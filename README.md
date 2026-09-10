@@ -19,9 +19,11 @@
   |:---:|:---|:---|:---|
   | **1** | **EntityExtractorAgent**<br>*(Schriftdetektiv)* | `extract(source_text, bible)` | **The Detective**: Scans raw text *before* translation to discover unknown character names, spells, and items, keeping spelling consistent. |
   | **2** | **ContextAwareDrafterAgent**<br>*(Wortschmied)* | `draft(source_text, bible, ...)` | **The Wordsmith**: Writes the initial full translation, restoring omitted pronouns (*Zero-Anaphora*) and enforcing character voices. |
-  | **3** | **CritiqueAgent**<br>*(Zensor)* | `evaluate(source_text, draft_text, ...)` | **The Inspector**: Audits fidelity (0-10) and style (0-10), checks glossary adherence, and generates actionable critique notes. |
-  | **4** | **PolishingAgent**<br>*(Feinschliff)* | `polish(draft_text, critique_notes, ...)` | **The Stylist**: Rewrites draft prose into natural, immersive literary English, eliminating machine-translation tropes. |
+  | **3** | **CritiqueAgent**<br>*(Zensor)* | `evaluate(source_text, draft_text, ...)` | **The Inspector**: Audits full-length chapters (up to 50k chars) against raw source text for fidelity (0-10) and style (0-10), checks glossary adherence, and generates actionable critique notes. |
+  | **4** | **PolishingAgent**<br>*(Feinschliff)* | `polish(draft_text, critique_notes, ..., source_text)` | **The Stylist**: Rewrites draft prose into natural literary target-language fiction using critique notes and source text reference, eliminating translationese while preserving 100% target language output. |
   | **5** | **ChroniclerAgent**<br>*(Chronist)* | `chronicle(...)`<br>`assemble_metadata(...)` | **The Memory Keeper**: Summarizes chapter events for future chapters and archives stats into `.novel/metadata.json`. |
+* **Domain Skills System (17 Built-in Skills + Markdown Catalogs)**: Automatically activates targeted literary guidelines (e.g. cultivation hierarchies, adventurer guild ranks, 4-character idiom localization, villainess court etiquette) based on novel genre and source language.
+* **Programmatic Language Anti-Regression Guards**: Enforces target-language integrity with offline Unicode script detection, immediately rejecting any model reversion back into source language.
 * **Automated Critic-Polish Reflection Loop**: Automatically loops between `Feinschliff` and `Zensor` to refine prose until both fidelity and style meet strict quality thresholds (`>= 8.5/10`) or hit a configurable loop cap (default 3 loops). Includes an automatic **Best-Candidate Regression Guard** that always saves the highest-scoring version.
 * **Proactive Sliding-Window Rate Limiter (16K TPM / 60 RPM)**: Dual quota management across a rolling 60-second window, backed by offline mixed CJK/Latin token estimation and 25s–65s window rollover cooldowns for Google API 429 quota exhaustion.
 * **Automatic Source Language Detection**: Automatically recognizes Japanese Kanji/Kana, Korean Hangul, and Chinese Hanzi during chapter scanning, removing manual setup barriers.
@@ -30,6 +32,7 @@
 * **Transient Error Resilience & Backoff**: Exponential backoff retry absorbs Google `500 INTERNAL`, `503`, and `429` rate limits automatically with full stack trace diagnostics.
 * **Folder-to-Folder Batch Automation**: Automatically discovers and naturally sorts chapters (`001.txt`, `ch2.txt`, `ch10.txt`), sequentially translates them while passing state, and skips unaltered completed chapters.
 * **Interactive Terminal UI (TUI)**: Full dual-pane terminal reader built with `textual` and `rich`, featuring synchronized source/target inspection, live checkpoint badges, and an in-terminal Novel Bible editor.
+* **Official Pip Package (`nousetsu`)**: Packaged with PyPA standards with console scripts `nousetsu` and `novel` that automatically open the interactive TUI when launched with no arguments.
 
 ---
 
@@ -75,21 +78,29 @@ flowchart TD
 
 ## 🚀 Quick Start
 
+> [!TIP]
+> 📖 **Looking for the complete manual?** Check out the comprehensive [**NouSetsu User Guide**](./doc/user_guide.md) for step-by-step TUI navigation, headless batch translation, Novel Bible customization, and troubleshooting!
+
 ### 1. Prerequisites
 * Python `>= 3.13`
-* [uv](https://github.com/astral-sh/uv) fast package manager installed:
-  ```powershell
-  # On Windows PowerShell
-  powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-  ```
+* Optional: [uv](https://github.com/astral-sh/uv) fast package manager
 
-### 2. Installation & Sync
-Clone the repository and install all dependencies:
+### 2. Installation
+You can install NouSetsu globally into your Python environment:
+
 ```bash
+# Clone the repository
 git clone https://github.com/Checkmartyr/NouSetsu.git
 cd NouSetsu
-uv sync
+
+# Install via pip
+pip install .
+
+# Or install via uv
+uv pip install .
 ```
+
+Once installed, simply run `nousetsu` or `novel` directly in your terminal!
 
 ### 3. Configure API Key
 Set your Gemini API key (or OpenAI / Anthropic key):
@@ -214,7 +225,7 @@ All chapter translation checkpoints, stage artifacts, and quality audit records 
 
 ## 🧪 Verification & Walkthrough Summary
 
-The system is continuously verified through comprehensive unit, integration, and UI tests:
+The system is continuously verified through comprehensive unit, integration, UI, and domain skill tests:
 
 ### 1. Test Suite Execution
 ```bash
@@ -223,22 +234,30 @@ uv run pytest
 Output:
 ```
 ============================= test session starts =============================
-tests/test_checkpoint.py ....                                            [  7%]
-tests/test_language.py ...........                                       [ 27%]
-tests/test_models.py ...                                                 [ 32%]
-tests/test_projects.py ....                                              [ 40%]
-tests/test_rate_limiter.py ........                                      [ 54%]
-tests/test_retry.py ....                                                 [ 61%]
-tests/test_review_loop.py ......                                         [ 72%]
-tests/test_runner.py ...                                                 [ 78%]
-tests/test_scanner.py ..                                                 [ 81%]
-tests/test_stop.py ..                                                    [ 85%]
-tests/test_tui.py ........                                               [100%]
-============================= 55 passed in 15.67s =============================
+platform win32 -- Python 3.13.12, pytest-9.1.1, pluggy-1.6.0
+rootdir: D:\Code\novel_translation_Agent
+configfile: pyproject.toml
+plugins: anyio-4.15.1, langsmith-0.12.4, asyncio-1.4.0
+collected 72 items
+
+tests\test_checkpoint.py ....                                            [  5%]
+tests\test_language.py ...........                                       [ 20%]
+tests\test_models.py ...                                                 [ 25%]
+tests\test_polisher_language.py .......                                  [ 34%]
+tests\test_projects.py ....                                              [ 40%]
+tests\test_rate_limiter.py ........                                      [ 51%]
+tests\test_retry.py ....                                                 [ 56%]
+tests\test_review_loop.py ......                                         [ 65%]
+tests\test_runner.py ...                                                 [ 69%]
+tests\test_scanner.py ..                                                 [ 72%]
+tests\test_skills.py .........                                           [ 84%]
+tests\test_stop.py ..                                                    [ 87%]
+tests\test_tui.py .........                                              [100%]
+============================= 72 passed in 15.65s =============================
 ```
 
 ### 2. End-to-End Batch Validation
-Sample raw chapters (`001 - Awakening.txt`, `002 - Magic Beast.txt`) processed through `main.py batch`:
+Sample raw chapters processed through `nousetsu batch`:
 * Translation Markdown created (`.md`) without polluting output directories.
 * Checkpoints saved centrally to `.novel/metadata.json`.
 * Memory committed to `.novel/bible/bible.yaml` with updated narrative summaries.
@@ -252,10 +271,11 @@ Sample raw chapters (`001 - Awakening.txt`, `002 - Magic Beast.txt`) processed t
 
 ## 📚 Technical Documentation & Deep Dives
 
-In-depth technical architecture and developer guides are located in the [**`doc/`**](./doc/README.md) directory:
+In-depth technical architecture, developer references, and end-user guides are located in the [**`doc/`**](./doc/README.md) directory:
 
 | Guide | Link | Focus Area |
 | :--- | :--- | :--- |
+| **End-User Guide** | [**`doc/user_guide.md`**](./doc/user_guide.md) | Complete manual: installation, auto-launch TUI, headless batch, Novel Bible, skills, and safety guards. |
 | **Workflow Pipeline** | [**`doc/workflow.md`**](./doc/workflow.md) | LangGraph stages, state machine, sequence diagrams, and retry backoff. |
 | **System Architecture** | [**`doc/architecture.md`**](./doc/architecture.md) | Layer design, component boundaries, and clean architecture data flow. |
 | **Novel Bible & Memory** | [**`doc/novel_bible.md`**](./doc/novel_bible.md) | Zero-anaphora pronoun resolution, character voice preservation, and style guides. |
@@ -269,8 +289,9 @@ In-depth technical architecture and developer guides are located in the [**`doc/
 
 ```
 NouSetsu/
-├── doc/                            # Comprehensive technical documentation
+├── doc/                            # Comprehensive technical documentation & user guide
 │   ├── README.md                   # Documentation index
+│   ├── user_guide.md               # End-user manual (TUI, CLI, Novel Bible, Skills)
 │   ├── workflow.md                 # LangGraph pipeline and agent stages
 │   ├── architecture.md             # System architecture and layer design
 │   ├── novel_bible.md              # Zero-anaphora and Novel Bible guide
@@ -291,22 +312,25 @@ NouSetsu/
 ├── translated_chapters/            # Clean output folder for translations
 │   ├── 001 - Awakening.md
 │   └── 002 - Magic Beast.md
-├── src/
-│   ├── agents/                     # LLM agent stages (extractor, drafter, critic, etc.)
+├── src/nousetsu/                   # Standard PyPA package layout
+│   ├── agents/                     # LLM agent stages (extractor, drafter, critic, polisher, chronicler)
 │   ├── batch/                      # Folder scanner, natural sorter, batch runner
+│   ├── cli/                        # CLI command dispatch (nousetsu, novel)
 │   ├── graph/                      # LangGraph state graph workflow
 │   ├── models/                     # Pydantic schemas (bible, metadata, state, config)
 │   ├── prompts/                    # Translation and critique prompt templates
+│   ├── skills/                     # Domain skills registry, loader, and models
+│   │   ├── builtin/                # 17 built-in agent domain skills
+│   │   └── catalog/                # Custom markdown skill catalogs (*.md)
 │   ├── storage/                    # File repository, registry, and persistence handlers
 │   ├── tui/                        # Textual TUI app and inspection widgets
 │   │   ├── widgets/                # Reader, Inspector, ProgressPanel, Modals
 │   │   └── app.py                  # Main Textual App
-│   ├── utils/                      # Utilities (language detector, sliding window rate limiter)
-│   └── cli/                        # CLI command dispatch
-├── tests/                          # Automated pytest suite (55 tests across 11 modules)
+│   └── utils/                      # Utilities (language detector, sliding window rate limiter)
+├── tests/                          # Automated pytest suite (72 tests across 13 modules)
 ├── main.py                         # Root entry point
-├── pyproject.toml                  # Dependencies and project configuration
-└── README.md                       # Documentation
+├── pyproject.toml                  # Dependencies, hatchling build config, console scripts
+└── README.md                       # Repository overview and quickstart
 ```
 
 ---

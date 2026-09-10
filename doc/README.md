@@ -8,8 +8,7 @@ Welcome to the **NouSetsu** (濃説 / 脳説) technical documentation. This dire
 
 | Guide | Document | Description |
 | :--- | :--- | :--- |
-| Guide | Document | Description |
-| :--- | :--- | :--- |
+| **End-User Guide** | [**`user_guide.md`**](./user_guide.md) | Complete end-user manual covering installation, auto-launch TUI dashboard, headless batch automation, Novel Bible management, custom skills, and safety guards. |
 | **Workflow & Pipeline** | [**`workflow.md`**](./workflow.md) | LangGraph multi-agent execution, reflection review loop, agent functions, rate limiting (16K TPM / 60 RPM), and sequence diagrams. |
 | **System Architecture** | [**`architecture.md`**](./architecture.md) | Layered architecture, component responsibilities, utilities (`rate_limiter`, `language`), and thread-safe cancellation. |
 | **Novel Bible & Memory** | [**`novel_bible.md`**](./novel_bible.md) | Persistent world memory, zero-anaphora resolution, automatic language detection, character registers, and style guide. |
