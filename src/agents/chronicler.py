@@ -15,6 +15,7 @@ from src.models.metadata import (
     TranslationStats,
 )
 from src.prompts.templates import CHRONICLER_SYSTEM_PROMPT
+from src.skills.registry import SkillRegistry
 
 
 class ChroniclerAgent:
@@ -27,11 +28,21 @@ class ChroniclerAgent:
         self,
         chapter_num: int,
         chapter_title: str,
-        translated_text: str
+        translated_text: str,
+        genre: Optional[str] = None,
+        source_lang: Optional[str] = None
     ) -> ChapterSummary:
+        skills_text = SkillRegistry.get_instance().build_prompt_section(
+            agent="chronicler",
+            source_lang=source_lang,
+            genre=genre or "general"
+        )
+        skills_section = f"\n{skills_text}\n" if skills_text else ""
+
         sys_msg = CHRONICLER_SYSTEM_PROMPT.format(
             chapter_num=chapter_num,
-            chapter_title=chapter_title or f"Chapter {chapter_num}"
+            chapter_title=chapter_title or f"Chapter {chapter_num}",
+            skills_section=skills_section
         )
 
         response = self.llm.invoke([

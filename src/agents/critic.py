@@ -1,12 +1,13 @@
 """Fidelity, tone, and terminology critique agent."""
 import json
 import re
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 from langchain_core.messages import HumanMessage, SystemMessage
 from src.agents.llm import extract_text_from_message, get_llm
 from src.models.bible import CharacterProfile, GlossaryItem, NovelBible
 from src.models.metadata import QualityAudit
 from src.prompts.templates import CRITIQUE_SYSTEM_PROMPT
+from src.skills.registry import SkillRegistry
 
 
 class CritiqueAgent:
@@ -21,16 +22,26 @@ class CritiqueAgent:
         draft_text: str,
         bible: NovelBible,
         active_characters: List[CharacterProfile],
-        active_glossary: List[GlossaryItem]
+        active_glossary: List[GlossaryItem],
+        genre: Optional[str] = None
     ) -> Tuple[QualityAudit, str]:
         chars_str = "\n".join([f"- {c.name} ({c.original_name}, {c.gender}, voice: {c.voice})" for c in active_characters]) or "None"
         gloss_str = "\n".join([f"- {g.source} -> {g.target}" for g in active_glossary]) or "None"
+
+        resolved_genre = genre or getattr(bible, "genre", "general")
+        skills_text = SkillRegistry.get_instance().build_prompt_section(
+            agent="critic",
+            source_lang=bible.source_language,
+            genre=resolved_genre
+        )
+        skills_section = f"\n{skills_text}\n" if skills_text else ""
 
         sys_msg = CRITIQUE_SYSTEM_PROMPT.format(
             source_lang=bible.source_language,
             target_lang=bible.target_language,
             characters=chars_str,
-            glossary=gloss_str
+            glossary=gloss_str,
+            skills_section=skills_section
         )
 
         user_content = f"Source Text Excerpt:\n{source_text[:6000]}\n\nDraft Translation:\n{draft_text[:10000]}"

@@ -28,6 +28,7 @@ class BatchRunner:
         max_rpm: Optional[int] = None,
         max_review_loops: Optional[int] = None,
         quality_threshold: Optional[float] = None,
+        genre: Optional[str] = None,
         console: Optional[Console] = None
     ):
         self.repo = repository
@@ -35,6 +36,8 @@ class BatchRunner:
         self.console = console or Console()
         self.scanner = ChapterScanner(repository)
         cfg = repository.load_config()
+
+        self.genre = genre or getattr(cfg, "genre", "general")
 
         # Rate limiting configuration (default 16K TPM / 60 RPM)
         env_tpm = int(os.environ["NOVEL_MAX_TPM"]) if "NOVEL_MAX_TPM" in os.environ else None
@@ -145,6 +148,7 @@ class BatchRunner:
                     output_file=str(task.output_file),
                     source_text=source_text,
                     model_name=self.model_name,
+                    genre=self.genre or getattr(bible, "genre", "general"),
                     novel_bible=bible,
                     max_review_loops=self.max_review_loops,
                     quality_threshold=self.quality_threshold

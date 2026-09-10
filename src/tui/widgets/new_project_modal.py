@@ -68,6 +68,9 @@ class NewProjectModal(ModalScreen):
                 yield Label("Default LLM Model Name:", classes="form-label")
                 yield Input(value="gemini-2.5-pro", id="inp_model")
 
+                yield Label("Novel Genre (e.g. general, xianxia, isekai, litrpg, romance, auto):", classes="form-label")
+                yield Input(value="general", id="inp_genre")
+
                 yield Static("", id="new_proj_status")
 
             with Horizontal(classes="btn-row"):
@@ -85,6 +88,7 @@ class NewProjectModal(ModalScreen):
             raw_dir = self.query_one("#inp_raw_dir", Input).value.strip() or "raw_chapters"
             out_dir = self.query_one("#inp_out_dir", Input).value.strip() or "translated_chapters"
             model = self.query_one("#inp_model", Input).value.strip() or "gemini-2.5-pro"
+            genre = self.query_one("#inp_genre", Input).value.strip() or "general"
             status = self.query_one("#new_proj_status", Static)
 
             target_path = Path(proj_path_str).expanduser().resolve()
@@ -97,7 +101,8 @@ class NewProjectModal(ModalScreen):
                 target_lang=tgt_lang,
                 raw_dir=raw_dir,
                 output_dir=out_dir,
-                model_name=model
+                model_name=model,
+                genre=genre
             )
 
             self.registry.register_project(target_path)

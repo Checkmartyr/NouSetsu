@@ -104,6 +104,11 @@ class SettingsModal(ModalScreen):
                     yield Label("Quality Threshold (5.0–10.0, default 8.5):", classes="field-label")
                     yield Input(value=str(getattr(cfg, "quality_threshold", 8.5)), id="set_quality_threshold")
 
+                with Container(classes="settings-section"):
+                    yield Label("✨ Novel Genre & Specialized Skills", classes="section-title")
+                    yield Label("Genre (general, xianxia, wuxia, isekai, litrpg, romance):", classes="field-label")
+                    yield Input(value=getattr(self.bible, "genre", getattr(cfg, "genre", "general")), id="set_genre")
+
                 yield Static("", id="settings_status")
 
             with Horizontal(classes="settings-btn-row"):
@@ -190,6 +195,15 @@ class SettingsModal(ModalScreen):
                     self.app_instance.runner.workflow.quality_threshold = new_thresh
         except ValueError:
             pass
+
+        # Update genre
+        genre_val = self.query_one("#set_genre", Input).value.strip()
+        if genre_val:
+            self.bible.genre = genre_val
+            cfg.genre = genre_val
+            if hasattr(self.app_instance.runner, "genre"):
+                self.app_instance.runner.genre = genre_val
+            self.repo.save_bible(self.bible)
 
         self.repo.save_config(cfg)
 

@@ -1,9 +1,10 @@
 """Context-aware novelistic translation drafter agent."""
-from typing import List
+from typing import List, Optional
 from langchain_core.messages import HumanMessage, SystemMessage
 from src.agents.llm import extract_text_from_message, get_llm
 from src.models.bible import CharacterProfile, ChapterSummary, GlossaryItem, NovelBible
 from src.prompts.templates import DRAFTING_SYSTEM_PROMPT
+from src.skills.registry import SkillRegistry
 
 
 class ContextAwareDrafterAgent:
@@ -18,7 +19,8 @@ class ContextAwareDrafterAgent:
         bible: NovelBible,
         active_characters: List[CharacterProfile],
         active_glossary: List[GlossaryItem],
-        rolling_summaries: List[ChapterSummary]
+        rolling_summaries: List[ChapterSummary],
+        genre: Optional[str] = None
     ) -> str:
         chars_str = "\n".join([
             f"- {c.name} (Original: {c.original_name}, Gender: {c.gender}, Role: {c.role}): Voice={c.voice}"
@@ -37,6 +39,14 @@ class ContextAwareDrafterAgent:
 
         custom_rules_str = "\n".join([f"   - {r}" for r in bible.style_guide.custom_rules])
 
+        resolved_genre = genre or getattr(bible, "genre", "general")
+        skills_text = SkillRegistry.get_instance().build_prompt_section(
+            agent="drafter",
+            source_lang=bible.source_language,
+            genre=resolved_genre
+        )
+        skills_section = f"\n{skills_text}\n" if skills_text else ""
+
         sys_msg = DRAFTING_SYSTEM_PROMPT.format(
             source_lang=bible.source_language,
             target_lang=bible.target_language,
@@ -47,7 +57,8 @@ class ContextAwareDrafterAgent:
             custom_rules=custom_rules_str,
             rolling_summaries=summaries_str,
             characters=chars_str,
-            glossary=gloss_str
+            glossary=gloss_str,
+            skills_section=skills_section
         )
 
         response = self.llm.invoke([

@@ -1,11 +1,12 @@
 """Entity and terminology extraction agent."""
 import json
 import re
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 from langchain_core.messages import HumanMessage, SystemMessage
 from src.agents.llm import extract_text_from_message, get_llm
 from src.models.bible import CharacterProfile, GlossaryItem, NovelBible
 from src.prompts.templates import EXTRACTION_SYSTEM_PROMPT
+from src.skills.registry import SkillRegistry
 
 
 class EntityExtractorAgent:
@@ -14,15 +15,29 @@ class EntityExtractorAgent:
     def __init__(self, model_name: str = "gemini-2.5-pro"):
         self.llm = get_llm(model_name=model_name, temperature=0.1)
 
-    def extract(self, source_text: str, bible: NovelBible) -> Tuple[List[CharacterProfile], List[GlossaryItem], List[str]]:
+    def extract(
+        self,
+        source_text: str,
+        bible: NovelBible,
+        genre: Optional[str] = None
+    ) -> Tuple[List[CharacterProfile], List[GlossaryItem], List[str]]:
         known_chars_str = "\n".join([f"- {c.original_name} -> {c.name} ({c.role}, {c.voice})" for c in bible.characters]) or "None yet."
         known_gloss_str = "\n".join([f"- {g.source} -> {g.target} ({g.category})" for g in bible.glossary]) or "None yet."
+
+        resolved_genre = genre or getattr(bible, "genre", "general")
+        skills_text = SkillRegistry.get_instance().build_prompt_section(
+            agent="extractor",
+            source_lang=bible.source_language,
+            genre=resolved_genre
+        )
+        skills_section = f"\n{skills_text}\n" if skills_text else ""
 
         sys_msg = EXTRACTION_SYSTEM_PROMPT.format(
             source_lang=bible.source_language,
             target_lang=bible.target_language,
             known_characters=known_chars_str,
-            known_glossary=known_gloss_str
+            known_glossary=known_gloss_str,
+            skills_section=skills_section
         )
 
         response = self.llm.invoke([

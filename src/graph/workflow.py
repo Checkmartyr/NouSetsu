@@ -12,7 +12,10 @@ from src.agents.polisher import PolishingAgent
 from src.models.exceptions import BatchStoppedException
 from src.models.metadata import PipelineStage, StageStatus
 from src.models.state import TranslationState
+from src.skills.registry import SkillRegistry
+from src.utils.genre import detect_genre
 from src.utils.rate_limiter import SlidingWindowRateLimiter, estimate_tokens
+
 
 
 class NovelTranslationWorkflow:
@@ -110,7 +113,17 @@ class NovelTranslationWorkflow:
     def _extract_step(self, state: TranslationState) -> Dict[str, Any]:
         self._check_stop(state, PipelineStage.EXTRACTION)
         self.current_stage = PipelineStage.EXTRACTION
-        self._notify(PipelineStage.EXTRACTION, "Extracting novel entities & terminology...", 15.0)
+
+        ext_skills = [
+            s.name for s in SkillRegistry.get_instance().get_active_skills(
+                agent="extractor",
+                source_lang=state.novel_bible.source_language,
+                genre=state.genre
+            )
+        ]
+        skills_suffix = f" [Skills: {', '.join(ext_skills)}]" if ext_skills else ""
+        self._notify(PipelineStage.EXTRACTION, f"Extracting novel entities & terminology{skills_suffix}...", 15.0)
+
         # If already extracted in checkpoint, skip re-extracting
         if state.extracted_terms or state.extracted_characters:
             return {
@@ -119,6 +132,7 @@ class NovelTranslationWorkflow:
                 "active_characters": state.novel_bible.characters + state.extracted_characters
             }
 
+        state.novel_bible.genre = state.genre
         est_extract = estimate_tokens(state.source_text[:12000]) + 600
         new_chars, new_terms, active_terms = invoke_with_retry(
             self.extractor.extract,
@@ -133,22 +147,37 @@ class NovelTranslationWorkflow:
         all_chars = list(state.novel_bible.characters) + new_chars
         all_glossary = list(state.novel_bible.glossary) + new_terms
 
+        updated_skills = dict(state.active_skills)
+        updated_skills["extraction"] = ext_skills
+
         return {
             "current_stage": PipelineStage.EXTRACTION,
             "extracted_characters": new_chars,
             "extracted_terms": new_terms,
             "active_characters": all_chars,
-            "active_glossary": all_glossary
+            "active_glossary": all_glossary,
+            "active_skills": updated_skills
         }
 
     def _draft_step(self, state: TranslationState) -> Dict[str, Any]:
         self._check_stop(state, PipelineStage.DRAFTING)
         self.current_stage = PipelineStage.DRAFTING
-        self._notify(PipelineStage.DRAFTING, "Drafting novelistic translation with character context...", 35.0)
+
+        dft_skills = [
+            s.name for s in SkillRegistry.get_instance().get_active_skills(
+                agent="drafter",
+                source_lang=state.novel_bible.source_language,
+                genre=state.genre
+            )
+        ]
+        skills_suffix = f" [Skills: {', '.join(dft_skills)}]" if dft_skills else ""
+        self._notify(PipelineStage.DRAFTING, f"Drafting novelistic translation{skills_suffix}...", 35.0)
+
         # If draft already exists in checkpoint, retain it
         if state.draft_text:
             return {"current_stage": PipelineStage.DRAFTING}
 
+        state.novel_bible.genre = state.genre
         est_draft = int(estimate_tokens(state.source_text) * 1.5) + 2000
         draft = invoke_with_retry(
             self.drafter.draft,
@@ -162,14 +191,28 @@ class NovelTranslationWorkflow:
             estimated_tokens=est_draft,
             stop_event=self.stop_event
         )
+
+        updated_skills = dict(state.active_skills)
+        updated_skills["drafting"] = dft_skills
+
         return {
             "current_stage": PipelineStage.DRAFTING,
-            "draft_text": draft
+            "draft_text": draft,
+            "active_skills": updated_skills
         }
 
     def _critique_step(self, state: TranslationState) -> Dict[str, Any]:
         self._check_stop(state, PipelineStage.CRITIQUE)
         self.current_stage = PipelineStage.CRITIQUE
+
+        crt_skills = [
+            s.name for s in SkillRegistry.get_instance().get_active_skills(
+                agent="critic",
+                source_lang=state.novel_bible.source_language,
+                genre=state.genre
+            )
+        ]
+        skills_suffix = f" [Skills: {', '.join(crt_skills)}]" if crt_skills else ""
 
         is_initial_draft = (state.review_iteration == 1 and not state.polished_text)
         current_iter = state.review_iteration if is_initial_draft else state.review_iteration + 1
@@ -178,7 +221,7 @@ class NovelTranslationWorkflow:
         if is_initial_draft:
             self._notify(
                 PipelineStage.CRITIQUE,
-                f"Auditing fidelity, tone, and glossary adherence (Pass {display_iter}/{state.max_review_loops})...",
+                f"Auditing fidelity, tone, and glossary adherence (Pass {display_iter}/{state.max_review_loops}){skills_suffix}...",
                 60.0
             )
             # If critique notes already exist from paused checkpoint, retain
@@ -191,11 +234,12 @@ class NovelTranslationWorkflow:
         else:
             self._notify(
                 PipelineStage.CRITIQUE,
-                f"Re-auditing polished translation (Pass {display_iter}/{state.max_review_loops})...",
+                f"Re-auditing polished translation (Pass {display_iter}/{state.max_review_loops}){skills_suffix}...",
                 60.0
             )
             text_to_audit = state.polished_text
 
+        state.novel_bible.genre = state.genre
         est_critique = estimate_tokens(state.source_text) + estimate_tokens(text_to_audit) + 500
         audit, notes = invoke_with_retry(
             self.critic.evaluate,
@@ -228,24 +272,37 @@ class NovelTranslationWorkflow:
                     best_audit = audit
                     best_text = text_to_audit
 
+        updated_skills = dict(state.active_skills)
+        updated_skills["critique"] = crt_skills
+
         return {
             "current_stage": PipelineStage.CRITIQUE,
             "quality_audit": audit,
             "critique_notes": notes,
             "review_iteration": current_iter,
             "best_audit": best_audit,
-            "best_polished_text": best_text
+            "best_polished_text": best_text,
+            "active_skills": updated_skills
         }
 
     def _polish_step(self, state: TranslationState) -> Dict[str, Any]:
         self._check_stop(state, PipelineStage.POLISHING)
         self.current_stage = PipelineStage.POLISHING
 
+        pol_skills = [
+            s.name for s in SkillRegistry.get_instance().get_active_skills(
+                agent="polisher",
+                source_lang=state.novel_bible.source_language,
+                genre=state.genre
+            )
+        ]
+        skills_suffix = f" [Skills: {', '.join(pol_skills)}]" if pol_skills else ""
+
         is_initial_draft = (state.review_iteration <= 1)
         display_iter = min(state.review_iteration, state.max_review_loops)
         self._notify(
             PipelineStage.POLISHING,
-            f"Polishing prose cadence (Pass {display_iter}/{state.max_review_loops})...",
+            f"Polishing prose cadence (Pass {display_iter}/{state.max_review_loops}){skills_suffix}...",
             80.0
         )
 
@@ -258,6 +315,7 @@ class NovelTranslationWorkflow:
 
         base_text = state.draft_text if is_initial_draft else (state.polished_text or state.best_polished_text or state.draft_text)
 
+        state.novel_bible.genre = state.genre
         est_polish = estimate_tokens(base_text) * 2 + 1000
         polished = invoke_with_retry(
             self.polisher.polish,
@@ -273,16 +331,29 @@ class NovelTranslationWorkflow:
 
         best_text = polished if is_initial_draft else (state.best_polished_text or polished)
 
+        updated_skills = dict(state.active_skills)
+        updated_skills["polishing"] = pol_skills
+
         return {
             "current_stage": PipelineStage.POLISHING,
             "polished_text": polished,
-            "best_polished_text": best_text
+            "best_polished_text": best_text,
+            "active_skills": updated_skills
         }
 
     def _chronicle_step(self, state: TranslationState) -> Dict[str, Any]:
         self._check_stop(state, PipelineStage.CHRONICLING)
         self.current_stage = PipelineStage.CHRONICLING
-        self._notify(PipelineStage.CHRONICLING, "Updating narrative lore, summaries, and checkpoint...", 95.0)
+
+        chr_skills = [
+            s.name for s in SkillRegistry.get_instance().get_active_skills(
+                agent="chronicler",
+                source_lang=state.novel_bible.source_language,
+                genre=state.genre
+            )
+        ]
+        skills_suffix = f" [Skills: {', '.join(chr_skills)}]" if chr_skills else ""
+        self._notify(PipelineStage.CHRONICLING, f"Updating narrative lore, summaries, and checkpoint{skills_suffix}...", 95.0)
 
         final_text = state.best_polished_text or state.polished_text
         final_audit = state.best_audit or state.quality_audit
@@ -293,6 +364,8 @@ class NovelTranslationWorkflow:
             chapter_num=state.chapter_num,
             chapter_title=f"Chapter {state.chapter_num}",
             translated_text=final_text,
+            genre=state.genre,
+            source_lang=state.novel_bible.source_language,
             notify_callback=lambda msg: self._notify(PipelineStage.CHRONICLING, msg, 95.0),
             rate_limiter=self.rate_limiter,
             estimated_tokens=est_chronicle,
@@ -318,12 +391,16 @@ class NovelTranslationWorkflow:
             status=StageStatus.COMPLETED
         )
 
+        updated_skills = dict(state.active_skills)
+        updated_skills["chronicling"] = chr_skills
+
         return {
             "current_stage": PipelineStage.CHRONICLING,
             "polished_text": final_text,
             "quality_audit": final_audit,
             "new_chapter_summary": summary,
-            "metadata": metadata
+            "metadata": metadata,
+            "active_skills": updated_skills
         }
 
     def run(
@@ -337,6 +414,15 @@ class NovelTranslationWorkflow:
             self.stage_callback = stage_callback
         self.stop_event = stop_event
         self.current_stage = PipelineStage.NONE
+
+        # Auto-resolve genre if general or unspecified
+        if not initial_state.genre or initial_state.genre == "general":
+            if getattr(initial_state.novel_bible, "genre", None) and initial_state.novel_bible.genre != "general":
+                initial_state.genre = initial_state.novel_bible.genre
+            else:
+                detected_genre = detect_genre(initial_state.source_text)
+                if detected_genre != "general":
+                    initial_state.genre = detected_genre
 
         if initial_state.max_review_loops == 3 and self.max_review_loops != 3:
             initial_state.max_review_loops = self.max_review_loops

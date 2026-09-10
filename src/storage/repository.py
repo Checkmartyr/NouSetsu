@@ -175,7 +175,8 @@ class NovelRepository:
         target_lang: str = "English",
         raw_dir: str = "raw_chapters",
         output_dir: str = "translated_chapters",
-        model_name: str = "gemini-2.5-pro"
+        model_name: str = "gemini-2.5-pro",
+        genre: str = "general"
     ) -> NovelBible:
         """Create project folder structure, config, and default Novel Bible."""
         self.bible_dir.mkdir(parents=True, exist_ok=True)
@@ -187,13 +188,29 @@ class NovelRepository:
         if (not source_lang) or source_lang.strip().lower() in ["auto", "autodetect", "detect", "unknown"]:
             source_lang = detect_language_from_dir(raw_path, default="Japanese")
 
+        # Auto-detect genre if requested
+        resolved_genre = genre
+        if (not resolved_genre) or resolved_genre.strip().lower() in ["auto", "detect"]:
+            from src.utils.genre import detect_genre
+            # Check raw chapters
+            sample_text = ""
+            for rf in raw_path.glob("*.txt"):
+                try:
+                    sample_text += rf.read_text(encoding="utf-8")[:3000] + "\n"
+                    if len(sample_text) >= 10000:
+                        break
+                except Exception:
+                    pass
+            resolved_genre = detect_genre(sample_text) if sample_text else "general"
+
         config = ProjectConfig(
             title=title,
             source_language=source_lang,
             target_language=target_lang,
             raw_dir=raw_dir,
             output_dir=output_dir,
-            model_name=model_name
+            model_name=model_name,
+            genre=resolved_genre
         )
         self.save_config(config)
 
@@ -201,6 +218,7 @@ class NovelRepository:
             title=title,
             source_language=source_lang,
             target_language=target_lang,
+            genre=resolved_genre,
             characters=[],
             glossary=[],
             style_guide=StyleGuide(),

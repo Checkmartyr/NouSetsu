@@ -12,7 +12,7 @@ Existing Known Characters:
 
 Existing Known Glossary:
 {known_glossary}
-
+{skills_section}
 Respond strictly in valid JSON format:
 {{
   "new_characters": [
@@ -61,7 +61,7 @@ Preceding Chapter Summaries:
 
 ## ACTIVE GLOSSARY:
 {glossary}
-
+{skills_section}
 Translate the entire chapter. Do not omit any scene, sentence, or dialogue line. Maintain standard novel paragraph breaks and dialogue quotes.
 """
 
@@ -79,7 +79,7 @@ Active Glossary:
 
 Active Characters:
 {characters}
-
+{skills_section}
 Respond strictly in valid JSON format:
 {{
   "fidelity_score": 9.5,
@@ -107,7 +107,7 @@ Critique Notes:
 
 Active Glossary:
 {glossary}
-
+{skills_section}
 Output ONLY the final polished chapter text in clean markdown format. Do not include conversational remarks or introductory notes.
 """
 
@@ -119,7 +119,7 @@ Analyze the final translated chapter and produce:
 
 Chapter Number: {chapter_num}
 Chapter Title: {chapter_title}
-
+{skills_section}
 Respond strictly in valid JSON format:
 {{
   "chapter_num": {chapter_num},

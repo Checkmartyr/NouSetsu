@@ -40,6 +40,7 @@ class NovelBible(BaseModel):
     title: str = Field(default="Untitled Novel", description="Novel title")
     source_language: str = Field(default="Japanese", description="Source text language")
     target_language: str = Field(default="English", description="Target text language")
+    genre: str = Field(default="general", description="Novel genre (e.g. xianxia, isekai, litrpg, romance, general)")
     characters: List[CharacterProfile] = Field(default_factory=list, description="Roster of known characters")
     glossary: List[GlossaryItem] = Field(default_factory=list, description="Active translation glossary")
     style_guide: StyleGuide = Field(default_factory=StyleGuide, description="Tone, formatting, and translation style rules")

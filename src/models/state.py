@@ -1,5 +1,5 @@
 """LangGraph state schema for novel translation workflow."""
-from typing import List, Optional
+from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
 from src.models.bible import CharacterProfile, ChapterSummary, GlossaryItem, NovelBible
 from src.models.metadata import ChapterMetadata, PipelineStage, QualityAudit
@@ -13,6 +13,8 @@ class TranslationState(BaseModel):
     output_file: str = Field(default="")
     source_text: str = Field(..., description="Raw text of chapter")
     model_name: str = Field(default="gemini-2.5-pro")
+    genre: str = Field(default="general", description="Novel genre")
+    active_skills: Dict[str, List[str]] = Field(default_factory=dict, description="Active skills used per stage")
 
     novel_bible: NovelBible = Field(default_factory=NovelBible)
     active_glossary: List[GlossaryItem] = Field(default_factory=list)

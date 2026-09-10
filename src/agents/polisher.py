@@ -1,9 +1,10 @@
 """Literary prose polisher and style editor agent."""
-from typing import List
+from typing import List, Optional
 from langchain_core.messages import HumanMessage, SystemMessage
 from src.agents.llm import extract_text_from_message, get_llm
 from src.models.bible import GlossaryItem, NovelBible
 from src.prompts.templates import POLISHING_SYSTEM_PROMPT
+from src.skills.registry import SkillRegistry
 
 
 class PolishingAgent:
@@ -17,13 +18,23 @@ class PolishingAgent:
         draft_text: str,
         critique_notes: str,
         active_glossary: List[GlossaryItem],
-        bible: NovelBible
+        bible: NovelBible,
+        genre: Optional[str] = None
     ) -> str:
         gloss_str = "\n".join([f"- {g.source} -> {g.target}" for g in active_glossary]) or "None"
 
+        resolved_genre = genre or getattr(bible, "genre", "general")
+        skills_text = SkillRegistry.get_instance().build_prompt_section(
+            agent="polisher",
+            source_lang=bible.source_language,
+            genre=resolved_genre
+        )
+        skills_section = f"\n{skills_text}\n" if skills_text else ""
+
         sys_msg = POLISHING_SYSTEM_PROMPT.format(
             critique_notes=critique_notes or "Preserve meaning and enhance natural rhythm.",
-            glossary=gloss_str
+            glossary=gloss_str,
+            skills_section=skills_section
         )
 
         response = self.llm.invoke([

@@ -33,11 +33,13 @@ def cmd_init(args: argparse.Namespace) -> None:
         target_lang=target_lang,
         raw_dir=getattr(args, "raw_dir", "raw_chapters"),
         output_dir=getattr(args, "output_dir", "translated_chapters"),
-        model_name=getattr(args, "model", "gemini-2.5-pro")
+        model_name=getattr(args, "model", "gemini-2.5-pro"),
+        genre=getattr(args, "genre", "general")
     )
     console.print(Panel.fit(
         f"[bold green]Novel Project Initialized![/]\n"
         f"Title: [cyan]{bible.title}[/]\n"
+        f"Genre: [magenta]{bible.genre}[/]\n"
         f"Languages: [yellow]{bible.source_language} -> {bible.target_language}[/]\n"
         f"Location: [dim]{repo.root_dir}[/]\n"
         f"Config: [dim]{repo.config_file_path()}[/]\n"
@@ -64,6 +66,7 @@ def cmd_batch(args: argparse.Namespace) -> None:
         max_rpm=getattr(args, "max_rpm", None),
         max_review_loops=getattr(args, "max_loops", None),
         quality_threshold=getattr(args, "quality_threshold", None),
+        genre=getattr(args, "genre", None),
         console=console
     )
     input_path = Path(args.input_dir) if args.input_dir != "raw_chapters" else cfg.get_raw_path(repo.root_dir)
@@ -96,6 +99,47 @@ def cmd_batch(args: argparse.Namespace) -> None:
             pass
 
 
+def cmd_skills(args: argparse.Namespace) -> None:
+    from rich.table import Table
+    from src.skills.registry import SkillRegistry
+
+    reg = SkillRegistry.get_instance()
+    agent_filter = getattr(args, "agent", None)
+    lang_filter = getattr(args, "source_lang", None)
+    genre_filter = getattr(args, "genre", None)
+
+    if agent_filter or lang_filter or genre_filter:
+        skills = reg.get_active_skills(
+            agent=agent_filter or "all",
+            source_lang=lang_filter,
+            genre=genre_filter
+        )
+        title = f"Active Agent Skills (Agent: {agent_filter or 'Any'}, Lang: {lang_filter or 'Any'}, Genre: {genre_filter or 'Any'})"
+    else:
+        skills = reg.list_skills()
+        title = f"Registered Agent Skills ({len(skills)} Total)"
+
+    table = Table(title=title, border_style="cyan")
+    table.add_column("Agent", style="bold green", width=12)
+    table.add_column("Skill Name", style="bold yellow")
+    table.add_column("Title", style="white")
+    table.add_column("Languages", style="dim cyan")
+    table.add_column("Genres", style="magenta")
+    table.add_column("Source", style="dim")
+
+    for s in sorted(skills, key=lambda x: (x.agent, -x.priority, x.name)):
+        table.add_row(
+            s.agent.capitalize(),
+            s.name,
+            s.title,
+            ", ".join(s.languages),
+            ", ".join(s.genres),
+            s.source
+        )
+
+    console.print(table)
+
+
 def cmd_tui(args: argparse.Namespace) -> None:
     project_dir = getattr(args, "project_dir", None)
     repo = NovelRepository(project_dir) if project_dir else NovelRepository()
@@ -123,6 +167,7 @@ def main() -> None:
     p_init.add_argument("--title", default="Untitled Novel", help="Novel series title")
     p_init.add_argument("--source-lang", default=default_src, help="Source language (e.g. Japanese, Chinese, Korean)")
     p_init.add_argument("--target-lang", default=default_tgt, help="Target language (e.g. English, Spanish)")
+    p_init.add_argument("--genre", "-g", default="general", help="Novel genre (e.g. xianxia, wuxia, isekai, litrpg, romance, auto, general)")
 
     # batch
     p_batch = subparsers.add_parser("batch", help="Run folder-to-folder automated batch translation")
@@ -131,6 +176,7 @@ def main() -> None:
     p_batch.add_argument("--output-dir", "-o", default="translated_chapters", help="Folder for translated output")
     p_batch.add_argument("--source-lang", default=None, help="Override source language")
     p_batch.add_argument("--target-lang", default=None, help="Override target language")
+    p_batch.add_argument("--genre", "-g", default=None, help="Override novel genre")
     p_batch.add_argument("--model", "-m", default=os.environ.get("DEFAULT_MODEL", "gemini-2.5-pro"), help="LLM model name")
     p_batch.add_argument("--limit", "-l", type=int, default=None, help="Maximum number of chapters to process")
     p_batch.add_argument("--force", "-f", action="store_true", help="Force re-translate completed chapters")
@@ -139,6 +185,12 @@ def main() -> None:
     p_batch.add_argument("--max-rpm", type=int, default=None, help="Max requests per minute rate limit quota (default: 60)")
     p_batch.add_argument("--max-loops", type=int, default=None, help="Maximum review loops for translation refinement (default: 3)")
     p_batch.add_argument("--quality-threshold", type=float, default=None, help="Target quality score threshold (fidelity & style) to exit review loop (default: 8.5)")
+
+    # skills
+    p_skills = subparsers.add_parser("skills", help="List registered agent domain skills and active capabilities")
+    p_skills.add_argument("--agent", "-a", default=None, help="Filter by agent (extractor, drafter, critic, polisher, chronicler)")
+    p_skills.add_argument("--genre", "-g", default=None, help="Filter by genre")
+    p_skills.add_argument("--source-lang", "-l", default=None, help="Filter by source language")
 
     # tui
     p_tui = subparsers.add_parser("tui", help="Launch interactive Textual TUI dashboard")
@@ -155,6 +207,8 @@ def main() -> None:
         cmd_init(args)
     elif args.command == "batch":
         cmd_batch(args)
+    elif args.command == "skills":
+        cmd_skills(args)
     elif args.command == "tui":
         cmd_tui(args)
     else:
