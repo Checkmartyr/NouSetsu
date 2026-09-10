@@ -1,7 +1,7 @@
 [project]
-name = "novel-translation-agent"
+name = "nousetsu"
 version = "0.1.0"
-description = "Agentic Document-Level Cross-Chapter Novel Translation System"
+description = "NouSetsu - Agentic Document-Level Cross-Chapter Novel Translation System"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
