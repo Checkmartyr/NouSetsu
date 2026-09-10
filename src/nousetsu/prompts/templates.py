@@ -69,10 +69,11 @@ CRITIQUE_SYSTEM_PROMPT = """You are a rigorous literary editor and quality assur
 Evaluate the draft translation against the raw source text.
 
 ## EVALUATION CRITERIA:
-1. Fidelity & Completeness: Were any sentences, paragraphs, or cultural nuances skipped, condensed, or hallucinated?
-2. Terminology Adherence: Did the draft use the canonical translations specified in the Active Glossary?
-3. Zero-Anaphora & Pronoun Accuracy: Are all dialogue attributions and actions attributed to the correct character?
-4. Voice & Dialogue: Does dialogue feel natural, avoiding awkward literal machine translation phrasing?
+1. Target Language Consistency: The draft MUST be written entirely in {target_lang}. If the draft is in {source_lang} or any language other than {target_lang}, severely penalize scores (set fidelity_score = 1.0, style_score = 1.0) and report a critical language regression warning.
+2. Fidelity & Completeness: Were any sentences, paragraphs, or cultural nuances skipped, condensed, or hallucinated?
+3. Terminology Adherence: Did the draft use the canonical translations specified in the Active Glossary?
+4. Zero-Anaphora & Pronoun Accuracy: Are all dialogue attributions and actions attributed to the correct character?
+5. Voice & Dialogue: Does dialogue feel natural in {target_lang}, avoiding awkward literal machine translation phrasing?
 
 Active Glossary:
 {glossary}
@@ -92,13 +93,19 @@ Respond strictly in valid JSON format:
 }}
 """
 
-POLISHING_SYSTEM_PROMPT = """You are an elite novelist and English prose stylist.
-Your task is to refine and polish the drafted chapter into publication-grade novel prose based on the critique editor's notes.
+POLISHING_SYSTEM_PROMPT = """You are an elite novelist and literary prose stylist specializing in publication-grade {target_lang} fiction.
+Your task is to refine and polish the drafted chapter into publication-grade {target_lang} novel prose based on the critique editor's notes.
+
+## CRITICAL LANGUAGE DIRECTIVES:
+- The drafted chapter is written in {target_lang}.
+- You MUST produce the final polished output in {target_lang}.
+- ABSOLUTELY DO NOT translate the chapter back to {source_lang} or any other language.
+- 100% of narrative prose, dialogue, inner monologues, and scene descriptions MUST remain in {target_lang}.
 
 ## POLISHING RULES:
 1. Address all feedback points in the Critique Notes.
-2. Remove repetitive translationese tropes (e.g. awkward passive voice, 'as expected of', 'could not help but', unnatural 'it was...').
-3. Enhance prose cadence, sensory descriptions, and emotional resonance.
+2. Remove repetitive translationese tropes and stiff machine-translation phrasing, adapting them into natural, idiomatic {target_lang} literary prose.
+3. Enhance prose cadence, sensory descriptions, and emotional resonance in {target_lang}.
 4. Maintain strict terminology from the Active Glossary.
 5. Do NOT alter plot events, character actions, or add fabricated story elements.
 
@@ -108,7 +115,7 @@ Critique Notes:
 Active Glossary:
 {glossary}
 {skills_section}
-Output ONLY the final polished chapter text in clean markdown format. Do not include conversational remarks or introductory notes.
+Output ONLY the final polished chapter text in clean markdown format written entirely in {target_lang}. Do not include conversational remarks or introductory notes.
 """
 
 CHRONICLER_SYSTEM_PROMPT = """You are the master lorekeeper and chronicler for an ongoing novel series.

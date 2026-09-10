@@ -8,6 +8,7 @@ from nousetsu.models.bible import CharacterProfile, GlossaryItem, NovelBible
 from nousetsu.models.metadata import QualityAudit
 from nousetsu.prompts.templates import CRITIQUE_SYSTEM_PROMPT
 from nousetsu.skills.registry import SkillRegistry
+from nousetsu.utils.language import detect_language
 
 
 class CritiqueAgent:
@@ -79,5 +80,22 @@ class CritiqueAgent:
             audit.warnings.extend(missing_terms)
             if len(active_glossary) > 0:
                 audit.glossary_compliance_pct = max(0.0, 100.0 - (len(missing_terms) / len(active_glossary) * 100.0))
+
+        # Programmatic Target Language Guard:
+        # If draft_text reverted to source language while target_language is distinct, fail audit immediately
+        if bible.target_language.lower() != bible.source_language.lower():
+            detected_lang = detect_language(draft_text)
+            if detected_lang and detected_lang.lower() == bible.source_language.lower():
+                audit.fidelity_score = 1.0
+                audit.style_score = 1.0
+                audit.passed = False
+                audit.warnings.insert(
+                    0,
+                    f"CRITICAL LANGUAGE REGRESSION: Text was generated in source language ({bible.source_language}) instead of target language ({bible.target_language})!"
+                )
+                critique_notes = (
+                    f"CRITICAL REJECTION: The text is written in {bible.source_language} instead of {bible.target_language}. "
+                    f"You MUST produce the translation and polished text strictly in {bible.target_language}."
+                )
 
         return audit, critique_notes

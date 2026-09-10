@@ -14,6 +14,7 @@ from nousetsu.models.metadata import PipelineStage, StageStatus
 from nousetsu.models.state import TranslationState
 from nousetsu.skills.registry import SkillRegistry
 from nousetsu.utils.genre import detect_genre
+from nousetsu.utils.language import detect_language
 from nousetsu.utils.rate_limiter import SlidingWindowRateLimiter, estimate_tokens
 
 
@@ -88,9 +89,12 @@ class NovelTranslationWorkflow:
             return "polish"
 
         # Pass 2+: check quality threshold or loop exhaustion
+        has_lang_regression = any("LANGUAGE REGRESSION" in str(w) for w in state.quality_audit.warnings)
         passed_threshold = (
             state.quality_audit.fidelity_score >= state.quality_threshold
             and state.quality_audit.style_score >= state.quality_threshold
+            and state.quality_audit.passed
+            and not has_lang_regression
         )
         reached_max = state.review_iteration > state.max_review_loops
         if passed_threshold or reached_max:
@@ -259,18 +263,27 @@ class NovelTranslationWorkflow:
         best_audit = state.best_audit
         best_text = state.best_polished_text
 
-        if is_initial_draft:
-            best_audit = audit
-            best_text = state.best_polished_text or ""
-        else:
-            if best_audit is None:
+        is_source_lang = False
+        if state.novel_bible.target_language.lower() != state.novel_bible.source_language.lower():
+            det_audit = detect_language(text_to_audit)
+            if det_audit and det_audit.lower() == state.novel_bible.source_language.lower():
+                is_source_lang = True
+            if any("LANGUAGE REGRESSION" in str(w) for w in audit.warnings):
+                is_source_lang = True
+
+        if not is_source_lang:
+            if is_initial_draft:
                 best_audit = audit
-                best_text = text_to_audit
+                best_text = state.best_polished_text or ""
             else:
-                prev_best_score = (best_audit.fidelity_score + best_audit.style_score) / 2.0
-                if current_score >= prev_best_score:
+                if best_audit is None:
                     best_audit = audit
                     best_text = text_to_audit
+                else:
+                    prev_best_score = (best_audit.fidelity_score + best_audit.style_score) / 2.0
+                    if current_score >= prev_best_score:
+                        best_audit = audit
+                        best_text = text_to_audit
 
         updated_skills = dict(state.active_skills)
         updated_skills["critique"] = crt_skills
@@ -315,6 +328,14 @@ class NovelTranslationWorkflow:
 
         base_text = state.draft_text if is_initial_draft else (state.polished_text or state.best_polished_text or state.draft_text)
 
+        # Sanity check: if base_text is in source language while draft_text is in target language, revert to draft_text
+        if state.novel_bible.target_language.lower() != state.novel_bible.source_language.lower():
+            if (
+                detect_language(base_text) == state.novel_bible.source_language
+                and detect_language(state.draft_text) != state.novel_bible.source_language
+            ):
+                base_text = state.draft_text
+
         state.novel_bible.genre = state.genre
         est_polish = estimate_tokens(base_text) * 2 + 1000
         polished = invoke_with_retry(
@@ -328,6 +349,18 @@ class NovelTranslationWorkflow:
             estimated_tokens=est_polish,
             stop_event=self.stop_event
         )
+
+        # Language regression guard on polished output:
+        # If output reverted to source language while target is distinct, retain target language draft
+        if state.novel_bible.target_language.lower() != state.novel_bible.source_language.lower():
+            det_pol = detect_language(polished)
+            if det_pol and det_pol.lower() == state.novel_bible.source_language.lower():
+                self._notify(
+                    PipelineStage.POLISHING,
+                    f"Warning: Polisher returned {state.novel_bible.source_language}; retaining {state.novel_bible.target_language} draft.",
+                    80.0
+                )
+                polished = state.draft_text
 
         best_text = polished if is_initial_draft else (state.best_polished_text or polished)
 
@@ -355,7 +388,15 @@ class NovelTranslationWorkflow:
         skills_suffix = f" [Skills: {', '.join(chr_skills)}]" if chr_skills else ""
         self._notify(PipelineStage.CHRONICLING, f"Updating narrative lore, summaries, and checkpoint{skills_suffix}...", 95.0)
 
-        final_text = state.best_polished_text or state.polished_text
+        final_text = state.best_polished_text or state.polished_text or state.draft_text
+        # Ensure final_text is not in source language if draft_text is in target language
+        if (
+            state.novel_bible.target_language.lower() != state.novel_bible.source_language.lower()
+            and detect_language(final_text) == state.novel_bible.source_language
+            and detect_language(state.draft_text) != state.novel_bible.source_language
+        ):
+            final_text = state.draft_text
+
         final_audit = state.best_audit or state.quality_audit
 
         est_chronicle = min(estimate_tokens(final_text), 4000) + 400

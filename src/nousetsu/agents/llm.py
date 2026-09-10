@@ -42,10 +42,12 @@ class MockNovelLLM(BaseChatModel):
             content = '{"fidelity_score": 9.5, "style_score": 9.2, "glossary_compliance_pct": 100.0, "warnings": [], "critique_notes": "Good flow, prose is faithful."}'
         elif "synopsis" in str(first_msg):
             content = '{"chapter_num": 1, "title": "Chapter", "synopsis": "The journey begins.", "key_events": ["Protagonist departs"], "character_state_changes": []}'
-        elif "elite novelist and English prose stylist" in str(first_msg):
-            content = f"# Polished Chapter\n\n{last_msg}"
+        elif "literary prose stylist" in str(first_msg) or "POLISHING RULES" in str(first_msg) or "elite novelist" in str(first_msg):
+            content = "# Polished Chapter\n\nChapter 1: The signal of departure. The boy stepped forward with quiet determination."
+        elif "CRITICAL TRANSLATION DIRECTIVES" in str(first_msg) or "literary translator" in str(first_msg):
+            content = "# Translated Chapter\n\nChapter 1: The signal of departure. The boy stepped forward into the unknown."
         else:
-            content = f"# Translated Chapter\n\n{last_msg}"
+            content = "# Translated Chapter\n\nChapter 1: The signal of departure. The boy stepped forward."
 
         return ChatResult(generations=[ChatGeneration(message=AIMessage(content=content))])
 
