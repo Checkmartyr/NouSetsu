@@ -109,6 +109,11 @@ Your task is to refine and polish the drafted chapter into publication-grade {ta
 4. Maintain strict terminology from the Active Glossary.
 5. Do NOT alter plot events, character actions, or add fabricated story elements.
 
+## SOURCE REFERENCE DIRECTIVES:
+- If provided with the Original Source Text, use it ONLY to clarify ambiguous phrasing, verify nuances, or check character emotions.
+- Do NOT re-translate directly from the source text; refine and polish the provided Draft Translation.
+- The final polished output MUST remain 100% in {target_lang}.
+
 Critique Notes:
 {critique_notes}
 

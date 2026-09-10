@@ -53,7 +53,7 @@ def test_multi_pass_review_loop_until_threshold_met():
     ])
 
     polish_calls = []
-    def mock_polish(draft_text, critique_notes, active_glossary, bible):
+    def mock_polish(draft_text, critique_notes, active_glossary, bible, **kwargs):
         idx = len(polish_calls) + 1
         out = f"Polished text version {idx} (Notes: {critique_notes})"
         polish_calls.append(out)

@@ -20,7 +20,8 @@ class PolishingAgent:
         critique_notes: str,
         active_glossary: List[GlossaryItem],
         bible: NovelBible,
-        genre: Optional[str] = None
+        genre: Optional[str] = None,
+        source_text: Optional[str] = None
     ) -> str:
         gloss_str = "\n".join([f"- {g.source} -> {g.target}" for g in active_glossary]) or "None"
 
@@ -40,11 +41,18 @@ class PolishingAgent:
             skills_section=skills_section
         )
 
-        user_content = (
-            f"Draft Translation in {bible.target_language} to Polish "
-            f"(CRITICAL: Output MUST remain 100% in {bible.target_language}, DO NOT translate back to {bible.source_language}):\n\n"
+        user_parts = []
+        if source_text and source_text.strip():
+            user_parts.append(
+                f"### Original Source Text ({bible.source_language} - Reference Only):\n"
+                f"{source_text.strip()[:50000]}"
+            )
+        user_parts.append(
+            f"### Draft Translation in {bible.target_language} to Polish "
+            f"(CRITICAL: Output MUST remain 100% in {bible.target_language}, DO NOT translate back to {bible.source_language}):\n"
             f"{draft_text}"
         )
+        user_content = "\n\n".join(user_parts)
 
         response = self.llm.invoke([
             SystemMessage(content=sys_msg),

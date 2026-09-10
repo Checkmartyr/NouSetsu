@@ -344,6 +344,8 @@ class NovelTranslationWorkflow:
             critique_notes=state.critique_notes,
             active_glossary=state.active_glossary,
             bible=state.novel_bible,
+            genre=state.genre,
+            source_text=state.source_text,
             notify_callback=lambda msg: self._notify(PipelineStage.POLISHING, msg, 80.0),
             rate_limiter=self.rate_limiter,
             estimated_tokens=est_polish,

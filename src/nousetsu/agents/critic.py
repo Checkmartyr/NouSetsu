@@ -45,7 +45,10 @@ class CritiqueAgent:
             skills_section=skills_section
         )
 
-        user_content = f"Source Text Excerpt:\n{source_text[:6000]}\n\nDraft Translation:\n{draft_text[:10000]}"
+        user_content = (
+            f"### Original Source Text ({bible.source_language}):\n{source_text[:50000]}\n\n"
+            f"### Draft Translation ({bible.target_language}):\n{draft_text[:50000]}"
+        )
 
         response = self.llm.invoke([
             SystemMessage(content=sys_msg),

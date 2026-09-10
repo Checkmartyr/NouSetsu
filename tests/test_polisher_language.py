@@ -135,3 +135,70 @@ def test_workflow_route_blocks_on_language_regression():
     route = wf._route_after_critique(state)
     # Even though fidelity & style >= 8.5, language regression must force re-polishing / re-eval
     assert route == "polish"
+
+
+def test_polisher_includes_source_text_as_reference():
+    """Verify PolishingAgent includes source text in prompt when provided."""
+    polisher = PolishingAgent(model_name="mock-model")
+
+    mock_llm = MagicMock()
+    mock_llm.invoke.return_value = AIMessage(
+        content="บทที่ 1: การเดินทางเริ่มต้นขึ้นอย่างสง่างาม"
+    )
+    polisher.llm = mock_llm
+
+    source = "Chapter 1: The journey begins with resolute steps."
+    draft = "บทที่ 1: การเดินทางเริ่มต้นขึ้น"
+    bible = NovelBible(source_language="English", target_language="Thai")
+
+    polisher.polish(
+        draft_text=draft,
+        critique_notes="Enhance elegance",
+        active_glossary=[],
+        bible=bible,
+        source_text=source
+    )
+
+    # Verify message sent to LLM contains the source text reference
+    invoked_msgs = mock_llm.invoke.call_args[0][0]
+    human_msg = invoked_msgs[1].content
+    assert "Original Source Text (English - Reference Only)" in human_msg
+    assert source in human_msg
+    assert draft in human_msg
+
+
+def test_critic_full_length_comparison():
+    """Verify CritiqueAgent passes full chapter (up to 50k chars) without 6k truncation."""
+    critic = CritiqueAgent(model_name="mock-model")
+
+    mock_llm = MagicMock()
+    mock_llm.invoke.return_value = AIMessage(content="""```json
+{
+  "fidelity_score": 9.5,
+  "style_score": 9.5,
+  "glossary_compliance_pct": 100.0,
+  "warnings": [],
+  "critique_notes": "All good."
+}
+```""")
+    critic.llm = mock_llm
+
+    # Chapter of 15,000 characters
+    long_source = "A" * 15000
+    long_draft = "ก" * 15000
+    bible = NovelBible(source_language="English", target_language="Thai")
+
+    critic.evaluate(
+        source_text=long_source,
+        draft_text=long_draft,
+        bible=bible,
+        active_characters=[],
+        active_glossary=[]
+    )
+
+    invoked_msgs = mock_llm.invoke.call_args[0][0]
+    human_msg = invoked_msgs[1].content
+    # The full 15,000 chars should be present, not truncated at 6,000!
+    assert "A" * 15000 in human_msg
+    assert "ก" * 15000 in human_msg
+
