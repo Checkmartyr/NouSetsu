@@ -33,28 +33,28 @@
 
 ```mermaid
 flowchart TD
-    subgraph Input & Discovery
-        Raw[raw_chapters/*.txt] --> Scanner[ChapterScanner (natsort + SHA256)]
-        Bible[(.novel/bible/bible.yaml)] --> MemorySync[Cross-Chapter Memory Sync]
+    subgraph Input_Discovery ["Input & Discovery"]
+        Raw["raw_chapters/*.txt"] --> Scanner["ChapterScanner (natsort + SHA256)"]
+        Bible[(".novel/bible/bible.yaml")] --> MemorySync["Cross-Chapter Memory Sync"]
     end
 
-    subgraph Agentic Translation Graph (LangGraph)
-        Scanner --> Extractor[Stage 1: EntityExtractorAgent]
-        Extractor --> Drafter[Stage 2: ContextAwareDrafterAgent]
-        Drafter --> Critic[Stage 3: CritiqueAgent]
-        Critic --> Polisher[Stage 4: PolishingAgent]
-        Polisher --> Chronicler[Stage 5: ChroniclerAgent]
+    subgraph Translation_Graph ["Agentic Translation Graph (LangGraph)"]
+        Scanner --> Extractor["Stage 1: EntityExtractorAgent"]
+        Extractor --> Drafter["Stage 2: ContextAwareDrafterAgent"]
+        Drafter --> Critic["Stage 3: CritiqueAgent"]
+        Critic --> Polisher["Stage 4: PolishingAgent"]
+        Polisher --> Chronicler["Stage 5: ChroniclerAgent"]
     end
 
-    subgraph Output & Verification
-        Chronicler --> OutText[translated_chapters/*.md]
-        Chronicler --> Meta[.meta.json with Checkpoint & Quality Audit]
-        Chronicler --> BibleUpdate[Update Novel Bible Lore & Summaries]
+    subgraph Output_Verification ["Output & Verification"]
+        Chronicler --> OutText["translated_chapters/*.md"]
+        Chronicler --> Meta[".novel/metadata.json (Checkpoints & Quality Audit)"]
+        Chronicler --> BibleUpdate["Update Novel Bible Lore & Summaries"]
     end
 
-    subgraph UI & Controls
-        Meta --> TUI[Textual TUI / Rich CLI]
-        TUI --> User[Master Review / Interactive Batch]
+    subgraph UI_Controls ["UI & Controls"]
+        Meta --> TUI["Textual TUI / Rich CLI"]
+        TUI --> User["Master Review / Interactive Batch"]
     end
 ```
 
