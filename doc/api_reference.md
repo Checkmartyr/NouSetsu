@@ -1,13 +1,13 @@
 # 🛠️ Code & Developer API Reference
 
-This document provides a technical API reference for core classes, functions, and Pydantic models in **NouSetsu**.
+This document provides a technical API reference for core classes, functions, utilities, and Pydantic models in **NouSetsu**.
 
 ---
 
 ## 🤖 Agents (`src/agents/`)
 
-### `EntityExtractorAgent` (`src/agents/extractor.py`)
-Extracts named entities, characters, and glossary candidates from source text.
+### `EntityExtractorAgent` (*Schriftdetektiv*) (`src/agents/extractor.py`)
+Extracts named entities, characters, and glossary candidates from source text before translation begins.
 
 ```python
 class EntityExtractorAgent:
@@ -17,7 +17,7 @@ class EntityExtractorAgent:
         self,
         source_text: str,
         bible: NovelBible
-    ) -> Tuple[List[CharacterProfile], List[GlossaryItem], List[GlossaryItem]]:
+    ) -> Tuple[List[CharacterProfile], List[GlossaryItem], List[str]]:
         """
         Extracts new characters and glossary terms.
         Returns: (new_characters, new_terms, active_terms_in_chapter)
@@ -26,8 +26,8 @@ class EntityExtractorAgent:
 
 ---
 
-### `ContextAwareDrafterAgent` (`src/agents/drafter.py`)
-Produces initial novelistic translation drafts with zero-anaphora resolution and character voices.
+### `ContextAwareDrafterAgent` (*Wortschmied*) (`src/agents/drafter.py`)
+Produces initial novelistic translation drafts with zero-anaphora resolution, character voices, and episodic memory.
 
 ```python
 class ContextAwareDrafterAgent:
@@ -49,8 +49,8 @@ class ContextAwareDrafterAgent:
 
 ---
 
-### `CritiqueAgent` (`src/agents/critic.py`)
-Performs independent fidelity, style, and glossary compliance audits.
+### `CritiqueAgent` (*Zensor*) (`src/agents/critic.py`)
+Performs independent fidelity, style, and glossary compliance audits for both raw drafts and polished iterations.
 
 ```python
 class CritiqueAgent:
@@ -65,15 +65,15 @@ class CritiqueAgent:
         active_glossary: List[GlossaryItem]
     ) -> Tuple[QualityAudit, str]:
         """
-        Audits draft against source.
+        Audits draft or polished translation against source.
         Returns: (QualityAudit object, critique_notes string)
         """
 ```
 
 ---
 
-### `PolishingAgent` (`src/agents/polisher.py`)
-Refines prose cadence and eliminates translationese.
+### `PolishingAgent` (*Feinschliff*) (`src/agents/polisher.py`)
+Refines prose cadence, remedies critique feedback, and eliminates translationese tropes.
 
 ```python
 class PolishingAgent:
@@ -87,14 +87,14 @@ class PolishingAgent:
         bible: NovelBible
     ) -> str:
         """
-        Polishes prose to publication standard.
+        Polishes prose to publication standard based on critique notes.
         Returns: Polished Markdown text.
         """
 ```
 
 ---
 
-### `ChroniclerAgent` (`src/agents/chronicler.py`)
+### `ChroniclerAgent` (*Chronist*) (`src/agents/chronicler.py`)
 Updates narrative lore, generates chapter synopses, and compiles metadata.
 
 ```python
@@ -107,15 +107,58 @@ class ChroniclerAgent:
         chapter_title: str,
         translated_text: str
     ) -> ChapterSummary:
-        """Generates episodic synopsis and records state changes."""
+        """Generates episodic synopsis and records character state changes."""
 
     def assemble_metadata(...) -> ChapterMetadata:
-        """Assembles final ChapterMetadata record with stats and audit scores."""
+        """Assembles final ChapterMetadata record with stats, checkpoint data, and audit scores."""
 ```
 
 ---
 
-### `LLM Utilities` (`src/agents/llm.py`)
+## ⚡ Utilities (`src/utils/`)
+
+### `SlidingWindowRateLimiter` (`src/utils/rate_limiter.py`)
+Thread-safe sliding-window rate limiter enforcing dual TPM and RPM quotas across a 60-second window.
+
+```python
+class SlidingWindowRateLimiter:
+    def __init__(self, max_tpm: int = 16000, max_rpm: int = 60, window_seconds: float = 60.0)
+
+    def acquire(self, tokens: int = 1, stop_event: Optional[threading.Event] = None) -> None:
+        """
+        Blocks until capacity is available under both TPM and RPM limits.
+        Sleeps in 200–250ms chunks to allow instant interruption via stop_event.
+        """
+
+    def reset(self) -> None:
+        """Clears all logged request and token timestamps."""
+```
+
+### `estimate_tokens` (`src/utils/rate_limiter.py`)
+Fast, offline token estimator optimized for mixed CJK and Latin text.
+
+```python
+def estimate_tokens(text: str) -> int:
+    """
+    Computes token estimate without external model weights:
+    ~1.7 tokens per CJK character + ~1.3 tokens per Latin word.
+    """
+```
+
+### `detect_language` (`src/utils/language.py`)
+Zero-dependency Unicode script and stop-word frequency analyzer.
+
+```python
+def detect_language(text: str, default: str = "Japanese") -> str:
+    """
+    Detects language from raw sample text:
+    Recognizes Japanese, Chinese, Korean, Thai, Russian, English, Spanish, French, German.
+    """
+```
+
+---
+
+## 🛡️ LLM Invocation & Retry (`src/agents/llm.py`)
 
 ```python
 def get_llm(model_name: str, temperature: float = 0.3) -> BaseChatModel:
@@ -124,8 +167,11 @@ def get_llm(model_name: str, temperature: float = 0.3) -> BaseChatModel:
 def extract_text_from_message(content: Any) -> str:
     """Extracts plain text from LLM response, discarding reasoning blocks."""
 
-def is_transient_error(err: Exception) -> bool:
-    """Returns True if exception is 500, 503, 429 rate limit, or socket timeout."""
+def is_rate_limit_error(err: Exception) -> bool:
+    """Returns True if exception is HTTP 429, ResourceExhausted, or rate limit exceeded."""
+
+def parse_retry_delay(err: Exception) -> Optional[float]:
+    """Parses delay seconds from retry-after headers or 'retry in Xs' error text."""
 
 def invoke_with_retry(
     fn: Callable[..., Any],
@@ -134,9 +180,15 @@ def invoke_with_retry(
     initial_delay: float = 2.0,
     backoff_factor: float = 2.0,
     notify_callback: Optional[Callable[[str], None]] = None,
+    rate_limiter: Optional[SlidingWindowRateLimiter] = None,
+    estimated_tokens: int = 1000,
+    stop_event: Optional[threading.Event] = None,
     **kwargs: Any
 ) -> Any:
-    """Executes a function with exponential backoff and jitter on transient errors."""
+    """
+    Executes function with rate limit token acquisition, 25s–65s window rollover
+    quota backoff for 429 errors, and exponential backoff for transient errors.
+    """
 ```
 
 ---
@@ -144,18 +196,71 @@ def invoke_with_retry(
 ## 🔄 Graph & Workflow (`src/graph/`)
 
 ### `NovelTranslationWorkflow` (`src/graph/workflow.py`)
-Compiles and coordinates the multi-agent LangGraph execution.
+Coordinates the multi-agent LangGraph execution and reflection review cycle.
 
 ```python
 class NovelTranslationWorkflow:
-    def __init__(self, model_name: str = "gemini-2.5-pro")
+    def __init__(
+        self,
+        model_name: str = "gemini-2.5-pro",
+        rate_limiter: Optional[SlidingWindowRateLimiter] = None,
+        max_review_loops: int = 3,
+        quality_threshold: float = 8.5
+    )
     
     def run(
         self,
         initial_state: TranslationState,
-        stage_callback: Optional[Callable[[PipelineStage, str, float], None]] = None
+        stage_callback: Optional[Callable[[PipelineStage, str, float], None]] = None,
+        stop_event: Optional[threading.Event] = None
     ) -> TranslationState:
-        """Runs the LangGraph workflow to completion with stage callbacks."""
+        """
+        Runs LangGraph workflow through extraction, drafting, and conditional
+        reflection loop (critique <-> polish) until quality >= 8.5 or loop cap reached.
+        """
+```
+
+---
+
+## 📦 Batch & Scanning (`src/batch/`)
+
+### `BatchRunner` (`src/batch/runner.py`)
+Sequential batch orchestration with Rich progress, rate limits, and thread-safe cancellation.
+
+```python
+class BatchRunner:
+    def __init__(
+        self,
+        repository: NovelRepository,
+        model_name: str = "gemini-2.5-pro",
+        auto_update_bible: Optional[bool] = None,
+        max_tpm: Optional[int] = None,
+        max_rpm: Optional[int] = None,
+        max_review_loops: Optional[int] = None,
+        quality_threshold: Optional[float] = None,
+        console: Optional[Console] = None
+    )
+
+    def stop(self) -> None:
+        """Signals runner to gracefully halt and preserve paused checkpoint."""
+
+    def reset_stop(self) -> None:
+        """Clears stop event for a new batch run."""
+
+    @property
+    def is_stopped(self) -> bool:
+        """Returns True if stop signal was sent."""
+
+    def run_batch(
+        self,
+        input_dir: Path,
+        output_dir: Path,
+        limit: Optional[int] = None,
+        force_retranslate: bool = False,
+        tasks: Optional[List[ChapterTask]] = None,
+        progress_callback: Optional[Callable[[str, int, int, str], None]] = None,
+        stage_callback: Optional[Callable[[str, PipelineStage, str, float], None]] = None
+    ) -> List[ChapterMetadata]: ...
 ```
 
 ---
@@ -193,60 +298,17 @@ class NovelRepository:
     def compute_sha256(file_path: Path) -> str: ...
 ```
 
-### `ProjectRegistry` (`src/storage/repository.py`)
-Manages multi-project paths and last-active project persistence.
-
-```python
-class ProjectRegistry:
-    def register_project(self, project_path: Path | str) -> None: ...
-    def list_projects(self) -> List[dict]: ...
-    def get_last_active_project(self) -> Optional[Path]: ...
-    def set_last_active_project(self, path: Path | str) -> None: ...
-```
-
----
-
-## 📦 Batch & Scanning (`src/batch/`)
-
-### `ChapterScanner` (`src/batch/scanner.py`)
-Scans directories, sorts naturally, and inspects checkpoints.
-
-```python
-class ChapterScanner:
-    def __init__(self, repository: NovelRepository)
-    def extract_chapter_num(self, path: Path, default_idx: int) -> int: ...
-    def scan_directory(self, input_dir: Path, output_dir: Path) -> List[ChapterTask]: ...
-```
-
-### `BatchRunner` (`src/batch/runner.py`)
-Sequential batch orchestration with Rich progress.
-
-```python
-class BatchRunner:
-    def __init__(self, repository: NovelRepository, model_name: str = "gemini-2.5-pro", console: Optional[Console] = None)
-    def run_batch(
-        self,
-        input_dir: Path,
-        output_dir: Path,
-        limit: Optional[int] = None,
-        force_retranslate: bool = False,
-        tasks: Optional[List[ChapterTask]] = None,
-        progress_callback: Optional[Callable[[str, int, int, str], None]] = None,
-        stage_callback: Optional[Callable[[str, PipelineStage, str, float], None]] = None
-    ) -> List[ChapterMetadata]: ...
-```
-
 ---
 
 ## 📋 Data Schemas (`src/models/`)
 
 ### Key Pydantic Models
 
-* **`TranslationState` (`src/models/state.py`)**: The LangGraph shared state object passed across nodes.
+* **`TranslationState` (`src/models/state.py`)**: The LangGraph state schema.
+  * Fields: `chapter_id`, `chapter_num`, `source_text`, `draft_text`, `critique_notes`, `quality_audit`, `polished_text`, `review_iteration`, `max_review_loops`, `quality_threshold`, `best_polished_text`, `best_audit`, `metadata`.
+* **`ProjectConfig` (`src/models/config.py`)**: Project configuration settings.
+  * Fields: `project_id`, `title`, `source_language`, `target_language`, `raw_dir`, `output_dir`, `model_name`, `auto_update_bible`, `max_tpm`, `max_rpm`, `max_review_loops`, `quality_threshold`.
 * **`NovelBible` (`src/models/bible.py`)**: Root memory document holding `characters`, `glossary`, `summaries`, and `style_guide`.
-* **`CharacterProfile` (`src/models/bible.py`)**: Individual character sheet (`name`, `original_name`, `role`, `gender`, `voice`, `aliases`).
-* **`GlossaryItem` (`src/models/bible.py`)**: Canonical term mapping (`source`, `target`, `category`, `notes`).
 * **`ChapterMetadata` (`src/models/metadata.py`)**: Chapter metadata record with paired `CheckpointData`, `QualityAudit`, and `TranslationStats`.
-* **`CheckpointData` (`src/models/metadata.py`)**: Stage tracking (`status`, `last_completed_stage`, `failed_stage`, `last_error_type`, `last_error_traceback`, `error_logs`).
-* **`ErrorLogEntry` (`src/models/metadata.py`)**: Granular error log (`timestamp`, `stage`, `error_type`, `message`, `traceback`, `retry_attempt`, `model`).
-* **`ProjectMetadataDocument` (`src/models/metadata.py`)**: Single file document representing `.novel/metadata.json`.
+* **`CheckpointData` (`src/models/metadata.py`)**: Stage tracking with `status` (`PENDING`, `IN_PROGRESS`, `PAUSED`, `COMPLETED`, `FAILED`), `stage_artifacts`, and `error_logs`.
+* **`StageArtifacts` (`src/models/metadata.py`)**: Intermediate outputs (`extracted_characters`, `extracted_terms`, `draft_text`, `critique_notes`, `polished_text`).

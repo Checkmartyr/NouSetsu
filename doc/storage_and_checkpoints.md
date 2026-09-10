@@ -88,6 +88,13 @@ stateDiagram-v2
     POLISHING --> CHRONICLING: Stage 5 Completed
     CHRONICLING --> COMPLETED: Final Output Written
     
+    IN_PROGRESS --> PAUSED: User Stop Signal (X key / Ctrl+C)
+    EXTRACTION --> PAUSED: Stop Signal
+    DRAFTING --> PAUSED: Stop Signal
+    CRITIQUE --> PAUSED: Stop Signal
+    POLISHING --> PAUSED: Stop Signal
+    PAUSED --> IN_PROGRESS: Resume Selected (T / B)
+
     IN_PROGRESS --> FAILED: Unrecoverable Error
     EXTRACTION --> FAILED: Unrecoverable Error
     DRAFTING --> FAILED: Unrecoverable Error
@@ -95,7 +102,7 @@ stateDiagram-v2
     POLISHING --> FAILED: Unrecoverable Error
     CHRONICLING --> FAILED: Unrecoverable Error
     
-    FAILED --> IN_PROGRESS: Resume / Retry Selected
+    FAILED --> IN_PROGRESS: Retry Selected (T / B)
 ```
 
 ### `CheckpointData` Pydantic Model
@@ -110,7 +117,21 @@ class CheckpointData(BaseModel):
     retry_count: int = Field(default=0)
     stage_artifacts: StageArtifacts = Field(default_factory=StageArtifacts)
     error_logs: List[ErrorLogEntry] = Field(default_factory=list)
+
+    def is_resumable(self) -> bool:
+        """Returns True if chapter was paused or failed and has intermediate artifacts."""
+        return self.status in [StageStatus.PAUSED, StageStatus.FAILED] and bool(
+            self.stage_artifacts.draft_text or self.stage_artifacts.extracted_characters
+        )
 ```
+
+### `StageArtifacts` Model
+Preserves intermediate outputs so cancelled or paused runs never lose completed work:
+* `extracted_characters`: List of character profiles identified in Stage 1.
+* `extracted_terms`: Glossary items identified in Stage 1.
+* `draft_text`: Complete raw draft generated in Stage 2.
+* `critique_notes`: Audit feedback generated in Stage 3.
+* `polished_text`: Best literary prose candidate generated in Stage 4.
 
 ---
 
