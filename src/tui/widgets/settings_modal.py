@@ -89,6 +89,14 @@ class SettingsModal(ModalScreen):
                     yield Label("Translated Chapters Output Folder:", classes="field-label")
                     yield Input(value=str(self.app_instance.output_dir), id="set_output_dir")
 
+                with Container(classes="settings-section"):
+                    cfg = self.repo.load_config()
+                    yield Label("⚡ API Rate Limits & Throttling Guard", classes="section-title")
+                    yield Label("Max Tokens Per Minute (TPM, default 16000):", classes="field-label")
+                    yield Input(value=str(getattr(cfg, "max_tpm", 16000)), id="set_max_tpm")
+                    yield Label("Max Requests Per Minute (RPM, default 60):", classes="field-label")
+                    yield Input(value=str(getattr(cfg, "max_rpm", 60)), id="set_max_rpm")
+
                 yield Static("", id="settings_status")
 
             with Horizontal(classes="settings-btn-row"):
@@ -139,6 +147,22 @@ class SettingsModal(ModalScreen):
             self.app_instance.input_dir = Path(in_dir)
         if out_dir:
             self.app_instance.output_dir = Path(out_dir)
+
+        # Update rate limits in config and active runner
+        tpm_val = self.query_one("#set_max_tpm", Input).value.strip()
+        rpm_val = self.query_one("#set_max_rpm", Input).value.strip()
+        cfg = self.repo.load_config()
+        if tpm_val.isdigit():
+            new_tpm = int(tpm_val)
+            cfg.max_tpm = new_tpm
+            if hasattr(self.app_instance.runner, "rate_limiter"):
+                self.app_instance.runner.rate_limiter.max_tpm = new_tpm
+        if rpm_val.isdigit():
+            new_rpm = int(rpm_val)
+            cfg.max_rpm = new_rpm
+            if hasattr(self.app_instance.runner, "rate_limiter"):
+                self.app_instance.runner.rate_limiter.max_rpm = new_rpm
+        self.repo.save_config(cfg)
 
         # Refresh tasks in TUI
         self.app_instance.action_refresh_chapters()

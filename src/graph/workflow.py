@@ -12,13 +12,19 @@ from src.agents.polisher import PolishingAgent
 from src.models.exceptions import BatchStoppedException
 from src.models.metadata import PipelineStage, StageStatus
 from src.models.state import TranslationState
+from src.utils.rate_limiter import SlidingWindowRateLimiter, estimate_tokens
 
 
 class NovelTranslationWorkflow:
     """Orchestrates document-level novel translation with LangGraph."""
 
-    def __init__(self, model_name: str = "gemini-2.5-pro"):
+    def __init__(
+        self,
+        model_name: str = "gemini-2.5-pro",
+        rate_limiter: Optional[SlidingWindowRateLimiter] = None
+    ):
         self.model_name = model_name
+        self.rate_limiter = rate_limiter or SlidingWindowRateLimiter()
         self.current_stage: PipelineStage = PipelineStage.NONE
         self.extractor = EntityExtractorAgent(model_name=model_name)
         self.drafter = ContextAwareDrafterAgent(model_name=model_name)
@@ -73,11 +79,15 @@ class NovelTranslationWorkflow:
                 "active_characters": state.novel_bible.characters + state.extracted_characters
             }
 
+        est_extract = estimate_tokens(state.source_text[:12000]) + 600
         new_chars, new_terms, active_terms = invoke_with_retry(
             self.extractor.extract,
             state.source_text,
             state.novel_bible,
-            notify_callback=lambda msg: self._notify(PipelineStage.EXTRACTION, msg, 15.0)
+            notify_callback=lambda msg: self._notify(PipelineStage.EXTRACTION, msg, 15.0),
+            rate_limiter=self.rate_limiter,
+            estimated_tokens=est_extract,
+            stop_event=self.stop_event
         )
         
         all_chars = list(state.novel_bible.characters) + new_chars
@@ -99,6 +109,7 @@ class NovelTranslationWorkflow:
         if state.draft_text:
             return {"current_stage": PipelineStage.DRAFTING}
 
+        est_draft = int(estimate_tokens(state.source_text) * 1.5) + 2000
         draft = invoke_with_retry(
             self.drafter.draft,
             source_text=state.source_text,
@@ -106,7 +117,10 @@ class NovelTranslationWorkflow:
             active_characters=state.active_characters,
             active_glossary=state.active_glossary,
             rolling_summaries=state.novel_bible.summaries,
-            notify_callback=lambda msg: self._notify(PipelineStage.DRAFTING, msg, 35.0)
+            notify_callback=lambda msg: self._notify(PipelineStage.DRAFTING, msg, 35.0),
+            rate_limiter=self.rate_limiter,
+            estimated_tokens=est_draft,
+            stop_event=self.stop_event
         )
         return {
             "current_stage": PipelineStage.DRAFTING,
@@ -121,6 +135,7 @@ class NovelTranslationWorkflow:
         if state.critique_notes and state.quality_audit.fidelity_score > 0:
             return {"current_stage": PipelineStage.CRITIQUE}
 
+        est_critique = estimate_tokens(state.source_text) + estimate_tokens(state.draft_text) + 500
         audit, notes = invoke_with_retry(
             self.critic.evaluate,
             source_text=state.source_text,
@@ -128,7 +143,10 @@ class NovelTranslationWorkflow:
             bible=state.novel_bible,
             active_characters=state.active_characters,
             active_glossary=state.active_glossary,
-            notify_callback=lambda msg: self._notify(PipelineStage.CRITIQUE, msg, 60.0)
+            notify_callback=lambda msg: self._notify(PipelineStage.CRITIQUE, msg, 60.0),
+            rate_limiter=self.rate_limiter,
+            estimated_tokens=est_critique,
+            stop_event=self.stop_event
         )
         return {
             "current_stage": PipelineStage.CRITIQUE,
@@ -143,13 +161,17 @@ class NovelTranslationWorkflow:
         if state.polished_text:
             return {"current_stage": PipelineStage.POLISHING}
 
+        est_polish = estimate_tokens(state.draft_text) * 2 + 1000
         polished = invoke_with_retry(
             self.polisher.polish,
             draft_text=state.draft_text,
             critique_notes=state.critique_notes,
             active_glossary=state.active_glossary,
             bible=state.novel_bible,
-            notify_callback=lambda msg: self._notify(PipelineStage.POLISHING, msg, 80.0)
+            notify_callback=lambda msg: self._notify(PipelineStage.POLISHING, msg, 80.0),
+            rate_limiter=self.rate_limiter,
+            estimated_tokens=est_polish,
+            stop_event=self.stop_event
         )
         return {
             "current_stage": PipelineStage.POLISHING,
@@ -160,12 +182,16 @@ class NovelTranslationWorkflow:
         self._check_stop(state, PipelineStage.CHRONICLING)
         self.current_stage = PipelineStage.CHRONICLING
         self._notify(PipelineStage.CHRONICLING, "Updating narrative lore, summaries, and checkpoint...", 95.0)
+        est_chronicle = min(estimate_tokens(state.polished_text), 4000) + 400
         summary = invoke_with_retry(
             self.chronicler.chronicle,
             chapter_num=state.chapter_num,
             chapter_title=f"Chapter {state.chapter_num}",
             translated_text=state.polished_text,
-            notify_callback=lambda msg: self._notify(PipelineStage.CHRONICLING, msg, 95.0)
+            notify_callback=lambda msg: self._notify(PipelineStage.CHRONICLING, msg, 95.0),
+            rate_limiter=self.rate_limiter,
+            estimated_tokens=est_chronicle,
+            stop_event=self.stop_event
         )
 
         metadata = self.chronicler.assemble_metadata(

@@ -1,4 +1,5 @@
 """Batch runner for sequential chapter execution with checkpoint resumption."""
+import os
 from pathlib import Path
 import threading
 from typing import Callable, List, Optional
@@ -12,6 +13,7 @@ from src.models.metadata import ChapterMetadata, CheckpointData, PipelineStage, 
 from src.models.state import TranslationState
 from src.storage.repository import NovelRepository
 from src.utils.language import detect_language
+from src.utils.rate_limiter import SlidingWindowRateLimiter
 
 
 class BatchRunner:
@@ -22,14 +24,24 @@ class BatchRunner:
         repository: NovelRepository,
         model_name: str = "gemini-2.5-pro",
         auto_update_bible: Optional[bool] = None,
+        max_tpm: Optional[int] = None,
+        max_rpm: Optional[int] = None,
         console: Optional[Console] = None
     ):
         self.repo = repository
         self.model_name = model_name
         self.console = console or Console()
         self.scanner = ChapterScanner(repository)
-        self.workflow = NovelTranslationWorkflow(model_name=model_name)
         cfg = repository.load_config()
+
+        # Rate limiting configuration (default 16K TPM / 60 RPM)
+        env_tpm = int(os.environ["NOVEL_MAX_TPM"]) if "NOVEL_MAX_TPM" in os.environ else None
+        env_rpm = int(os.environ["NOVEL_MAX_RPM"]) if "NOVEL_MAX_RPM" in os.environ else None
+        resolved_tpm = max_tpm or env_tpm or getattr(cfg, "max_tpm", 16000)
+        resolved_rpm = max_rpm or env_rpm or getattr(cfg, "max_rpm", 60)
+
+        self.rate_limiter = SlidingWindowRateLimiter(max_tpm=resolved_tpm, max_rpm=resolved_rpm)
+        self.workflow = NovelTranslationWorkflow(model_name=model_name, rate_limiter=self.rate_limiter)
         self.auto_update_bible = auto_update_bible if auto_update_bible is not None else cfg.auto_update_bible
         self.stop_event = threading.Event()
 

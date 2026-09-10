@@ -16,6 +16,8 @@ class ProjectConfig(BaseModel):
     output_dir: str = Field(default="translated_chapters", description="Path to output translated files")
     model_name: str = Field(default="gemini-2.5-pro", description="Default LLM model name")
     auto_update_bible: bool = Field(default=True, description="Automatically merge newly discovered characters, terms, and summaries into Novel Bible")
+    max_tpm: int = Field(default=16000, description="Max tokens per minute rate limit quota")
+    max_rpm: int = Field(default=60, description="Max requests per minute rate limit quota")
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     def get_raw_path(self, base_dir: Path) -> Path:
