@@ -81,7 +81,9 @@ class NovelBibleModal(ModalScreen):
                         yield Input(value=self.bible.source_language, id="inp_source_lang", classes="input-field")
                         yield Label(f"Current Target Language: [bold cyan]{self.bible.target_language}[/]")
                         yield Input(value=self.bible.target_language, id="inp_target_lang", classes="input-field")
-                        yield Button("Save Language Settings", variant="primary", id="btn_save_langs")
+                        with Horizontal(classes="form-row"):
+                            yield Button("🔍 Auto-Detect from Raw Chapters", variant="default", id="btn_autodetect_lang")
+                            yield Button("Save Language Settings", variant="primary", id="btn_save_langs")
                         yield Static("", id="lang_status")
 
                 with TabPane("Add New Term"):
@@ -101,6 +103,17 @@ class NovelBibleModal(ModalScreen):
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id in ["btn_close", "btn_close_top"]:
             self.dismiss()
+        elif event.button.id == "btn_autodetect_lang":
+            from src.utils.language import detect_language_from_dir
+            config = self.repo.load_config()
+            raw_dir_path = self.repo.root_dir / config.raw_dir
+            detected = detect_language_from_dir(raw_dir_path)
+            status = self.query_one("#lang_status", Static)
+            if detected:
+                self.query_one("#inp_source_lang", Input).value = detected
+                status.update(f"[bold green]🔍 Detected source language from raw chapters: [bold]{detected}[/bold]![/]")
+            else:
+                status.update("[bold yellow]⚠ Could not detect language: No raw chapter text found.[/]")
         elif event.button.id == "btn_save_langs":
             src = self.query_one("#inp_source_lang", Input).value.strip()
             tgt = self.query_one("#inp_target_lang", Input).value.strip()

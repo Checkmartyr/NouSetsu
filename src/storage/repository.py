@@ -8,6 +8,7 @@ import yaml
 from src.models.bible import ChapterSummary, CharacterProfile, GlossaryItem, NovelBible, StyleGuide
 from src.models.config import ProjectConfig
 from src.models.metadata import ChapterMetadata, CheckpointData, PipelineStage, ProjectMetadataDocument, StageStatus
+from src.utils.language import detect_language_from_dir
 
 
 class ProjectRegistry:
@@ -178,9 +179,13 @@ class NovelRepository:
     ) -> NovelBible:
         """Create project folder structure, config, and default Novel Bible."""
         self.bible_dir.mkdir(parents=True, exist_ok=True)
-        self.summaries_dir.mkdir(parents=True, exist_ok=True)
-        (self.root_dir / raw_dir).mkdir(parents=True, exist_ok=True)
+        raw_path = self.root_dir / raw_dir
+        raw_path.mkdir(parents=True, exist_ok=True)
         (self.root_dir / output_dir).mkdir(parents=True, exist_ok=True)
+
+        # Auto-detect language if requested or empty
+        if (not source_lang) or source_lang.strip().lower() in ["auto", "autodetect", "detect", "unknown"]:
+            source_lang = detect_language_from_dir(raw_path, default="Japanese")
 
         config = ProjectConfig(
             title=title,

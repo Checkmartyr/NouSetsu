@@ -9,6 +9,7 @@ from src.graph.workflow import NovelTranslationWorkflow
 from src.models.metadata import ChapterMetadata, CheckpointData, PipelineStage, StageStatus
 from src.models.state import TranslationState
 from src.storage.repository import NovelRepository
+from src.utils.language import detect_language
 
 
 class BatchRunner:
@@ -80,6 +81,9 @@ class BatchRunner:
 
                 # Load fresh Novel Bible state for current chapter
                 bible = self.repo.load_bible()
+                if (not bible.source_language) or bible.source_language.strip().lower() in ["auto", "autodetect", "detect", "unknown"]:
+                    detected = detect_language(source_text, default="Japanese")
+                    bible = self.repo.set_languages(source_lang=detected)
 
                 # Prepare initial state with possible checkpoint resumption
                 initial_state = TranslationState(

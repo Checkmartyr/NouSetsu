@@ -25,7 +25,7 @@ console = Console()
 def cmd_init(args: argparse.Namespace) -> None:
     project_dir = getattr(args, "project_dir", None)
     repo = NovelRepository(project_dir) if project_dir else NovelRepository()
-    source_lang = args.source_lang or os.environ.get("SOURCE_LANG", "Japanese")
+    source_lang = args.source_lang or os.environ.get("SOURCE_LANG", "auto")
     target_lang = args.target_lang or os.environ.get("TARGET_LANG", "English")
     bible = repo.initialize_project(
         title=args.title,
@@ -52,7 +52,10 @@ def cmd_batch(args: argparse.Namespace) -> None:
     repo = NovelRepository(project_dir) if project_dir else NovelRepository()
     cfg = repo.load_config()
     if args.source_lang or args.target_lang:
-        repo.set_languages(source_lang=args.source_lang, target_lang=args.target_lang)
+        src_lang = args.source_lang
+        if src_lang and src_lang.lower() in ["auto", "autodetect", "detect"]:
+            src_lang = "Auto"
+        repo.set_languages(source_lang=src_lang, target_lang=args.target_lang)
     runner = BatchRunner(repo, model_name=args.model, console=console)
     input_path = Path(args.input_dir) if args.input_dir != "raw_chapters" else cfg.get_raw_path(repo.root_dir)
     output_path = Path(args.output_dir) if args.output_dir != "translated_chapters" else cfg.get_output_path(repo.root_dir)

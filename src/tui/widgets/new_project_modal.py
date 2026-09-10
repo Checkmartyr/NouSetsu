@@ -53,8 +53,8 @@ class NewProjectModal(ModalScreen):
                 yield Label("Project Folder Path (Absolute or relative path, e.g. D:\\Novels\\Book or project\\book):", classes="form-label")
                 yield Input(placeholder="e.g. D:\\Novels\\MyNovel or project\\my_novel", value="project/new_novel", id="inp_path")
 
-                yield Label("Source Language:", classes="form-label")
-                yield Input(value="Japanese", id="inp_src_lang")
+                yield Label("Source Language (or 'Auto' to detect from raw chapters):", classes="form-label")
+                yield Input(value="Auto", id="inp_src_lang")
 
                 yield Label("Target Language:", classes="form-label")
                 yield Input(value="English", id="inp_tgt_lang")
@@ -80,7 +80,7 @@ class NewProjectModal(ModalScreen):
         elif event.button.id == "btn_create":
             title = self.query_one("#inp_title", Input).value.strip() or "Untitled Novel"
             proj_path_str = self.query_one("#inp_path", Input).value.strip() or "project/new_novel"
-            src_lang = self.query_one("#inp_src_lang", Input).value.strip() or "Japanese"
+            src_lang = self.query_one("#inp_src_lang", Input).value.strip() or "Auto"
             tgt_lang = self.query_one("#inp_tgt_lang", Input).value.strip() or "English"
             raw_dir = self.query_one("#inp_raw_dir", Input).value.strip() or "raw_chapters"
             out_dir = self.query_one("#inp_out_dir", Input).value.strip() or "translated_chapters"
