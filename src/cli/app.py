@@ -64,12 +64,32 @@ def cmd_batch(args: argparse.Namespace) -> None:
     )
     input_path = Path(args.input_dir) if args.input_dir != "raw_chapters" else cfg.get_raw_path(repo.root_dir)
     output_path = Path(args.output_dir) if args.output_dir != "translated_chapters" else cfg.get_output_path(repo.root_dir)
-    runner.run_batch(
-        input_dir=input_path,
-        output_dir=output_path,
-        limit=args.limit,
-        force_retranslate=args.force
-    )
+
+    import signal
+
+    def sigint_handler(sig, frame):
+        console.print("\n[bold yellow]🛑 Stop requested by user (Ctrl+C)... halting cleanly and preserving checkpoints.[/]")
+        runner.stop()
+
+    prev_handler = signal.getsignal(signal.SIGINT)
+    try:
+        signal.signal(signal.SIGINT, sigint_handler)
+    except Exception:
+        # Some environments (e.g. non-main thread) may not permit setting signal
+        pass
+
+    try:
+        runner.run_batch(
+            input_dir=input_path,
+            output_dir=output_path,
+            limit=args.limit,
+            force_retranslate=args.force
+        )
+    finally:
+        try:
+            signal.signal(signal.SIGINT, prev_handler)
+        except Exception:
+            pass
 
 
 def cmd_tui(args: argparse.Namespace) -> None:

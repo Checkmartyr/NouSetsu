@@ -32,6 +32,8 @@ class ChapterListItem(ListItem):
             badge = r"[bold green]\[DONE][/]"
         elif self.chapter_task.is_failed:
             badge = r"[bold red]\[FAILED][/]"
+        elif self.chapter_task.is_paused:
+            badge = rf"[bold yellow]\[PAUSED:{self.chapter_task.resume_stage.value[:4].upper()}][/]"
         elif self.chapter_task.needs_resume:
             badge = rf"[bold yellow]\[RESUME:{self.chapter_task.resume_stage.value[:4].upper()}][/]"
         else:
@@ -77,6 +79,7 @@ class NovelAgentApp(App):
         Binding("r", "refresh_chapters", "Refresh"),
         Binding("b", "run_batch", "Run Batch"),
         Binding("t", "translate_selected", "Translate"),
+        Binding("x", "stop_translation", "Stop"),
         Binding("e", "edit_bible", "Novel Bible"),
         Binding("p", "open_project_selector", "Projects"),
         Binding("n", "open_new_project", "New Project"),
@@ -129,6 +132,7 @@ class NovelAgentApp(App):
                 yield ListView(id="chapter-list")
                 yield Button("▶ Translate Selected (T)", variant="primary", id="btn_translate", classes="action-btn")
                 yield Button("⚡ Run All Batch (B)", variant="warning", id="btn_batch", classes="action-btn")
+                yield Button("⏹ Stop Translation (X)", variant="error", id="btn_stop", classes="action-btn", disabled=True)
                 yield Button("📖 Novel Bible (E)", variant="default", id="btn_bible", classes="action-btn")
                 yield Button("📁 Projects (P)", variant="default", id="btn_projects", classes="action-btn")
                 yield Button("✨ New Project (N)", variant="success", id="btn_new_project", classes="action-btn")
@@ -233,11 +237,34 @@ class NovelAgentApp(App):
     def action_open_settings(self) -> None:
         self.push_screen(SettingsModal(self.repo, self))
 
+    def _set_translating_ui(self, is_translating: bool) -> None:
+        try:
+            btn_stop = self.query_one("#btn_stop", Button)
+            btn_batch = self.query_one("#btn_batch", Button)
+            btn_translate = self.query_one("#btn_translate", Button)
+            btn_stop.disabled = not is_translating
+            btn_batch.disabled = is_translating
+            btn_translate.disabled = is_translating
+        except Exception:
+            pass
+
+    def action_stop_translation(self) -> None:
+        """Signal runner to halt ongoing translation."""
+        self.runner.stop()
+        self.notify("🛑 Stop signal sent! Halting translation cleanly...", severity="warning")
+        try:
+            progress_panel = self.query_one("#progress_panel", ProgressPanel)
+            progress_panel.set_stopped("Active Translation")
+        except Exception:
+            pass
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "btn_translate":
             self.action_translate_selected()
         elif event.button.id == "btn_batch":
             self.action_run_batch()
+        elif event.button.id == "btn_stop":
+            self.action_stop_translation()
         elif event.button.id == "btn_bible":
             self.action_edit_bible()
         elif event.button.id == "btn_projects":
@@ -253,6 +280,7 @@ class NovelAgentApp(App):
             self.notify("No chapter selected to translate!", severity="warning")
             return
 
+        self.app.call_from_thread(self._set_translating_ui, True)
         task = self.selected_task
         task_filename = task.source_file.name
         self.notify(f"Translating Chapter {task.chapter_num}...", severity="information")
@@ -269,15 +297,22 @@ class NovelAgentApp(App):
                 tasks=[task],
                 stage_callback=stage_cb
             )
-            self.app.call_from_thread(progress_panel.set_finished, task_filename)
+            if self.runner.is_stopped:
+                self.app.call_from_thread(progress_panel.set_stopped, task_filename)
+                self.notify(f"Chapter {task.chapter_num} translation stopped.", severity="warning")
+            else:
+                self.app.call_from_thread(progress_panel.set_finished, task_filename)
+                self.notify(f"Chapter {task.chapter_num} translation complete!", severity="information")
             self.app.call_from_thread(self.action_refresh_chapters)
-            self.notify(f"Chapter {task.chapter_num} translation complete!", severity="information")
         except Exception as e:
             self.app.call_from_thread(progress_panel.set_failed, task_filename, str(e))
             self.notify(f"Translation failed: {e}", severity="error")
+        finally:
+            self.app.call_from_thread(self._set_translating_ui, False)
 
     @work(thread=True)
     def action_run_batch(self) -> None:
+        self.app.call_from_thread(self._set_translating_ui, True)
         self.notify("Starting batch translation...", severity="information")
         progress_panel = self.query_one("#progress_panel", ProgressPanel)
 
@@ -290,9 +325,15 @@ class NovelAgentApp(App):
                 output_dir=self.output_dir,
                 stage_callback=stage_cb
             )
-            self.app.call_from_thread(progress_panel.set_finished, "Batch")
+            if self.runner.is_stopped:
+                self.app.call_from_thread(progress_panel.set_stopped, "Batch")
+                self.notify("Batch translation stopped by user.", severity="warning")
+            else:
+                self.app.call_from_thread(progress_panel.set_finished, "Batch")
+                self.notify("Batch translation finished!", severity="information")
             self.app.call_from_thread(self.action_refresh_chapters)
-            self.notify("Batch translation finished!", severity="information")
         except Exception as e:
             self.app.call_from_thread(progress_panel.set_failed, "Batch", str(e))
             self.notify(f"Batch translation failed: {e}", severity="error")
+        finally:
+            self.app.call_from_thread(self._set_translating_ui, False)

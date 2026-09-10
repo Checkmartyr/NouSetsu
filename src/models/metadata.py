@@ -11,6 +11,7 @@ class StageStatus(str, Enum):
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
     FAILED = "failed"
+    PAUSED = "paused"
 
 
 class PipelineStage(str, Enum):
@@ -54,7 +55,7 @@ class CheckpointData(BaseModel):
     stage_artifacts: StageArtifacts = Field(default_factory=StageArtifacts)
 
     def is_resumable(self) -> bool:
-        return self.status in [StageStatus.IN_PROGRESS, StageStatus.FAILED] and self.last_completed_stage != PipelineStage.NONE
+        return self.status in [StageStatus.IN_PROGRESS, StageStatus.FAILED, StageStatus.PAUSED] and self.last_completed_stage != PipelineStage.NONE
 
     def is_completed(self) -> bool:
         return self.status == StageStatus.COMPLETED

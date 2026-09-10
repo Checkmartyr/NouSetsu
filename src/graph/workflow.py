@@ -1,4 +1,5 @@
 """LangGraph translation workflow wiring the multi-agent pipeline."""
+import threading
 import time
 from typing import Any, Callable, Dict, Optional
 from langgraph.graph import END, StateGraph
@@ -8,6 +9,7 @@ from src.agents.drafter import ContextAwareDrafterAgent
 from src.agents.extractor import EntityExtractorAgent
 from src.agents.llm import invoke_with_retry
 from src.agents.polisher import PolishingAgent
+from src.models.exceptions import BatchStoppedException
 from src.models.metadata import PipelineStage, StageStatus
 from src.models.state import TranslationState
 
@@ -24,6 +26,8 @@ class NovelTranslationWorkflow:
         self.polisher = PolishingAgent(model_name=model_name)
         self.chronicler = ChroniclerAgent(model_name=model_name)
         self.stage_callback: Optional[Callable[[PipelineStage, str, float], None]] = None
+        self.stop_event: Optional[threading.Event] = None
+        self.last_state: Optional[TranslationState] = None
         self.graph = self._build_graph()
 
     def _notify(self, stage: PipelineStage, msg: str, percent: float) -> None:
@@ -51,7 +55,14 @@ class NovelTranslationWorkflow:
 
         return builder.compile()
 
+    def _check_stop(self, state: TranslationState, stage: PipelineStage) -> None:
+        self.last_state = state
+        self.current_stage = stage
+        if self.stop_event and self.stop_event.is_set():
+            raise BatchStoppedException(f"Translation stopped by user before {stage.value} stage.")
+
     def _extract_step(self, state: TranslationState) -> Dict[str, Any]:
+        self._check_stop(state, PipelineStage.EXTRACTION)
         self.current_stage = PipelineStage.EXTRACTION
         self._notify(PipelineStage.EXTRACTION, "Extracting novel entities & terminology...", 15.0)
         # If already extracted in checkpoint, skip re-extracting
@@ -81,6 +92,7 @@ class NovelTranslationWorkflow:
         }
 
     def _draft_step(self, state: TranslationState) -> Dict[str, Any]:
+        self._check_stop(state, PipelineStage.DRAFTING)
         self.current_stage = PipelineStage.DRAFTING
         self._notify(PipelineStage.DRAFTING, "Drafting novelistic translation with character context...", 35.0)
         # If draft already exists in checkpoint, retain it
@@ -102,6 +114,7 @@ class NovelTranslationWorkflow:
         }
 
     def _critique_step(self, state: TranslationState) -> Dict[str, Any]:
+        self._check_stop(state, PipelineStage.CRITIQUE)
         self.current_stage = PipelineStage.CRITIQUE
         self._notify(PipelineStage.CRITIQUE, "Auditing fidelity, tone, and glossary adherence...", 60.0)
         # If critique notes already exist, retain
@@ -124,6 +137,7 @@ class NovelTranslationWorkflow:
         }
 
     def _polish_step(self, state: TranslationState) -> Dict[str, Any]:
+        self._check_stop(state, PipelineStage.POLISHING)
         self.current_stage = PipelineStage.POLISHING
         self._notify(PipelineStage.POLISHING, "Polishing prose cadence and eliminating translationese...", 80.0)
         if state.polished_text:
@@ -143,6 +157,7 @@ class NovelTranslationWorkflow:
         }
 
     def _chronicle_step(self, state: TranslationState) -> Dict[str, Any]:
+        self._check_stop(state, PipelineStage.CHRONICLING)
         self.current_stage = PipelineStage.CHRONICLING
         self._notify(PipelineStage.CHRONICLING, "Updating narrative lore, summaries, and checkpoint...", 95.0)
         summary = invoke_with_retry(
@@ -178,14 +193,22 @@ class NovelTranslationWorkflow:
             "metadata": metadata
         }
 
-    def run(self, initial_state: TranslationState, stage_callback: Optional[Callable[[PipelineStage, str, float], None]] = None) -> TranslationState:
-        """Run workflow graph to completion with optional stage callback."""
+    def run(
+        self,
+        initial_state: TranslationState,
+        stage_callback: Optional[Callable[[PipelineStage, str, float], None]] = None,
+        stop_event: Optional[threading.Event] = None
+    ) -> TranslationState:
+        """Run workflow graph to completion with optional stage callback and stop event."""
         if stage_callback:
             self.stage_callback = stage_callback
+        self.stop_event = stop_event
         self.current_stage = PipelineStage.NONE
+        self.last_state = initial_state
         start_time = time.time()
         final_state_dict = self.graph.invoke(initial_state)
         result = TranslationState.model_validate(final_state_dict)
+        self.last_state = result
         if result.metadata:
             result.metadata.stats.duration_seconds = round(time.time() - start_time, 2)
         self._notify(PipelineStage.CHRONICLING, "Chapter translation completed!", 100.0)

@@ -1,12 +1,14 @@
 """Batch runner for sequential chapter execution with checkpoint resumption."""
 from pathlib import Path
+import threading
 from typing import Callable, List, Optional
 from rich.console import Console
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from rich.table import Table
 from src.batch.scanner import ChapterScanner, ChapterTask
 from src.graph.workflow import NovelTranslationWorkflow
-from src.models.metadata import ChapterMetadata, CheckpointData, PipelineStage, StageStatus
+from src.models.exceptions import BatchStoppedException
+from src.models.metadata import ChapterMetadata, CheckpointData, PipelineStage, StageArtifacts, StageStatus
 from src.models.state import TranslationState
 from src.storage.repository import NovelRepository
 from src.utils.language import detect_language
@@ -29,6 +31,19 @@ class BatchRunner:
         self.workflow = NovelTranslationWorkflow(model_name=model_name)
         cfg = repository.load_config()
         self.auto_update_bible = auto_update_bible if auto_update_bible is not None else cfg.auto_update_bible
+        self.stop_event = threading.Event()
+
+    def stop(self) -> None:
+        """Signal batch runner to gracefully halt translation."""
+        self.stop_event.set()
+
+    def reset_stop(self) -> None:
+        """Reset stop signal for a new batch run."""
+        self.stop_event.clear()
+
+    @property
+    def is_stopped(self) -> bool:
+        return self.stop_event.is_set()
 
     def run_batch(
         self,
@@ -49,6 +64,7 @@ class BatchRunner:
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
 
+        self.reset_stop()
         results: List[ChapterMetadata] = []
         total_tasks = len(tasks)
 
@@ -64,6 +80,10 @@ class BatchRunner:
             overall_task = progress.add_task("[bold cyan]Translating novel...", total=total_tasks)
 
             for idx, task in enumerate(tasks, start=1):
+                if self.is_stopped:
+                    self.console.print("\n[bold yellow]🛑 Batch translation stopped by user request.[/]")
+                    break
+
                 desc = f"Ch.{task.chapter_num} ({task.source_file.name})"
 
                 if task.is_completed and not force_retranslate:
@@ -118,7 +138,11 @@ class BatchRunner:
                         if stage_callback:
                             stage_callback(task.source_file.name, st, msg, pct)
 
-                    final_state = self.workflow.run(initial_state, stage_callback=_on_stage)
+                    final_state = self.workflow.run(
+                        initial_state,
+                        stage_callback=_on_stage,
+                        stop_event=self.stop_event
+                    )
 
                     # Write translated text
                     with open(task.output_file, "w", encoding="utf-8") as out_f:
@@ -146,6 +170,44 @@ class BatchRunner:
                     progress.update(overall_task, advance=1, description=f"[bold green]Finished: {desc}")
                     if progress_callback:
                         progress_callback(task.source_file.name, idx, total_tasks, "COMPLETED")
+
+                except BatchStoppedException:
+                    paused_stage = getattr(self.workflow, "current_stage", PipelineStage.NONE)
+                    last_st = getattr(self.workflow, "last_state", initial_state) or initial_state
+
+                    extracted_chars = getattr(last_st, "extracted_characters", []) or (task.existing_meta.checkpoint.stage_artifacts.extracted_characters if task.existing_meta else [])
+                    extracted_terms = getattr(last_st, "extracted_terms", []) or (task.existing_meta.checkpoint.stage_artifacts.extracted_terms if task.existing_meta else [])
+                    draft_text = getattr(last_st, "draft_text", None) or (task.existing_meta.checkpoint.stage_artifacts.draft_text if task.existing_meta else None)
+                    critique_notes = getattr(last_st, "critique_notes", None) or (task.existing_meta.checkpoint.stage_artifacts.critique_notes if task.existing_meta else None)
+                    polished_text = getattr(last_st, "polished_text", None) or (task.existing_meta.checkpoint.stage_artifacts.polished_text if task.existing_meta else None)
+
+                    paused_meta = ChapterMetadata(
+                        chapter_id=f"chapter_{task.chapter_num:04d}",
+                        chapter_num=task.chapter_num,
+                        source_file=str(task.source_file),
+                        source_sha256=task.source_sha256,
+                        output_file=str(task.output_file),
+                        model=self.model_name,
+                        checkpoint=CheckpointData(
+                            status=StageStatus.PAUSED,
+                            last_completed_stage=paused_stage,
+                            stage_artifacts=StageArtifacts(
+                                extracted_terms=extracted_terms,
+                                extracted_characters=extracted_chars,
+                                draft_text=draft_text,
+                                critique_notes=critique_notes,
+                                polished_text=polished_text,
+                            )
+                        )
+                    )
+                    self.repo.save_metadata(paused_meta, task.output_file)
+                    results.append(paused_meta)
+
+                    progress.update(overall_task, description=f"[bold yellow]Paused: {desc}")
+                    if progress_callback:
+                        progress_callback(task.source_file.name, idx, total_tasks, "PAUSED")
+                    self.console.print(f"\n[bold yellow]🛑 Translation paused at {paused_stage.value.upper()} stage for {desc}. Checkpoints preserved.[/]")
+                    break
 
                 except Exception as err:
                     import traceback

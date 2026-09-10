@@ -82,3 +82,11 @@ class ProgressPanel(Widget):
 
         badge.update("[bold red] FAILED [/]")
         status_lbl.update(f"[bold red]❌ Failed {filename}: {err}[/]")
+
+    def set_stopped(self, filename: str) -> None:
+        """Mark translation as stopped/paused."""
+        badge = self.query_one("#stage_badge", Static)
+        status_lbl = self.query_one("#engine_status_msg", Static)
+
+        badge.update("[bold yellow] STOPPED [/]")
+        status_lbl.update(f"[bold yellow]⏹ Translation stopped for {filename}. Checkpoints preserved for resume.[/]")

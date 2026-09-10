@@ -17,6 +17,7 @@ class ChapterTask:
     existing_meta: Optional[ChapterMetadata] = None
     is_completed: bool = False
     is_failed: bool = False
+    is_paused: bool = False
     last_error: Optional[str] = None
     needs_resume: bool = False
     resume_stage: PipelineStage = PipelineStage.NONE
@@ -65,6 +66,7 @@ class ChapterScanner:
             meta = all_metadata.get(src_file.stem) or self.repo.load_metadata(out_file)
             is_done = False
             is_failed = False
+            is_paused = False
             last_err = None
             needs_resume = False
             resume_stage = PipelineStage.NONE
@@ -76,6 +78,11 @@ class ChapterScanner:
                 elif meta.checkpoint.status == StageStatus.FAILED:
                     is_failed = True
                     last_err = meta.checkpoint.last_error
+                    if meta.source_sha256 == src_sha256 and meta.checkpoint.is_resumable():
+                        needs_resume = True
+                        resume_stage = meta.checkpoint.last_completed_stage
+                elif meta.checkpoint.status == StageStatus.PAUSED:
+                    is_paused = True
                     if meta.source_sha256 == src_sha256 and meta.checkpoint.is_resumable():
                         needs_resume = True
                         resume_stage = meta.checkpoint.last_completed_stage
@@ -91,6 +98,7 @@ class ChapterScanner:
                 existing_meta=meta,
                 is_completed=is_done,
                 is_failed=is_failed,
+                is_paused=is_paused,
                 last_error=last_err,
                 needs_resume=needs_resume,
                 resume_stage=resume_stage
