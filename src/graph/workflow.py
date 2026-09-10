@@ -21,10 +21,14 @@ class NovelTranslationWorkflow:
     def __init__(
         self,
         model_name: str = "gemini-2.5-pro",
-        rate_limiter: Optional[SlidingWindowRateLimiter] = None
+        rate_limiter: Optional[SlidingWindowRateLimiter] = None,
+        max_review_loops: int = 3,
+        quality_threshold: float = 8.5
     ):
         self.model_name = model_name
         self.rate_limiter = rate_limiter or SlidingWindowRateLimiter()
+        self.max_review_loops = max_review_loops
+        self.quality_threshold = quality_threshold
         self.current_stage: PipelineStage = PipelineStage.NONE
         self.extractor = EntityExtractorAgent(model_name=model_name)
         self.drafter = ContextAwareDrafterAgent(model_name=model_name)
@@ -55,11 +59,47 @@ class NovelTranslationWorkflow:
         builder.set_entry_point("extract")
         builder.add_edge("extract", "draft")
         builder.add_edge("draft", "critique")
-        builder.add_edge("critique", "polish")
-        builder.add_edge("polish", "chronicle")
+        builder.add_conditional_edges(
+            "critique",
+            self._route_after_critique,
+            {
+                "polish": "polish",
+                "chronicle": "chronicle"
+            }
+        )
+        builder.add_conditional_edges(
+            "polish",
+            self._route_after_polish,
+            {
+                "critique": "critique",
+                "chronicle": "chronicle"
+            }
+        )
         builder.add_edge("chronicle", END)
 
         return builder.compile()
+
+    def _route_after_critique(self, state: TranslationState) -> str:
+        # Pass 1: only raw draft was critiqued; must polish into literary prose
+        if state.review_iteration <= 1 or not state.polished_text:
+            return "polish"
+
+        # Pass 2+: check quality threshold or loop exhaustion
+        passed_threshold = (
+            state.quality_audit.fidelity_score >= state.quality_threshold
+            and state.quality_audit.style_score >= state.quality_threshold
+        )
+        reached_max = state.review_iteration > state.max_review_loops
+        if passed_threshold or reached_max:
+            return "chronicle"
+        return "polish"
+
+    def _route_after_polish(self, state: TranslationState) -> str:
+        if state.max_review_loops <= 1:
+            return "chronicle"
+        if state.review_iteration > state.max_review_loops:
+            return "chronicle"
+        return "critique"
 
     def _check_stop(self, state: TranslationState, stage: PipelineStage) -> None:
         self.last_state = state
@@ -130,16 +170,37 @@ class NovelTranslationWorkflow:
     def _critique_step(self, state: TranslationState) -> Dict[str, Any]:
         self._check_stop(state, PipelineStage.CRITIQUE)
         self.current_stage = PipelineStage.CRITIQUE
-        self._notify(PipelineStage.CRITIQUE, "Auditing fidelity, tone, and glossary adherence...", 60.0)
-        # If critique notes already exist, retain
-        if state.critique_notes and state.quality_audit.fidelity_score > 0:
-            return {"current_stage": PipelineStage.CRITIQUE}
 
-        est_critique = estimate_tokens(state.source_text) + estimate_tokens(state.draft_text) + 500
+        is_initial_draft = (state.review_iteration == 1 and not state.polished_text)
+        current_iter = state.review_iteration if is_initial_draft else state.review_iteration + 1
+        display_iter = min(current_iter, state.max_review_loops)
+
+        if is_initial_draft:
+            self._notify(
+                PipelineStage.CRITIQUE,
+                f"Auditing fidelity, tone, and glossary adherence (Pass {display_iter}/{state.max_review_loops})...",
+                60.0
+            )
+            # If critique notes already exist from paused checkpoint, retain
+            if state.critique_notes and state.quality_audit.fidelity_score > 0:
+                return {
+                    "current_stage": PipelineStage.CRITIQUE,
+                    "review_iteration": current_iter
+                }
+            text_to_audit = state.draft_text
+        else:
+            self._notify(
+                PipelineStage.CRITIQUE,
+                f"Re-auditing polished translation (Pass {display_iter}/{state.max_review_loops})...",
+                60.0
+            )
+            text_to_audit = state.polished_text
+
+        est_critique = estimate_tokens(state.source_text) + estimate_tokens(text_to_audit) + 500
         audit, notes = invoke_with_retry(
             self.critic.evaluate,
             source_text=state.source_text,
-            draft_text=state.draft_text,
+            draft_text=text_to_audit,
             bible=state.novel_bible,
             active_characters=state.active_characters,
             active_glossary=state.active_glossary,
@@ -148,23 +209,59 @@ class NovelTranslationWorkflow:
             estimated_tokens=est_critique,
             stop_event=self.stop_event
         )
+
+        # Best-candidate regression guard
+        current_score = (audit.fidelity_score + audit.style_score) / 2.0
+        best_audit = state.best_audit
+        best_text = state.best_polished_text
+
+        if is_initial_draft:
+            best_audit = audit
+            best_text = state.best_polished_text or ""
+        else:
+            if best_audit is None:
+                best_audit = audit
+                best_text = text_to_audit
+            else:
+                prev_best_score = (best_audit.fidelity_score + best_audit.style_score) / 2.0
+                if current_score >= prev_best_score:
+                    best_audit = audit
+                    best_text = text_to_audit
+
         return {
             "current_stage": PipelineStage.CRITIQUE,
             "quality_audit": audit,
-            "critique_notes": notes
+            "critique_notes": notes,
+            "review_iteration": current_iter,
+            "best_audit": best_audit,
+            "best_polished_text": best_text
         }
 
     def _polish_step(self, state: TranslationState) -> Dict[str, Any]:
         self._check_stop(state, PipelineStage.POLISHING)
         self.current_stage = PipelineStage.POLISHING
-        self._notify(PipelineStage.POLISHING, "Polishing prose cadence and eliminating translationese...", 80.0)
-        if state.polished_text:
-            return {"current_stage": PipelineStage.POLISHING}
 
-        est_polish = estimate_tokens(state.draft_text) * 2 + 1000
+        is_initial_draft = (state.review_iteration <= 1)
+        display_iter = min(state.review_iteration, state.max_review_loops)
+        self._notify(
+            PipelineStage.POLISHING,
+            f"Polishing prose cadence (Pass {display_iter}/{state.max_review_loops})...",
+            80.0
+        )
+
+        # Check checkpoint resume for pass 1 if paused previously
+        if is_initial_draft and state.polished_text and not state.best_polished_text:
+            return {
+                "current_stage": PipelineStage.POLISHING,
+                "best_polished_text": state.polished_text
+            }
+
+        base_text = state.draft_text if is_initial_draft else (state.polished_text or state.best_polished_text or state.draft_text)
+
+        est_polish = estimate_tokens(base_text) * 2 + 1000
         polished = invoke_with_retry(
             self.polisher.polish,
-            draft_text=state.draft_text,
+            draft_text=base_text,
             critique_notes=state.critique_notes,
             active_glossary=state.active_glossary,
             bible=state.novel_bible,
@@ -173,21 +270,29 @@ class NovelTranslationWorkflow:
             estimated_tokens=est_polish,
             stop_event=self.stop_event
         )
+
+        best_text = polished if is_initial_draft else (state.best_polished_text or polished)
+
         return {
             "current_stage": PipelineStage.POLISHING,
-            "polished_text": polished
+            "polished_text": polished,
+            "best_polished_text": best_text
         }
 
     def _chronicle_step(self, state: TranslationState) -> Dict[str, Any]:
         self._check_stop(state, PipelineStage.CHRONICLING)
         self.current_stage = PipelineStage.CHRONICLING
         self._notify(PipelineStage.CHRONICLING, "Updating narrative lore, summaries, and checkpoint...", 95.0)
-        est_chronicle = min(estimate_tokens(state.polished_text), 4000) + 400
+
+        final_text = state.best_polished_text or state.polished_text
+        final_audit = state.best_audit or state.quality_audit
+
+        est_chronicle = min(estimate_tokens(final_text), 4000) + 400
         summary = invoke_with_retry(
             self.chronicler.chronicle,
             chapter_num=state.chapter_num,
             chapter_title=f"Chapter {state.chapter_num}",
-            translated_text=state.polished_text,
+            translated_text=final_text,
             notify_callback=lambda msg: self._notify(PipelineStage.CHRONICLING, msg, 95.0),
             rate_limiter=self.rate_limiter,
             estimated_tokens=est_chronicle,
@@ -201,20 +306,22 @@ class NovelTranslationWorkflow:
             source_sha256=state.source_sha256,
             output_file=state.output_file,
             source_text=state.source_text,
-            final_text=state.polished_text,
+            final_text=final_text,
             model_name=self.model_name,
             duration_seconds=1.0,
-            quality_audit=state.quality_audit,
+            quality_audit=final_audit,
             active_characters=state.active_characters,
             active_glossary=state.active_glossary,
             draft_text=state.draft_text,
             critique_notes=state.critique_notes,
-            polished_text=state.polished_text,
+            polished_text=final_text,
             status=StageStatus.COMPLETED
         )
 
         return {
             "current_stage": PipelineStage.CHRONICLING,
+            "polished_text": final_text,
+            "quality_audit": final_audit,
             "new_chapter_summary": summary,
             "metadata": metadata
         }
@@ -230,6 +337,12 @@ class NovelTranslationWorkflow:
             self.stage_callback = stage_callback
         self.stop_event = stop_event
         self.current_stage = PipelineStage.NONE
+
+        if initial_state.max_review_loops == 3 and self.max_review_loops != 3:
+            initial_state.max_review_loops = self.max_review_loops
+        if initial_state.quality_threshold == 8.5 and self.quality_threshold != 8.5:
+            initial_state.quality_threshold = self.quality_threshold
+
         self.last_state = initial_state
         start_time = time.time()
         final_state_dict = self.graph.invoke(initial_state)

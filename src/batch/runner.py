@@ -26,6 +26,8 @@ class BatchRunner:
         auto_update_bible: Optional[bool] = None,
         max_tpm: Optional[int] = None,
         max_rpm: Optional[int] = None,
+        max_review_loops: Optional[int] = None,
+        quality_threshold: Optional[float] = None,
         console: Optional[Console] = None
     ):
         self.repo = repository
@@ -40,8 +42,22 @@ class BatchRunner:
         resolved_tpm = max_tpm or env_tpm or getattr(cfg, "max_tpm", 16000)
         resolved_rpm = max_rpm or env_rpm or getattr(cfg, "max_rpm", 60)
 
+        # Review loop configuration
+        env_loops = int(os.environ["NOVEL_MAX_REVIEW_LOOPS"]) if "NOVEL_MAX_REVIEW_LOOPS" in os.environ else None
+        env_thresh = float(os.environ["NOVEL_QUALITY_THRESHOLD"]) if "NOVEL_QUALITY_THRESHOLD" in os.environ else None
+        resolved_loops = max_review_loops or env_loops or getattr(cfg, "max_review_loops", 3)
+        resolved_thresh = quality_threshold or env_thresh or getattr(cfg, "quality_threshold", 8.5)
+
+        self.max_review_loops = resolved_loops
+        self.quality_threshold = resolved_thresh
+
         self.rate_limiter = SlidingWindowRateLimiter(max_tpm=resolved_tpm, max_rpm=resolved_rpm)
-        self.workflow = NovelTranslationWorkflow(model_name=model_name, rate_limiter=self.rate_limiter)
+        self.workflow = NovelTranslationWorkflow(
+            model_name=model_name,
+            rate_limiter=self.rate_limiter,
+            max_review_loops=resolved_loops,
+            quality_threshold=resolved_thresh
+        )
         self.auto_update_bible = auto_update_bible if auto_update_bible is not None else cfg.auto_update_bible
         self.stop_event = threading.Event()
 
@@ -129,7 +145,9 @@ class BatchRunner:
                     output_file=str(task.output_file),
                     source_text=source_text,
                     model_name=self.model_name,
-                    novel_bible=bible
+                    novel_bible=bible,
+                    max_review_loops=self.max_review_loops,
+                    quality_threshold=self.quality_threshold
                 )
 
                 # Resume stage artifacts if present
@@ -191,7 +209,7 @@ class BatchRunner:
                     extracted_terms = getattr(last_st, "extracted_terms", []) or (task.existing_meta.checkpoint.stage_artifacts.extracted_terms if task.existing_meta else [])
                     draft_text = getattr(last_st, "draft_text", None) or (task.existing_meta.checkpoint.stage_artifacts.draft_text if task.existing_meta else None)
                     critique_notes = getattr(last_st, "critique_notes", None) or (task.existing_meta.checkpoint.stage_artifacts.critique_notes if task.existing_meta else None)
-                    polished_text = getattr(last_st, "polished_text", None) or (task.existing_meta.checkpoint.stage_artifacts.polished_text if task.existing_meta else None)
+                    polished_text = getattr(last_st, "best_polished_text", None) or getattr(last_st, "polished_text", None) or (task.existing_meta.checkpoint.stage_artifacts.polished_text if task.existing_meta else None)
 
                     paused_meta = ChapterMetadata(
                         chapter_id=f"chapter_{task.chapter_num:04d}",

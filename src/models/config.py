@@ -18,6 +18,8 @@ class ProjectConfig(BaseModel):
     auto_update_bible: bool = Field(default=True, description="Automatically merge newly discovered characters, terms, and summaries into Novel Bible")
     max_tpm: int = Field(default=16000, description="Max tokens per minute rate limit quota")
     max_rpm: int = Field(default=60, description="Max requests per minute rate limit quota")
+    max_review_loops: int = Field(default=3, ge=1, le=5, description="Maximum review loops for translation refinement")
+    quality_threshold: float = Field(default=8.5, ge=5.0, le=10.0, description="Quality score threshold (fidelity & style) to exit review loop")
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     def get_raw_path(self, base_dir: Path) -> Path:

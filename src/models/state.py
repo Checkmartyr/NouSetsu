@@ -29,5 +29,12 @@ class TranslationState(BaseModel):
     polished_text: str = Field(default="")
     new_chapter_summary: Optional[ChapterSummary] = None
 
+    review_iteration: int = Field(default=1, description="Current review loop iteration (1-indexed)")
+    max_review_loops: int = Field(default=3, description="Maximum review passes allowed")
+    quality_threshold: float = Field(default=8.5, description="Target fidelity and style score threshold")
+    best_polished_text: str = Field(default="", description="Polished text candidate with highest score")
+    best_audit: Optional[QualityAudit] = Field(default=None, description="Quality audit of best candidate")
+
     metadata: Optional[ChapterMetadata] = None
     error: Optional[str] = None
+

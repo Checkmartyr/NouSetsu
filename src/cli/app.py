@@ -62,6 +62,8 @@ def cmd_batch(args: argparse.Namespace) -> None:
         auto_update_bible=getattr(args, "auto_update_bible", None),
         max_tpm=getattr(args, "max_tpm", None),
         max_rpm=getattr(args, "max_rpm", None),
+        max_review_loops=getattr(args, "max_loops", None),
+        quality_threshold=getattr(args, "quality_threshold", None),
         console=console
     )
     input_path = Path(args.input_dir) if args.input_dir != "raw_chapters" else cfg.get_raw_path(repo.root_dir)
@@ -135,6 +137,8 @@ def main() -> None:
     p_batch.add_argument("--auto-update-bible", action=argparse.BooleanOptionalAction, default=None, help="Automatically merge new characters/terms into Novel Bible")
     p_batch.add_argument("--max-tpm", type=int, default=None, help="Max tokens per minute rate limit quota (default: 16000)")
     p_batch.add_argument("--max-rpm", type=int, default=None, help="Max requests per minute rate limit quota (default: 60)")
+    p_batch.add_argument("--max-loops", type=int, default=None, help="Maximum review loops for translation refinement (default: 3)")
+    p_batch.add_argument("--quality-threshold", type=float, default=None, help="Target quality score threshold (fidelity & style) to exit review loop (default: 8.5)")
 
     # tui
     p_tui = subparsers.add_parser("tui", help="Launch interactive Textual TUI dashboard")

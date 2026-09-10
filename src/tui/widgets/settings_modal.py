@@ -97,6 +97,13 @@ class SettingsModal(ModalScreen):
                     yield Label("Max Requests Per Minute (RPM, default 60):", classes="field-label")
                     yield Input(value=str(getattr(cfg, "max_rpm", 60)), id="set_max_rpm")
 
+                with Container(classes="settings-section"):
+                    yield Label("🔄 Review Loop & Quality Control", classes="section-title")
+                    yield Label("Max Review Loops (1–5, default 3):", classes="field-label")
+                    yield Input(value=str(getattr(cfg, "max_review_loops", 3)), id="set_max_loops")
+                    yield Label("Quality Threshold (5.0–10.0, default 8.5):", classes="field-label")
+                    yield Input(value=str(getattr(cfg, "quality_threshold", 8.5)), id="set_quality_threshold")
+
                 yield Static("", id="settings_status")
 
             with Horizontal(classes="settings-btn-row"):
@@ -162,6 +169,28 @@ class SettingsModal(ModalScreen):
             cfg.max_rpm = new_rpm
             if hasattr(self.app_instance.runner, "rate_limiter"):
                 self.app_instance.runner.rate_limiter.max_rpm = new_rpm
+
+        # Update review loop configuration
+        loops_val = self.query_one("#set_max_loops", Input).value.strip()
+        thresh_val = self.query_one("#set_quality_threshold", Input).value.strip()
+        if loops_val.isdigit():
+            new_loops = max(1, min(5, int(loops_val)))
+            cfg.max_review_loops = new_loops
+            if hasattr(self.app_instance.runner, "max_review_loops"):
+                self.app_instance.runner.max_review_loops = new_loops
+            if hasattr(self.app_instance.runner, "workflow") and hasattr(self.app_instance.runner.workflow, "max_review_loops"):
+                self.app_instance.runner.workflow.max_review_loops = new_loops
+        try:
+            new_thresh = float(thresh_val)
+            if 5.0 <= new_thresh <= 10.0:
+                cfg.quality_threshold = new_thresh
+                if hasattr(self.app_instance.runner, "quality_threshold"):
+                    self.app_instance.runner.quality_threshold = new_thresh
+                if hasattr(self.app_instance.runner, "workflow") and hasattr(self.app_instance.runner.workflow, "quality_threshold"):
+                    self.app_instance.runner.workflow.quality_threshold = new_thresh
+        except ValueError:
+            pass
+
         self.repo.save_config(cfg)
 
         # Refresh tasks in TUI
