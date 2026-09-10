@@ -213,10 +213,33 @@ Sample raw chapters (`001 - Awakening.txt`, `002 - Magic Beast.txt`) processed t
 
 ---
 
+## 📚 Technical Documentation & Deep Dives
+
+In-depth technical architecture and developer guides are located in the [**`doc/`**](./doc/README.md) directory:
+
+| Guide | Link | Focus Area |
+| :--- | :--- | :--- |
+| **Workflow Pipeline** | [**`doc/workflow.md`**](./doc/workflow.md) | LangGraph stages, state machine, sequence diagrams, and retry backoff. |
+| **System Architecture** | [**`doc/architecture.md`**](./doc/architecture.md) | Layer design, component boundaries, and clean architecture data flow. |
+| **Novel Bible & Memory** | [**`doc/novel_bible.md`**](./doc/novel_bible.md) | Zero-anaphora pronoun resolution, character voice preservation, and style guides. |
+| **Storage & Checkpoints** | [**`doc/storage_and_checkpoints.md`**](./doc/storage_and_checkpoints.md) | Single metadata document (`.novel/metadata.json`), error logs, and mid-run resumption. |
+| **Terminal UI Guide** | [**`doc/tui_guide.md`**](./doc/tui_guide.md) | Dual Reader, live visualizer, Novel Bible editor, project manager, and keybindings. |
+| **Developer API Reference** | [**`doc/api_reference.md`**](./doc/api_reference.md) | Class signatures, methods, and Pydantic schemas. |
+
+---
+
 ## 📂 Project Structure
 
 ```
 NouSetsu/
+├── doc/                            # Comprehensive technical documentation
+│   ├── README.md                   # Documentation index
+│   ├── workflow.md                 # LangGraph pipeline and agent stages
+│   ├── architecture.md             # System architecture and layer design
+│   ├── novel_bible.md              # Zero-anaphora and Novel Bible guide
+│   ├── storage_and_checkpoints.md  # Single metadata and error logging
+│   ├── tui_guide.md                # Textual TUI user guide and shortcuts
+│   └── api_reference.md            # Developer API reference
 ├── .novel/                         # Project metadata and persistent memory
 │   ├── config.yaml                 # Project configuration (languages, raw/out folders)
 │   ├── metadata.json               # Consolidated chapter checkpoints & audit stats
