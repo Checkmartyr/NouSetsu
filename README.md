@@ -14,18 +14,22 @@
 
 * **Cross-Chapter Narrative Memory**: Maintains a persistent **Novel Bible** tracking character sheets, voice registers, canonical glossary terms, and rolling summaries of preceding chapters to eliminate character voice drift.
 * **Zero-Anaphora Resolution**: Context-augmented drafting specifically designed for East Asian languages (Japanese, Chinese, Korean) where subjects, agents, and pronouns are omitted.
-* **Multi-Stage Agentic Refinement**:
-  1. `EntityExtractorAgent`: Discovers unfamiliar names, terms, and ranks before drafting.
-  2. `ContextAwareDrafterAgent`: Translates with active character registers and rolling plot context.
-  3. `CritiqueAgent`: Inspects fidelity, dropped sentences, and glossary compliance.
-  4. `PolishingAgent`: Eliminates machine-translation tropes to produce publication-grade novel prose.
-  5. `ChroniclerAgent`: Updates world memory and generates chapter synopses.
+* **Multi-Stage Agentic Pipeline & Functions**:
+  | Stage | Agent (German Codename) | Primary Function | Plain-English Role & Purpose |
+  |:---:|:---|:---|:---|
+  | **1** | **EntityExtractorAgent**<br>*(Schriftdetektiv)* | `extract(source_text, bible)` | **The Detective**: Scans raw text *before* translation to discover unknown character names, spells, and items, keeping spelling consistent. |
+  | **2** | **ContextAwareDrafterAgent**<br>*(Wortschmied)* | `draft(source_text, bible, ...)` | **The Wordsmith**: Writes the initial full translation, restoring omitted pronouns (*Zero-Anaphora*) and enforcing character voices. |
+  | **3** | **CritiqueAgent**<br>*(Zensor)* | `evaluate(source_text, draft_text, ...)` | **The Inspector**: Audits fidelity (0-10) and style (0-10), checks glossary adherence, and generates actionable critique notes. |
+  | **4** | **PolishingAgent**<br>*(Feinschliff)* | `polish(draft_text, critique_notes, ...)` | **The Stylist**: Rewrites draft prose into natural, immersive literary English, eliminating machine-translation tropes. |
+  | **5** | **ChroniclerAgent**<br>*(Chronist)* | `chronicle(...)`<br>`assemble_metadata(...)` | **The Memory Keeper**: Summarizes chapter events for future chapters and archives stats into `.novel/metadata.json`. |
+* **Automated Critic-Polish Reflection Loop**: Automatically loops between `Feinschliff` and `Zensor` to refine prose until both fidelity and style meet strict quality thresholds (`>= 8.5/10`) or hit a configurable loop cap (default 3 loops). Includes an automatic **Best-Candidate Regression Guard** that always saves the highest-scoring version.
+* **Proactive Sliding-Window Rate Limiter (16K TPM / 60 RPM)**: Dual quota management across a rolling 60-second window, backed by offline mixed CJK/Latin token estimation and 25s–65s window rollover cooldowns for Google API 429 quota exhaustion.
+* **Automatic Source Language Detection**: Automatically recognizes Japanese Kanji/Kana, Korean Hangul, and Chinese Hanzi during chapter scanning, removing manual setup barriers.
+* **Thread-Safe Graceful Stop & Resumption**: Cleanly pause or cancel batch processing via `X` shortcut / button in TUI or `SIGINT` (Ctrl+C) in CLI, saving mid-chapter checkpoints (`StageStatus.PAUSED`) without losing progress.
 * **Single Project Metadata Checkpoints (`.novel/metadata.json`)**: All chapter checkpoints, error diagnostics, and quality audit metrics are centralized in a single project file, keeping translated folders clean while enabling instant 1-read directory scanning.
 * **Transient Error Resilience & Backoff**: Exponential backoff retry absorbs Google `500 INTERNAL`, `503`, and `429` rate limits automatically with full stack trace diagnostics.
 * **Folder-to-Folder Batch Automation**: Automatically discovers and naturally sorts chapters (`001.txt`, `ch2.txt`, `ch10.txt`), sequentially translates them while passing state, and skips unaltered completed chapters.
 * **Interactive Terminal UI (TUI)**: Full dual-pane terminal reader built with `textual` and `rich`, featuring synchronized source/target inspection, live checkpoint badges, and an in-terminal Novel Bible editor.
-* **In-TUI Project Management & Custom Folders**: Seamlessly initialize new novel projects, switch active projects with one click, and configure custom raw and translated output directory names per project.
-* **Real-Time Live Translation Visualizer**: Displays granular 5-stage progress badges (`1/5 EXTRACTION`, `2/5 DRAFTING`, `3/5 CRITIQUE`, `4/5 POLISHING`, `5/5 CHRONICLING`), an animated progress bar, and live status messaging during single-chapter or batch execution.
 
 ---
 
@@ -33,28 +37,37 @@
 
 ```mermaid
 flowchart TD
-    subgraph Input_Discovery ["Input & Discovery"]
-        Raw["raw_chapters/*.txt"] --> Scanner["ChapterScanner (natsort + SHA256)"]
-        Bible[(".novel/bible/bible.yaml")] --> MemorySync["Cross-Chapter Memory Sync"]
+    subgraph Input_Discovery ["1. Input Discovery & Memory Sync"]
+        Raw["raw_chapters/*.txt"] --> LangDetect["Auto Language Detection\n(Japanese / Chinese / Korean)"]
+        LangDetect --> Scanner["ChapterScanner\n(natsort + SHA256)"]
+        Bible[(".novel/bible/bible.yaml")] --> MemorySync["Cross-Chapter Memory Sync\n(Characters, Glossary, Summaries)"]
     end
 
-    subgraph Translation_Graph ["Agentic Translation Graph (LangGraph)"]
-        Scanner --> Extractor["Stage 1: EntityExtractorAgent"]
-        Extractor --> Drafter["Stage 2: ContextAwareDrafterAgent"]
-        Drafter --> Critic["Stage 3: CritiqueAgent"]
-        Critic --> Polisher["Stage 4: PolishingAgent"]
-        Polisher --> Chronicler["Stage 5: ChroniclerAgent"]
+    subgraph Translation_Graph ["2. Agentic Translation Graph (LangGraph)"]
+        Scanner --> Extractor["Stage 1: Schriftdetektiv (EntityExtractorAgent)\nextract() -> Discovers unknown names & items"]
+        Extractor --> Drafter["Stage 2: Wortschmied (ContextAwareDrafterAgent)\ndraft() -> Resolves Zero-Anaphora & voices"]
+        Drafter --> Critic["Stage 3: Zensor (CritiqueAgent)\nevaluate() -> Scores fidelity & style"]
+        Critic --> Polish["Stage 4: Feinschliff (PolishingAgent)\npolish() -> Refines cadence & natural prose"]
+        
+        Polish --> ReviewCheck{"Quality Check:\nFidelity & Style >= 8.5\nOR Max Loops Reached?"}
+        ReviewCheck -- "Below 8.5 (Needs Refinement)" --> Critic
+        ReviewCheck -- "Passed or Cap Reached\n(Best Candidate Guard)" --> Chronicler["Stage 5: Chronist (ChroniclerAgent)\nchronicle() & assemble_metadata()"]
     end
 
-    subgraph Output_Verification ["Output & Verification"]
+    subgraph Safety_Guards ["3. Enterprise Safety Guards"]
+        RateLimiter["⚡ Sliding-Window Rate Limiter\n(16,000 TPM / 60 RPM + 429 Rollover)"]
+        StopGuard["🛑 Thread-Safe Stop & Cancel\n(X Key / Ctrl+C -> PAUSED Checkpoint)"]
+    end
+
+    subgraph Output_Verification ["4. Output & Verification"]
         Chronicler --> OutText["translated_chapters/*.md"]
-        Chronicler --> Meta[".novel/metadata.json (Checkpoints & Quality Audit)"]
-        Chronicler --> BibleUpdate["Update Novel Bible Lore & Summaries"]
+        Chronicler --> Meta[".novel/metadata.json\n(Checkpoints & Quality Audit)"]
+        Chronicler --> BibleUpdate["Update Novel Bible\nLore & Rolling Summaries"]
     end
 
-    subgraph UI_Controls ["UI & Controls"]
+    subgraph UI_Controls ["5. UI & Controls"]
         Meta --> TUI["Textual TUI / Rich CLI"]
-        TUI --> User["Master Review / Interactive Batch"]
+        TUI --> User["Interactive Reader / Batch Dashboard"]
     end
 ```
 
@@ -108,11 +121,16 @@ uv run python main.py batch --input-dir raw_chapters --output-dir translated_cha
 **CLI Flags**:
 * `--input-dir`, `-i`: Folder containing raw source chapters (default: `raw_chapters`).
 * `--output-dir`, `-o`: Folder for translated output and metadata (default: `translated_chapters`).
-* `--source-lang`: Source language (e.g., `Japanese`, `Chinese`, `Korean`).
-* `--target-lang`: Target language (e.g., `English`, `Spanish`, `French`).
+* `--source-lang`: Source language (e.g., `Japanese`, `Chinese`, `Korean`, or auto-detected).
+* `--target-lang`: Target language (default: `English`).
 * `--model`, `-m`: LLM model name (default: `gemini-2.5-pro`).
 * `--limit`, `-l`: Maximum number of chapters to process.
 * `--force`, `-f`: Force re-translation even if chapter is already marked completed.
+* `--max-loops`: Maximum review reflection loops per chapter (default: 3, bounds: 1–5).
+* `--quality-threshold`: Target quality score (fidelity & style) to exit review loop early (default: 8.5).
+* `--max-tpm`: Max tokens per minute rate limit quota (default: 16000).
+* `--max-rpm`: Max requests per minute rate limit quota (default: 60).
+* `--auto-update-bible / --no-auto-update-bible`: Automatically merge new characters and terms into Novel Bible.
 
 ### 3. Launch the Textual TUI Dashboard
 Launch the interactive dual-pane reader and terminal workspace:
@@ -126,10 +144,11 @@ uv run python main.py tui --input-dir raw_chapters --output-dir translated_chapt
 |:---:|:---|:---|
 | `T` | **Translate Selected** | Run agentic translation on currently selected chapter |
 | `B` | **Run All Batch** | Trigger background batch translation across all chapters |
+| `X` | **Stop Translation** | Gracefully halt active translation and save pause checkpoint |
 | `P` | **Projects** | Open Project Selector modal to switch active project |
 | `N` | **New Project** | Open Initialize Project modal with title, languages & folder names |
 | `E` | **Novel Bible** | Open in-terminal editor to inspect/add characters & terms |
-| `S` | **Settings** | Configure LLM model, languages, style guide, and paths |
+| `S` | **Settings** | Configure model, languages, rate limits, review loops, and paths |
 | `R` | **Refresh** | Re-scan chapters and reload status badges |
 | `Q` | **Quit** | Exit the TUI application |
 
@@ -190,14 +209,18 @@ uv run pytest
 Output:
 ```
 ============================= test session starts =============================
-tests/test_checkpoint.py ....                                            [ 15%]
-tests/test_models.py ...                                                 [ 26%]
-tests/test_projects.py ....                                              [ 42%]
-tests/test_retry.py ....                                                 [ 57%]
-tests/test_runner.py .                                                   [ 61%]
-tests/test_scanner.py ..                                                 [ 69%]
+tests/test_checkpoint.py ....                                            [  7%]
+tests/test_language.py ...........                                       [ 27%]
+tests/test_models.py ...                                                 [ 32%]
+tests/test_projects.py ....                                              [ 40%]
+tests/test_rate_limiter.py ........                                      [ 54%]
+tests/test_retry.py ....                                                 [ 61%]
+tests/test_review_loop.py ......                                         [ 72%]
+tests/test_runner.py ...                                                 [ 78%]
+tests/test_scanner.py ..                                                 [ 81%]
+tests/test_stop.py ..                                                    [ 85%]
 tests/test_tui.py ........                                               [100%]
-============================= 26 passed in 10.58s =============================
+============================= 55 passed in 15.67s =============================
 ```
 
 ### 2. End-to-End Batch Validation
@@ -264,8 +287,9 @@ NouSetsu/
 │   ├── tui/                        # Textual TUI app and inspection widgets
 │   │   ├── widgets/                # Reader, Inspector, ProgressPanel, Modals
 │   │   └── app.py                  # Main Textual App
+│   ├── utils/                      # Utilities (language detector, sliding window rate limiter)
 │   └── cli/                        # CLI command dispatch
-├── tests/                          # Automated pytest suite (26 tests)
+├── tests/                          # Automated pytest suite (55 tests across 11 modules)
 ├── main.py                         # Root entry point
 ├── pyproject.toml                  # Dependencies and project configuration
 └── README.md                       # Documentation
