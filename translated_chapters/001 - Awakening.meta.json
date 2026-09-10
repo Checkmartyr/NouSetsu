@@ -1,0 +1,90 @@
+{
+  "chapter_id": "chapter_0001",
+  "chapter_num": 1,
+  "source_file": "raw_chapters\\001 - Awakening.txt",
+  "source_sha256": "eedc16a0eb6762e6e6dd859709f82586f15905907363ed5506fcfdc068a85d30",
+  "output_file": "translated_chapters\\001 - Awakening.md",
+  "timestamp": "2026-09-10T17:54:53.794792+00:00",
+  "model": "gemma-4-31b-it",
+  "checkpoint": {
+    "status": "completed",
+    "last_completed_stage": "chronicling",
+    "retry_count": 0,
+    "last_error": null,
+    "stage_artifacts": {
+      "extracted_terms": [
+        {
+          "source": "古代遺跡",
+          "target": "ซากปรักหักพังโบราณ",
+          "category": "location",
+          "notes": "สถานที่ที่ตัวเอกตื่นขึ้นมา"
+        },
+        {
+          "source": "回廊",
+          "target": "ระเบียงทางเดิน",
+          "category": "location",
+          "notes": "ทางเดินยาวภายในซากปรักหักพัง"
+        },
+        {
+          "source": "魔導具",
+          "target": "อุปกรณ์เวทมนตร์",
+          "category": "item",
+          "notes": "คำที่สลักอยู่บนตัวดาบ บ่งบอกว่าเป็นไอเทมที่มีพลังเวท"
+        }
+      ],
+      "extracted_characters": [
+        {
+          "name": "เด็กหนุ่ม",
+          "original_name": "少年",
+          "aliases": [],
+          "gender": "male",
+          "role": "protagonist",
+          "voice": "พูดกับตัวเองด้วยน้ำเสียงสับสนแต่มีความเด็ดเดี่ยว ใช้ระดับภาษาเป็นกันเอง (Casual)",
+          "relationships": {}
+        }
+      ],
+      "draft_text": "บทที่ 1: การตื่นรู้\n\nเด็กหนุ่มลืมตาตื่นขึ้นบนพื้นหินที่เย็นเยียบ\n\n“ที่นี่... ที่ไหนกัน”\n\nขณะที่พยายามกดข่มอาการปวดศีรษะและกวาดสายตามองไปรอบกาย เขาก็พบกับระเบียงทางเดินที่ทอดยาวออกไป ซึ่งดูคล้ายกับซากปรักหักพังโบราณที่ไม่คุ้นตา\n\nข้างกายของเขามีดาบเล่มหนึ่งที่ดูไม่คุ้นตาตกอยู่ ตัวดาบเปล่งประกายสีเงินหม่น และบนใบดาบนั้นมีอักษรโบราณสลักคำว่า “อุปกรณ์เวทมนตร์” เอาไว้\n\n“คงมีแต่ต้องเดินต่อไปสินะ”\n\nเด็กหนุ่มตัดสินใจเตรียมใจให้พร้อม แล้วจึงก้าวเดินลึกเข้าไปในระเบียงทางเดินอันสลัวราง",
+      "critique_notes": "The translation is exceptionally accurate and flows naturally in Thai. All glossary terms (ซากปรักหักพังโบราณ, ระเบียงทางเดิน, อุปกรณ์เวทมนตร์) were used correctly. The character's voice in the dialogue is consistent with the requested casual yet determined tone. No omissions or hallucinations were found.",
+      "polished_text": "# บทที่ 1: การตื่นรู้\n\nเด็กหนุ่มลืมตาตื่นขึ้นท่ามกลางความเงียบสงัด สัมผัสแรกที่รับรู้คือความเย็นเยียบของพื้นหินที่แนบชิดกับผิวหนังจนน่าขนลุก\n\n“ที่นี่... ที่ไหนกันแน่”\n\nเขาสบถพึมพำพลางพยายามกดข่มอาการปวดหนึบในศีรษะ เมื่อกวาดสายตามองไปรอบกาย สิ่งที่ปรากฏสู่สายตาคือระเบียงทางเดินที่ทอดยาวออกไปอย่างไร้จุดหมาย สถาปัตยกรรมรอบตัวดูแปลกตาและทรุดโทรม ราวกับเป็นซากปรักหักพังโบราณที่ถูกลืมเลือนไปตามกาลเวลา\n\nข้างกายของเขามีดาบเล่มหนึ่งวางนิ่งอยู่ ใบดาบสีเงินหม่นสะท้อนแสงสลัวอย่างลึกลับ และเมื่อเพ่งมอง เขาก็พบอักษรโบราณที่สลักไว้อย่างประณีตบนตัวดาบว่า “อุปกรณ์เวทมนตร์”\n\n“ไม่มีทางเลือกอื่น นอกจากต้องเดินต่อไปสินะ”\n\nเด็กหนุ่มรวบรวมความกล้าที่เหลืออยู่ กระชับดาบในมือให้มั่น แล้วก้าวเดินลึกเข้าไปในระเบียงทางเดินอันสลัวรางนั้น"
+    }
+  },
+  "stats": {
+    "source_char_count": 166,
+    "target_word_count": 23,
+    "prompt_tokens": 215,
+    "completion_tokens": 32,
+    "duration_seconds": 568.07
+  },
+  "quality_audit": {
+    "fidelity_score": 10.0,
+    "style_score": 9.5,
+    "glossary_compliance_pct": 100.0,
+    "warnings": [],
+    "passed": true
+  },
+  "entities_present": [
+    "เด็กหนุ่ม"
+  ],
+  "glossary_terms_applied": [
+    {
+      "source": "古代遺跡",
+      "target": "ซากปรักหักพังโบราณ",
+      "category": "location",
+      "notes": "สถานที่ที่ตัวเอกตื่นขึ้นมา"
+    },
+    {
+      "source": "回廊",
+      "target": "ระเบียงทางเดิน",
+      "category": "location",
+      "notes": "ทางเดินยาวภายในซากปรักหักพัง"
+    },
+    {
+      "source": "魔導具",
+      "target": "อุปกรณ์เวทมนตร์",
+      "category": "item",
+      "notes": "คำที่สลักอยู่บนตัวดาบ บ่งบอกว่าเป็นไอเทมที่มีพลังเวท"
+    }
+  ],
+  "paragraph_alignments": [],
+  "review_status": "draft"
+}
