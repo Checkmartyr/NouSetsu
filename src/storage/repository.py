@@ -256,18 +256,42 @@ class NovelRepository:
                 json.dump(summary.model_dump(), f, indent=2, ensure_ascii=False)
 
     def update_bible_memory(self, new_characters: List[CharacterProfile], new_terms: List[GlossaryItem], summary: Optional[ChapterSummary]) -> NovelBible:
-        """Atomically merge new characters, glossary items, and chapter summary into Bible."""
+        """Atomically merge new characters, glossary items, and chapter summary into Bible, evolving existing entries."""
         bible = self.load_bible()
-        
+
         for new_char in new_characters:
             existing = bible.find_character(new_char.name) or bible.find_character(new_char.original_name)
             if not existing:
                 bible.characters.append(new_char)
+            else:
+                # Merge new aliases deduplicated
+                for alias in new_char.aliases:
+                    if alias and alias.lower() not in [a.lower() for a in existing.aliases]:
+                        existing.aliases.append(alias)
+                # Evolve voice if existing was default/neutral or blank and new is informative
+                if (not existing.voice or existing.voice.lower() in ["neutral", "unspecified", "default"]) and new_char.voice and new_char.voice.lower() not in ["neutral", "unspecified", "default"]:
+                    existing.voice = new_char.voice
+                # Evolve role if existing was minor/unspecified and new is more specific
+                if (not existing.role or existing.role.lower() in ["minor", "unspecified"]) and new_char.role and new_char.role.lower() in ["protagonist", "antagonist", "supporting"]:
+                    existing.role = new_char.role
+                # Evolve gender if unspecified
+                if (not existing.gender or existing.gender.lower() in ["unspecified", "unknown"]) and new_char.gender and new_char.gender.lower() not in ["unspecified", "unknown"]:
+                    existing.gender = new_char.gender
+                # Merge relationships
+                if new_char.relationships:
+                    existing.relationships.update(new_char.relationships)
 
         for new_term in new_terms:
             existing_term = bible.find_term(new_term.source)
             if not existing_term:
                 bible.glossary.append(new_term)
+            else:
+                # Enrich notes if existing was empty
+                if not existing_term.notes and new_term.notes:
+                    existing_term.notes = new_term.notes
+                # Upgrade generic category
+                if existing_term.category == "term" and new_term.category != "term":
+                    existing_term.category = new_term.category
 
         if summary:
             # Replace existing summary for same chapter if present, else append

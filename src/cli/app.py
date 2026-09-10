@@ -56,7 +56,12 @@ def cmd_batch(args: argparse.Namespace) -> None:
         if src_lang and src_lang.lower() in ["auto", "autodetect", "detect"]:
             src_lang = "Auto"
         repo.set_languages(source_lang=src_lang, target_lang=args.target_lang)
-    runner = BatchRunner(repo, model_name=args.model, console=console)
+    runner = BatchRunner(
+        repo,
+        model_name=args.model,
+        auto_update_bible=getattr(args, "auto_update_bible", None),
+        console=console
+    )
     input_path = Path(args.input_dir) if args.input_dir != "raw_chapters" else cfg.get_raw_path(repo.root_dir)
     output_path = Path(args.output_dir) if args.output_dir != "translated_chapters" else cfg.get_output_path(repo.root_dir)
     runner.run_batch(
@@ -105,6 +110,7 @@ def main() -> None:
     p_batch.add_argument("--model", "-m", default=os.environ.get("DEFAULT_MODEL", "gemini-2.5-pro"), help="LLM model name")
     p_batch.add_argument("--limit", "-l", type=int, default=None, help="Maximum number of chapters to process")
     p_batch.add_argument("--force", "-f", action="store_true", help="Force re-translate completed chapters")
+    p_batch.add_argument("--auto-update-bible", action=argparse.BooleanOptionalAction, default=None, help="Automatically merge new characters/terms into Novel Bible")
 
     # tui
     p_tui = subparsers.add_parser("tui", help="Launch interactive Textual TUI dashboard")

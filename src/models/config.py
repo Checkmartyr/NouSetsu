@@ -15,6 +15,7 @@ class ProjectConfig(BaseModel):
     raw_dir: str = Field(default="raw_chapters", description="Path to input raw chapter files")
     output_dir: str = Field(default="translated_chapters", description="Path to output translated files")
     model_name: str = Field(default="gemini-2.5-pro", description="Default LLM model name")
+    auto_update_bible: bool = Field(default=True, description="Automatically merge newly discovered characters, terms, and summaries into Novel Bible")
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     def get_raw_path(self, base_dir: Path) -> Path:

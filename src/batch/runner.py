@@ -19,6 +19,7 @@ class BatchRunner:
         self,
         repository: NovelRepository,
         model_name: str = "gemini-2.5-pro",
+        auto_update_bible: Optional[bool] = None,
         console: Optional[Console] = None
     ):
         self.repo = repository
@@ -26,6 +27,8 @@ class BatchRunner:
         self.console = console or Console()
         self.scanner = ChapterScanner(repository)
         self.workflow = NovelTranslationWorkflow(model_name=model_name)
+        cfg = repository.load_config()
+        self.auto_update_bible = auto_update_bible if auto_update_bible is not None else cfg.auto_update_bible
 
     def run_batch(
         self,
@@ -122,11 +125,18 @@ class BatchRunner:
                         out_f.write(final_state.polished_text)
 
                     # Update persistent memory across chapters
-                    self.repo.update_bible_memory(
-                        new_characters=final_state.extracted_characters,
-                        new_terms=final_state.extracted_terms,
-                        summary=final_state.new_chapter_summary
-                    )
+                    if self.auto_update_bible:
+                        self.repo.update_bible_memory(
+                            new_characters=final_state.extracted_characters,
+                            new_terms=final_state.extracted_terms,
+                            summary=final_state.new_chapter_summary
+                        )
+                    elif final_state.new_chapter_summary:
+                        self.repo.update_bible_memory(
+                            new_characters=[],
+                            new_terms=[],
+                            summary=final_state.new_chapter_summary
+                        )
 
                     # Save chapter metadata and checkpoint
                     if final_state.metadata:
