@@ -1,8 +1,8 @@
 """Unit tests for checkpoint persistence and metadata loading."""
 from pathlib import Path
-from src.batch.scanner import ChapterScanner
-from src.models.metadata import ChapterMetadata, CheckpointData, PipelineStage, StageStatus
-from src.storage.repository import NovelRepository
+from nousetsu.batch.scanner import ChapterScanner
+from nousetsu.models.metadata import ChapterMetadata, CheckpointData, PipelineStage, StageStatus
+from nousetsu.storage.repository import NovelRepository
 
 
 def test_checkpoint_saving_and_status(tmp_path: Path):

@@ -4,9 +4,9 @@ This document provides a technical API reference for core classes, functions, ut
 
 ---
 
-## 🤖 Agents (`src/agents/`)
+## 🤖 Agents (`src/nousetsu/agents/`)
 
-### `EntityExtractorAgent` (*Schriftdetektiv*) (`src/agents/extractor.py`)
+### `EntityExtractorAgent` (*Schriftdetektiv*) (`src/nousetsu/agents/extractor.py`)
 Extracts named entities, characters, and glossary candidates from source text before translation begins.
 
 ```python
@@ -26,7 +26,7 @@ class EntityExtractorAgent:
 
 ---
 
-### `ContextAwareDrafterAgent` (*Wortschmied*) (`src/agents/drafter.py`)
+### `ContextAwareDrafterAgent` (*Wortschmied*) (`src/nousetsu/agents/drafter.py`)
 Produces initial novelistic translation drafts with zero-anaphora resolution, character voices, and episodic memory.
 
 ```python
@@ -49,7 +49,7 @@ class ContextAwareDrafterAgent:
 
 ---
 
-### `CritiqueAgent` (*Zensor*) (`src/agents/critic.py`)
+### `CritiqueAgent` (*Zensor*) (`src/nousetsu/agents/critic.py`)
 Performs independent fidelity, style, and glossary compliance audits for both raw drafts and polished iterations.
 
 ```python
@@ -72,7 +72,7 @@ class CritiqueAgent:
 
 ---
 
-### `PolishingAgent` (*Feinschliff*) (`src/agents/polisher.py`)
+### `PolishingAgent` (*Feinschliff*) (`src/nousetsu/agents/polisher.py`)
 Refines prose cadence, remedies critique feedback, and eliminates translationese tropes.
 
 ```python
@@ -94,7 +94,7 @@ class PolishingAgent:
 
 ---
 
-### `ChroniclerAgent` (*Chronist*) (`src/agents/chronicler.py`)
+### `ChroniclerAgent` (*Chronist*) (`src/nousetsu/agents/chronicler.py`)
 Updates narrative lore, generates chapter synopses, and compiles metadata.
 
 ```python
@@ -115,9 +115,9 @@ class ChroniclerAgent:
 
 ---
 
-## ⚡ Utilities (`src/utils/`)
+## ⚡ Utilities (`src/nousetsu/utils/`)
 
-### `SlidingWindowRateLimiter` (`src/utils/rate_limiter.py`)
+### `SlidingWindowRateLimiter` (`src/nousetsu/utils/rate_limiter.py`)
 Thread-safe sliding-window rate limiter enforcing dual TPM and RPM quotas across a 60-second window.
 
 ```python
@@ -134,7 +134,7 @@ class SlidingWindowRateLimiter:
         """Clears all logged request and token timestamps."""
 ```
 
-### `estimate_tokens` (`src/utils/rate_limiter.py`)
+### `estimate_tokens` (`src/nousetsu/utils/rate_limiter.py`)
 Fast, offline token estimator optimized for mixed CJK and Latin text.
 
 ```python
@@ -145,7 +145,7 @@ def estimate_tokens(text: str) -> int:
     """
 ```
 
-### `detect_language` (`src/utils/language.py`)
+### `detect_language` (`src/nousetsu/utils/language.py`)
 Zero-dependency Unicode script and stop-word frequency analyzer.
 
 ```python
@@ -158,7 +158,7 @@ def detect_language(text: str, default: str = "Japanese") -> str:
 
 ---
 
-## 🛡️ LLM Invocation & Retry (`src/agents/llm.py`)
+## 🛡️ LLM Invocation & Retry (`src/nousetsu/agents/llm.py`)
 
 ```python
 def get_llm(model_name: str, temperature: float = 0.3) -> BaseChatModel:
@@ -193,9 +193,9 @@ def invoke_with_retry(
 
 ---
 
-## 🔄 Graph & Workflow (`src/graph/`)
+## 🔄 Graph & Workflow (`src/nousetsu/graph/`)
 
-### `NovelTranslationWorkflow` (`src/graph/workflow.py`)
+### `NovelTranslationWorkflow` (`src/nousetsu/graph/workflow.py`)
 Coordinates the multi-agent LangGraph execution and reflection review cycle.
 
 ```python
@@ -222,9 +222,9 @@ class NovelTranslationWorkflow:
 
 ---
 
-## 📦 Batch & Scanning (`src/batch/`)
+## 📦 Batch & Scanning (`src/nousetsu/batch/`)
 
-### `BatchRunner` (`src/batch/runner.py`)
+### `BatchRunner` (`src/nousetsu/batch/runner.py`)
 Sequential batch orchestration with Rich progress, rate limits, and thread-safe cancellation.
 
 ```python
@@ -265,9 +265,9 @@ class BatchRunner:
 
 ---
 
-## 💾 Storage & Repositories (`src/storage/`)
+## 💾 Storage & Repositories (`src/nousetsu/storage/`)
 
-### `NovelRepository` (`src/storage/repository.py`)
+### `NovelRepository` (`src/nousetsu/storage/repository.py`)
 Manages on-disk state, Bible YAML, and single project metadata JSON.
 
 ```python
@@ -300,15 +300,15 @@ class NovelRepository:
 
 ---
 
-## 📋 Data Schemas (`src/models/`)
+## 📋 Data Schemas (`src/nousetsu/models/`)
 
 ### Key Pydantic Models
 
-* **`TranslationState` (`src/models/state.py`)**: The LangGraph state schema.
+* **`TranslationState` (`src/nousetsu/models/state.py`)**: The LangGraph state schema.
   * Fields: `chapter_id`, `chapter_num`, `source_text`, `draft_text`, `critique_notes`, `quality_audit`, `polished_text`, `review_iteration`, `max_review_loops`, `quality_threshold`, `best_polished_text`, `best_audit`, `metadata`.
-* **`ProjectConfig` (`src/models/config.py`)**: Project configuration settings.
+* **`ProjectConfig` (`src/nousetsu/models/config.py`)**: Project configuration settings.
   * Fields: `project_id`, `title`, `source_language`, `target_language`, `raw_dir`, `output_dir`, `model_name`, `auto_update_bible`, `max_tpm`, `max_rpm`, `max_review_loops`, `quality_threshold`.
-* **`NovelBible` (`src/models/bible.py`)**: Root memory document holding `characters`, `glossary`, `summaries`, and `style_guide`.
-* **`ChapterMetadata` (`src/models/metadata.py`)**: Chapter metadata record with paired `CheckpointData`, `QualityAudit`, and `TranslationStats`.
-* **`CheckpointData` (`src/models/metadata.py`)**: Stage tracking with `status` (`PENDING`, `IN_PROGRESS`, `PAUSED`, `COMPLETED`, `FAILED`), `stage_artifacts`, and `error_logs`.
-* **`StageArtifacts` (`src/models/metadata.py`)**: Intermediate outputs (`extracted_characters`, `extracted_terms`, `draft_text`, `critique_notes`, `polished_text`).
+* **`NovelBible` (`src/nousetsu/models/bible.py`)**: Root memory document holding `characters`, `glossary`, `summaries`, and `style_guide`.
+* **`ChapterMetadata` (`src/nousetsu/models/metadata.py`)**: Chapter metadata record with paired `CheckpointData`, `QualityAudit`, and `TranslationStats`.
+* **`CheckpointData` (`src/nousetsu/models/metadata.py`)**: Stage tracking with `status` (`PENDING`, `IN_PROGRESS`, `PAUSED`, `COMPLETED`, `FAILED`), `stage_artifacts`, and `error_logs`.
+* **`StageArtifacts` (`src/nousetsu/models/metadata.py`)**: Intermediate outputs (`extracted_characters`, `extracted_terms`, `draft_text`, `critique_notes`, `polished_text`).

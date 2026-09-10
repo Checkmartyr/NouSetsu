@@ -40,7 +40,7 @@ style_guide:
 
 ## 🌐 Automatic Source Language Detection
 
-NouSetsu features a high-speed, zero-dependency Unicode script and lexical frequency analyzer engine ([`src.utils.language`](file:///D:/Code/novel_translation_Agent/src/utils/language.py)) that automatically recognizes source languages from raw chapter text:
+NouSetsu features a high-speed, zero-dependency Unicode script and lexical frequency analyzer engine ([`nousetsu.utils.language`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/language.py)) that automatically recognizes source languages from raw chapter text:
 
 * **CJK Scripts**: Deterministically detects **Japanese** (Hiragana/Katakana presence), **Korean** (Hangul blocks), and **Chinese** (CJK Unified Ideographs without Kana).
 * **Other Non-Latin Scripts**: Recognizes **Thai** (`\u0e00-\u0e7f`) and **Russian / Cyrillic** (`\u0400-\u04ff`).

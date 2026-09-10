@@ -1,19 +1,19 @@
 """Unit and integration tests for Agent Skills System."""
 from pathlib import Path
 import pytest
-from src.agents.chronicler import ChroniclerAgent
-from src.agents.critic import CritiqueAgent
-from src.agents.drafter import ContextAwareDrafterAgent
-from src.agents.extractor import EntityExtractorAgent
-from src.agents.llm import MockNovelLLM
-from src.agents.polisher import PolishingAgent
-from src.graph.workflow import NovelTranslationWorkflow
-from src.models.bible import ChapterSummary, CharacterProfile, GlossaryItem, NovelBible, StyleGuide
-from src.models.state import TranslationState
-from src.skills.loader import load_skills_from_directory, parse_markdown_skill
-from src.skills.models import AgentSkill
-from src.skills.registry import SkillRegistry
-from src.utils.genre import detect_genre
+from nousetsu.agents.chronicler import ChroniclerAgent
+from nousetsu.agents.critic import CritiqueAgent
+from nousetsu.agents.drafter import ContextAwareDrafterAgent
+from nousetsu.agents.extractor import EntityExtractorAgent
+from nousetsu.agents.llm import MockNovelLLM
+from nousetsu.agents.polisher import PolishingAgent
+from nousetsu.graph.workflow import NovelTranslationWorkflow
+from nousetsu.models.bible import ChapterSummary, CharacterProfile, GlossaryItem, NovelBible, StyleGuide
+from nousetsu.models.state import TranslationState
+from nousetsu.skills.loader import load_skills_from_directory, parse_markdown_skill
+from nousetsu.skills.models import AgentSkill
+from nousetsu.skills.registry import SkillRegistry
+from nousetsu.utils.genre import detect_genre
 
 
 def test_agent_skill_model():
@@ -66,7 +66,8 @@ def test_builtin_skills_present():
 
 def test_catalog_files_loading():
     """Verify loading custom markdown skill files from catalog."""
-    catalog_dir = Path(__file__).parent.parent / "src" / "skills" / "catalog"
+    import nousetsu.skills
+    catalog_dir = Path(nousetsu.skills.__file__).parent / "catalog"
     assert catalog_dir.exists()
     skills = load_skills_from_directory(catalog_dir)
     skill_names = [s.name for s in skills]

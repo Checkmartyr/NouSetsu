@@ -106,16 +106,26 @@ export GEMINI_API_KEY="your-google-gemini-api-key"
 
 ## 💻 Usage & CLI Reference
 
+NouSetsu can be run via the installed console commands (`nousetsu` or `novel`) or through `uv run`:
+
+### 🖥️ Automatic Interactive TUI (Default)
+Simply run `nousetsu` (or `novel`) in your terminal with no arguments:
+```bash
+nousetsu
+```
+> [!TIP]
+> Executing `nousetsu` without subcommands automatically launches the interactive **Textual TUI dashboard**! If a registered or current project exists, it is loaded immediately; otherwise, the project selector modal opens ready for you to create or pick a novel project.
+
 ### 1. Initialize a Project
 Create project directories and generate the default **Novel Bible**:
 ```bash
-uv run python main.py init --title "Reincarnated as a Swordmaster" --source-lang "Japanese" --target-lang "English"
+nousetsu init --title "Reincarnated as a Swordmaster" --source-lang "Japanese" --target-lang "English"
 ```
 
 ### 2. Run Automated Folder-to-Folder Batch
 Place raw chapter files (`.txt` or `.md`) inside `raw_chapters/` and run:
 ```bash
-uv run python main.py batch --input-dir raw_chapters --output-dir translated_chapters
+nousetsu batch --input-dir raw_chapters --output-dir translated_chapters
 ```
 
 **CLI Flags**:
@@ -132,12 +142,16 @@ uv run python main.py batch --input-dir raw_chapters --output-dir translated_cha
 * `--max-rpm`: Max requests per minute rate limit quota (default: 60).
 * `--auto-update-bible / --no-auto-update-bible`: Automatically merge new characters and terms into Novel Bible.
 
-### 3. Launch the Textual TUI Dashboard
-Launch the interactive dual-pane reader and terminal workspace:
+### 3. List & Filter Agent Skills
 ```bash
-uv run python main.py tui --input-dir raw_chapters --output-dir translated_chapters
+nousetsu skills
+nousetsu skills --agent drafter --genre isekai
 ```
-*(Or simply run `uv run python main.py` when project files exist).*
+
+### 4. Explicit TUI Launch
+```bash
+nousetsu tui --input-dir raw_chapters --output-dir translated_chapters
+```
 
 #### TUI Keyboard Shortcuts
 | Key | Action | Description |

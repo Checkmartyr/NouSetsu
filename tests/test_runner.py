@@ -1,9 +1,9 @@
 """Integration tests for BatchRunner and LangGraph pipeline with MockNovelLLM."""
 from pathlib import Path
 from rich.console import Console
-from src.batch.runner import BatchRunner
-from src.models.metadata import StageStatus
-from src.storage.repository import NovelRepository
+from nousetsu.batch.runner import BatchRunner
+from nousetsu.models.metadata import StageStatus
+from nousetsu.storage.repository import NovelRepository
 
 
 def test_batch_runner_end_to_end(tmp_path: Path):
@@ -53,7 +53,7 @@ def test_batch_runner_end_to_end(tmp_path: Path):
 
 
 def test_update_bible_memory_evolution(tmp_path: Path):
-    from src.models.bible import CharacterProfile, GlossaryItem, ChapterSummary
+    from nousetsu.models.bible import CharacterProfile, GlossaryItem, ChapterSummary
 
     repo = NovelRepository(tmp_path)
     repo.initialize_project("Test Novel", "Japanese", "English")

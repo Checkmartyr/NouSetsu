@@ -1,6 +1,6 @@
 """Unit tests for data models."""
-from src.models.bible import CharacterProfile, ChapterSummary, GlossaryItem, NovelBible, StyleGuide
-from src.models.metadata import (
+from nousetsu.models.bible import CharacterProfile, ChapterSummary, GlossaryItem, NovelBible, StyleGuide
+from nousetsu.models.metadata import (
     ChapterMetadata,
     CheckpointData,
     PipelineStage,

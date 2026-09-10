@@ -1,7 +1,7 @@
 """Unit tests for chapter scanner and natural sorting."""
 from pathlib import Path
-from src.batch.scanner import ChapterScanner
-from src.storage.repository import NovelRepository
+from nousetsu.batch.scanner import ChapterScanner
+from nousetsu.storage.repository import NovelRepository
 
 
 def test_chapter_scanner_extraction(tmp_path: Path):

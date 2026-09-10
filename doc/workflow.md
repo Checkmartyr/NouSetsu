@@ -91,7 +91,7 @@ sequenceDiagram
 ## 🔍 Stage-by-Stage Function Breakdown
 
 ### Stage 1: Entity Extraction (`EntityExtractorAgent` / *Schriftdetektiv*)
-* **Source Module**: [`src/agents/extractor.py`](file:///D:/Code/novel_translation_Agent/src/agents/extractor.py)
+* **Source Module**: [`src/nousetsu/agents/extractor.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/extractor.py)
 * **Function**:
   ```python
   def extract(
@@ -117,7 +117,7 @@ sequenceDiagram
 ---
 
 ### Stage 2: Context-Aware Drafting (`ContextAwareDrafterAgent` / *Wortschmied*)
-* **Source Module**: [`src/agents/drafter.py`](file:///D:/Code/novel_translation_Agent/src/agents/drafter.py)
+* **Source Module**: [`src/nousetsu/agents/drafter.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/drafter.py)
 * **Function**:
   ```python
   def draft(
@@ -148,7 +148,7 @@ sequenceDiagram
 ---
 
 ### Stage 3: Critique & Quality Audit (`CritiqueAgent` / *Zensor*)
-* **Source Module**: [`src/agents/critic.py`](file:///D:/Code/novel_translation_Agent/src/agents/critic.py)
+* **Source Module**: [`src/nousetsu/agents/critic.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/critic.py)
 * **Function**:
   ```python
   def evaluate(
@@ -179,7 +179,7 @@ sequenceDiagram
 ---
 
 ### Stage 4: Prose Cadence Polishing (`PolishingAgent` / *Feinschliff*)
-* **Source Module**: [`src/agents/polisher.py`](file:///D:/Code/novel_translation_Agent/src/agents/polisher.py)
+* **Source Module**: [`src/nousetsu/agents/polisher.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/polisher.py)
 * **Function**:
   ```python
   def polish(
@@ -208,7 +208,7 @@ sequenceDiagram
 ---
 
 ### Stage 5: Narrative Lore Chronicling (`ChroniclerAgent` / *Chronist*)
-* **Source Module**: [`src/agents/chronicler.py`](file:///D:/Code/novel_translation_Agent/src/agents/chronicler.py)
+* **Source Module**: [`src/nousetsu/agents/chronicler.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/chronicler.py)
 * **Functions**:
   1. **`chronicle(...)`**:
      ```python
@@ -248,7 +248,7 @@ sequenceDiagram
 
 ## 🔄 Automated Reflection Review Loop & Regression Guard
 
-Inside [`src/graph/workflow.py`](file:///D:/Code/novel_translation_Agent/src/graph/workflow.py), LangGraph manages conditional routing between `Feinschliff` and `Zensor`:
+Inside [`src/nousetsu/graph/workflow.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/graph/workflow.py), LangGraph manages conditional routing between `Feinschliff` and `Zensor`:
 
 ```mermaid
 flowchart TD
@@ -273,7 +273,7 @@ flowchart TD
 
 ## ⚡ Sliding-Window Rate Limiting Engine (16K TPM / 60 RPM)
 
-NouSetsu protects upstream API quotas with a proactive sliding-window rate limiter in [`src/utils/rate_limiter.py`](file:///D:/Code/novel_translation_Agent/src/utils/rate_limiter.py):
+NouSetsu protects upstream API quotas with a proactive sliding-window rate limiter in [`src/nousetsu/utils/rate_limiter.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/rate_limiter.py):
 
 * **Mixed CJK/Latin Token Estimator** (`estimate_tokens`):
   * CJK characters (Japanese Kanji/Kana, Chinese Hanzi, Korean Hangul): ~1.7 tokens per character.

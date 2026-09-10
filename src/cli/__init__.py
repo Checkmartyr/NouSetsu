@@ -1,4 +1,0 @@
-"""CLI package."""
-from src.cli.app import main
-
-__all__ = ["main"]

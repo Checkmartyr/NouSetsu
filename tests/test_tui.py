@@ -1,15 +1,15 @@
 """Unit tests for Textual TUI using pilot."""
 from pathlib import Path
 import pytest
-from src.models.metadata import PipelineStage
-from src.storage.repository import NovelRepository
-from src.tui.app import NovelAgentApp
-from src.tui.widgets.checkpoint_inspector import CheckpointInspectorWidget
-from src.tui.widgets.new_project_modal import NewProjectModal
-from src.tui.widgets.progress_panel import ProgressPanel
-from src.tui.widgets.project_selector_modal import ProjectSelectorModal
-from src.tui.widgets.reader import DualReaderWidget
-from src.tui.widgets.settings_modal import SettingsModal
+from nousetsu.models.metadata import PipelineStage
+from nousetsu.storage.repository import NovelRepository
+from nousetsu.tui.app import NovelAgentApp
+from nousetsu.tui.widgets.checkpoint_inspector import CheckpointInspectorWidget
+from nousetsu.tui.widgets.new_project_modal import NewProjectModal
+from nousetsu.tui.widgets.progress_panel import ProgressPanel
+from nousetsu.tui.widgets.project_selector_modal import ProjectSelectorModal
+from nousetsu.tui.widgets.reader import DualReaderWidget
+from nousetsu.tui.widgets.settings_modal import SettingsModal
 
 
 @pytest.mark.asyncio
@@ -183,7 +183,7 @@ async def test_tui_open_external_path_in_project_selector(tmp_path: Path):
         assert len(app.current_tasks) == 1
 @pytest.mark.asyncio
 async def test_tui_novel_bible_modal_escape():
-    from src.tui.widgets.bible_editor import NovelBibleModal
+    from nousetsu.tui.widgets.bible_editor import NovelBibleModal
     app = NovelAgentApp(
         input_dir="raw_chapters",
         output_dir="translated_chapters",
@@ -208,9 +208,9 @@ async def test_tui_novel_bible_modal_escape():
 
 @pytest.mark.asyncio
 async def test_tui_failed_badge_and_inspector():
-    from src.batch.scanner import ChapterTask
-    from src.models.metadata import ChapterMetadata, CheckpointData, PipelineStage, StageStatus
-    from src.tui.app import ChapterListItem
+    from nousetsu.batch.scanner import ChapterTask
+    from nousetsu.models.metadata import ChapterMetadata, CheckpointData, PipelineStage, StageStatus
+    from nousetsu.tui.app import ChapterListItem
 
     # Create failed task
     failed_meta = ChapterMetadata(
@@ -255,5 +255,18 @@ async def test_tui_failed_badge_and_inspector():
         assert "FAILED" in str(inspector.query_one("#lbl_status").render())
         assert "POLISHING" in str(inspector.query_one("#lbl_stage").render())
         assert "500 INTERNAL" in str(inspector.query_one("#lbl_warnings").render())
+
+
+def test_bare_cli_launches_tui():
+    """Verify executing nousetsu without subcommands automatically triggers cmd_tui."""
+    from unittest.mock import patch
+    import sys
+    import nousetsu.cli.app as app_module
+
+    with patch.object(app_module, "cmd_tui") as mock_tui:
+        with patch.object(sys, "argv", ["nousetsu"]):
+            app_module.main()
+            assert mock_tui.called, "cmd_tui should be called automatically on bare nousetsu command"
+
 
 

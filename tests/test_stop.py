@@ -3,10 +3,10 @@ from pathlib import Path
 from rich.console import Console
 import pytest
 
-from src.batch.runner import BatchRunner
-from src.batch.scanner import ChapterScanner
-from src.models.metadata import PipelineStage, StageStatus
-from src.storage.repository import NovelRepository
+from nousetsu.batch.runner import BatchRunner
+from nousetsu.batch.scanner import ChapterScanner
+from nousetsu.models.metadata import PipelineStage, StageStatus
+from nousetsu.storage.repository import NovelRepository
 
 
 def test_batch_runner_stop_between_chapters(tmp_path: Path):

@@ -5,14 +5,14 @@ import threading
 from unittest.mock import MagicMock
 import pytest
 
-from src.batch.runner import BatchRunner
-from src.graph.workflow import NovelTranslationWorkflow
-from src.models.bible import NovelBible
-from src.models.config import ProjectConfig
-from src.models.exceptions import BatchStoppedException
-from src.models.metadata import PipelineStage, QualityAudit
-from src.models.state import TranslationState
-from src.storage.repository import NovelRepository
+from nousetsu.batch.runner import BatchRunner
+from nousetsu.graph.workflow import NovelTranslationWorkflow
+from nousetsu.models.bible import NovelBible
+from nousetsu.models.config import ProjectConfig
+from nousetsu.models.exceptions import BatchStoppedException
+from nousetsu.models.metadata import PipelineStage, QualityAudit
+from nousetsu.models.state import TranslationState
+from nousetsu.storage.repository import NovelRepository
 
 
 def test_default_review_loop_early_exit(tmp_path: Path):

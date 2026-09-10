@@ -5,12 +5,12 @@ import time
 from rich.console import Console
 import pytest
 
-from src.agents.llm import is_rate_limit_error, parse_retry_delay, invoke_with_retry
-from src.batch.runner import BatchRunner
-from src.models.exceptions import BatchStoppedException
-from src.models.metadata import StageStatus
-from src.storage.repository import NovelRepository
-from src.utils.rate_limiter import SlidingWindowRateLimiter, estimate_tokens
+from nousetsu.agents.llm import is_rate_limit_error, parse_retry_delay, invoke_with_retry
+from nousetsu.batch.runner import BatchRunner
+from nousetsu.models.exceptions import BatchStoppedException
+from nousetsu.models.metadata import StageStatus
+from nousetsu.storage.repository import NovelRepository
+from nousetsu.utils.rate_limiter import SlidingWindowRateLimiter, estimate_tokens
 
 
 def test_estimate_tokens():

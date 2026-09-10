@@ -1,8 +1,8 @@
 """Unit tests for ProjectConfig and ProjectRegistry."""
 from pathlib import Path
 import pytest
-from src.models.config import ProjectConfig
-from src.storage.repository import NovelRepository, ProjectRegistry
+from nousetsu.models.config import ProjectConfig
+from nousetsu.storage.repository import NovelRepository, ProjectRegistry
 
 
 def test_project_config_defaults(tmp_path: Path):

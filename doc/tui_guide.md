@@ -43,7 +43,7 @@ Displays all discovered chapters in natural numerical order (`Ch.001`, `Ch.002`,
 
 ---
 
-### 2. Dual Reader Widget (`src/tui/widgets/reader.py`)
+### 2. Dual Reader Widget (`src/nousetsu/tui/widgets/reader.py`)
 Provides side-by-side synchronized comparison between the raw original text and the translated Markdown:
 * **Source Pane**: Displays original Japanese/Chinese/Korean text with full Unicode support.
 * **Translated Pane**: Renders target English text rendered as rich Markdown with syntax highlighting and formatting.
@@ -51,7 +51,7 @@ Provides side-by-side synchronized comparison between the raw original text and 
 
 ---
 
-### 3. Real-Time Progress Panel (`src/tui/widgets/progress_panel.py`)
+### 3. Real-Time Progress Panel (`src/nousetsu/tui/widgets/progress_panel.py`)
 Visualizes live agent execution during translation:
 * **Stage Badge**: Displays the current executing agent stage (`1/5 EXTRACTION`, `2/5 DRAFTING`, `3/5 CRITIQUE`, `4/5 POLISHING`, `5/5 CHRONICLING`).
 * **Animated Progress Bar**: Smooth percentage progression reflecting stage completion.
@@ -59,7 +59,7 @@ Visualizes live agent execution during translation:
 
 ---
 
-### 4. Checkpoint Inspector Bar (`src/tui/widgets/checkpoint_inspector.py`)
+### 4. Checkpoint Inspector Bar (`src/nousetsu/tui/widgets/checkpoint_inspector.py`)
 Located at the bottom of the interface, displaying deep metadata diagnostics for the selected chapter:
 * **Status & Checkpoint**: Displays status, last completed stage, and truncated SHA-256 hash.
 * **Quality Audit Scores**:

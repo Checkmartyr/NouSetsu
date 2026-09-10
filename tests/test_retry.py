@@ -1,6 +1,6 @@
 """Unit tests for invoke_with_retry and is_transient_error."""
 import pytest
-from src.agents.llm import invoke_with_retry, is_transient_error
+from nousetsu.agents.llm import invoke_with_retry, is_transient_error
 
 
 def test_is_transient_error():
