@@ -95,10 +95,11 @@ class CheckpointInspectorWidget(Widget):
         lbl_fidelity.update(f"Fidelity: [bold cyan]{meta.quality_audit.fidelity_score:.1f}[/]/10")
         lbl_style.update(f"Style: [bold cyan]{meta.quality_audit.style_score:.1f}[/]/10")
         lbl_glossary.update(f"Glossary: {meta.quality_audit.glossary_compliance_pct:.0f}%")
+        dur_str = f" in {meta.stats.duration_seconds:.1f}s" if meta.stats.duration_seconds > 0 else ""
         if meta.stats.total_tokens:
-            lbl_tokens.update(f"Tokens: [bold green]{meta.stats.total_tokens:,}[/] (In:{meta.stats.prompt_tokens:,} Out:{meta.stats.completion_tokens:,})")
+            lbl_tokens.update(f"Tokens: [bold green]{meta.stats.total_tokens:,}[/]{dur_str} (In:{meta.stats.prompt_tokens:,} Out:{meta.stats.completion_tokens:,})")
         else:
-            lbl_tokens.update("Tokens: -")
+            lbl_tokens.update(f"Tokens: -{dur_str}")
 
         if meta.checkpoint.status == StageStatus.FAILED:
             err_snippet = (meta.checkpoint.last_error or 'Unknown error')[:45]

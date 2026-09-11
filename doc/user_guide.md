@@ -340,26 +340,21 @@ NouSetsu tracks 5 precise token dimensions across every pipeline stage:
 4. `polishing (loop #1, #2, ...)`: Literary rewriting pass.
 5. `chronicling`: Narrative summary extraction and metadata consolidation.
 
-### Viewing Token Metrics
-* **TUI Checkpoint Inspector**: Highlight any chapter in the TUI to view live aggregated metrics:
+### Viewing Token & Duration Metrics
+* **TUI Checkpoint Inspector**: Highlight any chapter in the TUI to view live aggregated metrics including duration:
   ```text
-  Tokens: 1,284 (In: 820 | Out: 364 | Thought: 100)
+  Tokens: 1,284 in 3.9s (In: 820 Out: 364)
   ```
-* **Rich CLI Batch Table**: At the conclusion of `nousetsu batch`, a comprehensive summary table displays token breakdowns by task and step:
+* **Rich CLI Batch Table**: At the conclusion of `nousetsu batch`, a comprehensive summary table displays token and execution duration breakdowns by task and step:
   ```text
-  📊 Token Usage by Task & Pipeline Step
-  Chapter / Step       Input    Output   Thought  Cached   Total
-  ─────────────────────────────────────────────────────────────
-  Ch.1                 820      364      100      0        1,284
-    ├── 1. extracting  150      50       0        0          200
-    ├── 2. drafting    220      120      0        0          340
-    ├── 3. critiquing  200      74       50       0          324
-    ├── 4. polishing   180      80       50       0          310
-    └── 5. chronicling  70      40       0        0          110
-  ─────────────────────────────────────────────────────────────
-  Grand Total          820      364      100      0        1,284
+  📊 Token & Duration Breakdown by Pipeline Step
+  Chapter / Step       Extraction   Drafting      Critique      Polishing     Chronicle     Thought   Total Tokens   Time (s)
+  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Ch.1                 200 (0.5s)   340 (1.2s)    324 (0.9s)    310 (1.1s)    110 (0.4s)    100       1,284          4.1
+  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  GRAND TOTAL          -            -             -             -             -             100       1,284          4.1
   ```
-* **Persistent Metadata (`.novel/metadata.json`)**: Every chapter's `stats` object stores the complete cumulative metrics alongside the `step_usage` array for automated billing or usage analytics.
+* **Persistent Metadata (`.novel/metadata.json`)**: Every chapter's `stats` object stores the complete cumulative metrics alongside the `step_usage` array (recording `duration_seconds` for every pipeline pass) for automated billing, latency monitoring, or profiling analytics.
 
 ---
 

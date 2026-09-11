@@ -132,6 +132,7 @@ class NovelTranslationWorkflow:
     def _extract_step(self, state: TranslationState) -> Dict[str, Any]:
         self._check_stop(state, PipelineStage.EXTRACTION)
         self.current_stage = PipelineStage.EXTRACTION
+        step_start = time.time()
 
         ext_skills = [
             s.name for s in SkillRegistry.get_instance().get_active_skills(
@@ -166,12 +167,14 @@ class NovelTranslationWorkflow:
         all_chars = list(state.novel_bible.characters) + new_chars
         all_glossary = list(state.novel_bible.glossary) + new_terms
 
+        extract_duration = round(time.time() - step_start, 2)
         extract_usage = getattr(self.extractor, "last_usage", TokenUsage())
         extract_record = StepTokenUsage(
             stage=PipelineStage.EXTRACTION,
             step_name="Extraction",
             iteration=1,
             model=self.model_name,
+            duration_seconds=extract_duration,
             usage=extract_usage
         )
         updated_token_records = list(state.step_token_records) + [extract_record]
@@ -192,6 +195,7 @@ class NovelTranslationWorkflow:
     def _draft_step(self, state: TranslationState) -> Dict[str, Any]:
         self._check_stop(state, PipelineStage.DRAFTING)
         self.current_stage = PipelineStage.DRAFTING
+        step_start = time.time()
 
         dft_skills = [
             s.name for s in SkillRegistry.get_instance().get_active_skills(
@@ -238,6 +242,7 @@ class NovelTranslationWorkflow:
             stop_event=self.stop_event
         )
 
+        draft_duration = round(time.time() - step_start, 2)
         chunk_count = len(source_chunks) if source_chunks else 1
         draft_usage = getattr(self.drafter, "last_usage", TokenUsage())
         draft_record = StepTokenUsage(
@@ -246,6 +251,7 @@ class NovelTranslationWorkflow:
             iteration=1,
             model=self.model_name,
             chunk_count=chunk_count,
+            duration_seconds=draft_duration,
             usage=draft_usage
         )
         updated_token_records = list(state.step_token_records) + [draft_record]
@@ -263,6 +269,7 @@ class NovelTranslationWorkflow:
     def _critique_step(self, state: TranslationState) -> Dict[str, Any]:
         self._check_stop(state, PipelineStage.CRITIQUE)
         self.current_stage = PipelineStage.CRITIQUE
+        step_start = time.time()
 
         crt_skills = [
             s.name for s in SkillRegistry.get_instance().get_active_skills(
@@ -340,12 +347,14 @@ class NovelTranslationWorkflow:
                         best_audit = audit
                         best_text = text_to_audit
 
+        critique_duration = round(time.time() - step_start, 2)
         critique_usage = getattr(self.critic, "last_usage", TokenUsage())
         critique_record = StepTokenUsage(
             stage=PipelineStage.CRITIQUE,
             step_name=f"Critique (Pass {display_iter})",
             iteration=current_iter,
             model=self.model_name,
+            duration_seconds=critique_duration,
             usage=critique_usage
         )
         updated_token_records = list(state.step_token_records) + [critique_record]
@@ -367,6 +376,7 @@ class NovelTranslationWorkflow:
     def _polish_step(self, state: TranslationState) -> Dict[str, Any]:
         self._check_stop(state, PipelineStage.POLISHING)
         self.current_stage = PipelineStage.POLISHING
+        step_start = time.time()
 
         pol_skills = [
             s.name for s in SkillRegistry.get_instance().get_active_skills(
@@ -447,6 +457,7 @@ class NovelTranslationWorkflow:
 
         best_text = polished if is_initial_draft else (state.best_polished_text or polished)
 
+        polish_duration = round(time.time() - step_start, 2)
         chunk_count = len(draft_chunks) if draft_chunks else 1
         polish_usage = getattr(self.polisher, "last_usage", TokenUsage())
         polish_record = StepTokenUsage(
@@ -455,6 +466,7 @@ class NovelTranslationWorkflow:
             iteration=display_iter,
             model=self.model_name,
             chunk_count=chunk_count,
+            duration_seconds=polish_duration,
             usage=polish_usage
         )
         updated_token_records = list(state.step_token_records) + [polish_record]
@@ -473,6 +485,7 @@ class NovelTranslationWorkflow:
     def _chronicle_step(self, state: TranslationState) -> Dict[str, Any]:
         self._check_stop(state, PipelineStage.CHRONICLING)
         self.current_stage = PipelineStage.CHRONICLING
+        step_start = time.time()
 
         chr_skills = [
             s.name for s in SkillRegistry.get_instance().get_active_skills(
@@ -509,15 +522,18 @@ class NovelTranslationWorkflow:
             stop_event=self.stop_event
         )
 
+        chronicle_duration = round(time.time() - step_start, 2)
         chronicle_usage = getattr(self.chronicler, "last_usage", TokenUsage())
         chronicle_record = StepTokenUsage(
             stage=PipelineStage.CHRONICLING,
             step_name="Chronicling",
             iteration=1,
             model=self.model_name,
+            duration_seconds=chronicle_duration,
             usage=chronicle_usage
         )
         all_token_records = list(state.step_token_records) + [chronicle_record]
+        total_duration = round(sum(r.duration_seconds for r in all_token_records), 2)
 
         metadata = self.chronicler.assemble_metadata(
             chapter_id=state.chapter_id,
@@ -528,7 +544,7 @@ class NovelTranslationWorkflow:
             source_text=state.source_text,
             final_text=final_text,
             model_name=self.model_name,
-            duration_seconds=1.0,
+            duration_seconds=total_duration if total_duration > 0 else 1.0,
             quality_audit=final_audit,
             active_characters=state.active_characters,
             active_glossary=state.active_glossary,

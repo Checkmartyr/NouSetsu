@@ -330,39 +330,52 @@ class BatchRunner:
         self.console.print(table)
 
         # Granular Token Usage by Task & Step Table
-        token_table = Table(title="📊 Token Usage by Task & Pipeline Step", show_header=True, header_style="bold cyan")
+        token_table = Table(title="📊 Token & Duration Breakdown by Pipeline Step", show_header=True, header_style="bold cyan")
         token_table.add_column("Task / Chapter", style="bold yellow", width=16)
-        token_table.add_column("Extraction", justify="right", width=12)
-        token_table.add_column("Drafting", justify="right", width=12)
-        token_table.add_column("Critique", justify="right", width=12)
-        token_table.add_column("Polishing", justify="right", width=12)
-        token_table.add_column("Chronicle", justify="right", width=12)
+        token_table.add_column("Extraction", justify="right", width=14)
+        token_table.add_column("Drafting", justify="right", width=14)
+        token_table.add_column("Critique", justify="right", width=14)
+        token_table.add_column("Polishing", justify="right", width=14)
+        token_table.add_column("Chronicle", justify="right", width=14)
         token_table.add_column("Thought", justify="right", width=10, style="dim magenta")
         token_table.add_column("Total Tokens", justify="right", width=14, style="bold green")
+        token_table.add_column("Time (s)", justify="right", width=10, style="bold blue")
 
         for m in results:
             step_map: dict[str, int] = {}
+            dur_map: dict[str, float] = {}
             for step in m.stats.step_usage:
                 key = step.stage.value.lower()
                 step_map[key] = step_map.get(key, 0) + step.usage.total_tokens
+                dur_map[key] = round(dur_map.get(key, 0.0) + step.duration_seconds, 2)
+
+            def _fmt_step(k: str) -> str:
+                toks = step_map.get(k, 0)
+                dur = dur_map.get(k, 0.0)
+                if dur > 0:
+                    return f"{toks:,} [dim]({dur:.1f}s)[/]"
+                return f"{toks:,}"
 
             token_table.add_row(
                 f"Ch.{m.chapter_num} ({Path(m.source_file).name})",
-                f"{step_map.get('extraction', 0):,}",
-                f"{step_map.get('drafting', 0):,}",
-                f"{step_map.get('critique', 0):,}",
-                f"{step_map.get('polishing', 0):,}",
-                f"{step_map.get('chronicling', 0):,}",
+                _fmt_step('extraction'),
+                _fmt_step('drafting'),
+                _fmt_step('critique'),
+                _fmt_step('polishing'),
+                _fmt_step('chronicling'),
                 f"{m.stats.thought_tokens:,}",
-                f"{m.stats.total_tokens:,}"
+                f"{m.stats.total_tokens:,}",
+                f"{m.stats.duration_seconds:.1f}"
             )
 
         token_table.add_section()
+        total_time = sum(m.stats.duration_seconds for m in results)
         token_table.add_row(
             "GRAND TOTAL",
             "-", "-", "-", "-", "-",
             f"{self.batch_token_usage.thought_tokens:,}",
             f"{self.batch_token_usage.total_tokens:,}",
+            f"{total_time:.1f}",
             style="bold cyan"
         )
         self.console.print(token_table)

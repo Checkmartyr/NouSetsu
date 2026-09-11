@@ -222,11 +222,11 @@ All chapter translation checkpoints, stage artifacts, fine-grained token usage, 
         "thought_tokens": 100,
         "cached_tokens": 0,
         "step_usage": [
-          {"stage": "extracting", "step_num": 1, "input_tokens": 150, "output_tokens": 50, "thought_tokens": 0, "cached_tokens": 0, "total_tokens": 200},
-          {"stage": "drafting", "step_num": 2, "input_tokens": 220, "output_tokens": 120, "thought_tokens": 0, "cached_tokens": 0, "total_tokens": 340},
-          {"stage": "critiquing", "step_num": 3, "input_tokens": 200, "output_tokens": 74, "thought_tokens": 50, "cached_tokens": 0, "total_tokens": 324},
-          {"stage": "polishing", "step_num": 4, "input_tokens": 180, "output_tokens": 80, "thought_tokens": 50, "cached_tokens": 0, "total_tokens": 310},
-          {"stage": "chronicling", "step_num": 5, "input_tokens": 70, "output_tokens": 40, "thought_tokens": 0, "cached_tokens": 0, "total_tokens": 110}
+          {"stage": "extraction", "step_name": "Extraction", "iteration": 1, "duration_seconds": 0.45, "usage": {"input_tokens": 150, "output_tokens": 50, "thought_tokens": 0, "cached_tokens": 0, "total_tokens": 200}},
+          {"stage": "drafting", "step_name": "Drafting", "iteration": 1, "duration_seconds": 1.20, "usage": {"input_tokens": 220, "output_tokens": 120, "thought_tokens": 0, "cached_tokens": 0, "total_tokens": 340}},
+          {"stage": "critique", "step_name": "Critique (Pass 1)", "iteration": 1, "duration_seconds": 0.85, "usage": {"input_tokens": 200, "output_tokens": 74, "thought_tokens": 50, "cached_tokens": 0, "total_tokens": 324}},
+          {"stage": "polishing", "step_name": "Polishing (Pass 1)", "iteration": 1, "duration_seconds": 1.10, "usage": {"input_tokens": 180, "output_tokens": 80, "thought_tokens": 50, "cached_tokens": 0, "total_tokens": 310}},
+          {"stage": "chronicling", "step_name": "Chronicling", "iteration": 1, "duration_seconds": 0.35, "usage": {"input_tokens": 70, "output_tokens": 40, "thought_tokens": 0, "cached_tokens": 0, "total_tokens": 110}}
         ]
       },
       "quality_audit": {

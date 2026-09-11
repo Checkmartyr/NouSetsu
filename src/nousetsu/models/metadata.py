@@ -119,6 +119,7 @@ class StepTokenUsage(BaseModel):
     iteration: int = Field(default=1, description="Iteration or review pass number")
     model: str = Field(default="", description="Model name used for this step")
     chunk_count: int = Field(default=1, description="Number of text chunks processed for this step")
+    duration_seconds: float = Field(default=0.0, description="Duration of this specific pipeline stage execution in seconds")
     usage: TokenUsage = Field(default_factory=TokenUsage)
     timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
