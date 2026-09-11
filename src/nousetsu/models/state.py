@@ -12,7 +12,7 @@ class TranslationState(BaseModel):
     source_sha256: str = Field(default="")
     output_file: str = Field(default="")
     source_text: str = Field(..., description="Raw text of chapter")
-    model_name: str = Field(default="gemini-2.5-pro")
+    model_name: str = Field(default="gemini-3.1-flash-lite")
     genre: str = Field(default="general", description="Novel genre")
     active_skills: Dict[str, List[str]] = Field(default_factory=dict, description="Active skills used per stage")
 

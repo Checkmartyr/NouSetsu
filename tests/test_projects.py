@@ -7,9 +7,18 @@ from nousetsu.storage.repository import NovelRepository, ProjectRegistry
 
 def test_project_config_defaults(tmp_path: Path):
     cfg = ProjectConfig()
-    assert cfg.title == "Untitled Novel"
-    assert cfg.source_language == "Japanese"
-    assert cfg.target_language == "English"
+    assert cfg.title == "Ascendance of a Bookworm"
+    assert cfg.source_language == "English"
+    assert cfg.target_language == "Thai"
+    assert cfg.model_name == "gemini-3.1-flash-lite"
+    assert cfg.fallback_model == "gemini-3.5-flash-lite"
+    assert cfg.extractor_model == "gemini-3.1-flash-lite"
+    assert cfg.drafter_model == "gemini-3.5-flash-lite"
+    assert cfg.critic_model == "gemma-4-26b-a4b-it"
+    assert cfg.polisher_model == "gemini-3.5-flash-lite"
+    assert cfg.chronicler_model == "gemma-4-26b-a4b-it"
+    assert cfg.max_tpm == 32000
+    assert cfg.chunk_threshold_lines == 85
     assert cfg.raw_dir == "raw_chapters"
     assert cfg.output_dir == "translated_chapters"
     assert cfg.get_raw_path(tmp_path) == (tmp_path / "raw_chapters").resolve()
@@ -64,7 +73,7 @@ def test_project_registry_and_initialization(tmp_path: Path):
 def test_repository_load_and_save_config(tmp_path: Path):
     repo = NovelRepository(tmp_path)
     cfg = repo.load_config()
-    assert cfg.title == "Untitled Novel"
+    assert cfg.title == "Ascendance of a Bookworm"
 
     cfg.title = "Overlord Saga"
     cfg.source_language = "Japanese"

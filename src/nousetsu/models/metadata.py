@@ -157,7 +157,7 @@ class ChapterMetadata(BaseModel):
     source_sha256: str = Field(..., description="SHA256 hash of source content for delta detection")
     output_file: str = Field(..., description="Path to translated output file")
     timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-    model: str = Field(default="gemini-2.5-pro")
+    model: str = Field(default="gemini-3.1-flash-lite")
     checkpoint: CheckpointData = Field(default_factory=CheckpointData)
     stats: TranslationStats = Field(default_factory=TranslationStats)
     quality_audit: QualityAudit = Field(default_factory=QualityAudit)

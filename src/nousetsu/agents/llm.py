@@ -332,7 +332,7 @@ class FallbackChatModel(BaseChatModel):
 
 
 def _create_single_llm(
-    model_name: str = "gemini-2.5-pro",
+    model_name: str = "gemini-3.1-flash-lite",
     temperature: float = 0.3,
     use_interactions: Optional[bool] = None
 ) -> BaseChatModel:
@@ -386,7 +386,7 @@ def _create_single_llm(
 
 
 def get_llm(
-    model_name: str = "gemini-2.5-pro",
+    model_name: str = "gemini-3.1-flash-lite",
     temperature: float = 0.3,
     use_interactions: Optional[bool] = None,
     fallback_model: Optional[str] = None,

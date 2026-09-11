@@ -88,6 +88,8 @@ def test_project_config_agent_models_and_helpers():
         extractor_model="gemini-2.5-flash",
         drafter_model="gemini-2.5-pro",
         critic_model=None, # Should fallback to model_name
+        polisher_model=None,
+        chronicler_model=None,
     )
 
     assert cfg.get_agent_model("extractor") == "gemini-2.5-flash"

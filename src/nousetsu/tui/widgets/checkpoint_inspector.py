@@ -13,45 +13,38 @@ class CheckpointInspectorWidget(Widget):
 
     DEFAULT_CSS = """
     CheckpointInspectorWidget {
-        height: 8;
-        border: solid $accent;
+        height: 5;
+        border: solid $accent 40%;
         padding: 0 1;
         background: $surface;
+        margin: 0;
     }
-    .status-col {
+    .inspector-col {
         width: 1fr;
+        height: auto;
     }
-    .score-col {
-        width: 1fr;
-    }
-    .warning-col {
+    .inspector-col-wide {
         width: 2fr;
-    }
-    .meta-heading {
-        text-style: bold;
-        color: $primary;
+        height: auto;
     }
     """
 
     def compose(self) -> ComposeResult:
         with Horizontal():
-            with Vertical(classes="status-col"):
-                yield Label("Status & Checkpoint", classes="meta-heading")
-                yield Static("No chapter selected", id="lbl_status")
+            with Vertical(classes="inspector-col"):
+                yield Static("Status: [dim]Unprocessed[/]", id="lbl_status")
                 yield Static("Stage: -", id="lbl_stage")
                 yield Static("Hash: -", id="lbl_hash")
 
-            with Vertical(classes="score-col"):
-                yield Label("Quality Audit & Tokens", classes="meta-heading")
+            with Vertical(classes="inspector-col"):
+                yield Static("Tokens: -", id="lbl_tokens")
                 yield Static("Fidelity: -", id="lbl_fidelity")
                 yield Static("Style: -", id="lbl_style")
-                yield Static("Glossary: -", id="lbl_glossary")
-                yield Static("Tokens: -", id="lbl_tokens")
 
-            with Vertical(classes="warning-col"):
-                yield Label("Warnings & Applied Terms", classes="meta-heading")
-                yield Static("No warnings", id="lbl_warnings")
+            with Vertical(classes="inspector-col-wide"):
+                yield Static("Glossary: -", id="lbl_glossary")
                 yield Static("Terms: -", id="lbl_terms")
+                yield Static("Warnings: None", id="lbl_warnings")
 
     def update_metadata(self, meta: Optional[ChapterMetadata]) -> None:
         """Update inspection labels based on chapter metadata."""

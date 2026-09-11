@@ -25,18 +25,18 @@ class NovelTranslationWorkflow:
 
     def __init__(
         self,
-        model_name: str = "gemini-2.5-pro",
-        fallback_model: Optional[str] = None,
-        extractor_model: Optional[str] = None,
-        drafter_model: Optional[str] = None,
-        critic_model: Optional[str] = None,
-        polisher_model: Optional[str] = None,
-        chronicler_model: Optional[str] = None,
+        model_name: str = "gemini-3.1-flash-lite",
+        fallback_model: Optional[str] = "gemini-3.5-flash-lite",
+        extractor_model: Optional[str] = "gemini-3.1-flash-lite",
+        drafter_model: Optional[str] = "gemini-3.5-flash-lite",
+        critic_model: Optional[str] = "gemma-4-26b-a4b-it",
+        polisher_model: Optional[str] = "gemini-3.5-flash-lite",
+        chronicler_model: Optional[str] = "gemma-4-26b-a4b-it",
         rate_limiter: Optional[SlidingWindowRateLimiter] = None,
         max_review_loops: int = 3,
         quality_threshold: float = 8.5,
         enable_chunking: bool = True,
-        chunk_threshold_lines: int = 100,
+        chunk_threshold_lines: int = 85,
         target_chunk_lines: int = 70,
         chunk_overlap_lines: int = 3
     ):

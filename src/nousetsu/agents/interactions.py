@@ -42,7 +42,7 @@ class GeminiInteractionsClient:
 
     def create(
         self,
-        model: str = "gemini-2.5-pro",
+        model: str = "gemini-3.1-flash-lite",
         input_data: Union[str, List[Dict[str, Any]]] = "",
         system_instruction: Optional[str] = None,
         generation_config: Optional[Dict[str, Any]] = None,
@@ -201,7 +201,7 @@ class GeminiInteractionsClient:
 class GeminiInteractionsChatModel(BaseChatModel):
     """LangChain BaseChatModel adapter powered by Google Gemini Interactions API."""
 
-    model_name: str = "gemini-2.5-pro"
+    model_name: str = "gemini-3.1-flash-lite"
     temperature: float = 0.3
     api_key: Optional[str] = None
     timeout: float = 180.0

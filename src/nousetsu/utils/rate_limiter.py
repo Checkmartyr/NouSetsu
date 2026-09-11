@@ -41,7 +41,7 @@ class SlidingWindowRateLimiter:
 
     def __init__(
         self,
-        max_tpm: int = 16000,
+        max_tpm: int = 32000,
         max_rpm: int = 60,
         window_seconds: float = 60.0
     ):

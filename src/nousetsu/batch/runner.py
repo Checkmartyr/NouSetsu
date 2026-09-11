@@ -46,16 +46,16 @@ class BatchRunner:
 
         # Resolve primary model
         env_model = os.environ.get("DEFAULT_MODEL") or os.environ.get("NOVEL_MODEL")
-        resolved_model = model_name or getattr(cfg, "model_name", None) or env_model or "gemini-2.5-pro"
+        resolved_model = model_name or getattr(cfg, "model_name", None) or env_model or "gemini-3.1-flash-lite"
         self.model_name = resolved_model
 
         # Resolve fallback and per-agent models
-        resolved_fallback = fallback_model or getattr(cfg, "fallback_model", None) or os.environ.get("NOVEL_FALLBACK_MODEL")
-        resolved_extractor = extractor_model or getattr(cfg, "extractor_model", None) or os.environ.get("NOVEL_EXTRACTOR_MODEL") or resolved_model
-        resolved_drafter = drafter_model or getattr(cfg, "drafter_model", None) or os.environ.get("NOVEL_DRAFTER_MODEL") or resolved_model
-        resolved_critic = critic_model or getattr(cfg, "critic_model", None) or os.environ.get("NOVEL_CRITIC_MODEL") or resolved_model
-        resolved_polisher = polisher_model or getattr(cfg, "polisher_model", None) or os.environ.get("NOVEL_POLISHER_MODEL") or resolved_model
-        resolved_chronicler = chronicler_model or getattr(cfg, "chronicler_model", None) or os.environ.get("NOVEL_CHRONICLER_MODEL") or resolved_model
+        resolved_fallback = fallback_model or getattr(cfg, "fallback_model", None) or os.environ.get("NOVEL_FALLBACK_MODEL") or "gemini-3.5-flash-lite"
+        resolved_extractor = extractor_model or getattr(cfg, "extractor_model", None) or os.environ.get("NOVEL_EXTRACTOR_MODEL") or "gemini-3.1-flash-lite"
+        resolved_drafter = drafter_model or getattr(cfg, "drafter_model", None) or os.environ.get("NOVEL_DRAFTER_MODEL") or "gemini-3.5-flash-lite"
+        resolved_critic = critic_model or getattr(cfg, "critic_model", None) or os.environ.get("NOVEL_CRITIC_MODEL") or "gemma-4-26b-a4b-it"
+        resolved_polisher = polisher_model or getattr(cfg, "polisher_model", None) or os.environ.get("NOVEL_POLISHER_MODEL") or "gemini-3.5-flash-lite"
+        resolved_chronicler = chronicler_model or getattr(cfg, "chronicler_model", None) or os.environ.get("NOVEL_CHRONICLER_MODEL") or "gemma-4-26b-a4b-it"
 
         self.fallback_model = resolved_fallback
         self.extractor_model = resolved_extractor
@@ -69,10 +69,10 @@ class BatchRunner:
 
         self.genre = genre or getattr(cfg, "genre", "general")
 
-        # Rate limiting configuration (default 16K TPM / 60 RPM)
+        # Rate limiting configuration (default 32K TPM / 60 RPM)
         env_tpm = int(os.environ["NOVEL_MAX_TPM"]) if "NOVEL_MAX_TPM" in os.environ else None
         env_rpm = int(os.environ["NOVEL_MAX_RPM"]) if "NOVEL_MAX_RPM" in os.environ else None
-        resolved_tpm = max_tpm or env_tpm or getattr(cfg, "max_tpm", 16000)
+        resolved_tpm = max_tpm or env_tpm or getattr(cfg, "max_tpm", 32000)
         resolved_rpm = max_rpm or env_rpm or getattr(cfg, "max_rpm", 60)
 
         # Review loop configuration
@@ -86,7 +86,7 @@ class BatchRunner:
 
         # Chunking configuration
         resolved_chunking = enable_chunking if enable_chunking is not None else getattr(cfg, "enable_chunking", True)
-        resolved_chunk_thresh = chunk_threshold_lines or getattr(cfg, "chunk_threshold_lines", 100)
+        resolved_chunk_thresh = chunk_threshold_lines or getattr(cfg, "chunk_threshold_lines", 85)
         resolved_target_lines = target_chunk_lines or getattr(cfg, "target_chunk_lines", 70)
         resolved_overlap_lines = chunk_overlap_lines or getattr(cfg, "chunk_overlap_lines", 3)
 

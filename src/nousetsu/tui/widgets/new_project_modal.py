@@ -57,7 +57,7 @@ class NewProjectModal(ModalScreen):
                 yield Input(value="Auto", id="inp_src_lang")
 
                 yield Label("Target Language:", classes="form-label")
-                yield Input(value="English", id="inp_tgt_lang")
+                yield Input(value="Thai", id="inp_tgt_lang")
 
                 yield Label("Raw Chapters Input Folder Name / Path:", classes="form-label")
                 yield Input(value="raw_chapters", id="inp_raw_dir")
@@ -66,7 +66,7 @@ class NewProjectModal(ModalScreen):
                 yield Input(value="translated_chapters", id="inp_out_dir")
 
                 yield Label("Default LLM Model Name:", classes="form-label")
-                yield Input(value="gemini-2.5-pro", id="inp_model")
+                yield Input(value="gemini-3.1-flash-lite", id="inp_model")
 
                 yield Label("Novel Genre (e.g. general, xianxia, isekai, litrpg, romance, auto):", classes="form-label")
                 yield Input(value="general", id="inp_genre")
@@ -84,10 +84,10 @@ class NewProjectModal(ModalScreen):
             title = self.query_one("#inp_title", Input).value.strip() or "Untitled Novel"
             proj_path_str = self.query_one("#inp_path", Input).value.strip() or "project/new_novel"
             src_lang = self.query_one("#inp_src_lang", Input).value.strip() or "Auto"
-            tgt_lang = self.query_one("#inp_tgt_lang", Input).value.strip() or "English"
+            tgt_lang = self.query_one("#inp_tgt_lang", Input).value.strip() or "Thai"
             raw_dir = self.query_one("#inp_raw_dir", Input).value.strip() or "raw_chapters"
             out_dir = self.query_one("#inp_out_dir", Input).value.strip() or "translated_chapters"
-            model = self.query_one("#inp_model", Input).value.strip() or "gemini-2.5-pro"
+            model = self.query_one("#inp_model", Input).value.strip() or "gemini-3.1-flash-lite"
             genre = self.query_one("#inp_genre", Input).value.strip() or "general"
             status = self.query_one("#new_proj_status", Static)
 

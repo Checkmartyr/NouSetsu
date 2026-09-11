@@ -29,15 +29,15 @@ class ChapterListItem(ListItem):
 
     def compose(self) -> ComposeResult:
         if self.chapter_task.is_completed:
-            badge = r"[bold green]\[DONE][/]"
+            badge = r"[bold green]✓ DONE[/]"
         elif self.chapter_task.is_failed:
-            badge = r"[bold red]\[FAILED][/]"
+            badge = r"[bold red]✕ FAILED[/]"
         elif self.chapter_task.is_paused:
-            badge = rf"[bold yellow]\[PAUSED:{self.chapter_task.resume_stage.value[:4].upper()}][/]"
+            badge = rf"[bold yellow]⏸ PAUSE:{self.chapter_task.resume_stage.value[:4].upper()}[/]"
         elif self.chapter_task.needs_resume:
-            badge = rf"[bold yellow]\[RESUME:{self.chapter_task.resume_stage.value[:4].upper()}][/]"
+            badge = rf"[bold yellow]● RESUME:{self.chapter_task.resume_stage.value[:4].upper()}[/]"
         else:
-            badge = r"[dim]\[WAIT][/]"
+            badge = r"[dim]· WAIT[/]"
 
         yield Static(f"{badge} Ch.{self.chapter_task.chapter_num:03d} - {self.chapter_task.source_file.name}")
 
@@ -54,23 +54,42 @@ class NovelAgentApp(App):
         height: 1fr;
     }
     #sidebar {
-        width: 36;
-        border-right: solid $accent;
+        width: 38;
+        border-right: solid $accent 50%;
         padding: 0 1;
         background: $surface;
     }
+    .pane-title {
+        text-style: bold;
+        color: $accent;
+        height: 1;
+        margin-bottom: 0;
+    }
     #chapter-list {
         height: 1fr;
-        border: solid $primary;
+        border: solid $primary 50%;
+        margin-bottom: 0;
+    }
+    #sidebar-toolbar {
+        height: auto;
+        margin-top: 1;
+        padding-bottom: 0;
+    }
+    .toolbar-row {
+        height: auto;
         margin-bottom: 1;
+        align-horizontal: center;
+    }
+    .tool-btn {
+        height: 1;
+        min-width: 6;
+        border: none;
+        padding: 0 1;
+        margin: 0 1 0 0;
     }
     #content-pane {
         width: 1fr;
         height: 1fr;
-    }
-    .action-btn {
-        width: 100%;
-        margin-bottom: 1;
     }
     """
 
@@ -130,13 +149,16 @@ class NovelAgentApp(App):
             with Vertical(id="sidebar"):
                 yield Label("📚 Chapters", classes="pane-title")
                 yield ListView(id="chapter-list")
-                yield Button("▶ Translate Selected (T)", variant="primary", id="btn_translate", classes="action-btn")
-                yield Button("⚡ Run All Batch (B)", variant="warning", id="btn_batch", classes="action-btn")
-                yield Button("⏹ Stop Translation (X)", variant="error", id="btn_stop", classes="action-btn", disabled=True)
-                yield Button("📖 Novel Bible (E)", variant="default", id="btn_bible", classes="action-btn")
-                yield Button("📁 Projects (P)", variant="default", id="btn_projects", classes="action-btn")
-                yield Button("✨ New Project (N)", variant="success", id="btn_new_project", classes="action-btn")
-                yield Button("⚙ Settings (S)", variant="default", id="btn_settings", classes="action-btn")
+                with Vertical(id="sidebar-toolbar"):
+                    with Horizontal(classes="toolbar-row"):
+                        yield Button("▶ Trans (T)", variant="primary", id="btn_translate", classes="tool-btn")
+                        yield Button("⚡ Batch (B)", variant="warning", id="btn_batch", classes="tool-btn")
+                        yield Button("⏹ Stop (X)", variant="error", id="btn_stop", classes="tool-btn", disabled=True)
+                    with Horizontal(classes="toolbar-row"):
+                        yield Button("📖 Bible", variant="default", id="btn_bible", classes="tool-btn")
+                        yield Button("📁 Proj", variant="default", id="btn_projects", classes="tool-btn")
+                        yield Button("✨ New", variant="success", id="btn_new_project", classes="tool-btn")
+                        yield Button("⚙ Set", variant="default", id="btn_settings", classes="tool-btn")
 
             with Vertical(id="content-pane"):
                 yield ProgressPanel(id="progress_panel")

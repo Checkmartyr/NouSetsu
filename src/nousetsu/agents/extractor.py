@@ -13,7 +13,7 @@ from nousetsu.skills.registry import SkillRegistry
 class EntityExtractorAgent:
     """Extracts unknown characters and terms from novel chapters."""
 
-    def __init__(self, model_name: str = "gemini-2.5-pro", fallback_model: Optional[str] = None):
+    def __init__(self, model_name: str = "gemini-3.1-flash-lite", fallback_model: Optional[str] = None):
         self.model_name = model_name
         self.fallback_model = fallback_model
         self.llm = get_llm(model_name=model_name, fallback_model=fallback_model, temperature=0.1)

@@ -33,7 +33,7 @@ def cmd_init(args: argparse.Namespace) -> None:
         target_lang=target_lang,
         raw_dir=getattr(args, "raw_dir", "raw_chapters"),
         output_dir=getattr(args, "output_dir", "translated_chapters"),
-        model_name=getattr(args, "model", "gemini-2.5-pro"),
+        model_name=getattr(args, "model", "gemini-3.1-flash-lite"),
         genre=getattr(args, "genre", "general")
     )
     console.print(Panel.fit(
@@ -172,13 +172,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Agentic Document-Level Novel Translation CLI")
     subparsers = parser.add_subparsers(dest="command", help="Available subcommands")
 
-    default_src = os.environ.get("SOURCE_LANG", "Japanese")
-    default_tgt = os.environ.get("TARGET_LANG", "English")
+    default_src = os.environ.get("SOURCE_LANG", "English")
+    default_tgt = os.environ.get("TARGET_LANG", "Thai")
 
     # init
     p_init = subparsers.add_parser("init", help="Initialize novel project and Novel Bible")
     p_init.add_argument("--project-dir", "-p", default=None, help="Root folder of novel project")
-    p_init.add_argument("--title", default="Untitled Novel", help="Novel series title")
+    p_init.add_argument("--title", default="Ascendance of a Bookworm", help="Novel series title")
     p_init.add_argument("--source-lang", default=default_src, help="Source language (e.g. Japanese, Chinese, Korean)")
     p_init.add_argument("--target-lang", default=default_tgt, help="Target language (e.g. English, Spanish)")
     p_init.add_argument("--genre", "-g", default="general", help="Novel genre (e.g. xianxia, wuxia, isekai, litrpg, romance, auto, general)")
@@ -191,7 +191,7 @@ def main() -> None:
     p_batch.add_argument("--source-lang", default=None, help="Override source language")
     p_batch.add_argument("--target-lang", default=None, help="Override target language")
     p_batch.add_argument("--genre", "-g", default=None, help="Override novel genre")
-    p_batch.add_argument("--model", "-m", default=os.environ.get("DEFAULT_MODEL", "gemini-2.5-pro"), help="Default LLM model name")
+    p_batch.add_argument("--model", "-m", default=os.environ.get("DEFAULT_MODEL", "gemini-3.1-flash-lite"), help="Default LLM model name")
     p_batch.add_argument("--fallback-model", default=None, help="Global fallback LLM model name")
     p_batch.add_argument("--extractor-model", default=None, help="Override model for Entity Extractor Agent")
     p_batch.add_argument("--drafter-model", default=None, help="Override model for Drafter Agent")
@@ -201,13 +201,13 @@ def main() -> None:
     p_batch.add_argument("--limit", "-l", type=int, default=None, help="Maximum number of chapters to process")
     p_batch.add_argument("--force", "-f", action="store_true", help="Force re-translate completed chapters")
     p_batch.add_argument("--auto-update-bible", action=argparse.BooleanOptionalAction, default=None, help="Automatically merge new characters/terms into Novel Bible")
-    p_batch.add_argument("--max-tpm", type=int, default=None, help="Max tokens per minute rate limit quota (default: 16000)")
+    p_batch.add_argument("--max-tpm", type=int, default=None, help="Max tokens per minute rate limit quota (default: 32000)")
     p_batch.add_argument("--max-rpm", type=int, default=None, help="Max requests per minute rate limit quota (default: 60)")
     p_batch.add_argument("--max-loops", type=int, default=None, help="Maximum review loops for translation refinement (default: 3)")
     p_batch.add_argument("--quality-threshold", type=float, default=None, help="Target quality score threshold (fidelity & style) to exit review loop (default: 8.5)")
     p_batch.add_argument("--interactions", action=argparse.BooleanOptionalAction, default=True, help="Use Gemini Interactions API (/v1beta/interactions) (default: True)")
     p_batch.add_argument("--chunking", action=argparse.BooleanOptionalAction, default=True, help="Enable line-based semantic chunking for long chapters (default: True)")
-    p_batch.add_argument("--chunk-threshold-lines", type=int, default=None, help="Line threshold to trigger chunking (default: 100)")
+    p_batch.add_argument("--chunk-threshold-lines", type=int, default=None, help="Line threshold to trigger chunking (default: 85)")
     p_batch.add_argument("--target-chunk-lines", type=int, default=None, help="Target line count per chunk (default: 70)")
 
     # skills
@@ -223,7 +223,7 @@ def main() -> None:
     p_tui.add_argument("--output-dir", "-o", default=None, help="Folder for translated output")
     p_tui.add_argument("--source-lang", default=None, help="Override source language")
     p_tui.add_argument("--target-lang", default=None, help="Override target language")
-    p_tui.add_argument("--model", "-m", default=os.environ.get("DEFAULT_MODEL", "gemini-2.5-pro"), help="LLM model name")
+    p_tui.add_argument("--model", "-m", default=os.environ.get("DEFAULT_MODEL", "gemini-3.1-flash-lite"), help="LLM model name")
     p_tui.add_argument("--fallback-model", default=None, help="Global fallback LLM model name")
     p_tui.add_argument("--interactions", action=argparse.BooleanOptionalAction, default=True, help="Use Gemini Interactions API (/v1beta/interactions) (default: True)")
     p_tui.add_argument("--chunking", action=argparse.BooleanOptionalAction, default=True, help="Enable line-based semantic chunking for long chapters (default: True)")
@@ -247,7 +247,7 @@ def main() -> None:
             project_dir=proj_dir,
             input_dir=None,
             output_dir=None,
-            model=getattr(args, "model", os.environ.get("DEFAULT_MODEL", "gemini-2.5-pro")),
+            model=getattr(args, "model", os.environ.get("DEFAULT_MODEL", "gemini-3.1-flash-lite")),
             source_lang=None,
             target_lang=None
         ))

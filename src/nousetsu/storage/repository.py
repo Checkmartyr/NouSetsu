@@ -170,12 +170,18 @@ class NovelRepository:
 
     def initialize_project(
         self,
-        title: str = "Untitled Novel",
-        source_lang: str = "Japanese",
-        target_lang: str = "English",
+        title: str = "Ascendance of a Bookworm",
+        source_lang: str = "English",
+        target_lang: str = "Thai",
         raw_dir: str = "raw_chapters",
         output_dir: str = "translated_chapters",
-        model_name: str = "gemini-2.5-pro",
+        model_name: str = "gemini-3.1-flash-lite",
+        fallback_model: Optional[str] = "gemini-3.5-flash-lite",
+        extractor_model: Optional[str] = "gemini-3.1-flash-lite",
+        drafter_model: Optional[str] = "gemini-3.5-flash-lite",
+        critic_model: Optional[str] = "gemma-4-26b-a4b-it",
+        polisher_model: Optional[str] = "gemini-3.5-flash-lite",
+        chronicler_model: Optional[str] = "gemma-4-26b-a4b-it",
         genre: str = "general"
     ) -> NovelBible:
         """Create project folder structure, config, and default Novel Bible."""
@@ -210,6 +216,12 @@ class NovelRepository:
             raw_dir=raw_dir,
             output_dir=output_dir,
             model_name=model_name,
+            fallback_model=fallback_model,
+            extractor_model=extractor_model,
+            drafter_model=drafter_model,
+            critic_model=critic_model,
+            polisher_model=polisher_model,
+            chronicler_model=chronicler_model,
             genre=resolved_genre
         )
         self.save_config(config)

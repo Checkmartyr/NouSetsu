@@ -16,16 +16,16 @@ class DualReaderWidget(Widget):
     .reader-pane {
         width: 1fr;
         height: 1fr;
-        border: round $primary;
-        margin: 0 1;
+        border: solid $primary 30%;
+        margin: 0;
         padding: 0 1;
     }
     .pane-title {
-        background: $accent;
-        color: $text;
+        color: $accent;
         text-style: bold;
         padding: 0 1;
-        margin-bottom: 1;
+        margin-bottom: 0;
+        border-bottom: solid $accent 30%;
         dock: top;
     }
     """

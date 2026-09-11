@@ -11,40 +11,39 @@ class ProgressPanel(Widget):
 
     DEFAULT_CSS = """
     ProgressPanel {
-        height: 6;
-        border: round $primary;
+        height: 4;
+        border: solid $primary 40%;
         background: $surface;
         padding: 0 1;
-        margin: 0 1;
+        margin: 0;
     }
     .panel-header-row {
         height: 1;
-        margin-bottom: 0;
-    }
-    .panel-title {
-        text-style: bold;
-        color: $accent;
+        align-horizontal: left;
     }
     .stage-badge {
         text-style: bold;
         padding: 0 1;
         background: $primary;
         color: $text;
+        margin-right: 1;
     }
     #engine_status_msg {
         color: $text-muted;
         height: 1;
+    }
+    #engine_progress {
+        height: 1;
+        margin-top: 0;
     }
     """
 
     def compose(self) -> ComposeResult:
         with Vertical():
             with Horizontal(classes="panel-header-row"):
-                yield Label("⚡ Translation Engine", classes="panel-title")
                 yield Static("[bold green] IDLE [/]", id="stage_badge", classes="stage-badge")
-
+                yield Static("Engine ready. Select chapter or batch to begin.", id="engine_status_msg")
             yield ProgressBar(id="engine_progress", total=100, show_eta=False, show_percentage=True)
-            yield Static("Engine ready. Select chapter or batch to begin.", id="engine_status_msg")
 
     def update_progress(self, filename: str, stage: PipelineStage, msg: str, percent: float) -> None:
         """Update live badge, progress bar, and status message from worker thread."""
