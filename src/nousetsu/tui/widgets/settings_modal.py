@@ -28,7 +28,19 @@ class SettingsModal(ModalScreen):
         background: $surface;
         padding: 1 2;
     }
+    .modal-header-row {
+        height: auto;
+        margin-bottom: 1;
+        align: right middle;
+    }
+    .modal-header-row .pane-title {
+        width: 1fr;
+    }
+    #settings-dialog VerticalScroll {
+        height: 1fr;
+    }
     .settings-section {
+        height: auto;
         margin: 1 0;
         padding: 0 1;
         border: solid $accent;
@@ -54,9 +66,15 @@ class SettingsModal(ModalScreen):
         self.app_instance = app_instance
         self.bible: NovelBible = repo.load_bible()
 
+    def on_mount(self) -> None:
+        """Focus the first input field on mount for immediate keyboard interaction."""
+        self.query_one("#set_model", Input).focus()
+
     def compose(self) -> ComposeResult:
         with Container(id="settings-dialog"):
-            yield Label("⚙️ Project & Translation Settings", classes="pane-title")
+            with Horizontal(classes="modal-header-row"):
+                yield Label("⚙️ Project & Translation Settings", classes="pane-title")
+                yield Button("✖ Close (Esc)", variant="error", id="btn_close_top")
 
             with VerticalScroll():
                 with Container(classes="settings-section"):
@@ -116,7 +134,7 @@ class SettingsModal(ModalScreen):
                 yield Button("Close", variant="default", id="btn_close_settings")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "btn_close_settings":
+        if event.button.id in ("btn_close_settings", "btn_close_top"):
             self.dismiss()
         elif event.button.id == "btn_save_settings":
             self._save_settings()

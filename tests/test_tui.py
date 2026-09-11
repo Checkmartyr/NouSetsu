@@ -35,6 +35,7 @@ async def test_tui_app_mount_and_widgets():
 
 @pytest.mark.asyncio
 async def test_tui_settings_modal():
+    from textual.widgets import Button, Input
     app = NovelAgentApp(
         input_dir="raw_chapters",
         output_dir="translated_chapters",
@@ -48,10 +49,68 @@ async def test_tui_settings_modal():
         settings_screen = app.screen
         assert isinstance(settings_screen, SettingsModal)
 
-        # Trigger save
-        settings_screen._save_settings()
+        # Verify first input is focused on mount
+        inp_model = settings_screen.query_one("#set_model", Input)
+        assert app.focused == inp_model
+
+        # Click on model input directly
+        await pilot.click(inp_model)
+        await pilot.pause()
+        assert app.focused == inp_model
+
+        # Type new model name
+        inp_model.value = ""
+        await pilot.press("g", "e", "m", "i", "n", "i")
+        assert inp_model.value == "gemini"
+
+        # Tab navigation advances focus to next input
+        await pilot.press("tab")
+        await pilot.pause()
+        assert app.focused == settings_screen.query_one("#set_source_lang", Input)
+
+        # Click save button via pilot
+        btn_save = settings_screen.query_one("#btn_save_settings", Button)
+        await pilot.click(btn_save)
         await pilot.pause()
         assert "Settings saved" in str(settings_screen.query_one("#settings_status").render())
+
+        # Click top close button via pilot
+        btn_close = settings_screen.query_one("#btn_close_top", Button)
+        await pilot.click(btn_close)
+        await pilot.pause()
+        assert not isinstance(app.screen, SettingsModal)
+
+
+@pytest.mark.asyncio
+async def test_tui_checkpoint_inspector_duration_formatting():
+    from nousetsu.models.metadata import ChapterMetadata, TranslationStats
+    app = NovelAgentApp(
+        input_dir="raw_chapters",
+        output_dir="translated_chapters",
+        model_name="mock-model"
+    )
+    async with app.run_test() as pilot:
+        inspector = app.query_one("#inspector", CheckpointInspectorWidget)
+        
+        # Test duration 846.4s formatted to 14m 6s
+        meta = ChapterMetadata(
+            chapter_id="ch_format_test",
+            chapter_num=32,
+            source_file="032.txt",
+            source_sha256="abc123456789",
+            output_file="032_out.txt",
+            stats=TranslationStats(
+                total_tokens=43128,
+                prompt_tokens=28450,
+                completion_tokens=14678,
+                duration_seconds=846.4
+            )
+        )
+        inspector.update_metadata(meta)
+        lbl_tokens = inspector.query_one("#lbl_tokens")
+        rendered_text = str(lbl_tokens.render())
+        assert "in 14m 6s" in rendered_text
+        assert "43,128" in rendered_text
 
 
 @pytest.mark.asyncio
