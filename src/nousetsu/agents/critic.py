@@ -3,9 +3,9 @@ import json
 import re
 from typing import List, Optional, Tuple
 from langchain_core.messages import HumanMessage, SystemMessage
-from nousetsu.agents.llm import extract_text_from_message, get_llm
+from nousetsu.agents.llm import extract_text_from_message, extract_usage_from_message, get_llm
 from nousetsu.models.bible import CharacterProfile, GlossaryItem, NovelBible
-from nousetsu.models.metadata import QualityAudit
+from nousetsu.models.metadata import QualityAudit, TokenUsage
 from nousetsu.prompts.templates import CRITIQUE_SYSTEM_PROMPT
 from nousetsu.skills.registry import SkillRegistry
 from nousetsu.utils.language import detect_language
@@ -16,6 +16,7 @@ class CritiqueAgent:
 
     def __init__(self, model_name: str = "gemini-2.5-pro"):
         self.llm = get_llm(model_name=model_name, temperature=0.1)
+        self.last_usage: TokenUsage = TokenUsage()
 
     def evaluate(
         self,
@@ -54,6 +55,7 @@ class CritiqueAgent:
             SystemMessage(content=sys_msg),
             HumanMessage(content=user_content)
         ])
+        self.last_usage = extract_usage_from_message(response)
 
         raw_content = extract_text_from_message(response.content)
         json_match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", raw_content)

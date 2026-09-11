@@ -41,10 +41,11 @@ class CheckpointInspectorWidget(Widget):
                 yield Static("Hash: -", id="lbl_hash")
 
             with Vertical(classes="score-col"):
-                yield Label("Quality Audit", classes="meta-heading")
+                yield Label("Quality Audit & Tokens", classes="meta-heading")
                 yield Static("Fidelity: -", id="lbl_fidelity")
                 yield Static("Style: -", id="lbl_style")
                 yield Static("Glossary: -", id="lbl_glossary")
+                yield Static("Tokens: -", id="lbl_tokens")
 
             with Vertical(classes="warning-col"):
                 yield Label("Warnings & Applied Terms", classes="meta-heading")
@@ -59,6 +60,7 @@ class CheckpointInspectorWidget(Widget):
         lbl_fidelity = self.query_one("#lbl_fidelity", Static)
         lbl_style = self.query_one("#lbl_style", Static)
         lbl_glossary = self.query_one("#lbl_glossary", Static)
+        lbl_tokens = self.query_one("#lbl_tokens", Static)
         lbl_warnings = self.query_one("#lbl_warnings", Static)
         lbl_terms = self.query_one("#lbl_terms", Static)
 
@@ -69,6 +71,7 @@ class CheckpointInspectorWidget(Widget):
             lbl_fidelity.update("Fidelity: -")
             lbl_style.update("Style: -")
             lbl_glossary.update("Glossary: -")
+            lbl_tokens.update("Tokens: -")
             lbl_warnings.update("Warnings: None")
             lbl_terms.update("Terms: None")
             return
@@ -92,6 +95,10 @@ class CheckpointInspectorWidget(Widget):
         lbl_fidelity.update(f"Fidelity: [bold cyan]{meta.quality_audit.fidelity_score:.1f}[/]/10")
         lbl_style.update(f"Style: [bold cyan]{meta.quality_audit.style_score:.1f}[/]/10")
         lbl_glossary.update(f"Glossary: {meta.quality_audit.glossary_compliance_pct:.0f}%")
+        if meta.stats.total_tokens:
+            lbl_tokens.update(f"Tokens: [bold green]{meta.stats.total_tokens:,}[/] (In:{meta.stats.prompt_tokens:,} Out:{meta.stats.completion_tokens:,})")
+        else:
+            lbl_tokens.update("Tokens: -")
 
         if meta.checkpoint.status == StageStatus.FAILED:
             err_snippet = (meta.checkpoint.last_error or 'Unknown error')[:45]

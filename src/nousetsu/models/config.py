@@ -15,6 +15,7 @@ class ProjectConfig(BaseModel):
     raw_dir: str = Field(default="raw_chapters", description="Path to input raw chapter files")
     output_dir: str = Field(default="translated_chapters", description="Path to output translated files")
     model_name: str = Field(default="gemini-2.5-pro", description="Default LLM model name")
+    use_interactions_api: bool = Field(default=True, description="Use Gemini Interactions API for Gemini models")
     auto_update_bible: bool = Field(default=True, description="Automatically merge newly discovered characters, terms, and summaries into Novel Bible")
     max_tpm: int = Field(default=16000, description="Max tokens per minute rate limit quota")
     max_rpm: int = Field(default=60, description="Max requests per minute rate limit quota")

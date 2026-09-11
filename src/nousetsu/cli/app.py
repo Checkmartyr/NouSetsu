@@ -53,6 +53,11 @@ def cmd_batch(args: argparse.Namespace) -> None:
     project_dir = getattr(args, "project_dir", None)
     repo = NovelRepository(project_dir) if project_dir else NovelRepository()
     cfg = repo.load_config()
+    if getattr(args, "interactions", None) is not None:
+        os.environ["NOVEL_USE_INTERACTIONS"] = "1" if args.interactions else "0"
+    elif hasattr(cfg, "use_interactions_api"):
+        os.environ["NOVEL_USE_INTERACTIONS"] = "1" if cfg.use_interactions_api else "0"
+
     if args.source_lang or args.target_lang:
         src_lang = args.source_lang
         if src_lang and src_lang.lower() in ["auto", "autodetect", "detect"]:
@@ -185,6 +190,7 @@ def main() -> None:
     p_batch.add_argument("--max-rpm", type=int, default=None, help="Max requests per minute rate limit quota (default: 60)")
     p_batch.add_argument("--max-loops", type=int, default=None, help="Maximum review loops for translation refinement (default: 3)")
     p_batch.add_argument("--quality-threshold", type=float, default=None, help="Target quality score threshold (fidelity & style) to exit review loop (default: 8.5)")
+    p_batch.add_argument("--interactions", action=argparse.BooleanOptionalAction, default=True, help="Use Gemini Interactions API (/v1beta/interactions) (default: True)")
 
     # skills
     p_skills = subparsers.add_parser("skills", help="List registered agent domain skills and active capabilities")
@@ -200,6 +206,7 @@ def main() -> None:
     p_tui.add_argument("--source-lang", default=None, help="Override source language")
     p_tui.add_argument("--target-lang", default=None, help="Override target language")
     p_tui.add_argument("--model", "-m", default=os.environ.get("DEFAULT_MODEL", "gemini-2.5-pro"), help="LLM model name")
+    p_tui.add_argument("--interactions", action=argparse.BooleanOptionalAction, default=True, help="Use Gemini Interactions API (/v1beta/interactions) (default: True)")
 
     args = parser.parse_args()
 

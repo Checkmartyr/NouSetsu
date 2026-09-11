@@ -14,7 +14,8 @@
 5. [Agent Skills System](#-5-agent-skills-system)
 6. [Managing the Novel Bible & Lore](#-6-managing-the-novel-bible--lore)
 7. [Enterprise Safety Guards](#-7-enterprise-safety-guards)
-8. [Troubleshooting & FAQ](#-8-troubleshooting--faq)
+8. [Gemini Interactions API & Granular Token Tracking](#-8-gemini-interactions-api--granular-token-tracking)
+9. [Troubleshooting & FAQ](#-9-troubleshooting--faq)
 
 ---
 
@@ -177,6 +178,7 @@ nousetsu tui --project-dir ./my_novel
 | `--quality-threshold` | | `8.5` | Target quality score (fidelity & style) to exit review loop early |
 | `--max-tpm` | | `16000` | Sliding-window Tokens Per Minute rate limit quota |
 | `--max-rpm` | | `60` | Sliding-window Requests Per Minute rate limit quota |
+| `--interactions / --no-interactions` | | True | Enable or disable Gemini Interactions API (`/v1beta/interactions`) with fallback |
 | `--auto-update-bible` | | True | Automatically merge newly discovered characters and terms into Novel Bible |
 
 > [!TIP]
@@ -303,7 +305,54 @@ summaries:
 
 ---
 
-## ❓ 8. Troubleshooting & FAQ
+## ⚡ 8. Gemini Interactions API & Granular Token Tracking
+
+NouSetsu natively integrates Google's cutting-edge **Gemini Interactions API** (`/v1beta/interactions`) to coordinate stateful multi-turn agent conversations, stream model thoughts, and provide high-fidelity token accounting across all pipeline stages.
+
+### Interactions API Architecture
+* **Native SDK Integration**: Interacts directly through `google.genai.Client.interactions.create` with support for `model`, `input`, and structured thought tokens.
+* **Resilient HTTP REST Fallback**: Automatically falls back to standard direct REST (`https://generativelanguage.googleapis.com/v1beta/interactions`) if the SDK method is unavailable or in transitional environments.
+* **Toggle via Configuration**: Controlled via `--interactions / --no-interactions` in CLI or `use_interactions_api: true/false` in `ProjectConfig`.
+
+### Granular Per-Task & Per-Step Token Metrics
+NouSetsu tracks 5 precise token dimensions across every pipeline stage:
+* `input_tokens`: Raw prompt and context tokens fed to the agent.
+* `output_tokens`: Final generated tokens produced by the agent.
+* `thought_tokens`: Internal reasoning / chain-of-thought tokens consumed by reasoning models (e.g. Gemini 2.5 Flash Thinking / Gemini 2.5 Pro).
+* `cached_tokens`: Tokens retrieved from prompt cache contexts.
+* `total_tokens`: Grand total of all token usage for that step.
+
+### Monitored Pipeline Steps
+1. `extracting`: Entity discovery pass.
+2. `drafting`: Initial narrative translation pass.
+3. `critiquing (loop #1, #2, ...)`: Fidelity and prose evaluation pass.
+4. `polishing (loop #1, #2, ...)`: Literary rewriting pass.
+5. `chronicling`: Narrative summary extraction and metadata consolidation.
+
+### Viewing Token Metrics
+* **TUI Checkpoint Inspector**: Highlight any chapter in the TUI to view live aggregated metrics:
+  ```text
+  Tokens: 1,284 (In: 820 | Out: 364 | Thought: 100)
+  ```
+* **Rich CLI Batch Table**: At the conclusion of `nousetsu batch`, a comprehensive summary table displays token breakdowns by task and step:
+  ```text
+  📊 Token Usage by Task & Pipeline Step
+  Chapter / Step       Input    Output   Thought  Cached   Total
+  ─────────────────────────────────────────────────────────────
+  Ch.1                 820      364      100      0        1,284
+    ├── 1. extracting  150      50       0        0          200
+    ├── 2. drafting    220      120      0        0          340
+    ├── 3. critiquing  200      74       50       0          324
+    ├── 4. polishing   180      80       50       0          310
+    └── 5. chronicling  70      40       0        0          110
+  ─────────────────────────────────────────────────────────────
+  Grand Total          820      364      100      0        1,284
+  ```
+* **Persistent Metadata (`.novel/metadata.json`)**: Every chapter's `stats` object stores the complete cumulative metrics alongside the `step_usage` array for automated billing or usage analytics.
+
+---
+
+## ❓ 9. Troubleshooting & FAQ
 
 ### Q: What should I do if I get a `429 Resource Exhausted` error?
 **A**: NouSetsu's sliding-window rate limiter automatically catches 429 errors, pauses execution until the current 60-second window clears, and retries with exponential backoff. If you are on a restricted tier, lower your TPM via CLI:

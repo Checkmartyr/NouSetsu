@@ -1,8 +1,9 @@
 """Context-aware novelistic translation drafter agent."""
 from typing import List, Optional
 from langchain_core.messages import HumanMessage, SystemMessage
-from nousetsu.agents.llm import extract_text_from_message, get_llm
+from nousetsu.agents.llm import extract_text_from_message, extract_usage_from_message, get_llm
 from nousetsu.models.bible import CharacterProfile, ChapterSummary, GlossaryItem, NovelBible
+from nousetsu.models.metadata import TokenUsage
 from nousetsu.prompts.templates import DRAFTING_SYSTEM_PROMPT
 from nousetsu.skills.registry import SkillRegistry
 
@@ -12,6 +13,7 @@ class ContextAwareDrafterAgent:
 
     def __init__(self, model_name: str = "gemini-2.5-pro"):
         self.llm = get_llm(model_name=model_name, temperature=0.3)
+        self.last_usage: TokenUsage = TokenUsage()
 
     def draft(
         self,
@@ -65,5 +67,6 @@ class ContextAwareDrafterAgent:
             SystemMessage(content=sys_msg),
             HumanMessage(content=f"Original Text to Translate:\n\n{source_text}")
         ])
+        self.last_usage = extract_usage_from_message(response)
 
         return extract_text_from_message(response.content)

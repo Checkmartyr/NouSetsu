@@ -4,6 +4,69 @@ from typing import Any, Callable, Optional
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
+from nousetsu.models.metadata import TokenUsage
+
+
+def extract_usage_from_message(msg: Any) -> TokenUsage:
+    """Extract fine-grained TokenUsage from an AIMessage, response object, or dict."""
+    if not msg:
+        return TokenUsage()
+
+    # Case 1: Standard LangChain usage_metadata
+    if hasattr(msg, "usage_metadata") and msg.usage_metadata:
+        um = msg.usage_metadata
+        return TokenUsage(
+            input_tokens=int(um.get("input_tokens", 0) or 0),
+            output_tokens=int(um.get("output_tokens", 0) or 0),
+            total_tokens=int(um.get("total_tokens", 0) or 0),
+            thought_tokens=int(um.get("thought_tokens", 0) or 0),
+            cached_tokens=int(um.get("cached_tokens", 0) or 0),
+        )
+
+    # Case 2: Response metadata from Gemini Interactions or LangChain
+    if hasattr(msg, "response_metadata") and msg.response_metadata:
+        rm = msg.response_metadata
+        if "usage" in rm:
+            u = rm["usage"]
+            if isinstance(u, TokenUsage):
+                return u
+            if hasattr(u, "total_tokens"):
+                return TokenUsage(
+                    input_tokens=int(getattr(u, "total_input_tokens", 0) or 0),
+                    output_tokens=int(getattr(u, "total_output_tokens", 0) or 0),
+                    thought_tokens=int(getattr(u, "total_thought_tokens", 0) or 0),
+                    cached_tokens=int(getattr(u, "total_cached_tokens", 0) or 0),
+                    total_tokens=int(getattr(u, "total_tokens", 0) or 0),
+                )
+            if isinstance(u, dict):
+                return TokenUsage(
+                    input_tokens=int(u.get("total_input_tokens") or u.get("input_tokens", 0) or 0),
+                    output_tokens=int(u.get("total_output_tokens") or u.get("output_tokens", 0) or 0),
+                    thought_tokens=int(u.get("total_thought_tokens") or u.get("thought_tokens", 0) or 0),
+                    cached_tokens=int(u.get("total_cached_tokens") or u.get("cached_tokens", 0) or 0),
+                    total_tokens=int(u.get("total_tokens", 0) or 0),
+                )
+        if "token_usage" in rm and isinstance(rm["token_usage"], dict):
+            tu = rm["token_usage"]
+            return TokenUsage(
+                input_tokens=int(tu.get("prompt_tokens", 0) or 0),
+                output_tokens=int(tu.get("completion_tokens", 0) or 0),
+                total_tokens=int(tu.get("total_tokens", 0) or 0),
+            )
+
+    # Case 3: Raw dict with token usage keys
+    if isinstance(msg, dict):
+        if "usage" in msg:
+            return extract_usage_from_message(msg["usage"])
+        return TokenUsage(
+            input_tokens=int(msg.get("input_tokens") or msg.get("prompt_tokens", 0) or 0),
+            output_tokens=int(msg.get("output_tokens") or msg.get("completion_tokens", 0) or 0),
+            thought_tokens=int(msg.get("thought_tokens", 0) or 0),
+            cached_tokens=int(msg.get("cached_tokens", 0) or 0),
+            total_tokens=int(msg.get("total_tokens", 0) or 0),
+        )
+
+    return TokenUsage()
 
 
 def extract_text_from_message(content: Any) -> str:
@@ -49,7 +112,27 @@ class MockNovelLLM(BaseChatModel):
         else:
             content = "# Translated Chapter\n\nChapter 1: The signal of departure. The boy stepped forward."
 
-        return ChatResult(generations=[ChatGeneration(message=AIMessage(content=content))])
+        in_tokens = max(1, sum(len(str(m.content)) for m in messages) // 4)
+        out_tokens = max(1, len(content) // 4)
+        total_tokens = in_tokens + out_tokens
+        usage_dict = {
+            "input_tokens": in_tokens,
+            "output_tokens": out_tokens,
+            "total_tokens": total_tokens,
+            "thought_tokens": 0,
+            "cached_tokens": 0,
+        }
+        resp_meta = {
+            "usage": {
+                "total_input_tokens": in_tokens,
+                "total_output_tokens": out_tokens,
+                "total_thought_tokens": 0,
+                "total_cached_tokens": 0,
+                "total_tokens": total_tokens,
+            }
+        }
+        ai_msg = AIMessage(content=content, usage_metadata=usage_dict, response_metadata=resp_meta)
+        return ChatResult(generations=[ChatGeneration(message=ai_msg)])
 
     @property
     def _llm_type(self) -> str:
@@ -172,8 +255,12 @@ def invoke_with_retry(
         raise last_exc
 
 
-def get_llm(model_name: str = "gemini-2.5-pro", temperature: float = 0.3) -> BaseChatModel:
-    """Factory to instantiate appropriate LLM or fallback to MockNovelLLM."""
+def get_llm(
+    model_name: str = "gemini-2.5-pro",
+    temperature: float = 0.3,
+    use_interactions: Optional[bool] = None
+) -> BaseChatModel:
+    """Factory to instantiate appropriate LLM (Interactions API / LangChain / Mock)."""
     if model_name.startswith("mock"):
         return MockNovelLLM()
 
@@ -183,6 +270,21 @@ def get_llm(model_name: str = "gemini-2.5-pro", temperature: float = 0.3) -> Bas
     api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
 
     if api_key:
+        env_interactions = os.environ.get("NOVEL_USE_INTERACTIONS", "1").lower() not in ["0", "false", "no"]
+        should_use_interactions = env_interactions if use_interactions is None else use_interactions
+
+        # Default to Gemini Interactions API for Gemini/Gemma models
+        if should_use_interactions and ("gemini" in model_name or "gemma" in model_name):
+            try:
+                from nousetsu.agents.interactions import GeminiInteractionsChatModel
+                return GeminiInteractionsChatModel(
+                    model_name=model_name,
+                    temperature=temperature,
+                    api_key=api_key
+                )
+            except Exception:
+                pass
+
         try:
             from langchain_google_genai import ChatGoogleGenerativeAI
             return ChatGoogleGenerativeAI(

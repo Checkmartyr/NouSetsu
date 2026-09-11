@@ -9,7 +9,7 @@ from rich.table import Table
 from nousetsu.batch.scanner import ChapterScanner, ChapterTask
 from nousetsu.graph.workflow import NovelTranslationWorkflow
 from nousetsu.models.exceptions import BatchStoppedException
-from nousetsu.models.metadata import ChapterMetadata, CheckpointData, PipelineStage, StageArtifacts, StageStatus
+from nousetsu.models.metadata import ChapterMetadata, CheckpointData, PipelineStage, StageArtifacts, StageStatus, TokenUsage
 from nousetsu.models.state import TranslationState
 from nousetsu.storage.repository import NovelRepository
 from nousetsu.utils.language import detect_language
@@ -63,6 +63,8 @@ class BatchRunner:
         )
         self.auto_update_bible = auto_update_bible if auto_update_bible is not None else cfg.auto_update_bible
         self.stop_event = threading.Event()
+        self.batch_token_usage = TokenUsage()
+        self.task_token_usage: dict[str, TokenUsage] = {}
 
     def stop(self) -> None:
         """Signal batch runner to gracefully halt translation."""
@@ -198,10 +200,22 @@ class BatchRunner:
 
                     # Save chapter metadata and checkpoint
                     if final_state.metadata:
+                        st = final_state.metadata.stats
+                        tok_use = TokenUsage(
+                            input_tokens=st.prompt_tokens,
+                            output_tokens=st.completion_tokens,
+                            thought_tokens=st.thought_tokens,
+                            cached_tokens=st.cached_tokens,
+                            total_tokens=st.total_tokens,
+                        )
+                        self.task_token_usage[task.source_file.name] = tok_use
+                        self.batch_token_usage = self.batch_token_usage.add(tok_use)
+
                         self.repo.save_metadata(final_state.metadata, task.output_file)
                         results.append(final_state.metadata)
 
-                    progress.update(overall_task, advance=1, description=f"[bold green]Finished: {desc}")
+                    tok_display = f" [cyan]({final_state.metadata.stats.total_tokens:,} tokens)[/]" if (final_state.metadata and final_state.metadata.stats.total_tokens) else ""
+                    progress.update(overall_task, advance=1, description=f"[bold green]Finished: {desc}{tok_display}")
                     if progress_callback:
                         progress_callback(task.source_file.name, idx, total_tasks, "COMPLETED")
 
@@ -274,12 +288,16 @@ class BatchRunner:
         return results
 
     def _print_batch_summary(self, results: List[ChapterMetadata]) -> None:
-        """Display Rich summary table of batch run."""
+        """Display Rich summary table of batch run and granular token breakdown."""
+        if not results:
+            return
+
         table = Table(title="Batch Translation Summary", show_header=True, header_style="bold magenta")
         table.add_column("Chapter", style="cyan", width=12)
         table.add_column("Status", style="green", width=12)
         table.add_column("Fidelity", justify="right", width=10)
         table.add_column("Words", justify="right", width=10)
+        table.add_column("Tokens", justify="right", width=12, style="bold cyan")
         table.add_column("Time (s)", justify="right", width=10)
         table.add_column("Warnings", style="yellow")
 
@@ -290,8 +308,47 @@ class BatchRunner:
                 m.checkpoint.status.value.upper(),
                 f"{m.quality_audit.fidelity_score:.1f}/10",
                 str(m.stats.target_word_count),
+                f"{m.stats.total_tokens:,}" if m.stats.total_tokens else "-",
                 f"{m.stats.duration_seconds:.1f}",
                 warnings_str
             )
 
         self.console.print(table)
+
+        # Granular Token Usage by Task & Step Table
+        token_table = Table(title="📊 Token Usage by Task & Pipeline Step", show_header=True, header_style="bold cyan")
+        token_table.add_column("Task / Chapter", style="bold yellow", width=16)
+        token_table.add_column("Extraction", justify="right", width=12)
+        token_table.add_column("Drafting", justify="right", width=12)
+        token_table.add_column("Critique", justify="right", width=12)
+        token_table.add_column("Polishing", justify="right", width=12)
+        token_table.add_column("Chronicle", justify="right", width=12)
+        token_table.add_column("Thought", justify="right", width=10, style="dim magenta")
+        token_table.add_column("Total Tokens", justify="right", width=14, style="bold green")
+
+        for m in results:
+            step_map: dict[str, int] = {}
+            for step in m.stats.step_usage:
+                key = step.stage.value.lower()
+                step_map[key] = step_map.get(key, 0) + step.usage.total_tokens
+
+            token_table.add_row(
+                f"Ch.{m.chapter_num} ({Path(m.source_file).name})",
+                f"{step_map.get('extraction', 0):,}",
+                f"{step_map.get('drafting', 0):,}",
+                f"{step_map.get('critique', 0):,}",
+                f"{step_map.get('polishing', 0):,}",
+                f"{step_map.get('chronicling', 0):,}",
+                f"{m.stats.thought_tokens:,}",
+                f"{m.stats.total_tokens:,}"
+            )
+
+        token_table.add_section()
+        token_table.add_row(
+            "GRAND TOTAL",
+            "-", "-", "-", "-", "-",
+            f"{self.batch_token_usage.thought_tokens:,}",
+            f"{self.batch_token_usage.total_tokens:,}",
+            style="bold cyan"
+        )
+        self.console.print(token_table)

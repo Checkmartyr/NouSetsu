@@ -2,7 +2,7 @@
 from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
 from nousetsu.models.bible import CharacterProfile, ChapterSummary, GlossaryItem, NovelBible
-from nousetsu.models.metadata import ChapterMetadata, PipelineStage, QualityAudit
+from nousetsu.models.metadata import ChapterMetadata, PipelineStage, QualityAudit, StepTokenUsage
 
 
 class TranslationState(BaseModel):
@@ -38,5 +38,6 @@ class TranslationState(BaseModel):
     best_audit: Optional[QualityAudit] = Field(default=None, description="Quality audit of best candidate")
 
     metadata: Optional[ChapterMetadata] = None
+    step_token_records: List[StepTokenUsage] = Field(default_factory=list, description="Granular token metrics recorded for each pipeline step")
     error: Optional[str] = None
 

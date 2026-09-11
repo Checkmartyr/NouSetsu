@@ -93,12 +93,45 @@ class CheckpointData(BaseModel):
         self.error_logs.append(log_entry)
 
 
+class TokenUsage(BaseModel):
+    """Detailed token consumption metrics from LLM API (Interactions API / GenAI)."""
+    input_tokens: int = Field(default=0, description="Prompt/context input tokens")
+    output_tokens: int = Field(default=0, description="Generated completion tokens")
+    thought_tokens: int = Field(default=0, description="Reasoning/thought tokens for thinking models")
+    cached_tokens: int = Field(default=0, description="Cached prompt tokens")
+    total_tokens: int = Field(default=0, description="Grand total tokens")
+
+    def add(self, other: "TokenUsage") -> "TokenUsage":
+        """Sum two TokenUsage instances."""
+        return TokenUsage(
+            input_tokens=self.input_tokens + other.input_tokens,
+            output_tokens=self.output_tokens + other.output_tokens,
+            thought_tokens=self.thought_tokens + other.thought_tokens,
+            cached_tokens=self.cached_tokens + other.cached_tokens,
+            total_tokens=self.total_tokens + other.total_tokens,
+        )
+
+
+class StepTokenUsage(BaseModel):
+    """Token usage recorded for a specific pipeline stage or review loop step."""
+    stage: PipelineStage = Field(default=PipelineStage.NONE)
+    step_name: str = Field(default="", description="Human-readable step name e.g. Extraction, Drafting, Critique (Pass 1)")
+    iteration: int = Field(default=1, description="Iteration or review pass number")
+    model: str = Field(default="", description="Model name used for this step")
+    usage: TokenUsage = Field(default_factory=TokenUsage)
+    timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
 class TranslationStats(BaseModel):
     source_char_count: int = Field(default=0)
     target_word_count: int = Field(default=0)
-    prompt_tokens: int = Field(default=0)
-    completion_tokens: int = Field(default=0)
+    prompt_tokens: int = Field(default=0, description="Cumulative input tokens across all steps")
+    completion_tokens: int = Field(default=0, description="Cumulative output tokens across all steps")
+    thought_tokens: int = Field(default=0, description="Cumulative reasoning thought tokens across all steps")
+    cached_tokens: int = Field(default=0, description="Cumulative cached tokens across all steps")
+    total_tokens: int = Field(default=0, description="Cumulative total tokens across all steps")
     duration_seconds: float = Field(default=0.0)
+    step_usage: List[StepTokenUsage] = Field(default_factory=list, description="Per-step breakdown of token usage")
 
 
 class QualityAudit(BaseModel):

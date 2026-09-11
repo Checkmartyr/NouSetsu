@@ -10,7 +10,7 @@ from nousetsu.agents.extractor import EntityExtractorAgent
 from nousetsu.agents.llm import invoke_with_retry
 from nousetsu.agents.polisher import PolishingAgent
 from nousetsu.models.exceptions import BatchStoppedException
-from nousetsu.models.metadata import PipelineStage, StageStatus
+from nousetsu.models.metadata import PipelineStage, StageStatus, StepTokenUsage, TokenUsage
 from nousetsu.models.state import TranslationState
 from nousetsu.skills.registry import SkillRegistry
 from nousetsu.utils.genre import detect_genre
@@ -151,6 +151,16 @@ class NovelTranslationWorkflow:
         all_chars = list(state.novel_bible.characters) + new_chars
         all_glossary = list(state.novel_bible.glossary) + new_terms
 
+        extract_usage = getattr(self.extractor, "last_usage", TokenUsage())
+        extract_record = StepTokenUsage(
+            stage=PipelineStage.EXTRACTION,
+            step_name="Extraction",
+            iteration=1,
+            model=self.model_name,
+            usage=extract_usage
+        )
+        updated_token_records = list(state.step_token_records) + [extract_record]
+
         updated_skills = dict(state.active_skills)
         updated_skills["extraction"] = ext_skills
 
@@ -160,7 +170,8 @@ class NovelTranslationWorkflow:
             "extracted_terms": new_terms,
             "active_characters": all_chars,
             "active_glossary": all_glossary,
-            "active_skills": updated_skills
+            "active_skills": updated_skills,
+            "step_token_records": updated_token_records
         }
 
     def _draft_step(self, state: TranslationState) -> Dict[str, Any]:
@@ -196,13 +207,24 @@ class NovelTranslationWorkflow:
             stop_event=self.stop_event
         )
 
+        draft_usage = getattr(self.drafter, "last_usage", TokenUsage())
+        draft_record = StepTokenUsage(
+            stage=PipelineStage.DRAFTING,
+            step_name="Drafting",
+            iteration=1,
+            model=self.model_name,
+            usage=draft_usage
+        )
+        updated_token_records = list(state.step_token_records) + [draft_record]
+
         updated_skills = dict(state.active_skills)
         updated_skills["drafting"] = dft_skills
 
         return {
             "current_stage": PipelineStage.DRAFTING,
             "draft_text": draft,
-            "active_skills": updated_skills
+            "active_skills": updated_skills,
+            "step_token_records": updated_token_records
         }
 
     def _critique_step(self, state: TranslationState) -> Dict[str, Any]:
@@ -285,6 +307,16 @@ class NovelTranslationWorkflow:
                         best_audit = audit
                         best_text = text_to_audit
 
+        critique_usage = getattr(self.critic, "last_usage", TokenUsage())
+        critique_record = StepTokenUsage(
+            stage=PipelineStage.CRITIQUE,
+            step_name=f"Critique (Pass {display_iter})",
+            iteration=current_iter,
+            model=self.model_name,
+            usage=critique_usage
+        )
+        updated_token_records = list(state.step_token_records) + [critique_record]
+
         updated_skills = dict(state.active_skills)
         updated_skills["critique"] = crt_skills
 
@@ -295,7 +327,8 @@ class NovelTranslationWorkflow:
             "review_iteration": current_iter,
             "best_audit": best_audit,
             "best_polished_text": best_text,
-            "active_skills": updated_skills
+            "active_skills": updated_skills,
+            "step_token_records": updated_token_records
         }
 
     def _polish_step(self, state: TranslationState) -> Dict[str, Any]:
@@ -366,6 +399,16 @@ class NovelTranslationWorkflow:
 
         best_text = polished if is_initial_draft else (state.best_polished_text or polished)
 
+        polish_usage = getattr(self.polisher, "last_usage", TokenUsage())
+        polish_record = StepTokenUsage(
+            stage=PipelineStage.POLISHING,
+            step_name=f"Polishing (Pass {display_iter})",
+            iteration=display_iter,
+            model=self.model_name,
+            usage=polish_usage
+        )
+        updated_token_records = list(state.step_token_records) + [polish_record]
+
         updated_skills = dict(state.active_skills)
         updated_skills["polishing"] = pol_skills
 
@@ -373,7 +416,8 @@ class NovelTranslationWorkflow:
             "current_stage": PipelineStage.POLISHING,
             "polished_text": polished,
             "best_polished_text": best_text,
-            "active_skills": updated_skills
+            "active_skills": updated_skills,
+            "step_token_records": updated_token_records
         }
 
     def _chronicle_step(self, state: TranslationState) -> Dict[str, Any]:
@@ -415,6 +459,16 @@ class NovelTranslationWorkflow:
             stop_event=self.stop_event
         )
 
+        chronicle_usage = getattr(self.chronicler, "last_usage", TokenUsage())
+        chronicle_record = StepTokenUsage(
+            stage=PipelineStage.CHRONICLING,
+            step_name="Chronicling",
+            iteration=1,
+            model=self.model_name,
+            usage=chronicle_usage
+        )
+        all_token_records = list(state.step_token_records) + [chronicle_record]
+
         metadata = self.chronicler.assemble_metadata(
             chapter_id=state.chapter_id,
             chapter_num=state.chapter_num,
@@ -431,7 +485,8 @@ class NovelTranslationWorkflow:
             draft_text=state.draft_text,
             critique_notes=state.critique_notes,
             polished_text=final_text,
-            status=StageStatus.COMPLETED
+            status=StageStatus.COMPLETED,
+            step_usage=all_token_records
         )
 
         updated_skills = dict(state.active_skills)
@@ -443,7 +498,8 @@ class NovelTranslationWorkflow:
             "quality_audit": final_audit,
             "new_chapter_summary": summary,
             "metadata": metadata,
-            "active_skills": updated_skills
+            "active_skills": updated_skills,
+            "step_token_records": all_token_records
         }
 
     def run(

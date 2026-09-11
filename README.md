@@ -22,6 +22,8 @@
   | **3** | **CritiqueAgent**<br>*(Zensor)* | `evaluate(source_text, draft_text, ...)` | **The Inspector**: Audits full-length chapters (up to 50k chars) against raw source text for fidelity (0-10) and style (0-10), checks glossary adherence, and generates actionable critique notes. |
   | **4** | **PolishingAgent**<br>*(Feinschliff)* | `polish(draft_text, critique_notes, ..., source_text)` | **The Stylist**: Rewrites draft prose into natural literary target-language fiction using critique notes and source text reference, eliminating translationese while preserving 100% target language output. |
   | **5** | **ChroniclerAgent**<br>*(Chronist)* | `chronicle(...)`<br>`assemble_metadata(...)` | **The Memory Keeper**: Summarizes chapter events for future chapters and archives stats into `.novel/metadata.json`. |
+* **Gemini Interactions API & REST Fallback**: Seamless native support for the new `/v1beta/interactions` endpoint via Google GenAI SDK and HTTP REST fallback, enabling structured interaction steps and thought streaming.
+* **Granular Per-Task & Per-Step Token Tracking**: Complete token metrics (`input_tokens`, `output_tokens`, `thought_tokens`, `cached_tokens`, `total_tokens`) tracked for every chapter task and pipeline step (Extraction, Drafting, Critique passes, Polishing passes, Chronicling), logged in `.novel/metadata.json`, displayed live in the TUI inspector, and rendered in Rich summary tables.
 * **Domain Skills System (17 Built-in Skills + Markdown Catalogs)**: Automatically activates targeted literary guidelines (e.g. cultivation hierarchies, adventurer guild ranks, 4-character idiom localization, villainess court etiquette) based on novel genre and source language.
 * **Programmatic Language Anti-Regression Guards**: Enforces target-language integrity with offline Unicode script detection, immediately rejecting any model reversion back into source language.
 * **Automated Critic-Polish Reflection Loop**: Automatically loops between `Feinschliff` and `Zensor` to refine prose until both fidelity and style meet strict quality thresholds (`>= 8.5/10`) or hit a configurable loop cap (default 3 loops). Includes an automatic **Best-Candidate Regression Guard** that always saves the highest-scoring version.
@@ -151,6 +153,7 @@ nousetsu batch --input-dir raw_chapters --output-dir translated_chapters
 * `--quality-threshold`: Target quality score (fidelity & style) to exit review loop early (default: 8.5).
 * `--max-tpm`: Max tokens per minute rate limit quota (default: 16000).
 * `--max-rpm`: Max requests per minute rate limit quota (default: 60).
+* `--interactions / --no-interactions`: Enable or disable Gemini Interactions API (`/v1beta/interactions`) with REST fallback (default: True).
 * `--auto-update-bible / --no-auto-update-bible`: Automatically merge new characters and terms into Novel Bible.
 
 ### 3. List & Filter Agent Skills
@@ -181,13 +184,13 @@ nousetsu tui --input-dir raw_chapters --output-dir translated_chapters
 
 ## 📑 Single Project Metadata & Error Checkpoints (`.novel/metadata.json`)
 
-All chapter translation checkpoints, stage artifacts, and quality audit records are consolidated into a single project metadata file (`.novel/metadata.json`), ensuring translated output directories stay clean and uncluttered:
+All chapter translation checkpoints, stage artifacts, fine-grained token usage, and quality audit records are consolidated into a single project metadata file (`.novel/metadata.json`), ensuring translated output directories stay clean and uncluttered:
 
 ```json
 {
   "project_id": "default_project",
   "version": 1,
-  "updated_at": "2026-09-11T02:40:00Z",
+  "updated_at": "2026-09-11T05:30:00Z",
   "chapters": {
     "001 - Awakening": {
       "chapter_id": "chapter_0001",
@@ -207,7 +210,19 @@ All chapter translation checkpoints, stage artifacts, and quality audit records 
       "stats": {
         "source_char_count": 166,
         "target_word_count": 22,
-        "duration_seconds": 0.01
+        "duration_seconds": 0.01,
+        "total_tokens": 1284,
+        "input_tokens": 820,
+        "output_tokens": 364,
+        "thought_tokens": 100,
+        "cached_tokens": 0,
+        "step_usage": [
+          {"stage": "extracting", "step_num": 1, "input_tokens": 150, "output_tokens": 50, "thought_tokens": 0, "cached_tokens": 0, "total_tokens": 200},
+          {"stage": "drafting", "step_num": 2, "input_tokens": 220, "output_tokens": 120, "thought_tokens": 0, "cached_tokens": 0, "total_tokens": 340},
+          {"stage": "critiquing", "step_num": 3, "input_tokens": 200, "output_tokens": 74, "thought_tokens": 50, "cached_tokens": 0, "total_tokens": 324},
+          {"stage": "polishing", "step_num": 4, "input_tokens": 180, "output_tokens": 80, "thought_tokens": 50, "cached_tokens": 0, "total_tokens": 310},
+          {"stage": "chronicling", "step_num": 5, "input_tokens": 70, "output_tokens": 40, "thought_tokens": 0, "cached_tokens": 0, "total_tokens": 110}
+        ]
       },
       "quality_audit": {
         "fidelity_score": 9.5,
@@ -238,22 +253,24 @@ platform win32 -- Python 3.13.12, pytest-9.1.1, pluggy-1.6.0
 rootdir: D:\Code\novel_translation_Agent
 configfile: pyproject.toml
 plugins: anyio-4.15.1, langsmith-0.12.4, asyncio-1.4.0
-collected 72 items
+collected 82 items
 
-tests\test_checkpoint.py ....                                            [  5%]
-tests\test_language.py ...........                                       [ 20%]
-tests\test_models.py ...                                                 [ 25%]
-tests\test_polisher_language.py .......                                  [ 34%]
-tests\test_projects.py ....                                              [ 40%]
-tests\test_rate_limiter.py ........                                      [ 51%]
-tests\test_retry.py ....                                                 [ 56%]
-tests\test_review_loop.py ......                                         [ 65%]
-tests\test_runner.py ...                                                 [ 69%]
-tests\test_scanner.py ..                                                 [ 72%]
-tests\test_skills.py .........                                           [ 84%]
-tests\test_stop.py ..                                                    [ 87%]
+tests\test_checkpoint.py ....                                            [  4%]
+tests\test_interactions.py ......                                        [ 12%]
+tests\test_language.py ...........                                       [ 25%]
+tests\test_models.py ...                                                 [ 29%]
+tests\test_polisher_language.py .......                                  [ 37%]
+tests\test_projects.py ....                                              [ 42%]
+tests\test_rate_limiter.py ........                                      [ 52%]
+tests\test_retry.py ....                                                 [ 57%]
+tests\test_review_loop.py ......                                         [ 64%]
+tests\test_runner.py ...                                                 [ 68%]
+tests\test_scanner.py ..                                                 [ 70%]
+tests\test_skills.py .........                                           [ 81%]
+tests\test_stop.py ..                                                    [ 84%]
+tests\test_token_tracking.py ....                                        [ 89%]
 tests\test_tui.py .........                                              [100%]
-============================= 72 passed in 15.65s =============================
+============================= 82 passed in 30.45s =============================
 ```
 
 ### 2. End-to-End Batch Validation

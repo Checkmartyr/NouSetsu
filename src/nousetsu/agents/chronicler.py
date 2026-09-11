@@ -3,7 +3,7 @@ import json
 import re
 from typing import List, Optional
 from langchain_core.messages import HumanMessage, SystemMessage
-from nousetsu.agents.llm import extract_text_from_message, get_llm
+from nousetsu.agents.llm import extract_text_from_message, extract_usage_from_message, get_llm
 from nousetsu.models.bible import ChapterSummary, CharacterProfile, GlossaryItem, NovelBible
 from nousetsu.models.metadata import (
     ChapterMetadata,
@@ -12,6 +12,8 @@ from nousetsu.models.metadata import (
     QualityAudit,
     StageArtifacts,
     StageStatus,
+    StepTokenUsage,
+    TokenUsage,
     TranslationStats,
 )
 from nousetsu.prompts.templates import CHRONICLER_SYSTEM_PROMPT
@@ -23,6 +25,7 @@ class ChroniclerAgent:
 
     def __init__(self, model_name: str = "gemini-2.5-pro"):
         self.llm = get_llm(model_name=model_name, temperature=0.2)
+        self.last_usage: TokenUsage = TokenUsage()
 
     def chronicle(
         self,
@@ -49,6 +52,7 @@ class ChroniclerAgent:
             SystemMessage(content=sys_msg),
             HumanMessage(content=f"Translated Chapter:\n{translated_text[:12000]}")
         ])
+        self.last_usage = extract_usage_from_message(response)
 
         raw_content = extract_text_from_message(response.content)
         json_match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", raw_content)
@@ -84,7 +88,8 @@ class ChroniclerAgent:
         draft_text: str,
         critique_notes: str,
         polished_text: str,
-        status: StageStatus = StageStatus.COMPLETED
+        status: StageStatus = StageStatus.COMPLETED,
+        step_usage: Optional[List[StepTokenUsage]] = None
     ) -> ChapterMetadata:
         artifacts = StageArtifacts(
             extracted_terms=active_glossary,
@@ -102,12 +107,30 @@ class ChroniclerAgent:
             stage_artifacts=artifacts
         )
 
+        step_records = step_usage or []
+        if step_records:
+            prompt_tokens = sum(s.usage.input_tokens for s in step_records)
+            completion_tokens = sum(s.usage.output_tokens for s in step_records)
+            thought_tokens = sum(s.usage.thought_tokens for s in step_records)
+            cached_tokens = sum(s.usage.cached_tokens for s in step_records)
+            total_tokens = sum(s.usage.total_tokens for s in step_records)
+        else:
+            prompt_tokens = int(len(source_text) * 1.3)
+            completion_tokens = int(len(final_text.split()) * 1.4)
+            thought_tokens = 0
+            cached_tokens = 0
+            total_tokens = prompt_tokens + completion_tokens
+
         stats = TranslationStats(
             source_char_count=len(source_text),
             target_word_count=len(final_text.split()),
-            prompt_tokens=int(len(source_text) * 1.3),
-            completion_tokens=int(len(final_text.split()) * 1.4),
-            duration_seconds=round(duration_seconds, 2)
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            thought_tokens=thought_tokens,
+            cached_tokens=cached_tokens,
+            total_tokens=total_tokens,
+            duration_seconds=round(duration_seconds, 2),
+            step_usage=step_records
         )
 
         return ChapterMetadata(
