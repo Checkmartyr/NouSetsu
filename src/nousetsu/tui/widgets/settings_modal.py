@@ -1,4 +1,4 @@
-"""Settings modal screen for adjusting model, languages, style guide, and project paths."""
+import os
 from pathlib import Path
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -6,6 +6,7 @@ from textual.containers import Container, Horizontal, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Label, Select, Static
 from nousetsu.models.bible import NovelBible
+from nousetsu.models.config import ProjectConfig
 from nousetsu.storage.repository import NovelRepository
 
 
@@ -64,11 +65,12 @@ class SettingsModal(ModalScreen):
         super().__init__()
         self.repo = repo
         self.app_instance = app_instance
+        self.cfg: ProjectConfig = repo.load_config()
         self.bible: NovelBible = repo.load_bible()
 
     def on_mount(self) -> None:
         """Focus the first input field on mount for immediate keyboard interaction."""
-        self.query_one("#set_model", Input).focus()
+        self.query_one("#set_title", Input).focus()
 
     def compose(self) -> ComposeResult:
         with Container(id="settings-dialog"):
@@ -76,16 +78,27 @@ class SettingsModal(ModalScreen):
 
             with VerticalScroll():
                 with Container(classes="settings-section"):
-                    yield Label("Model & Provider Configuration", classes="section-title")
+                    yield Label("Project & Model Configuration", classes="section-title")
+                    yield Label("Novel Title:", classes="field-label")
+                    yield Input(value=self.cfg.title or self.bible.title, id="set_title")
                     yield Label("LLM Model Name (e.g. gemini-2.5-pro, gemini-2.5-flash):", classes="field-label")
-                    yield Input(value=self.app_instance.model_name, id="set_model")
+                    yield Input(value=self.cfg.model_name or self.app_instance.model_name, id="set_model")
+                    yield Label("Novel Genre (general, xianxia, wuxia, isekai, litrpg, romance):", classes="field-label")
+                    yield Input(value=self.cfg.genre or self.bible.genre, id="set_genre")
 
                 with Container(classes="settings-section"):
                     yield Label("Language Pair Settings", classes="section-title")
-                    yield Label("Source Language (e.g. Japanese, Chinese, Korean):", classes="field-label")
-                    yield Input(value=self.bible.source_language, id="set_source_lang")
-                    yield Label("Target Language (e.g. English, Spanish, French):", classes="field-label")
-                    yield Input(value=self.bible.target_language, id="set_target_lang")
+                    yield Label("Source Language (e.g. Japanese, Chinese, Korean, English):", classes="field-label")
+                    yield Input(value=self.cfg.source_language or self.bible.source_language, id="set_source_lang")
+                    yield Label("Target Language (e.g. English, Spanish, Thai, French):", classes="field-label")
+                    yield Input(value=self.cfg.target_language or self.bible.target_language, id="set_target_lang")
+
+                with Container(classes="settings-section"):
+                    yield Label("Directory Paths", classes="section-title")
+                    yield Label("Raw Chapters Input Folder:", classes="field-label")
+                    yield Input(value=self.cfg.raw_dir or str(self.app_instance.input_dir), id="set_input_dir")
+                    yield Label("Translated Chapters Output Folder:", classes="field-label")
+                    yield Input(value=self.cfg.output_dir or str(self.app_instance.output_dir), id="set_output_dir")
 
                 with Container(classes="settings-section"):
                     yield Label("Style Guide & Tone Guidelines", classes="section-title")
@@ -99,31 +112,33 @@ class SettingsModal(ModalScreen):
                     yield Input(value=self.bible.style_guide.honorific_mode, id="set_honorifics")
 
                 with Container(classes="settings-section"):
-                    yield Label("Directory Paths", classes="section-title")
-                    yield Label("Raw Chapters Input Folder:", classes="field-label")
-                    yield Input(value=str(self.app_instance.input_dir), id="set_input_dir")
-                    yield Label("Translated Chapters Output Folder:", classes="field-label")
-                    yield Input(value=str(self.app_instance.output_dir), id="set_output_dir")
-
-                with Container(classes="settings-section"):
-                    cfg = self.repo.load_config()
-                    yield Label("⚡ API Rate Limits & Throttling Guard", classes="section-title")
+                    yield Label("⚡ API Rate Limits & Provider Guard", classes="section-title")
                     yield Label("Max Tokens Per Minute (TPM, default 16000):", classes="field-label")
-                    yield Input(value=str(getattr(cfg, "max_tpm", 16000)), id="set_max_tpm")
+                    yield Input(value=str(self.cfg.max_tpm), id="set_max_tpm")
                     yield Label("Max Requests Per Minute (RPM, default 60):", classes="field-label")
-                    yield Input(value=str(getattr(cfg, "max_rpm", 60)), id="set_max_rpm")
+                    yield Input(value=str(self.cfg.max_rpm), id="set_max_rpm")
+                    yield Label("Use Gemini Interactions API (true / false):", classes="field-label")
+                    yield Input(value="true" if self.cfg.use_interactions_api else "false", id="set_use_interactions")
 
                 with Container(classes="settings-section"):
-                    yield Label("🔄 Review Loop & Quality Control", classes="section-title")
+                    yield Label("🔄 Review Loop & Automation", classes="section-title")
                     yield Label("Max Review Loops (1–5, default 3):", classes="field-label")
-                    yield Input(value=str(getattr(cfg, "max_review_loops", 3)), id="set_max_loops")
+                    yield Input(value=str(self.cfg.max_review_loops), id="set_max_loops")
                     yield Label("Quality Threshold (5.0–10.0, default 8.5):", classes="field-label")
-                    yield Input(value=str(getattr(cfg, "quality_threshold", 8.5)), id="set_quality_threshold")
+                    yield Input(value=str(self.cfg.quality_threshold), id="set_quality_threshold")
+                    yield Label("Auto-Update Novel Bible (true / false):", classes="field-label")
+                    yield Input(value="true" if self.cfg.auto_update_bible else "false", id="set_auto_bible")
 
                 with Container(classes="settings-section"):
-                    yield Label("✨ Novel Genre & Specialized Skills", classes="section-title")
-                    yield Label("Genre (general, xianxia, wuxia, isekai, litrpg, romance):", classes="field-label")
-                    yield Input(value=getattr(self.bible, "genre", getattr(cfg, "genre", "general")), id="set_genre")
+                    yield Label("📏 Line-Based Semantic Chunking", classes="section-title")
+                    yield Label("Enable Line Chunking (true / false):", classes="field-label")
+                    yield Input(value="true" if self.cfg.enable_chunking else "false", id="set_enable_chunking")
+                    yield Label("Chunk Trigger Line Threshold (default 100 non-empty lines):", classes="field-label")
+                    yield Input(value=str(self.cfg.chunk_threshold_lines), id="set_chunk_threshold_lines")
+                    yield Label("Target Chunk Lines (default 70 lines per chunk):", classes="field-label")
+                    yield Input(value=str(self.cfg.target_chunk_lines), id="set_target_chunk_lines")
+                    yield Label("Context Overlap Lines (default 3 preceding lines):", classes="field-label")
+                    yield Input(value=str(self.cfg.chunk_overlap_lines), id="set_chunk_overlap_lines")
 
                 yield Static("", id="settings_status")
 
@@ -138,22 +153,41 @@ class SettingsModal(ModalScreen):
             self._save_settings()
 
     def _save_settings(self) -> None:
+        title_val = self.query_one("#set_title", Input).value.strip()
         model_val = self.query_one("#set_model", Input).value.strip()
+        genre_val = self.query_one("#set_genre", Input).value.strip()
         src_val = self.query_one("#set_source_lang", Input).value.strip()
         tgt_val = self.query_one("#set_target_lang", Input).value.strip()
+        in_dir = self.query_one("#set_input_dir", Input).value.strip()
+        out_dir = self.query_one("#set_output_dir", Input).value.strip()
+
         reading_level = self.query_one("#set_reading_level", Input).value.strip()
         tense_val = self.query_one("#set_tense", Input).value.strip()
         pov_val = self.query_one("#set_pov", Input).value.strip()
         honorifics_val = self.query_one("#set_honorifics", Input).value.strip()
-        in_dir = self.query_one("#set_input_dir", Input).value.strip()
-        out_dir = self.query_one("#set_output_dir", Input).value.strip()
-        genre_val = self.query_one("#set_genre", Input).value.strip()
+
+        tpm_val = self.query_one("#set_max_tpm", Input).value.strip()
+        rpm_val = self.query_one("#set_max_rpm", Input).value.strip()
+        interactions_val = self.query_one("#set_use_interactions", Input).value.strip().lower() in ("true", "1", "yes")
+
+        loops_val = self.query_one("#set_max_loops", Input).value.strip()
+        thresh_val = self.query_one("#set_quality_threshold", Input).value.strip()
+        auto_bible_val = self.query_one("#set_auto_bible", Input).value.strip().lower() in ("true", "1", "yes")
+
+        chunking_val = self.query_one("#set_enable_chunking", Input).value.strip().lower() in ("true", "1", "yes")
+        chunk_thresh_val = self.query_one("#set_chunk_threshold_lines", Input).value.strip()
+        target_chunk_val = self.query_one("#set_target_chunk_lines", Input).value.strip()
+        chunk_overlap_val = self.query_one("#set_chunk_overlap_lines", Input).value.strip()
 
         # Update Bible in repo
+        if title_val:
+            self.bible.title = title_val
         if src_val:
             self.bible.source_language = src_val
         if tgt_val:
             self.bible.target_language = tgt_val
+        if genre_val:
+            self.bible.genre = genre_val
         if reading_level:
             self.bible.style_guide.target_reading_level = reading_level
         if tense_val:
@@ -162,15 +196,17 @@ class SettingsModal(ModalScreen):
             self.bible.style_guide.pov = pov_val
         if honorifics_val:
             self.bible.style_guide.honorific_mode = honorifics_val
-        if genre_val:
-            self.bible.genre = genre_val
 
         self.repo.save_bible(self.bible)
 
         # Update and persist complete ProjectConfig
         cfg = self.repo.load_config()
+        if title_val:
+            cfg.title = title_val
         if model_val:
             cfg.model_name = model_val
+        if genre_val:
+            cfg.genre = genre_val
         if src_val:
             cfg.source_language = src_val
         if tgt_val:
@@ -179,21 +215,16 @@ class SettingsModal(ModalScreen):
             cfg.raw_dir = in_dir
         if out_dir:
             cfg.output_dir = out_dir
-        if genre_val:
-            cfg.genre = genre_val
 
-        tpm_val = self.query_one("#set_max_tpm", Input).value.strip()
-        rpm_val = self.query_one("#set_max_rpm", Input).value.strip()
         if tpm_val.isdigit():
             cfg.max_tpm = int(tpm_val)
         if rpm_val.isdigit():
             cfg.max_rpm = int(rpm_val)
+        cfg.use_interactions_api = interactions_val
 
-        loops_val = self.query_one("#set_max_loops", Input).value.strip()
         if loops_val.isdigit():
             cfg.max_review_loops = max(1, min(5, int(loops_val)))
 
-        thresh_val = self.query_one("#set_quality_threshold", Input).value.strip()
         try:
             new_thresh = float(thresh_val)
             if 5.0 <= new_thresh <= 10.0:
@@ -201,7 +232,20 @@ class SettingsModal(ModalScreen):
         except ValueError:
             pass
 
+        cfg.auto_update_bible = auto_bible_val
+        cfg.enable_chunking = chunking_val
+
+        if chunk_thresh_val.isdigit():
+            cfg.chunk_threshold_lines = int(chunk_thresh_val)
+        if target_chunk_val.isdigit():
+            cfg.target_chunk_lines = int(target_chunk_val)
+        if chunk_overlap_val.isdigit():
+            cfg.chunk_overlap_lines = int(chunk_overlap_val)
+
         self.repo.save_config(cfg)
+
+        # Apply environment flag for interactions API
+        os.environ["NOVEL_USE_INTERACTIONS"] = "1" if cfg.use_interactions_api else "0"
 
         # Update active app instance state
         self.app_instance.model_name = cfg.model_name
@@ -214,11 +258,16 @@ class SettingsModal(ModalScreen):
         self.app_instance.runner = BatchRunner(
             self.repo,
             model_name=cfg.model_name,
+            auto_update_bible=cfg.auto_update_bible,
             max_tpm=cfg.max_tpm,
             max_rpm=cfg.max_rpm,
             max_review_loops=cfg.max_review_loops,
             quality_threshold=cfg.quality_threshold,
-            genre=cfg.genre
+            genre=cfg.genre,
+            enable_chunking=cfg.enable_chunking,
+            chunk_threshold_lines=cfg.chunk_threshold_lines,
+            target_chunk_lines=cfg.target_chunk_lines,
+            chunk_overlap_lines=cfg.chunk_overlap_lines
         )
 
         # Refresh scanned tasks in TUI

@@ -146,3 +146,8 @@ def test_repository_set_languages(tmp_path: Path):
     reloaded = repo.load_bible()
     assert reloaded.source_language == "Chinese"
     assert reloaded.target_language == "Spanish"
+
+    # Verify config.yaml was also synchronized
+    cfg = repo.load_config()
+    assert cfg.source_language == "Chinese"
+    assert cfg.target_language == "Spanish"

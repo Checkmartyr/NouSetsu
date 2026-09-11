@@ -321,13 +321,20 @@ class NovelRepository:
         return bible
 
     def set_languages(self, source_lang: Optional[str] = None, target_lang: Optional[str] = None) -> NovelBible:
-        """Update source and/or target languages in Novel Bible."""
+        """Update source and/or target languages in both Novel Bible and ProjectConfig."""
         bible = self.load_bible()
         if source_lang:
             bible.source_language = source_lang
         if target_lang:
             bible.target_language = target_lang
         self.save_bible(bible)
+
+        cfg = self.load_config()
+        if source_lang:
+            cfg.source_language = source_lang
+        if target_lang:
+            cfg.target_language = target_lang
+        self.save_config(cfg)
         return bible
 
     @staticmethod
