@@ -14,9 +14,17 @@ from nousetsu.utils.language import detect_language
 class CritiqueAgent:
     """Evaluates draft quality, glossary adherence, and zero-anaphora pronoun resolution."""
 
-    def __init__(self, model_name: str = "gemini-2.5-pro"):
-        self.llm = get_llm(model_name=model_name, temperature=0.1)
+    def __init__(self, model_name: str = "gemini-2.5-pro", fallback_model: Optional[str] = None):
+        self.model_name = model_name
+        self.fallback_model = fallback_model
+        self.llm = get_llm(model_name=model_name, fallback_model=fallback_model, temperature=0.1)
         self.last_usage: TokenUsage = TokenUsage()
+
+    @property
+    def last_model_used(self) -> str:
+        if hasattr(self.llm, "last_model_used") and self.llm.last_model_used:
+            return self.llm.last_model_used
+        return self.model_name
 
     def evaluate(
         self,

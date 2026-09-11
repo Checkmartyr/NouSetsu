@@ -26,6 +26,12 @@ class NovelTranslationWorkflow:
     def __init__(
         self,
         model_name: str = "gemini-2.5-pro",
+        fallback_model: Optional[str] = None,
+        extractor_model: Optional[str] = None,
+        drafter_model: Optional[str] = None,
+        critic_model: Optional[str] = None,
+        polisher_model: Optional[str] = None,
+        chronicler_model: Optional[str] = None,
         rate_limiter: Optional[SlidingWindowRateLimiter] = None,
         max_review_loops: int = 3,
         quality_threshold: float = 8.5,
@@ -35,6 +41,13 @@ class NovelTranslationWorkflow:
         chunk_overlap_lines: int = 3
     ):
         self.model_name = model_name
+        self.fallback_model = fallback_model
+        self.extractor_model = extractor_model or model_name
+        self.drafter_model = drafter_model or model_name
+        self.critic_model = critic_model or model_name
+        self.polisher_model = polisher_model or model_name
+        self.chronicler_model = chronicler_model or model_name
+
         self.rate_limiter = rate_limiter or SlidingWindowRateLimiter()
         self.max_review_loops = max_review_loops
         self.quality_threshold = quality_threshold
@@ -49,11 +62,11 @@ class NovelTranslationWorkflow:
             else None
         )
         self.current_stage: PipelineStage = PipelineStage.NONE
-        self.extractor = EntityExtractorAgent(model_name=model_name)
-        self.drafter = ContextAwareDrafterAgent(model_name=model_name)
-        self.critic = CritiqueAgent(model_name=model_name)
-        self.polisher = PolishingAgent(model_name=model_name)
-        self.chronicler = ChroniclerAgent(model_name=model_name)
+        self.extractor = EntityExtractorAgent(model_name=self.extractor_model, fallback_model=fallback_model)
+        self.drafter = ContextAwareDrafterAgent(model_name=self.drafter_model, fallback_model=fallback_model)
+        self.critic = CritiqueAgent(model_name=self.critic_model, fallback_model=fallback_model)
+        self.polisher = PolishingAgent(model_name=self.polisher_model, fallback_model=fallback_model)
+        self.chronicler = ChroniclerAgent(model_name=self.chronicler_model, fallback_model=fallback_model)
         self.stage_callback: Optional[Callable[[PipelineStage, str, float], None]] = None
         self.stop_event: Optional[threading.Event] = None
         self.last_state: Optional[TranslationState] = None
@@ -173,7 +186,7 @@ class NovelTranslationWorkflow:
             stage=PipelineStage.EXTRACTION,
             step_name="Extraction",
             iteration=1,
-            model=self.model_name,
+            model=getattr(self.extractor, "last_model_used", self.extractor_model),
             duration_seconds=extract_duration,
             usage=extract_usage
         )
@@ -249,7 +262,7 @@ class NovelTranslationWorkflow:
             stage=PipelineStage.DRAFTING,
             step_name="Drafting",
             iteration=1,
-            model=self.model_name,
+            model=getattr(self.drafter, "last_model_used", self.drafter_model),
             chunk_count=chunk_count,
             duration_seconds=draft_duration,
             usage=draft_usage
@@ -353,7 +366,7 @@ class NovelTranslationWorkflow:
             stage=PipelineStage.CRITIQUE,
             step_name=f"Critique (Pass {display_iter})",
             iteration=current_iter,
-            model=self.model_name,
+            model=getattr(self.critic, "last_model_used", self.critic_model),
             duration_seconds=critique_duration,
             usage=critique_usage
         )
@@ -464,7 +477,7 @@ class NovelTranslationWorkflow:
             stage=PipelineStage.POLISHING,
             step_name=f"Polishing (Pass {display_iter})",
             iteration=display_iter,
-            model=self.model_name,
+            model=getattr(self.polisher, "last_model_used", self.polisher_model),
             chunk_count=chunk_count,
             duration_seconds=polish_duration,
             usage=polish_usage
@@ -528,7 +541,7 @@ class NovelTranslationWorkflow:
             stage=PipelineStage.CHRONICLING,
             step_name="Chronicling",
             iteration=1,
-            model=self.model_name,
+            model=getattr(self.chronicler, "last_model_used", self.chronicler_model),
             duration_seconds=chronicle_duration,
             usage=chronicle_usage
         )

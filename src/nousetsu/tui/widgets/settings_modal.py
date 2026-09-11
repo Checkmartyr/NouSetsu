@@ -81,10 +81,25 @@ class SettingsModal(ModalScreen):
                     yield Label("Project & Model Configuration", classes="section-title")
                     yield Label("Novel Title:", classes="field-label")
                     yield Input(value=self.cfg.title or self.bible.title, id="set_title")
-                    yield Label("LLM Model Name (e.g. gemini-2.5-pro, gemini-2.5-flash):", classes="field-label")
+                    yield Label("Default LLM Model Name (e.g. gemini-2.5-pro, gemini-2.5-flash):", classes="field-label")
                     yield Input(value=self.cfg.model_name or self.app_instance.model_name, id="set_model")
+                    yield Label("Global Fallback Model (optional, e.g. gemini-2.5-flash, mock-novel-llm):", classes="field-label")
+                    yield Input(value=self.cfg.fallback_model or "", id="set_fallback_model", placeholder="Leave blank if no fallback")
                     yield Label("Novel Genre (general, xianxia, wuxia, isekai, litrpg, romance):", classes="field-label")
                     yield Input(value=self.cfg.genre or self.bible.genre, id="set_genre")
+
+                with Container(classes="settings-section"):
+                    yield Label("🤖 Multi-Agent Model Routing (Leave blank to use default model)", classes="section-title")
+                    yield Label("Entity Extractor Model:", classes="field-label")
+                    yield Input(value=self.cfg.extractor_model or "", id="set_extractor_model", placeholder="e.g. gemini-2.5-flash")
+                    yield Label("Translation Drafter Model:", classes="field-label")
+                    yield Input(value=self.cfg.drafter_model or "", id="set_drafter_model", placeholder="e.g. gemini-2.5-pro")
+                    yield Label("Critique & Quality Auditor Model:", classes="field-label")
+                    yield Input(value=self.cfg.critic_model or "", id="set_critic_model", placeholder="e.g. gemini-2.5-pro")
+                    yield Label("Prose Polisher Model:", classes="field-label")
+                    yield Input(value=self.cfg.polisher_model or "", id="set_polisher_model", placeholder="e.g. gemini-2.5-pro")
+                    yield Label("Chronicler Lore Memory Model:", classes="field-label")
+                    yield Input(value=self.cfg.chronicler_model or "", id="set_chronicler_model", placeholder="e.g. gemini-2.5-flash")
 
                 with Container(classes="settings-section"):
                     yield Label("Language Pair Settings", classes="section-title")
@@ -155,6 +170,12 @@ class SettingsModal(ModalScreen):
     def _save_settings(self) -> None:
         title_val = self.query_one("#set_title", Input).value.strip()
         model_val = self.query_one("#set_model", Input).value.strip()
+        fallback_val = self.query_one("#set_fallback_model", Input).value.strip()
+        extractor_val = self.query_one("#set_extractor_model", Input).value.strip()
+        drafter_val = self.query_one("#set_drafter_model", Input).value.strip()
+        critic_val = self.query_one("#set_critic_model", Input).value.strip()
+        polisher_val = self.query_one("#set_polisher_model", Input).value.strip()
+        chronicler_val = self.query_one("#set_chronicler_model", Input).value.strip()
         genre_val = self.query_one("#set_genre", Input).value.strip()
         src_val = self.query_one("#set_source_lang", Input).value.strip()
         tgt_val = self.query_one("#set_target_lang", Input).value.strip()
@@ -205,6 +226,12 @@ class SettingsModal(ModalScreen):
             cfg.title = title_val
         if model_val:
             cfg.model_name = model_val
+        cfg.fallback_model = fallback_val or None
+        cfg.extractor_model = extractor_val or None
+        cfg.drafter_model = drafter_val or None
+        cfg.critic_model = critic_val or None
+        cfg.polisher_model = polisher_val or None
+        cfg.chronicler_model = chronicler_val or None
         if genre_val:
             cfg.genre = genre_val
         if src_val:
@@ -258,6 +285,12 @@ class SettingsModal(ModalScreen):
         self.app_instance.runner = BatchRunner(
             self.repo,
             model_name=cfg.model_name,
+            fallback_model=cfg.fallback_model,
+            extractor_model=cfg.extractor_model,
+            drafter_model=cfg.drafter_model,
+            critic_model=cfg.critic_model,
+            polisher_model=cfg.polisher_model,
+            chronicler_model=cfg.chronicler_model,
             auto_update_bible=cfg.auto_update_bible,
             max_tpm=cfg.max_tpm,
             max_rpm=cfg.max_rpm,

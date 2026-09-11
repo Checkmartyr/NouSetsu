@@ -15,6 +15,12 @@ class ProjectConfig(BaseModel):
     raw_dir: str = Field(default="raw_chapters", description="Path to input raw chapter files")
     output_dir: str = Field(default="translated_chapters", description="Path to output translated files")
     model_name: str = Field(default="gemini-2.5-pro", description="Default LLM model name")
+    fallback_model: Optional[str] = Field(default=None, description="Global fallback LLM model name")
+    extractor_model: Optional[str] = Field(default=None, description="LLM model for Entity Extractor Agent")
+    drafter_model: Optional[str] = Field(default=None, description="LLM model for Drafter Agent")
+    critic_model: Optional[str] = Field(default=None, description="LLM model for Critique Agent")
+    polisher_model: Optional[str] = Field(default=None, description="LLM model for Polisher Agent")
+    chronicler_model: Optional[str] = Field(default=None, description="LLM model for Chronicler Agent")
     use_interactions_api: bool = Field(default=True, description="Use Gemini Interactions API for Gemini models")
     auto_update_bible: bool = Field(default=True, description="Automatically merge newly discovered characters, terms, and summaries into Novel Bible")
     max_tpm: int = Field(default=16000, description="Max tokens per minute rate limit quota")
@@ -59,3 +65,19 @@ class ProjectConfig(BaseModel):
         except ValueError:
             pass
         return candidate
+
+    def get_agent_model(self, role: str) -> str:
+        """Return configured model for agent role, falling back to model_name."""
+        role_map = {
+            "extractor": self.extractor_model,
+            "drafter": self.drafter_model,
+            "critic": self.critic_model,
+            "polisher": self.polisher_model,
+            "chronicler": self.chronicler_model,
+        }
+        return role_map.get(role) or self.model_name
+
+    def get_agent_fallback_model(self, role: Optional[str] = None) -> Optional[str]:
+        """Return fallback model for agent role or global fallback_model."""
+        return self.fallback_model
+

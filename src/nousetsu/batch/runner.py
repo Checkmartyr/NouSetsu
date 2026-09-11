@@ -22,7 +22,13 @@ class BatchRunner:
     def __init__(
         self,
         repository: NovelRepository,
-        model_name: str = "gemini-2.5-pro",
+        model_name: Optional[str] = None,
+        fallback_model: Optional[str] = None,
+        extractor_model: Optional[str] = None,
+        drafter_model: Optional[str] = None,
+        critic_model: Optional[str] = None,
+        polisher_model: Optional[str] = None,
+        chronicler_model: Optional[str] = None,
         auto_update_bible: Optional[bool] = None,
         max_tpm: Optional[int] = None,
         max_rpm: Optional[int] = None,
@@ -36,10 +42,30 @@ class BatchRunner:
         console: Optional[Console] = None
     ):
         self.repo = repository
-        self.model_name = model_name
+        cfg = repository.load_config()
+
+        # Resolve primary model
+        env_model = os.environ.get("DEFAULT_MODEL") or os.environ.get("NOVEL_MODEL")
+        resolved_model = model_name or getattr(cfg, "model_name", None) or env_model or "gemini-2.5-pro"
+        self.model_name = resolved_model
+
+        # Resolve fallback and per-agent models
+        resolved_fallback = fallback_model or getattr(cfg, "fallback_model", None) or os.environ.get("NOVEL_FALLBACK_MODEL")
+        resolved_extractor = extractor_model or getattr(cfg, "extractor_model", None) or os.environ.get("NOVEL_EXTRACTOR_MODEL") or resolved_model
+        resolved_drafter = drafter_model or getattr(cfg, "drafter_model", None) or os.environ.get("NOVEL_DRAFTER_MODEL") or resolved_model
+        resolved_critic = critic_model or getattr(cfg, "critic_model", None) or os.environ.get("NOVEL_CRITIC_MODEL") or resolved_model
+        resolved_polisher = polisher_model or getattr(cfg, "polisher_model", None) or os.environ.get("NOVEL_POLISHER_MODEL") or resolved_model
+        resolved_chronicler = chronicler_model or getattr(cfg, "chronicler_model", None) or os.environ.get("NOVEL_CHRONICLER_MODEL") or resolved_model
+
+        self.fallback_model = resolved_fallback
+        self.extractor_model = resolved_extractor
+        self.drafter_model = resolved_drafter
+        self.critic_model = resolved_critic
+        self.polisher_model = resolved_polisher
+        self.chronicler_model = resolved_chronicler
+
         self.console = console or Console()
         self.scanner = ChapterScanner(repository)
-        cfg = repository.load_config()
 
         self.genre = genre or getattr(cfg, "genre", "general")
 
@@ -66,7 +92,13 @@ class BatchRunner:
 
         self.rate_limiter = SlidingWindowRateLimiter(max_tpm=resolved_tpm, max_rpm=resolved_rpm)
         self.workflow = NovelTranslationWorkflow(
-            model_name=model_name,
+            model_name=resolved_model,
+            fallback_model=resolved_fallback,
+            extractor_model=resolved_extractor,
+            drafter_model=resolved_drafter,
+            critic_model=resolved_critic,
+            polisher_model=resolved_polisher,
+            chronicler_model=resolved_chronicler,
             rate_limiter=self.rate_limiter,
             max_review_loops=resolved_loops,
             quality_threshold=resolved_thresh,

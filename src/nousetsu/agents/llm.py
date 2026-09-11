@@ -123,6 +123,7 @@ class MockNovelLLM(BaseChatModel):
             "cached_tokens": 0,
         }
         resp_meta = {
+            "model": self.model_name,
             "usage": {
                 "total_input_tokens": in_tokens,
                 "total_output_tokens": out_tokens,
@@ -255,14 +256,89 @@ def invoke_with_retry(
         raise last_exc
 
 
-def get_llm(
+class FallbackChatModel(BaseChatModel):
+    """ChatModel adapter that executes primary model and falls back to secondary model upon failure/quota exhaustion."""
+
+    primary: BaseChatModel
+    fallback: BaseChatModel
+    primary_model_name: str = ""
+    fallback_model_name: str = ""
+    last_model_used: str = ""
+    on_fallback: Optional[Callable[[str, Exception], None]] = None
+
+    def __init__(
+        self,
+        primary: BaseChatModel,
+        fallback: BaseChatModel,
+        primary_model_name: str = "",
+        fallback_model_name: str = "",
+        on_fallback: Optional[Callable[[str, Exception], None]] = None,
+        **kwargs: Any
+    ):
+        p_name = primary_model_name or getattr(primary, "model_name", "primary")
+        f_name = fallback_model_name or getattr(fallback, "model_name", "fallback")
+        super().__init__(
+            primary=primary,
+            fallback=fallback,
+            primary_model_name=p_name,
+            fallback_model_name=f_name,
+            last_model_used=p_name,
+            on_fallback=on_fallback,
+            **kwargs
+        )
+
+    @property
+    def _llm_type(self) -> str:
+        return f"fallback({self.primary_model_name}->{self.fallback_model_name})"
+
+    @property
+    def model_name(self) -> str:
+        return self.last_model_used or self.primary_model_name
+
+    def _generate(
+        self,
+        messages: list[BaseMessage],
+        stop: Optional[list[str]] = None,
+        **kwargs: Any
+    ) -> ChatResult:
+        import logging
+        logger = logging.getLogger(__name__)
+
+        try:
+            if hasattr(self.primary, "_generate"):
+                res = self.primary._generate(messages, stop=stop, **kwargs)
+            else:
+                ai_msg = self.primary.invoke(messages)
+                res = ChatResult(generations=[ChatGeneration(message=ai_msg)])
+            self.last_model_used = self.primary_model_name
+            return res
+        except Exception as err:
+            logger.warning(
+                f"⚠️ Primary model '{self.primary_model_name}' failed ({type(err).__name__}: {err}). "
+                f"Falling back to model '{self.fallback_model_name}'."
+            )
+            if self.on_fallback:
+                try:
+                    self.on_fallback(self.fallback_model_name, err)
+                except Exception:
+                    pass
+            if hasattr(self.fallback, "_generate"):
+                res = self.fallback._generate(messages, stop=stop, **kwargs)
+            else:
+                ai_msg = self.fallback.invoke(messages)
+                res = ChatResult(generations=[ChatGeneration(message=ai_msg)])
+            self.last_model_used = self.fallback_model_name
+            return res
+
+
+def _create_single_llm(
     model_name: str = "gemini-2.5-pro",
     temperature: float = 0.3,
     use_interactions: Optional[bool] = None
 ) -> BaseChatModel:
-    """Factory to instantiate appropriate LLM (Interactions API / LangChain / Mock)."""
+    """Instantiate a single LLM instance."""
     if model_name.startswith("mock"):
-        return MockNovelLLM()
+        return MockNovelLLM(model_name=model_name)
 
     import dotenv
     dotenv.load_dotenv()
@@ -306,4 +382,37 @@ def get_llm(
             pass
 
     # Fallback to deterministic mock if no key or provider fails
-    return MockNovelLLM()
+    return MockNovelLLM(model_name=model_name)
+
+
+def get_llm(
+    model_name: str = "gemini-2.5-pro",
+    temperature: float = 0.3,
+    use_interactions: Optional[bool] = None,
+    fallback_model: Optional[str] = None,
+    on_fallback: Optional[Callable[[str, Exception], None]] = None
+) -> BaseChatModel:
+    """Factory to instantiate appropriate LLM, optionally wrapped with automatic fallback support."""
+    primary_llm = _create_single_llm(
+        model_name=model_name,
+        temperature=temperature,
+        use_interactions=use_interactions
+    )
+
+    clean_fallback = (fallback_model or "").strip()
+    if clean_fallback and clean_fallback != model_name:
+        fallback_llm = _create_single_llm(
+            model_name=clean_fallback,
+            temperature=temperature,
+            use_interactions=use_interactions
+        )
+        return FallbackChatModel(
+            primary=primary_llm,
+            fallback=fallback_llm,
+            primary_model_name=model_name,
+            fallback_model_name=clean_fallback,
+            on_fallback=on_fallback
+        )
+
+    return primary_llm
+

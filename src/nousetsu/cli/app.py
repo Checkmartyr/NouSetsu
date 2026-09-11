@@ -66,6 +66,12 @@ def cmd_batch(args: argparse.Namespace) -> None:
     runner = BatchRunner(
         repo,
         model_name=args.model,
+        fallback_model=getattr(args, "fallback_model", None),
+        extractor_model=getattr(args, "extractor_model", None),
+        drafter_model=getattr(args, "drafter_model", None),
+        critic_model=getattr(args, "critic_model", None),
+        polisher_model=getattr(args, "polisher_model", None),
+        chronicler_model=getattr(args, "chronicler_model", None),
         auto_update_bible=getattr(args, "auto_update_bible", None),
         max_tpm=getattr(args, "max_tpm", None),
         max_rpm=getattr(args, "max_rpm", None),
@@ -185,7 +191,13 @@ def main() -> None:
     p_batch.add_argument("--source-lang", default=None, help="Override source language")
     p_batch.add_argument("--target-lang", default=None, help="Override target language")
     p_batch.add_argument("--genre", "-g", default=None, help="Override novel genre")
-    p_batch.add_argument("--model", "-m", default=os.environ.get("DEFAULT_MODEL", "gemini-2.5-pro"), help="LLM model name")
+    p_batch.add_argument("--model", "-m", default=os.environ.get("DEFAULT_MODEL", "gemini-2.5-pro"), help="Default LLM model name")
+    p_batch.add_argument("--fallback-model", default=None, help="Global fallback LLM model name")
+    p_batch.add_argument("--extractor-model", default=None, help="Override model for Entity Extractor Agent")
+    p_batch.add_argument("--drafter-model", default=None, help="Override model for Drafter Agent")
+    p_batch.add_argument("--critic-model", default=None, help="Override model for Critique Agent")
+    p_batch.add_argument("--polisher-model", default=None, help="Override model for Polisher Agent")
+    p_batch.add_argument("--chronicler-model", default=None, help="Override model for Chronicler Agent")
     p_batch.add_argument("--limit", "-l", type=int, default=None, help="Maximum number of chapters to process")
     p_batch.add_argument("--force", "-f", action="store_true", help="Force re-translate completed chapters")
     p_batch.add_argument("--auto-update-bible", action=argparse.BooleanOptionalAction, default=None, help="Automatically merge new characters/terms into Novel Bible")
@@ -212,6 +224,7 @@ def main() -> None:
     p_tui.add_argument("--source-lang", default=None, help="Override source language")
     p_tui.add_argument("--target-lang", default=None, help="Override target language")
     p_tui.add_argument("--model", "-m", default=os.environ.get("DEFAULT_MODEL", "gemini-2.5-pro"), help="LLM model name")
+    p_tui.add_argument("--fallback-model", default=None, help="Global fallback LLM model name")
     p_tui.add_argument("--interactions", action=argparse.BooleanOptionalAction, default=True, help="Use Gemini Interactions API (/v1beta/interactions) (default: True)")
     p_tui.add_argument("--chunking", action=argparse.BooleanOptionalAction, default=True, help="Enable line-based semantic chunking for long chapters (default: True)")
 
