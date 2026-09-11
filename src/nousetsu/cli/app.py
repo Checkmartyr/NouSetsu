@@ -72,6 +72,9 @@ def cmd_batch(args: argparse.Namespace) -> None:
         max_review_loops=getattr(args, "max_loops", None),
         quality_threshold=getattr(args, "quality_threshold", None),
         genre=getattr(args, "genre", None),
+        enable_chunking=getattr(args, "chunking", None),
+        chunk_threshold_lines=getattr(args, "chunk_threshold_lines", None),
+        target_chunk_lines=getattr(args, "target_chunk_lines", None),
         console=console
     )
     input_path = Path(args.input_dir) if args.input_dir != "raw_chapters" else cfg.get_raw_path(repo.root_dir)
@@ -191,6 +194,9 @@ def main() -> None:
     p_batch.add_argument("--max-loops", type=int, default=None, help="Maximum review loops for translation refinement (default: 3)")
     p_batch.add_argument("--quality-threshold", type=float, default=None, help="Target quality score threshold (fidelity & style) to exit review loop (default: 8.5)")
     p_batch.add_argument("--interactions", action=argparse.BooleanOptionalAction, default=True, help="Use Gemini Interactions API (/v1beta/interactions) (default: True)")
+    p_batch.add_argument("--chunking", action=argparse.BooleanOptionalAction, default=True, help="Enable line-based semantic chunking for long chapters (default: True)")
+    p_batch.add_argument("--chunk-threshold-lines", type=int, default=None, help="Line threshold to trigger chunking (default: 100)")
+    p_batch.add_argument("--target-chunk-lines", type=int, default=None, help="Target line count per chunk (default: 70)")
 
     # skills
     p_skills = subparsers.add_parser("skills", help="List registered agent domain skills and active capabilities")
@@ -207,6 +213,7 @@ def main() -> None:
     p_tui.add_argument("--target-lang", default=None, help="Override target language")
     p_tui.add_argument("--model", "-m", default=os.environ.get("DEFAULT_MODEL", "gemini-2.5-pro"), help="LLM model name")
     p_tui.add_argument("--interactions", action=argparse.BooleanOptionalAction, default=True, help="Use Gemini Interactions API (/v1beta/interactions) (default: True)")
+    p_tui.add_argument("--chunking", action=argparse.BooleanOptionalAction, default=True, help="Enable line-based semantic chunking for long chapters (default: True)")
 
     args = parser.parse_args()
 

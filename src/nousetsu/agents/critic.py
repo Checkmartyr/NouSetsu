@@ -27,8 +27,16 @@ class CritiqueAgent:
         active_glossary: List[GlossaryItem],
         genre: Optional[str] = None
     ) -> Tuple[QualityAudit, str]:
+        # Filter glossary to terms actually present in this chapter to avoid prompt bloat
+        source_present_terms = [item for item in active_glossary if item.source.lower() in source_text.lower()]
+        relevant_glossary = [
+            item for item in active_glossary
+            if item.source.lower() in source_text.lower() or item.target.lower() in draft_text.lower()
+        ]
+        eval_glossary = relevant_glossary if relevant_glossary else (active_glossary[:15] if active_glossary else [])
+
         chars_str = "\n".join([f"- {c.name} ({c.original_name}, {c.gender}, voice: {c.voice})" for c in active_characters]) or "None"
-        gloss_str = "\n".join([f"- {g.source} -> {g.target}" for g in active_glossary]) or "None"
+        gloss_str = "\n".join([f"- {g.source} -> {g.target}" for g in eval_glossary]) or "None"
 
         resolved_genre = genre or getattr(bible, "genre", "general")
         skills_text = SkillRegistry.get_instance().build_prompt_section(
@@ -76,15 +84,17 @@ class CritiqueAgent:
             audit.warnings.append("Critique JSON could not be parsed; default scores assigned.")
             critique_notes = "Review prose for rhythm and verify all proper nouns."
 
-        # Quick programmatic check of active glossary terms in draft
+        # Programmatic check only against glossary terms that actually appeared in the source text
         missing_terms = []
-        for item in active_glossary:
+        for item in source_present_terms:
             if item.target.lower() not in draft_text.lower():
                 missing_terms.append(f"Glossary term '{item.target}' (source: '{item.source}') missing in draft")
         if missing_terms:
             audit.warnings.extend(missing_terms)
-            if len(active_glossary) > 0:
-                audit.glossary_compliance_pct = max(0.0, 100.0 - (len(missing_terms) / len(active_glossary) * 100.0))
+            if len(source_present_terms) > 0:
+                audit.glossary_compliance_pct = max(0.0, 100.0 - (len(missing_terms) / len(source_present_terms) * 100.0))
+        elif source_present_terms:
+            audit.glossary_compliance_pct = 100.0
 
         # Programmatic Target Language Guard:
         # If draft_text reverted to source language while target_language is distinct, fail audit immediately

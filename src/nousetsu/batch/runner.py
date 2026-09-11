@@ -29,6 +29,10 @@ class BatchRunner:
         max_review_loops: Optional[int] = None,
         quality_threshold: Optional[float] = None,
         genre: Optional[str] = None,
+        enable_chunking: Optional[bool] = None,
+        chunk_threshold_lines: Optional[int] = None,
+        target_chunk_lines: Optional[int] = None,
+        chunk_overlap_lines: Optional[int] = None,
         console: Optional[Console] = None
     ):
         self.repo = repository
@@ -54,12 +58,22 @@ class BatchRunner:
         self.max_review_loops = resolved_loops
         self.quality_threshold = resolved_thresh
 
+        # Chunking configuration
+        resolved_chunking = enable_chunking if enable_chunking is not None else getattr(cfg, "enable_chunking", True)
+        resolved_chunk_thresh = chunk_threshold_lines or getattr(cfg, "chunk_threshold_lines", 100)
+        resolved_target_lines = target_chunk_lines or getattr(cfg, "target_chunk_lines", 70)
+        resolved_overlap_lines = chunk_overlap_lines or getattr(cfg, "chunk_overlap_lines", 3)
+
         self.rate_limiter = SlidingWindowRateLimiter(max_tpm=resolved_tpm, max_rpm=resolved_rpm)
         self.workflow = NovelTranslationWorkflow(
             model_name=model_name,
             rate_limiter=self.rate_limiter,
             max_review_loops=resolved_loops,
-            quality_threshold=resolved_thresh
+            quality_threshold=resolved_thresh,
+            enable_chunking=resolved_chunking,
+            chunk_threshold_lines=resolved_chunk_thresh,
+            target_chunk_lines=resolved_target_lines,
+            chunk_overlap_lines=resolved_overlap_lines
         )
         self.auto_update_bible = auto_update_bible if auto_update_bible is not None else cfg.auto_update_bible
         self.stop_event = threading.Event()

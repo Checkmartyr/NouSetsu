@@ -44,7 +44,7 @@ class EntityExtractorAgent:
 
         response = self.llm.invoke([
             SystemMessage(content=sys_msg),
-            HumanMessage(content=f"Chapter Text:\n{source_text[:12000]}")
+            HumanMessage(content=f"Chapter Text:\n{source_text[:100000]}")
         ])
         self.last_usage = extract_usage_from_message(response)
 

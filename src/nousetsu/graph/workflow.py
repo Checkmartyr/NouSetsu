@@ -13,6 +13,7 @@ from nousetsu.models.exceptions import BatchStoppedException
 from nousetsu.models.metadata import PipelineStage, StageStatus, StepTokenUsage, TokenUsage
 from nousetsu.models.state import TranslationState
 from nousetsu.skills.registry import SkillRegistry
+from nousetsu.utils.chunker import LineSemanticChunker
 from nousetsu.utils.genre import detect_genre
 from nousetsu.utils.language import detect_language
 from nousetsu.utils.rate_limiter import SlidingWindowRateLimiter, estimate_tokens
@@ -27,12 +28,26 @@ class NovelTranslationWorkflow:
         model_name: str = "gemini-2.5-pro",
         rate_limiter: Optional[SlidingWindowRateLimiter] = None,
         max_review_loops: int = 3,
-        quality_threshold: float = 8.5
+        quality_threshold: float = 8.5,
+        enable_chunking: bool = True,
+        chunk_threshold_lines: int = 100,
+        target_chunk_lines: int = 70,
+        chunk_overlap_lines: int = 3
     ):
         self.model_name = model_name
         self.rate_limiter = rate_limiter or SlidingWindowRateLimiter()
         self.max_review_loops = max_review_loops
         self.quality_threshold = quality_threshold
+        self.enable_chunking = enable_chunking
+        self.chunker = (
+            LineSemanticChunker(
+                threshold_lines=chunk_threshold_lines,
+                target_chunk_lines=target_chunk_lines,
+                overlap_lines=chunk_overlap_lines
+            )
+            if enable_chunking
+            else None
+        )
         self.current_stage: PipelineStage = PipelineStage.NONE
         self.extractor = EntityExtractorAgent(model_name=model_name)
         self.drafter = ContextAwareDrafterAgent(model_name=model_name)
@@ -193,7 +208,21 @@ class NovelTranslationWorkflow:
             return {"current_stage": PipelineStage.DRAFTING}
 
         state.novel_bible.genre = state.genre
-        est_draft = int(estimate_tokens(state.source_text) * 1.5) + 2000
+
+        source_chunks = None
+        if self.chunker and self.chunker.should_chunk(state.source_text):
+            source_chunks = self.chunker.split_lines(state.source_text)
+            self._notify(
+                PipelineStage.DRAFTING,
+                f"Divided chapter into {len(source_chunks)} line chunks (target: {self.chunker.target_chunk_lines} lines/chunk)...",
+                35.0
+            )
+
+        if source_chunks and len(source_chunks) > 1:
+            est_draft = int(estimate_tokens(source_chunks[0].content) * 1.5) + 1500
+        else:
+            est_draft = int(estimate_tokens(state.source_text) * 1.5) + 2000
+
         draft = invoke_with_retry(
             self.drafter.draft,
             source_text=state.source_text,
@@ -201,18 +230,22 @@ class NovelTranslationWorkflow:
             active_characters=state.active_characters,
             active_glossary=state.active_glossary,
             rolling_summaries=state.novel_bible.summaries,
+            genre=state.genre,
+            chunks=source_chunks,
             notify_callback=lambda msg: self._notify(PipelineStage.DRAFTING, msg, 35.0),
             rate_limiter=self.rate_limiter,
             estimated_tokens=est_draft,
             stop_event=self.stop_event
         )
 
+        chunk_count = len(source_chunks) if source_chunks else 1
         draft_usage = getattr(self.drafter, "last_usage", TokenUsage())
         draft_record = StepTokenUsage(
             stage=PipelineStage.DRAFTING,
             step_name="Drafting",
             iteration=1,
             model=self.model_name,
+            chunk_count=chunk_count,
             usage=draft_usage
         )
         updated_token_records = list(state.step_token_records) + [draft_record]
@@ -370,7 +403,21 @@ class NovelTranslationWorkflow:
                 base_text = state.draft_text
 
         state.novel_bible.genre = state.genre
-        est_polish = estimate_tokens(base_text) * 2 + 1000
+
+        draft_chunks = None
+        if self.chunker and self.chunker.should_chunk(base_text):
+            draft_chunks = self.chunker.split_lines(base_text)
+            self._notify(
+                PipelineStage.POLISHING,
+                f"Divided draft into {len(draft_chunks)} line chunks for paced polishing...",
+                80.0
+            )
+
+        if draft_chunks and len(draft_chunks) > 1:
+            est_polish = estimate_tokens(draft_chunks[0].content) * 2 + 1000
+        else:
+            est_polish = estimate_tokens(base_text) * 2 + 1000
+
         polished = invoke_with_retry(
             self.polisher.polish,
             draft_text=base_text,
@@ -379,6 +426,7 @@ class NovelTranslationWorkflow:
             bible=state.novel_bible,
             genre=state.genre,
             source_text=state.source_text,
+            draft_chunks=draft_chunks,
             notify_callback=lambda msg: self._notify(PipelineStage.POLISHING, msg, 80.0),
             rate_limiter=self.rate_limiter,
             estimated_tokens=est_polish,
@@ -399,12 +447,14 @@ class NovelTranslationWorkflow:
 
         best_text = polished if is_initial_draft else (state.best_polished_text or polished)
 
+        chunk_count = len(draft_chunks) if draft_chunks else 1
         polish_usage = getattr(self.polisher, "last_usage", TokenUsage())
         polish_record = StepTokenUsage(
             stage=PipelineStage.POLISHING,
             step_name=f"Polishing (Pass {display_iter})",
             iteration=display_iter,
             model=self.model_name,
+            chunk_count=chunk_count,
             usage=polish_usage
         )
         updated_token_records = list(state.step_token_records) + [polish_record]

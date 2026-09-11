@@ -118,6 +118,7 @@ class StepTokenUsage(BaseModel):
     step_name: str = Field(default="", description="Human-readable step name e.g. Extraction, Drafting, Critique (Pass 1)")
     iteration: int = Field(default=1, description="Iteration or review pass number")
     model: str = Field(default="", description="Model name used for this step")
+    chunk_count: int = Field(default=1, description="Number of text chunks processed for this step")
     usage: TokenUsage = Field(default_factory=TokenUsage)
     timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 

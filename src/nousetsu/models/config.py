@@ -22,6 +22,10 @@ class ProjectConfig(BaseModel):
     max_review_loops: int = Field(default=3, ge=1, le=5, description="Maximum review loops for translation refinement")
     quality_threshold: float = Field(default=8.5, ge=5.0, le=10.0, description="Quality score threshold (fidelity & style) to exit review loop")
     genre: str = Field(default="general", description="Novel genre (e.g. xianxia, isekai, litrpg, romance, general)")
+    enable_chunking: bool = Field(default=True, description="Enable line-based semantic chunking for long chapters")
+    chunk_threshold_lines: int = Field(default=100, description="Minimum non-empty lines to trigger chunked drafting and polishing")
+    target_chunk_lines: int = Field(default=70, description="Target line count per chunk")
+    chunk_overlap_lines: int = Field(default=3, description="Lines of preceding translated context passed to next chunk")
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     def get_raw_path(self, base_dir: Path) -> Path:

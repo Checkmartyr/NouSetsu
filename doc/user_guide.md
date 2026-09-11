@@ -179,6 +179,9 @@ nousetsu tui --project-dir ./my_novel
 | `--max-tpm` | | `16000` | Sliding-window Tokens Per Minute rate limit quota |
 | `--max-rpm` | | `60` | Sliding-window Requests Per Minute rate limit quota |
 | `--interactions / --no-interactions` | | True | Enable or disable Gemini Interactions API (`/v1beta/interactions`) with fallback |
+| `--chunking / --no-chunking` | | True | Enable or disable line-based semantic chunking for long chapters |
+| `--chunk-threshold-lines` | | `100` | Minimum non-empty lines to trigger chunked translation |
+| `--target-chunk-lines` | | `70` | Target line count per chunk |
 | `--auto-update-bible` | | True | Automatically merge newly discovered characters and terms into Novel Bible |
 
 > [!TIP]
@@ -302,6 +305,14 @@ summaries:
 4. **Single-File Checkpoints (`.novel/metadata.json`)**:
    - All chapter checkpoints, error traces, and quality audits are stored in a single JSON file.
    - Enables fast directory scanning and instant resume.
+5. **Line-Based Semantic Chunking (16K TPM Rate-Limit Guard)**:
+   - Scans non-empty lines in source chapters. If line count exceeds `chunk_threshold_lines` (default: 100), automatically divides chapters into ~70-line chunks.
+   - Snaps to scene break lines (`***`, `---`, `◆◆◆`) and paragraph boundaries while strictly preserving multi-line dialogue quotes (`「...」`, `"..."`).
+   - Keeps individual chunk requests under ~3,500 total tokens (under 25% of the 16,000 TPM limit), completely preventing 60-second sliding-window freezes.
+   - Passes sliding translation context (last 3 lines of preceding translation) to guarantee zero-anaphora pronoun continuity and character voice.
+6. **Active Chapter Glossary Optimization**:
+   - Dynamically filters the Novel Bible glossary to terms actually present in the chapter text before sending prompts to Critic and Polisher.
+   - Prevents prompt bloat and eliminates false-positive compliance warnings.
 
 ---
 

@@ -24,6 +24,8 @@
   | **5** | **ChroniclerAgent**<br>*(Chronist)* | `chronicle(...)`<br>`assemble_metadata(...)` | **The Memory Keeper**: Summarizes chapter events for future chapters and archives stats into `.novel/metadata.json`. |
 * **Gemini Interactions API & REST Fallback**: Seamless native support for the new `/v1beta/interactions` endpoint via Google GenAI SDK and HTTP REST fallback, enabling structured interaction steps and thought streaming.
 * **Granular Per-Task & Per-Step Token Tracking**: Complete token metrics (`input_tokens`, `output_tokens`, `thought_tokens`, `cached_tokens`, `total_tokens`) tracked for every chapter task and pipeline step (Extraction, Drafting, Critique passes, Polishing passes, Chronicling), logged in `.novel/metadata.json`, displayed live in the TUI inspector, and rendered in Rich summary tables.
+* **Line-Based Semantic Chunking (Rate-Limit & TPM Guard)**: Intelligently partitions long chapters (>100 lines) into ~70-line chunks along scene breaks (`***`) and dialogue boundaries, passing sliding translation context to maintain character voice and eliminate 16k TPM sliding-window freezes.
+* **Active Chapter Glossary Optimization**: Filters glossary terms to only those appearing in the active chapter, eliminating input prompt bloat and false-positive compliance warnings.
 * **Domain Skills System (17 Built-in Skills + Markdown Catalogs)**: Automatically activates targeted literary guidelines (e.g. cultivation hierarchies, adventurer guild ranks, 4-character idiom localization, villainess court etiquette) based on novel genre and source language.
 * **Programmatic Language Anti-Regression Guards**: Enforces target-language integrity with offline Unicode script detection, immediately rejecting any model reversion back into source language.
 * **Automated Critic-Polish Reflection Loop**: Automatically loops between `Feinschliff` and `Zensor` to refine prose until both fidelity and style meet strict quality thresholds (`>= 8.5/10`) or hit a configurable loop cap (default 3 loops). Includes an automatic **Best-Candidate Regression Guard** that always saves the highest-scoring version.
@@ -154,6 +156,9 @@ nousetsu batch --input-dir raw_chapters --output-dir translated_chapters
 * `--max-tpm`: Max tokens per minute rate limit quota (default: 16000).
 * `--max-rpm`: Max requests per minute rate limit quota (default: 60).
 * `--interactions / --no-interactions`: Enable or disable Gemini Interactions API (`/v1beta/interactions`) with REST fallback (default: True).
+* `--chunking / --no-chunking`: Enable or disable line-based semantic chunking for long chapters (default: True).
+* `--chunk-threshold-lines`: Line threshold to trigger chunking (default: 100).
+* `--target-chunk-lines`: Target line count per chunk (default: 70).
 * `--auto-update-bible / --no-auto-update-bible`: Automatically merge new characters and terms into Novel Bible.
 
 ### 3. List & Filter Agent Skills
@@ -253,24 +258,27 @@ platform win32 -- Python 3.13.12, pytest-9.1.1, pluggy-1.6.0
 rootdir: D:\Code\novel_translation_Agent
 configfile: pyproject.toml
 plugins: anyio-4.15.1, langsmith-0.12.4, asyncio-1.4.0
-collected 82 items
+collected 91 items
 
 tests\test_checkpoint.py ....                                            [  4%]
-tests\test_interactions.py ......                                        [ 12%]
-tests\test_language.py ...........                                       [ 25%]
-tests\test_models.py ...                                                 [ 29%]
-tests\test_polisher_language.py .......                                  [ 37%]
-tests\test_projects.py ....                                              [ 42%]
-tests\test_rate_limiter.py ........                                      [ 52%]
-tests\test_retry.py ....                                                 [ 57%]
-tests\test_review_loop.py ......                                         [ 64%]
-tests\test_runner.py ...                                                 [ 68%]
-tests\test_scanner.py ..                                                 [ 70%]
-tests\test_skills.py .........                                           [ 81%]
-tests\test_stop.py ..                                                    [ 84%]
-tests\test_token_tracking.py ....                                        [ 89%]
+tests\test_chunker.py ......                                             [ 10%]
+tests\test_drafter_chunking.py .                                         [ 12%]
+tests\test_glossary_filter.py ..                                         [ 14%]
+tests\test_interactions.py ......                                        [ 20%]
+tests\test_language.py ...........                                       [ 32%]
+tests\test_models.py ...                                                 [ 36%]
+tests\test_polisher_language.py .......                                  [ 43%]
+tests\test_projects.py ....                                              [ 48%]
+tests\test_rate_limiter.py ........                                      [ 57%]
+tests\test_retry.py ....                                                 [ 61%]
+tests\test_review_loop.py ......                                         [ 68%]
+tests\test_runner.py ...                                                 [ 71%]
+tests\test_scanner.py ..                                                 [ 73%]
+tests\test_skills.py .........                                           [ 83%]
+tests\test_stop.py ..                                                    [ 85%]
+tests\test_token_tracking.py ....                                        [ 90%]
 tests\test_tui.py .........                                              [100%]
-============================= 82 passed in 30.45s =============================
+============================= 91 passed in 31.60s =============================
 ```
 
 ### 2. End-to-End Batch Validation
