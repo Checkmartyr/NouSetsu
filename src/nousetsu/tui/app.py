@@ -246,6 +246,11 @@ class NovelAgentApp(App):
         meta = self.repo.load_metadata(task.output_file)
         reader.update_content(src_text, tgt_text)
         inspector.update_metadata(meta)
+        try:
+            progress_panel = self.query_one("#progress_panel", ProgressPanel)
+            progress_panel.set_chapter(task.source_file.name)
+        except Exception:
+            pass
 
     def action_open_project_selector(self) -> None:
         self.push_screen(ProjectSelectorModal(self))

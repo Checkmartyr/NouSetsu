@@ -152,10 +152,12 @@ async def test_tui_progress_panel_updates():
 
         assert "2/5 DRAFTING" in str(panel.query_one("#stage_badge").render())
         assert "Drafting translation" in str(panel.query_one("#engine_status_msg").render())
+        assert "chapter_001" in str(panel.query_one("#progress_chapter_name").render())
 
         panel.set_finished("chapter_001.txt")
         await pilot.pause()
         assert "COMPLETED" in str(panel.query_one("#stage_badge").render())
+        assert "chapter_001" in str(panel.query_one("#progress_chapter_name").render())
 
 
 @pytest.mark.asyncio
