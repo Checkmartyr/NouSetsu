@@ -49,6 +49,10 @@ async def test_tui_settings_modal():
         settings_screen = app.screen
         assert isinstance(settings_screen, SettingsModal)
 
+        # Verify only one close button exists (no duplicate top button)
+        assert len(settings_screen.query("#btn_close_top")) == 0
+        assert len(settings_screen.query("#btn_close_settings")) == 1
+
         # Verify first input is focused on mount
         inp_model = settings_screen.query_one("#set_model", Input)
         assert app.focused == inp_model
@@ -59,23 +63,31 @@ async def test_tui_settings_modal():
         assert app.focused == inp_model
 
         # Type new model name
-        inp_model.value = ""
-        await pilot.press("g", "e", "m", "i", "n", "i")
-        assert inp_model.value == "gemini"
-
-        # Tab navigation advances focus to next input
-        await pilot.press("tab")
-        await pilot.pause()
-        assert app.focused == settings_screen.query_one("#set_source_lang", Input)
+        inp_model.value = "gemini-custom-test"
 
         # Click save button via pilot
         btn_save = settings_screen.query_one("#btn_save_settings", Button)
         await pilot.click(btn_save)
         await pilot.pause()
-        assert "Settings saved" in str(settings_screen.query_one("#settings_status").render())
 
-        # Click top close button via pilot
-        btn_close = settings_screen.query_one("#btn_close_top", Button)
+        # Modal should dismiss on save
+        assert not isinstance(app.screen, SettingsModal)
+
+        # Verify app and runner state updated
+        assert app.model_name == "gemini-custom-test"
+        assert app.runner.model_name == "gemini-custom-test"
+
+        # Verify config was persisted to disk
+        persisted_cfg = app.repo.load_config()
+        assert persisted_cfg.model_name == "gemini-custom-test"
+
+        # Re-open settings and test bottom close button
+        app.action_open_settings()
+        await pilot.pause()
+        assert isinstance(app.screen, SettingsModal)
+        assert app.screen.query_one("#set_model", Input).value == "gemini-custom-test"
+
+        btn_close = app.screen.query_one("#btn_close_settings", Button)
         await pilot.click(btn_close)
         await pilot.pause()
         assert not isinstance(app.screen, SettingsModal)

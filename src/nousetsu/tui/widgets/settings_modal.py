@@ -72,9 +72,7 @@ class SettingsModal(ModalScreen):
 
     def compose(self) -> ComposeResult:
         with Container(id="settings-dialog"):
-            with Horizontal(classes="modal-header-row"):
-                yield Label("⚙️ Project & Translation Settings", classes="pane-title")
-                yield Button("✖ Close (Esc)", variant="error", id="btn_close_top")
+            yield Label("⚙️ Project & Translation Settings", classes="pane-title")
 
             with VerticalScroll():
                 with Container(classes="settings-section"):
@@ -134,7 +132,7 @@ class SettingsModal(ModalScreen):
                 yield Button("Close", variant="default", id="btn_close_settings")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id in ("btn_close_settings", "btn_close_top"):
+        if event.button.id == "btn_close_settings":
             self.dismiss()
         elif event.button.id == "btn_save_settings":
             self._save_settings()
@@ -149,7 +147,7 @@ class SettingsModal(ModalScreen):
         honorifics_val = self.query_one("#set_honorifics", Input).value.strip()
         in_dir = self.query_one("#set_input_dir", Input).value.strip()
         out_dir = self.query_one("#set_output_dir", Input).value.strip()
-        status = self.query_one("#settings_status", Static)
+        genre_val = self.query_one("#set_genre", Input).value.strip()
 
         # Update Bible in repo
         if src_val:
@@ -164,68 +162,68 @@ class SettingsModal(ModalScreen):
             self.bible.style_guide.pov = pov_val
         if honorifics_val:
             self.bible.style_guide.honorific_mode = honorifics_val
+        if genre_val:
+            self.bible.genre = genre_val
 
         self.repo.save_bible(self.bible)
 
-        # Update app instance state
+        # Update and persist complete ProjectConfig
+        cfg = self.repo.load_config()
         if model_val:
-            self.app_instance.model_name = model_val
-            self.app_instance.runner.model_name = model_val
-            self.app_instance.runner.workflow.model_name = model_val
-
+            cfg.model_name = model_val
+        if src_val:
+            cfg.source_language = src_val
+        if tgt_val:
+            cfg.target_language = tgt_val
         if in_dir:
-            self.app_instance.input_dir = Path(in_dir)
+            cfg.raw_dir = in_dir
         if out_dir:
-            self.app_instance.output_dir = Path(out_dir)
+            cfg.output_dir = out_dir
+        if genre_val:
+            cfg.genre = genre_val
 
-        # Update rate limits in config and active runner
         tpm_val = self.query_one("#set_max_tpm", Input).value.strip()
         rpm_val = self.query_one("#set_max_rpm", Input).value.strip()
-        cfg = self.repo.load_config()
         if tpm_val.isdigit():
-            new_tpm = int(tpm_val)
-            cfg.max_tpm = new_tpm
-            if hasattr(self.app_instance.runner, "rate_limiter"):
-                self.app_instance.runner.rate_limiter.max_tpm = new_tpm
+            cfg.max_tpm = int(tpm_val)
         if rpm_val.isdigit():
-            new_rpm = int(rpm_val)
-            cfg.max_rpm = new_rpm
-            if hasattr(self.app_instance.runner, "rate_limiter"):
-                self.app_instance.runner.rate_limiter.max_rpm = new_rpm
+            cfg.max_rpm = int(rpm_val)
 
-        # Update review loop configuration
         loops_val = self.query_one("#set_max_loops", Input).value.strip()
-        thresh_val = self.query_one("#set_quality_threshold", Input).value.strip()
         if loops_val.isdigit():
-            new_loops = max(1, min(5, int(loops_val)))
-            cfg.max_review_loops = new_loops
-            if hasattr(self.app_instance.runner, "max_review_loops"):
-                self.app_instance.runner.max_review_loops = new_loops
-            if hasattr(self.app_instance.runner, "workflow") and hasattr(self.app_instance.runner.workflow, "max_review_loops"):
-                self.app_instance.runner.workflow.max_review_loops = new_loops
+            cfg.max_review_loops = max(1, min(5, int(loops_val)))
+
+        thresh_val = self.query_one("#set_quality_threshold", Input).value.strip()
         try:
             new_thresh = float(thresh_val)
             if 5.0 <= new_thresh <= 10.0:
                 cfg.quality_threshold = new_thresh
-                if hasattr(self.app_instance.runner, "quality_threshold"):
-                    self.app_instance.runner.quality_threshold = new_thresh
-                if hasattr(self.app_instance.runner, "workflow") and hasattr(self.app_instance.runner.workflow, "quality_threshold"):
-                    self.app_instance.runner.workflow.quality_threshold = new_thresh
         except ValueError:
             pass
 
-        # Update genre
-        genre_val = self.query_one("#set_genre", Input).value.strip()
-        if genre_val:
-            self.bible.genre = genre_val
-            cfg.genre = genre_val
-            if hasattr(self.app_instance.runner, "genre"):
-                self.app_instance.runner.genre = genre_val
-            self.repo.save_bible(self.bible)
-
         self.repo.save_config(cfg)
 
-        # Refresh tasks in TUI
+        # Update active app instance state
+        self.app_instance.model_name = cfg.model_name
+        self.app_instance.input_dir = cfg.get_raw_path(self.app_instance.project_dir)
+        self.app_instance.output_dir = cfg.get_output_path(self.app_instance.project_dir)
+        self.app_instance.title = f"Novel Translation Agent - {cfg.title}"
+
+        # Rebuild runner with full new config and model
+        from nousetsu.batch.runner import BatchRunner
+        self.app_instance.runner = BatchRunner(
+            self.repo,
+            model_name=cfg.model_name,
+            max_tpm=cfg.max_tpm,
+            max_rpm=cfg.max_rpm,
+            max_review_loops=cfg.max_review_loops,
+            quality_threshold=cfg.quality_threshold,
+            genre=cfg.genre
+        )
+
+        # Refresh scanned tasks in TUI
         self.app_instance.action_refresh_chapters()
 
-        status.update("[bold green]✓ Settings saved and applied successfully![/]")
+        # Notify user and dismiss modal
+        self.app_instance.notify("✓ Settings saved and applied successfully!", severity="information")
+        self.dismiss()
