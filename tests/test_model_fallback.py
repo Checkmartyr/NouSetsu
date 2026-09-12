@@ -237,3 +237,28 @@ async def test_tui_settings_modal_agent_models(tmp_path: Path):
         assert app.runner.extractor_model == "mock-extractor-val"
         assert app.runner.drafter_model == "mock-drafter-val"
 
+
+def test_batch_runner_propagates_mock_model_to_all_agents(tmp_path: Path):
+    """Verify BatchRunner defaults all sub-agents to mock model when mock model_name is passed."""
+    from nousetsu.agents.llm import MockNovelLLM
+    from nousetsu.batch.runner import BatchRunner
+    from nousetsu.storage.repository import NovelRepository
+
+    repo = NovelRepository(tmp_path)
+    repo.initialize_project("Mock Propagation Test", "Japanese", "English")
+
+    runner = BatchRunner(repo, model_name="mock-model")
+    assert runner.model_name == "mock-model"
+    assert runner.extractor_model == "mock-model"
+    assert runner.drafter_model == "mock-model"
+    assert runner.critic_model == "mock-model"
+    assert runner.polisher_model == "mock-model"
+    assert runner.chronicler_model == "mock-model"
+    assert runner.fallback_model == "mock-model"
+
+    assert isinstance(runner.workflow.extractor.llm, MockNovelLLM)
+    assert isinstance(runner.workflow.drafter.llm, MockNovelLLM)
+    assert isinstance(runner.workflow.critic.llm, MockNovelLLM)
+    assert isinstance(runner.workflow.polisher.llm, MockNovelLLM)
+    assert isinstance(runner.workflow.chronicler.llm, MockNovelLLM)
+

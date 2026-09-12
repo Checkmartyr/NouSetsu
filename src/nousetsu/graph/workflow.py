@@ -26,12 +26,12 @@ class NovelTranslationWorkflow:
     def __init__(
         self,
         model_name: str = "gemini-3.1-flash-lite",
-        fallback_model: Optional[str] = "gemini-3.5-flash-lite",
-        extractor_model: Optional[str] = "gemini-3.1-flash-lite",
-        drafter_model: Optional[str] = "gemini-3.5-flash-lite",
-        critic_model: Optional[str] = "gemma-4-26b-a4b-it",
-        polisher_model: Optional[str] = "gemini-3.5-flash-lite",
-        chronicler_model: Optional[str] = "gemma-4-26b-a4b-it",
+        fallback_model: Optional[str] = None,
+        extractor_model: Optional[str] = None,
+        drafter_model: Optional[str] = None,
+        critic_model: Optional[str] = None,
+        polisher_model: Optional[str] = None,
+        chronicler_model: Optional[str] = None,
         rate_limiter: Optional[SlidingWindowRateLimiter] = None,
         max_review_loops: int = 3,
         quality_threshold: float = 8.5,
@@ -41,12 +41,15 @@ class NovelTranslationWorkflow:
         chunk_overlap_lines: int = 3
     ):
         self.model_name = model_name
-        self.fallback_model = fallback_model
-        self.extractor_model = extractor_model or model_name
-        self.drafter_model = drafter_model or model_name
-        self.critic_model = critic_model or model_name
-        self.polisher_model = polisher_model or model_name
-        self.chronicler_model = chronicler_model or model_name
+        is_mock = model_name.startswith("mock") or model_name.startswith("test")
+        default_agent = model_name if is_mock else None
+
+        self.fallback_model = fallback_model or default_agent or "gemini-3.5-flash-lite"
+        self.extractor_model = extractor_model or default_agent or "gemini-3.1-flash-lite"
+        self.drafter_model = drafter_model or default_agent or "gemini-3.5-flash-lite"
+        self.critic_model = critic_model or default_agent or "gemma-4-26b-a4b-it"
+        self.polisher_model = polisher_model or default_agent or "gemini-3.5-flash-lite"
+        self.chronicler_model = chronicler_model or default_agent or "gemma-4-26b-a4b-it"
 
         self.rate_limiter = rate_limiter or SlidingWindowRateLimiter()
         self.max_review_loops = max_review_loops
