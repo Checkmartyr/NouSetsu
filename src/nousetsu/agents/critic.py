@@ -29,6 +29,7 @@ class CritiqueAgent:
         self.llm = get_llm(model_name=model_name, fallback_model=fallback_model, temperature=0.1)
         self.last_usage: TokenUsage = TokenUsage()
         self.chunker = chunker
+        self.safety_fallbacks_used: int = 0
 
     @property
     def last_model_used(self) -> str:
@@ -143,6 +144,7 @@ class CritiqueAgent:
             self.last_usage = extract_usage_from_message(response)
         except Exception as e:
             if is_safety_block_exception(e):
+                self.safety_fallbacks_used += 1
                 logger.warning("⚠️ Sensitive scene safety block bypassed during critique.")
                 return QualityAudit(
                     fidelity_score=8.5,

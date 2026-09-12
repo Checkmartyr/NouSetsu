@@ -1,5 +1,6 @@
 """Translation fallback utility using Google Translate via deep-translator for safety blocked scenes."""
 import logging
+import re
 from typing import Any, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -29,23 +30,50 @@ _LANG_MAP = {
     "fr": "fr",
     "spanish": "es",
     "es": "es",
+    "vietnamese": "vi",
+    "vi": "vi",
+    "indonesian": "id",
+    "id": "id",
+    "russian": "ru",
+    "ru": "ru",
+    "italian": "it",
+    "it": "it",
+    "portuguese": "pt",
+    "pt": "pt",
     "auto": "auto",
 }
 
 
 def is_safety_block_exception(err: Any) -> bool:
-    """Check if an exception or message indicates a Google AI safety block / prohibited content filter."""
+    """Check if an exception or message indicates a Google AI / provider safety block or content policy filter."""
     msg = str(err).lower()
-    if "prohibited_content" in msg:
+
+    # Never treat transient server / network / parse errors as safety blocks
+    if any(k in msg for k in ["500 internal server error", "502 bad gateway", "503 service unavailable", "504 gateway timeout"]):
+        return False
+
+    if "prohibited_content" in msg or "prohibited content" in msg:
         return True
-    if "input blocked" in msg:
+    if any(k in msg for k in ["input blocked", "response blocked", "prompt blocked", "blocked by safety", "safety block"]):
         return True
-    if "safety block" in msg or "blocked by safety" in msg:
+    if "harm_category" in msg or "harm category" in msg:
         return True
-    if "safety" in msg and any(k in msg for k in ["block", "filter", "violation", "prohibited", "policy", "rating", "reason"]):
+    if any(k in msg for k in ["content_filter", "content filter", "content policy", "content_policy"]):
         return True
-    if "400" in msg and any(k in msg for k in ["prohibited", "safety", "blocked", "content filter"]):
+    if "sexually_explicit" in msg or "sensitive content" in msg:
         return True
+    if "safety" in msg and any(k in msg for k in ["block", "filter", "violation", "prohibited", "policy", "rating", "reason", "flag", "exception"]):
+        return True
+    if "finish_reason" in msg and "safety" in msg:
+        return True
+    if "400" in msg and any(k in msg for k in ["prohibited", "safety", "blocked", "content", "filter", "policy", "sensitive"]):
+        return True
+
+    # Check object attributes if present (e.g. FinishReason enum or response_metadata)
+    finish_reason = getattr(err, "finish_reason", None)
+    if finish_reason and "safety" in str(finish_reason).lower():
+        return True
+
     return False
 
 
@@ -55,6 +83,55 @@ def resolve_lang_code(lang: str) -> str:
         return "auto"
     clean = lang.strip().lower()
     return _LANG_MAP.get(clean, clean)
+
+
+def _split_into_chunks(text: str, max_chars: int = 4000) -> List[str]:
+    """Split text into chunks under max_chars without breaking mid-sentence where possible."""
+    if len(text) <= max_chars:
+        return [text]
+
+    lines = text.split("\n")
+    batches: List[str] = []
+    current_batch: List[str] = []
+    current_len = 0
+
+    for line in lines:
+        if len(line) > max_chars:
+            if current_batch:
+                batches.append("\n".join(current_batch))
+                current_batch = []
+                current_len = 0
+            # Split long line by sentence endings (CJK and Latin)
+            subparts = re.split(r"([。！？.!?]+[\s]*)", line)
+            current_sub = ""
+            for part in subparts:
+                if len(current_sub) + len(part) > max_chars:
+                    if current_sub:
+                        batches.append(current_sub)
+                        current_sub = ""
+                    if len(part) > max_chars:
+                        for i in range(0, len(part), max_chars):
+                            batches.append(part[i:i + max_chars])
+                    else:
+                        current_sub = part
+                else:
+                    current_sub += part
+            if current_sub:
+                batches.append(current_sub)
+        else:
+            line_len = len(line) + 1
+            if current_len + line_len > max_chars and current_batch:
+                batches.append("\n".join(current_batch))
+                current_batch = [line]
+                current_len = line_len
+            else:
+                current_batch.append(line)
+                current_len += line_len
+
+    if current_batch:
+        batches.append("\n".join(current_batch))
+
+    return batches
 
 
 def translate_via_google(text: str, source_lang: str = "auto", target_lang: str = "en") -> str:
@@ -75,31 +152,23 @@ def translate_via_google(text: str, source_lang: str = "auto", target_lang: str 
 
     # Free Google Translate endpoint limit is ~5000 chars per request
     if len(text) <= 4500:
-        res = translator.translate(text)
-        return res if res is not None else text
+        try:
+            res = translator.translate(text)
+            return res if res is not None else text
+        except Exception as e:
+            logger.error(f"Google translate request failed: {e}; returning source text.")
+            return text
 
     # Batch lines for larger texts to avoid exceeding character limits
-    lines = text.split("\n")
-    batches: List[str] = []
-    current_batch: List[str] = []
-    current_len = 0
-
-    for line in lines:
-        line_len = len(line) + 1
-        if current_len + line_len > 4000 and current_batch:
-            batches.append("\n".join(current_batch))
-            current_batch = [line]
-            current_len = line_len
-        else:
-            current_batch.append(line)
-            current_len += line_len
-
-    if current_batch:
-        batches.append("\n".join(current_batch))
+    batches = _split_into_chunks(text, max_chars=4000)
 
     translated_batches = []
     for b in batches:
-        translated_b = translator.translate(b)
-        translated_batches.append(translated_b if translated_b is not None else b)
+        try:
+            translated_b = translator.translate(b)
+            translated_batches.append(translated_b if translated_b is not None else b)
+        except Exception as e:
+            logger.error(f"Google translate batch request failed: {e}; retaining raw batch text.")
+            translated_batches.append(b)
 
     return "\n".join(translated_batches)

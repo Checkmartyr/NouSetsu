@@ -3,13 +3,14 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 import pytest
 
+from nousetsu.agents.chronicler import ChroniclerAgent
 from nousetsu.agents.critic import CritiqueAgent
 from nousetsu.agents.drafter import ContextAwareDrafterAgent
 from nousetsu.agents.extractor import EntityExtractorAgent
 from nousetsu.agents.polisher import PolishingAgent
 from nousetsu.graph.workflow import NovelTranslationWorkflow
 from nousetsu.models.bible import CharacterProfile, GlossaryItem, NovelBible
-from nousetsu.models.metadata import PipelineStage, QualityAudit, TranslationStats
+from nousetsu.models.metadata import PipelineStage, QualityAudit, StageArtifacts, TranslationStats
 from nousetsu.models.state import TranslationState
 from nousetsu.utils.chunker import LineChunk
 from nousetsu.utils.translation_fallback import (
@@ -292,3 +293,155 @@ def test_workflow_end_to_end_safety_block_handling(tmp_path: Path):
     assert any("Sensitive scene safety block triggered fallback" in w for w in final_state.quality_audit.warnings)
     assert final_state.metadata is not None
     assert final_state.metadata.stats.safety_fallbacks_used >= 1
+
+
+def test_is_safety_block_exception_harm_categories_and_content_filters():
+    """Verify detection of Gemini harm categories, OpenAI/Azure content filters, and finish_reason."""
+    assert is_safety_block_exception(RuntimeError("Candidate was blocked due to HARM_CATEGORY_SEXUALLY_EXPLICIT"))
+    assert is_safety_block_exception("Blocked by content filter: prompt violated content_policy")
+    assert is_safety_block_exception(ValueError("Response blocked due to sensitive content"))
+    assert is_safety_block_exception("finish_reason: finishreason.safety")
+
+    # Negative matches
+    assert not is_safety_block_exception(RuntimeError("502 Bad Gateway"))
+    assert not is_safety_block_exception(RuntimeError("503 Service Unavailable"))
+    assert not is_safety_block_exception(RuntimeError("429 ResourceExhausted"))
+
+
+def test_translate_via_google_long_single_line_without_newlines():
+    """Verify translate_via_google splits a 8000-char single line without crashing."""
+    with patch("deep_translator.GoogleTranslator") as mock_gt_cls:
+        mock_instance = MagicMock()
+        mock_instance.translate.side_effect = lambda t: f"EN: {t[:20]}"
+        mock_gt_cls.return_value = mock_instance
+
+        # Single continuous line of >7000 chars with Japanese periods
+        sentences = ["彼女の柔らかな肌に触れた。" * 20 for _ in range(30)]
+        huge_line = "".join(sentences)
+        assert len(huge_line) > 6000
+
+        res = translate_via_google(huge_line, source_lang="Japanese", target_lang="English")
+
+        assert mock_instance.translate.call_count >= 2
+        for call in mock_instance.translate.call_args_list:
+            arg = call[0][0]
+            assert len(arg) <= 4500
+        assert "EN:" in res
+
+
+def test_translate_via_google_network_exception_fallback():
+    """Verify translate_via_google returns source text without crashing when request fails."""
+    with patch("deep_translator.GoogleTranslator") as mock_gt_cls:
+        mock_instance = MagicMock()
+        mock_instance.translate.side_effect = Exception("Connection reset by peer")
+        mock_gt_cls.return_value = mock_instance
+
+        res = translate_via_google("テスト文章", source_lang="Japanese", target_lang="English")
+        assert res == "テスト文章"
+
+
+def test_drafter_fallback_does_not_pass_blocked_source_to_polisher():
+    """Verify that drafter safety fallback passes source_text=None to polisher to prevent tripping filters."""
+    drafter = ContextAwareDrafterAgent(model_name="mock-model")
+    mock_llm = MagicMock()
+    mock_llm.invoke.side_effect = RuntimeError("400 Bad Request: prohibited_content")
+    drafter.llm = mock_llm
+
+    mock_polisher = MagicMock()
+    mock_polisher.polish.return_value = "Literary polished text"
+    drafter.polisher = mock_polisher
+
+    bible = NovelBible(title="Test", source_language="Japanese", target_language="English")
+
+    with patch("nousetsu.agents.drafter.translate_via_google") as mock_gt:
+        mock_gt.return_value = "Google Translated English"
+
+        res = drafter.draft(
+            source_text="秘密のベッドシーン",
+            bible=bible,
+            active_characters=[],
+            active_glossary=[],
+            rolling_summaries=[]
+        )
+
+        assert res == "Literary polished text"
+        assert mock_polisher.polish.called
+        # Verify source_text was passed as None, NOT the blocked Japanese text
+        _, kwargs = mock_polisher.polish.call_args
+        assert kwargs.get("source_text") is None
+
+
+def test_workflow_safety_bypass_avoids_wasteful_review_loops(tmp_path: Path):
+    """Verify that a critique safety bypass exits immediately to chronicle after pass 1 polish instead of 3 loops."""
+    workflow = NovelTranslationWorkflow(
+        model_name="mock-model",
+        max_review_loops=3,
+        quality_threshold=8.5
+    )
+
+    state = TranslationState(
+        chapter_id="ch_bypass_loop",
+        chapter_num=1,
+        source_file=str(tmp_path / "ch.txt"),
+        source_text="過激な情景",
+        draft_text="Sensitive scene draft",
+        polished_text="Polished sensitive scene",
+        review_iteration=2,  # After pass 1 polish
+        quality_audit=QualityAudit(
+            fidelity_score=8.5,
+            style_score=8.0,
+            warnings=["⚠️ Sensitive scene safety block bypassed during critique."],
+            passed=True
+        )
+    )
+
+    route = workflow._route_after_critique(state)
+    assert route == "chronicle"
+
+
+def test_chronicler_safety_block_graceful_fallback():
+    """Verify ChroniclerAgent returns default summary and increments safety counter on safety block."""
+    chronicler = ChroniclerAgent(model_name="mock-model")
+    mock_llm = MagicMock()
+    mock_llm.invoke.side_effect = RuntimeError("400 Bad Request: prohibited_content")
+    chronicler.llm = mock_llm
+
+    summary = chronicler.chronicle(
+        chapter_num=5,
+        translated_text="Explicit intimate scene concluded.",
+        chapter_title="Chapter 5"
+    )
+
+    assert summary.chapter_num == 5
+    assert "concluded" in summary.synopsis
+    assert chronicler.safety_fallbacks_used == 1
+
+
+def test_checkpoint_preserves_safety_fallbacks_used():
+    """Verify StageArtifacts serializes safety_fallbacks_used and assemble_metadata populates it."""
+    artifacts = StageArtifacts(safety_fallbacks_used=2)
+    assert artifacts.safety_fallbacks_used == 2
+
+    chronicler = ChroniclerAgent(model_name="mock-model")
+    meta = chronicler.assemble_metadata(
+        chapter_id="ch_01",
+        chapter_num=1,
+        source_file="ch01.txt",
+        source_sha256="abc",
+        output_file="ch01.md",
+        source_text="source",
+        final_text="translated",
+        model_name="mock-model",
+        duration_seconds=1.5,
+        quality_audit=QualityAudit(),
+        active_characters=[],
+        active_glossary=[],
+        draft_text="draft",
+        critique_notes="notes",
+        polished_text="polished",
+        safety_fallbacks_used=3
+    )
+
+    assert meta.checkpoint.stage_artifacts.safety_fallbacks_used == 3
+    assert meta.stats.safety_fallbacks_used == 3
+

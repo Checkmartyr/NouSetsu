@@ -99,6 +99,9 @@ class ContextAwareDrafterAgent:
             source_lang=bible.source_language,
             target_lang=bible.target_language
         )
+        if not gt_text or not gt_text.strip():
+            return gt_text
+
         active_pol = polisher or self._get_polisher()
         try:
             polished = active_pol.polish(
@@ -107,14 +110,15 @@ class ContextAwareDrafterAgent:
                 active_glossary=active_glossary,
                 bible=bible,
                 genre=genre,
-                source_text=source_chunk_text
+                source_text=None
             )
-            return polished
+            return polished if (polished and polished.strip()) else gt_text
         except Exception as pe:
             if is_safety_block_exception(pe):
                 logger.warning("⚠️ Polisher also blocked on sensitive chunk - retaining raw Google Translate output.")
-                return gt_text
-            raise
+            else:
+                logger.warning(f"⚠️ Polisher failed on fallback chunk ({pe}) - retaining raw Google Translate output.")
+            return gt_text
 
     def draft(
         self,

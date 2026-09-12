@@ -29,6 +29,7 @@ class StageArtifacts(BaseModel):
     draft_text: Optional[str] = None
     critique_notes: Optional[str] = None
     polished_text: Optional[str] = None
+    safety_fallbacks_used: int = 0
 
 
 class ErrorLogEntry(BaseModel):

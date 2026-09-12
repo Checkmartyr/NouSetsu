@@ -26,6 +26,7 @@ class PolishingAgent:
         self.fallback_model = fallback_model
         self.llm = get_llm(model_name=model_name, fallback_model=fallback_model, temperature=temperature)
         self.last_usage: TokenUsage = TokenUsage()
+        self.safety_fallbacks_used: int = 0
 
     @property
     def last_model_used(self) -> str:
@@ -106,6 +107,7 @@ class PolishingAgent:
             self.last_usage = extract_usage_from_message(response)
         except Exception as e:
             if is_safety_block_exception(e):
+                self.safety_fallbacks_used += 1
                 logger.warning("⚠️ Polisher blocked by safety filter - retaining draft text.")
                 return draft_text
             raise
@@ -263,6 +265,7 @@ class PolishingAgent:
             self.last_usage = extract_usage_from_message(response)
         except Exception as e:
             if is_safety_block_exception(e):
+                self.safety_fallbacks_used += 1
                 logger.warning("⚠️ Polisher chunk blocked by safety filter - retaining chunk draft.")
                 return chunk_draft
             raise

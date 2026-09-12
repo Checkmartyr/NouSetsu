@@ -1,7 +1,10 @@
 """Chronicler agent for narrative continuity, summary generation, and metadata compilation."""
 import json
+import logging
 import re
 from typing import Any, List, Optional
+
+logger = logging.getLogger(__name__)
 from langchain_core.messages import HumanMessage, SystemMessage
 from nousetsu.agents.llm import extract_text_from_message, extract_usage_from_message, get_llm
 from nousetsu.models.bible import ChapterSummary, CharacterProfile, GlossaryItem, NovelBible
@@ -18,6 +21,7 @@ from nousetsu.models.metadata import (
 )
 from nousetsu.prompts.templates import CHRONICLER_SYSTEM_PROMPT
 from nousetsu.skills.registry import SkillRegistry
+from nousetsu.utils.translation_fallback import is_safety_block_exception
 
 
 class ChroniclerAgent:
@@ -28,6 +32,7 @@ class ChroniclerAgent:
         self.fallback_model = fallback_model
         self.llm = get_llm(model_name=model_name, fallback_model=fallback_model, temperature=0.2)
         self.last_usage: TokenUsage = TokenUsage()
+        self.safety_fallbacks_used: int = 0
 
     @property
     def last_model_used(self) -> str:
@@ -58,11 +63,24 @@ class ChroniclerAgent:
             skills_section=skills_section
         )
 
-        response = self.llm.invoke([
-            SystemMessage(content=sys_msg),
-            HumanMessage(content=f"Analyze and summarize this translated novel chapter for story lore and plot events:\n{translated_text[:12000]}")
-        ])
-        self.last_usage = extract_usage_from_message(response)
+        try:
+            response = self.llm.invoke([
+                SystemMessage(content=sys_msg),
+                HumanMessage(content=f"Analyze and summarize this translated novel chapter for story lore and plot events:\n{translated_text[:12000]}")
+            ])
+            self.last_usage = extract_usage_from_message(response)
+        except Exception as e:
+            if is_safety_block_exception(e):
+                self.safety_fallbacks_used += 1
+                logger.warning("⚠️ Chronicler blocked by safety filter on sensitive scene - assigning default chapter summary.")
+                return ChapterSummary(
+                    chapter_num=chapter_num,
+                    title=chapter_title or f"Chapter {chapter_num}",
+                    synopsis=f"Events of Chapter {chapter_num} concluded.",
+                    key_events=["Chapter concluded."],
+                    character_state_changes=[]
+                )
+            raise
 
         raw_content = extract_text_from_message(response.content)
         json_match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", raw_content)
@@ -115,7 +133,8 @@ class ChroniclerAgent:
             extracted_characters=active_characters,
             draft_text=draft_text,
             critique_notes=critique_notes,
-            polished_text=polished_text
+            polished_text=polished_text,
+            safety_fallbacks_used=safety_fallbacks_used
         )
 
         checkpoint = CheckpointData(

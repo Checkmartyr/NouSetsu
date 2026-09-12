@@ -31,6 +31,7 @@ class EntityExtractorAgent:
         self.last_usage: TokenUsage = TokenUsage()
         self.procedural_graph = procedural_graph or get_default_extractor_graph()
         self.chunker = chunker
+        self.safety_fallbacks_used: int = 0
 
     @property
     def last_model_used(self) -> str:
@@ -84,6 +85,7 @@ class EntityExtractorAgent:
             self.last_usage = extract_usage_from_message(response)
         except Exception as e:
             if is_safety_block_exception(e):
+                self.safety_fallbacks_used += 1
                 logger.warning("⚠️ Extractor chunk blocked by safety filter - bypassing entity extraction for this chunk.")
                 return [], [], []
             raise

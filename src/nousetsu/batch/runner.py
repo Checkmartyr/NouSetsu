@@ -265,6 +265,8 @@ class BatchRunner:
                     if task.existing_meta.quality_audit and task.existing_meta.quality_audit.fidelity_score > 0:
                         initial_state.quality_audit = task.existing_meta.quality_audit
                         initial_state.best_audit = task.existing_meta.quality_audit
+                    if getattr(artifacts, "safety_fallbacks_used", 0):
+                        initial_state.safety_fallbacks_used = artifacts.safety_fallbacks_used
 
                 try:
                     # Run LangGraph pipeline with stage notification
@@ -346,6 +348,7 @@ class BatchRunner:
                                 draft_text=draft_text,
                                 critique_notes=critique_notes,
                                 polished_text=polished_text,
+                                safety_fallbacks_used=getattr(last_st, "safety_fallbacks_used", 0)
                             )
                         )
                     )
@@ -422,6 +425,7 @@ class BatchRunner:
                         draft_text=saved_draft,
                         critique_notes=saved_notes,
                         polished_text=saved_polish,
+                        safety_fallbacks_used=getattr(last_st, "safety_fallbacks_used", 0)
                     )
                     if completed_stage != PipelineStage.NONE:
                         failed_meta.checkpoint.last_completed_stage = completed_stage

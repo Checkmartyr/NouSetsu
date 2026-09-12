@@ -144,11 +144,15 @@ class NovelTranslationWorkflow:
         if state.review_iteration <= 1 or not state.polished_text:
             return "polish"
 
-        # Pass 2+: check quality threshold or loop exhaustion
+        # Pass 2+: check quality threshold, safety bypass, or loop exhaustion
         has_lang_regression = any("LANGUAGE REGRESSION" in str(w) for w in state.quality_audit.warnings)
+        is_safety_bypassed = any("Sensitive scene safety block bypassed during critique" in str(w) for w in state.quality_audit.warnings)
         passed_threshold = (
-            state.quality_audit.fidelity_score >= state.quality_threshold
-            and state.quality_audit.style_score >= state.quality_threshold
+            (
+                (state.quality_audit.fidelity_score >= state.quality_threshold
+                 and state.quality_audit.style_score >= state.quality_threshold)
+                or (is_safety_bypassed and state.quality_audit.passed)
+            )
             and state.quality_audit.passed
             and not has_lang_regression
         )
@@ -241,6 +245,10 @@ class NovelTranslationWorkflow:
         updated_skills = dict(state.active_skills)
         updated_skills["extraction"] = ext_skills
 
+        ext_safety_used = getattr(self.extractor, "safety_fallbacks_used", 0)
+        total_safety_used = state.safety_fallbacks_used + ext_safety_used
+        self.extractor.safety_fallbacks_used = 0
+
         return {
             "current_stage": PipelineStage.EXTRACTION,
             "extracted_characters": new_chars,
@@ -248,7 +256,8 @@ class NovelTranslationWorkflow:
             "active_characters": all_chars,
             "active_glossary": all_glossary,
             "active_skills": updated_skills,
-            "step_token_records": updated_token_records
+            "step_token_records": updated_token_records,
+            "safety_fallbacks_used": total_safety_used
         }
 
     def _draft_step(self, state: TranslationState) -> Dict[str, Any]:
@@ -458,8 +467,12 @@ class NovelTranslationWorkflow:
         )
         updated_token_records = list(state.step_token_records) + [critique_record]
 
-        if state.safety_fallbacks_used > 0:
-            fallback_warn = f"⚠️ Sensitive scene safety block triggered fallback for {state.safety_fallbacks_used} chunk(s)."
+        crt_safety_used = getattr(self.critic, "safety_fallbacks_used", 0)
+        total_safety_used = state.safety_fallbacks_used + crt_safety_used
+        self.critic.safety_fallbacks_used = 0
+
+        if total_safety_used > 0:
+            fallback_warn = f"⚠️ Sensitive scene safety block triggered fallback for {total_safety_used} chunk(s)."
             if fallback_warn not in audit.warnings:
                 audit.warnings.append(fallback_warn)
 
@@ -474,7 +487,8 @@ class NovelTranslationWorkflow:
             "best_audit": best_audit,
             "best_polished_text": best_text,
             "active_skills": updated_skills,
-            "step_token_records": updated_token_records
+            "step_token_records": updated_token_records,
+            "safety_fallbacks_used": total_safety_used
         }
 
     def _polish_step(self, state: TranslationState) -> Dict[str, Any]:
@@ -621,12 +635,17 @@ class NovelTranslationWorkflow:
         updated_skills = dict(state.active_skills)
         updated_skills["polishing"] = pol_skills
 
+        pol_safety_used = getattr(self.polisher, "safety_fallbacks_used", 0)
+        total_safety_used = state.safety_fallbacks_used + pol_safety_used
+        self.polisher.safety_fallbacks_used = 0
+
         return {
             "current_stage": PipelineStage.POLISHING,
             "polished_text": polished,
             "best_polished_text": best_text,
             "active_skills": updated_skills,
-            "step_token_records": updated_token_records
+            "step_token_records": updated_token_records,
+            "safety_fallbacks_used": total_safety_used
         }
 
     def _chronicle_step(self, state: TranslationState) -> Dict[str, Any]:
@@ -686,8 +705,12 @@ class NovelTranslationWorkflow:
         all_token_records = list(state.step_token_records) + [chronicle_record]
         total_duration = round(sum(r.duration_seconds for r in all_token_records), 2)
 
-        if state.safety_fallbacks_used > 0:
-            fallback_warn = f"⚠️ Sensitive scene safety block triggered fallback for {state.safety_fallbacks_used} chunk(s)."
+        chr_safety_used = getattr(self.chronicler, "safety_fallbacks_used", 0)
+        total_safety_used = state.safety_fallbacks_used + chr_safety_used
+        self.chronicler.safety_fallbacks_used = 0
+
+        if total_safety_used > 0:
+            fallback_warn = f"⚠️ Sensitive scene safety block triggered fallback for {total_safety_used} chunk(s)."
             if fallback_warn not in final_audit.warnings:
                 final_audit.warnings.append(fallback_warn)
 
@@ -709,7 +732,7 @@ class NovelTranslationWorkflow:
             polished_text=final_text,
             status=StageStatus.COMPLETED,
             step_usage=all_token_records,
-            safety_fallbacks_used=state.safety_fallbacks_used
+            safety_fallbacks_used=total_safety_used
         )
 
         updated_skills = dict(state.active_skills)
@@ -722,7 +745,8 @@ class NovelTranslationWorkflow:
             "new_chapter_summary": summary,
             "metadata": metadata,
             "active_skills": updated_skills,
-            "step_token_records": all_token_records
+            "step_token_records": all_token_records,
+            "safety_fallbacks_used": total_safety_used
         }
 
     def run(
@@ -736,6 +760,10 @@ class NovelTranslationWorkflow:
             self.stage_callback = stage_callback
         self.stop_event = stop_event
         self.current_stage = PipelineStage.NONE
+
+        for agent_inst in [self.extractor, self.drafter, self.critic, self.polisher, self.chronicler]:
+            if hasattr(agent_inst, "safety_fallbacks_used"):
+                agent_inst.safety_fallbacks_used = 0
 
         # Auto-resolve genre if general or unspecified
         if not initial_state.genre or initial_state.genre == "general":
