@@ -119,6 +119,7 @@ class EntityExtractorAgent:
                         known_glossary=known_glossary,
                         depth=depth + 1
                     )
+                    left_usage = self.last_usage
                     c_right, t_right, a_right = self._extract_single_text(
                         text=right_text,
                         bible=bible,
@@ -128,6 +129,7 @@ class EntityExtractorAgent:
                         known_glossary=(known_glossary or []) + t_left,
                         depth=depth + 1
                     )
+                    self.last_usage = left_usage.add(self.last_usage)
                     merged_chars = []
                     seen_names = set()
                     for c in c_left + c_right:
@@ -146,6 +148,7 @@ class EntityExtractorAgent:
 
                 self.safety_fallbacks_used += 1
                 logger.warning("⚠️ Extractor chunk blocked by safety filter - bypassing entity extraction for this chunk.")
+                self.last_usage = TokenUsage()
                 return [], [], []
             raise
 
@@ -198,6 +201,7 @@ class EntityExtractorAgent:
                 **kwargs
             )
 
+        self.last_usage = TokenUsage()
         return self._extract_single_text(
             text=source_text,
             bible=bible,

@@ -401,7 +401,8 @@ class ContextAwareDrafterAgent:
                     polisher=polisher,
                     **kwargs
                 )
-                left_tail = "\n".join([l.strip() for l in left_draft.splitlines() if l.strip()][-3:])
+                left_tail_lines = [l.strip() for l in left_draft.splitlines() if l.strip()]
+                left_tail = "\n".join(left_tail_lines[-3:]) if left_tail_lines else preceding_context
                 right_draft = self._draft_with_recursive_subdivision(
                     chunk_text=right_text,
                     preceding_context=left_tail,
@@ -417,7 +418,8 @@ class ContextAwareDrafterAgent:
                     polisher=polisher,
                     **kwargs
                 )
-                return f"{left_draft}\n\n{right_draft}"
+                draft_parts = [p.strip() for p in (left_draft, right_draft) if p and p.strip()]
+                return "\n\n".join(draft_parts)
 
             # Base case: reached minimum lines or max depth -> isolated sensitive snippet
             relevant_glossary = [

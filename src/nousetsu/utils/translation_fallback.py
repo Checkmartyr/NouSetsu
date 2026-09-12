@@ -47,8 +47,13 @@ def bisect_text(text: str) -> Tuple[str, str]:
     if best_match:
         return best_match
 
-    # Priority 3: Sentence boundary ([。！？] or [.!?] + whitespace) closest to midpoint
-    sentence_pattern = r"([。！？]+[」』\"'\u201d\u2019]?\s*|[.!?]+[\"'\u201d\u2019]?\s+)"
+    # Priority 3: Sentence, dialogue, or ellipsis boundary closest to midpoint
+    sentence_pattern = (
+        r"([。！？]+[」』\"'\u201d\u2019]?\s*"
+        r"|[」』][」』\"'\u201d\u2019]?\s*"
+        r"|[…―]{1,4}[」』\"'\u201d\u2019]?\s*"
+        r"|[.!?]+[\"'\u201d\u2019]?\s+)"
+    )
     sent_matches = list(re.finditer(sentence_pattern, text))
     best_match = None
     best_dist = float("inf")
@@ -64,10 +69,28 @@ def bisect_text(text: str) -> Tuple[str, str]:
     if best_match:
         return best_match
 
-    # Priority 4: Exact character midpoint if unpunctuated
+    # Priority 4: Word/whitespace boundary (\s+) closest to midpoint
+    space_matches = list(re.finditer(r"\s+", text))
+    best_match = None
+    best_dist = float("inf")
+    for m in space_matches:
+        start, end = m.start(), m.end()
+        left = text[:start].strip()
+        right = text[end:].strip()
+        if left and right:
+            dist = abs(start - mid)
+            if dist < best_dist:
+                best_dist = dist
+                best_match = (left, right)
+    if best_match:
+        return best_match
+
+    # Priority 5: Exact character midpoint if unpunctuated and without whitespace
     left = text[:mid].strip()
     right = text[mid:].strip()
     if not left and right:
+        return text, ""
+    if not right and left:
         return text, ""
     return left, right
 

@@ -14,7 +14,7 @@ def extract_usage_from_message(msg: Any) -> TokenUsage:
         return TokenUsage()
 
     # Case 1: Standard LangChain usage_metadata
-    if hasattr(msg, "usage_metadata") and msg.usage_metadata:
+    if hasattr(msg, "usage_metadata") and isinstance(msg.usage_metadata, dict) and msg.usage_metadata:
         um = msg.usage_metadata
         return TokenUsage(
             input_tokens=int(um.get("input_tokens", 0) or 0),
@@ -25,7 +25,7 @@ def extract_usage_from_message(msg: Any) -> TokenUsage:
         )
 
     # Case 2: Response metadata from Gemini Interactions or LangChain
-    if hasattr(msg, "response_metadata") and msg.response_metadata:
+    if hasattr(msg, "response_metadata") and isinstance(msg.response_metadata, dict) and msg.response_metadata:
         rm = msg.response_metadata
         if "usage" in rm:
             u = rm["usage"]

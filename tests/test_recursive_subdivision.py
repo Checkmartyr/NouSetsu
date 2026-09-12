@@ -50,7 +50,28 @@ class TestBisectionUtility:
         assert left.endswith(".")
         assert right.startswith("Once")
 
-    def test_bisect_priority4_unpunctuated_midpoint(self):
+    def test_bisect_priority3_japanese_dialogue_closing_bracket(self):
+        text = "「違います」「私は何も知らないのです」"
+        left, right = bisect_text(text)
+        assert left == "「違います」"
+        assert right == "「私は何も知らないのです」"
+
+    def test_bisect_priority3_japanese_ellipsis_boundary(self):
+        text = "彼は立ち尽くしていた……何も言えなかった。"
+        left, right = bisect_text(text)
+        assert left == "彼は立ち尽くしていた……"
+        assert right == "何も言えなかった。"
+
+    def test_bisect_priority4_word_whitespace_boundary(self):
+        text = "The quick brown fox jumps over the lazy dog again and again"
+        left, right = bisect_text(text)
+        # Verify it splits at a space and doesn't cut a word in half
+        assert not left.endswith("ove")
+        assert not right.startswith("r ")
+        assert "over" in left or "over" in right
+        assert f"{left} {right}" == text
+
+    def test_bisect_priority5_unpunctuated_midpoint(self):
         text = "abcdefghijklmnopqrstuvwxyz"
         left, right = bisect_text(text)
         assert left == "abcdefghijklm"
@@ -215,6 +236,46 @@ class TestDrafterRecursiveSubdivision:
             # Verify sliding context was passed to the right half
             assert any("Draft line 3 (end of left)" in ctx for ctx in captured_contexts)
 
+    def test_drafter_sliding_context_fallback_when_left_empty(self):
+        """Verify that preceding context falls back to parent preceding_context when left draft is empty."""
+        drafter = ContextAwareDrafterAgent(
+            model_name="mock-model",
+            subdivision_min_lines=4,
+            subdivision_max_depth=2,
+        )
+
+        bible = NovelBible(title="Test", source_language="Japanese", target_language="English")
+        clean_half = "\n".join([f"Safe line {i}." for i in range(1, 6)])
+        sensitive_half = "\n".join([f"Sensitive line {i}." for i in range(1, 6)])
+        source = f"{clean_half}\n\n{sensitive_half}"
+
+        captured_contexts = []
+
+        def mock_llm_invoke(messages):
+            user_msg = messages[1].content
+            if "### Preceding Scene Context" in user_msg:
+                captured_contexts.append(user_msg)
+            if "Sensitive line" in user_msg:
+                resp = MagicMock()
+                resp.content = "Right translated text."
+                return resp
+            # Left half returns empty
+            resp = MagicMock()
+            resp.content = ""
+            return resp
+
+        drafter.llm = MagicMock()
+        drafter.llm.invoke.side_effect = mock_llm_invoke
+
+        drafter.draft(
+            source_text=source,
+            bible=bible,
+            active_characters=[],
+            active_glossary=[],
+            rolling_summaries=[]
+        )
+
+
 
 class TestExtractorRecursiveSubdivision:
     """Tests for EntityExtractorAgent recursive bisection on safety blocks."""
@@ -255,6 +316,36 @@ class TestExtractorRecursiveSubdivision:
         assert terms[0].source == "宝剣エクスカリバー"
         assert extractor.subdivisions_count >= 1
         assert extractor.safety_fallbacks_used >= 1
+
+    def test_extractor_accumulates_token_usage_during_subdivision(self):
+        extractor = EntityExtractorAgent(
+            model_name="mock-model",
+            subdivision_min_lines=4,
+            subdivision_max_depth=2,
+        )
+
+        safe_text = "アリスは剣を抜いた。\n彼女は聖騎士だった。\n魔法陣が輝いた。\n宝剣エクスカリバー。"
+        sensitive_text = "過激な描写の文章。\n不適切な表現。\n非常に危険な内容。\n規制対象の文字列。"
+        combined = f"{safe_text}\n\n{sensitive_text}"
+        bible = NovelBible(title="Test", source_language="Japanese", target_language="English")
+
+        def mock_invoke(messages):
+            prompt = messages[1].content
+            if "過激な描写" in prompt or "不適切な表現" in prompt:
+                raise RuntimeError("400 Bad Request: prohibited_content")
+            resp = MagicMock()
+            resp.content = '{"new_characters": [], "new_terms": [], "active_terms_in_chapter": []}'
+            resp.usage_metadata = {"input_tokens": 120, "output_tokens": 40, "total_tokens": 160}
+            return resp
+
+        extractor.llm = MagicMock()
+        extractor.llm.invoke.side_effect = mock_invoke
+
+        extractor.extract(combined, bible=bible)
+        # Verify token usage from safe half was preserved and not wiped out by sensitive half
+        assert extractor.last_usage.total_tokens >= 160
+        assert extractor.last_usage.input_tokens >= 120
+
 
 
 class TestCriticRecursiveSubdivision:
@@ -302,6 +393,79 @@ class TestCriticRecursiveSubdivision:
         assert audit.style_score == round((9.5 + 8.0) / 2.0, 1)
         assert critic.subdivisions_count >= 1
         assert critic.safety_fallbacks_used >= 1
+
+    def test_critic_requires_both_source_and_draft_subdividability(self):
+        """Verify that Critic bypasses directly without runaway recursion when one side cannot subdivide."""
+        critic = CritiqueAgent(
+            model_name="mock-model",
+            subdivision_min_lines=4,
+            subdivision_max_depth=3,
+        )
+
+        bible = NovelBible(title="Test", source_language="Japanese", target_language="English")
+        # 10 lines of source, but only 1 line of draft
+        src = "\n".join([f"Source line {i}" for i in range(1, 11)])
+        short_draft = "Single short draft line."
+
+        mock_llm = MagicMock()
+        mock_llm.invoke.side_effect = RuntimeError("400 Bad Request: prohibited_content")
+        critic.llm = mock_llm
+
+        audit, notes = critic.evaluate(
+            source_text=src,
+            draft_text=short_draft,
+            bible=bible,
+            active_characters=[],
+            active_glossary=[]
+        )
+
+        # Because draft is only 1 line (< 4 lines and < 200 chars), it should NOT subdivide
+        assert critic.subdivisions_count == 0
+        assert critic.safety_fallbacks_used == 1
+        assert audit.passed is True
+        assert "bypassed" in audit.warnings[0].lower()
+
+    def test_critic_accumulates_token_usage_during_subdivision(self):
+        """Verify that Critic accumulates tokens from successful subdivisions."""
+        critic = CritiqueAgent(
+            model_name="mock-model",
+            subdivision_min_lines=4,
+            subdivision_max_depth=2,
+        )
+
+        safe_src = "安全な原文。\n通常の会話文。\n情景描写。\n日常の風景。"
+        sens_src = "過激な原文 1。\n過激な原文 2。\n過激な原文 3。\n過激な原文 4。"
+        full_src = f"{safe_src}\n\n{sens_src}"
+
+        safe_draft = "Safe source text.\nNormal dialogue.\nScene description.\nDaily scenery."
+        sens_draft = "Explicit draft 1.\nExplicit draft 2.\nExplicit draft 3.\nExplicit draft 4."
+        full_draft = f"{safe_draft}\n\n{sens_draft}"
+
+        bible = NovelBible(title="Test", source_language="Japanese", target_language="English")
+
+        def mock_invoke(messages):
+            prompt = messages[1].content
+            if "過激な原文" in prompt or "Explicit draft" in prompt:
+                raise RuntimeError("400 Bad Request: prohibited_content")
+            resp = MagicMock()
+            resp.content = '{"fidelity_score": 9.5, "style_score": 9.5, "glossary_compliance_pct": 100.0, "warnings": [], "critique_notes": "Great flow."}'
+            resp.usage_metadata = {"input_tokens": 150, "output_tokens": 50, "total_tokens": 200}
+            return resp
+
+        critic.llm = MagicMock()
+        critic.llm.invoke.side_effect = mock_invoke
+
+        critic.evaluate(
+            source_text=full_src,
+            draft_text=full_draft,
+            bible=bible,
+            active_characters=[],
+            active_glossary=[]
+        )
+
+        assert critic.last_usage.total_tokens >= 200
+        assert critic.last_usage.input_tokens >= 150
+
 
 
 class TestConfigAndWorkflowIntegration:

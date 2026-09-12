@@ -159,58 +159,60 @@ class CritiqueAgent:
                 can_sub = (
                     self.enable_recursive_subdivision
                     and depth < self.subdivision_max_depth
-                    and (
-                        can_subdivide_text(source_text, min_lines=self.subdivision_min_lines)
-                        or can_subdivide_text(draft_text, min_lines=self.subdivision_min_lines)
-                    )
+                    and can_subdivide_text(source_text, min_lines=self.subdivision_min_lines)
+                    and can_subdivide_text(draft_text, min_lines=self.subdivision_min_lines)
                 )
                 if can_sub:
-                    self.subdivisions_count += 1
-                    s_left, s_right = bisect_text(source_text) if can_subdivide_text(source_text, min_lines=2, min_chars=20) else (source_text, source_text)
-                    d_left, d_right = bisect_text(draft_text) if can_subdivide_text(draft_text, min_lines=2, min_chars=20) else (draft_text, draft_text)
-                    line_count = len([l for l in draft_text.splitlines() if l.strip()])
-                    logger.warning(
-                        f"⚠️ Sensitive scene safety block in critique ({line_count} lines) - "
-                        f"subdividing (depth {depth + 1}/{self.subdivision_max_depth})..."
-                    )
-                    audit_left, notes_left = self._evaluate_single(
-                        source_text=s_left,
-                        draft_text=d_left,
-                        bible=bible,
-                        active_characters=active_characters,
-                        active_glossary=active_glossary,
-                        genre=genre,
-                        chunk_idx=chunk_idx,
-                        total_chunks=total_chunks,
-                        depth=depth + 1
-                    )
-                    audit_right, notes_right = self._evaluate_single(
-                        source_text=s_right,
-                        draft_text=d_right,
-                        bible=bible,
-                        active_characters=active_characters,
-                        active_glossary=active_glossary,
-                        genre=genre,
-                        chunk_idx=chunk_idx,
-                        total_chunks=total_chunks,
-                        depth=depth + 1
-                    )
-                    combined_fid = round((audit_left.fidelity_score + audit_right.fidelity_score) / 2.0, 1)
-                    combined_sty = round((audit_left.style_score + audit_right.style_score) / 2.0, 1)
-                    combined_glo = round((audit_left.glossary_compliance_pct + audit_right.glossary_compliance_pct) / 2.0, 1)
-                    combined_warn = list(dict.fromkeys(audit_left.warnings + audit_right.warnings))
-                    combined_audit = QualityAudit(
-                        fidelity_score=combined_fid,
-                        style_score=combined_sty,
-                        glossary_compliance_pct=combined_glo,
-                        warnings=combined_warn,
-                        passed=(combined_fid >= 7.5 and combined_sty >= 7.5)
-                    )
-                    combined_notes = f"{notes_left} {notes_right}".strip()
-                    return combined_audit, combined_notes
+                    s_left, s_right = bisect_text(source_text)
+                    d_left, d_right = bisect_text(draft_text)
+                    if s_left and s_right and d_left and d_right:
+                        self.subdivisions_count += 1
+                        line_count = len([l for l in draft_text.splitlines() if l.strip()])
+                        logger.warning(
+                            f"⚠️ Sensitive scene safety block in critique ({line_count} lines) - "
+                            f"subdividing (depth {depth + 1}/{self.subdivision_max_depth})..."
+                        )
+                        audit_left, notes_left = self._evaluate_single(
+                            source_text=s_left,
+                            draft_text=d_left,
+                            bible=bible,
+                            active_characters=active_characters,
+                            active_glossary=active_glossary,
+                            genre=genre,
+                            chunk_idx=chunk_idx,
+                            total_chunks=total_chunks,
+                            depth=depth + 1
+                        )
+                        left_usage = self.last_usage
+                        audit_right, notes_right = self._evaluate_single(
+                            source_text=s_right,
+                            draft_text=d_right,
+                            bible=bible,
+                            active_characters=active_characters,
+                            active_glossary=active_glossary,
+                            genre=genre,
+                            chunk_idx=chunk_idx,
+                            total_chunks=total_chunks,
+                            depth=depth + 1
+                        )
+                        self.last_usage = left_usage.add(self.last_usage)
+                        combined_fid = round((audit_left.fidelity_score + audit_right.fidelity_score) / 2.0, 1)
+                        combined_sty = round((audit_left.style_score + audit_right.style_score) / 2.0, 1)
+                        combined_glo = round((audit_left.glossary_compliance_pct + audit_right.glossary_compliance_pct) / 2.0, 1)
+                        combined_warn = list(dict.fromkeys(audit_left.warnings + audit_right.warnings))
+                        combined_audit = QualityAudit(
+                            fidelity_score=combined_fid,
+                            style_score=combined_sty,
+                            glossary_compliance_pct=combined_glo,
+                            warnings=combined_warn,
+                            passed=(combined_fid >= 7.5 and combined_sty >= 7.5)
+                        )
+                        combined_notes = f"{notes_left} {notes_right}".strip()
+                        return combined_audit, combined_notes
 
                 self.safety_fallbacks_used += 1
                 logger.warning("⚠️ Sensitive scene safety block bypassed during critique.")
+                self.last_usage = TokenUsage()
                 return QualityAudit(
                     fidelity_score=8.5,
                     style_score=8.0,
@@ -388,6 +390,7 @@ class CritiqueAgent:
                 **kwargs
             )
 
+        self.last_usage = TokenUsage()
         audit, critique_notes = self._evaluate_single(
             source_text=source_text,
             draft_text=draft_text,
