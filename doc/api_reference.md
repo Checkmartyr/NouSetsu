@@ -11,7 +11,11 @@ Extracts named entities, characters, and glossary candidates from source text be
 
 ```python
 class EntityExtractorAgent:
-    def __init__(self, model_name: str = "gemini-2.5-pro")
+    def __init__(
+        self,
+        model_name: str = "gemini-3.1-flash-lite",
+        fallback_model: Optional[str] = None
+    )
     
     def extract(
         self,
@@ -27,11 +31,18 @@ class EntityExtractorAgent:
 ---
 
 ### `ContextAwareDrafterAgent` (*Wortschmied*) (`src/nousetsu/agents/drafter.py`)
-Produces initial novelistic translation drafts with zero-anaphora resolution, character voices, and episodic memory.
+Produces initial novelistic translation drafts with zero-anaphora resolution, character voices, and episodic memory. Supports line-based semantic chunking.
 
 ```python
 class ContextAwareDrafterAgent:
-    def __init__(self, model_name: str = "gemini-2.5-pro")
+    def __init__(
+        self,
+        model_name: str = "gemini-3.5-flash-lite",
+        fallback_model: Optional[str] = None,
+        chunk_threshold_lines: int = 85,
+        target_chunk_lines: int = 70,
+        chunk_overlap_lines: int = 3
+    )
     
     def draft(
         self,
@@ -54,7 +65,11 @@ Performs independent fidelity, style, and glossary compliance audits for both ra
 
 ```python
 class CritiqueAgent:
-    def __init__(self, model_name: str = "gemini-2.5-pro")
+    def __init__(
+        self,
+        model_name: str = "gemma-4-26b-a4b-it",
+        fallback_model: Optional[str] = None
+    )
     
     def evaluate(
         self,
@@ -73,11 +88,18 @@ class CritiqueAgent:
 ---
 
 ### `PolishingAgent` (*Feinschliff*) (`src/nousetsu/agents/polisher.py`)
-Refines prose cadence, remedies critique feedback, and eliminates translationese tropes.
+Refines prose cadence, remedies critique feedback, and eliminates translationese tropes across semantic chunks.
 
 ```python
 class PolishingAgent:
-    def __init__(self, model_name: str = "gemini-2.5-pro")
+    def __init__(
+        self,
+        model_name: str = "gemini-3.5-flash-lite",
+        fallback_model: Optional[str] = None,
+        chunk_threshold_lines: int = 85,
+        target_chunk_lines: int = 70,
+        chunk_overlap_lines: int = 3
+    )
     
     def polish(
         self,
@@ -99,7 +121,11 @@ Updates narrative lore, generates chapter synopses, and compiles metadata.
 
 ```python
 class ChroniclerAgent:
-    def __init__(self, model_name: str = "gemini-2.5-pro")
+    def __init__(
+        self,
+        model_name: str = "gemma-4-26b-a4b-it",
+        fallback_model: Optional[str] = None
+    )
     
     def chronicle(
         self,
@@ -122,7 +148,7 @@ Thread-safe sliding-window rate limiter enforcing dual TPM and RPM quotas across
 
 ```python
 class SlidingWindowRateLimiter:
-    def __init__(self, max_tpm: int = 16000, max_rpm: int = 60, window_seconds: float = 60.0)
+    def __init__(self, max_tpm: int = 32000, max_rpm: int = 60, window_seconds: float = 60.0)
 
     def acquire(self, tokens: int = 1, stop_event: Optional[threading.Event] = None) -> None:
         """
@@ -132,6 +158,25 @@ class SlidingWindowRateLimiter:
 
     def reset(self) -> None:
         """Clears all logged request and token timestamps."""
+```
+
+### `LineSemanticChunker` (`src/nousetsu/utils/chunker.py`)
+Partitions long chapters exceeding threshold lines into semantic chunks while respecting scene transitions and dialogue quotes.
+
+```python
+class LineSemanticChunker:
+    def __init__(self, threshold_lines: int = 85, target_lines: int = 70, overlap_lines: int = 3)
+    
+    def split(self, text: str) -> List[TextChunk]:
+        """Partitions raw text into TextChunk objects with overlap context."""
+```
+
+### `format_duration` (`src/nousetsu/utils/formatting.py`)
+Formats seconds into clean, human-friendly duration strings.
+
+```python
+def format_duration(seconds: float) -> str:
+    """Formats duration into human-readable strings like '1.2s', '2m 15s', or '1h 4m'."""
 ```
 
 ### `estimate_tokens` (`src/nousetsu/utils/rate_limiter.py`)
@@ -158,11 +203,15 @@ def detect_language(text: str, default: str = "Japanese") -> str:
 
 ---
 
-## 🛡️ LLM Invocation & Retry (`src/nousetsu/agents/llm.py`)
+## 🛡️ LLM Invocation, Fallback & Retry (`src/nousetsu/agents/llm.py`)
 
 ```python
-def get_llm(model_name: str, temperature: float = 0.3) -> BaseChatModel:
-    """Factory returning Google Gemini model, or MockNovelLLM if no API key is present."""
+class FallbackChatModel(BaseChatModel):
+    """Wraps primary and fallback models, automatically switching on HTTP 429 quota exhaustion."""
+    def __init__(self, primary: BaseChatModel, fallback: BaseChatModel)
+
+def get_llm(model_name: str, fallback_model: Optional[str] = None, temperature: float = 0.3) -> BaseChatModel:
+    """Factory returning primary LLM wrapped with FallbackChatModel if fallback_model specified."""
 
 def extract_text_from_message(content: Any) -> str:
     """Extracts plain text from LLM response, discarding reasoning blocks."""
@@ -202,10 +251,19 @@ Coordinates the multi-agent LangGraph execution and reflection review cycle.
 class NovelTranslationWorkflow:
     def __init__(
         self,
-        model_name: str = "gemini-2.5-pro",
+        model_name: str = "gemini-3.1-flash-lite",
+        fallback_model: Optional[str] = "gemini-3.5-flash-lite",
+        extractor_model: Optional[str] = "gemini-3.1-flash-lite",
+        drafter_model: Optional[str] = "gemini-3.5-flash-lite",
+        critic_model: Optional[str] = "gemma-4-26b-a4b-it",
+        polisher_model: Optional[str] = "gemini-3.5-flash-lite",
+        chronicler_model: Optional[str] = "gemma-4-26b-a4b-it",
         rate_limiter: Optional[SlidingWindowRateLimiter] = None,
         max_review_loops: int = 3,
-        quality_threshold: float = 8.5
+        quality_threshold: float = 8.5,
+        chunk_threshold_lines: int = 85,
+        target_chunk_lines: int = 70,
+        chunk_overlap_lines: int = 3
     )
     
     def run(
@@ -232,12 +290,21 @@ class BatchRunner:
     def __init__(
         self,
         repository: NovelRepository,
-        model_name: str = "gemini-2.5-pro",
+        model_name: str = "gemini-3.1-flash-lite",
+        fallback_model: Optional[str] = "gemini-3.5-flash-lite",
+        extractor_model: Optional[str] = "gemini-3.1-flash-lite",
+        drafter_model: Optional[str] = "gemini-3.5-flash-lite",
+        critic_model: Optional[str] = "gemma-4-26b-a4b-it",
+        polisher_model: Optional[str] = "gemini-3.5-flash-lite",
+        chronicler_model: Optional[str] = "gemma-4-26b-a4b-it",
         auto_update_bible: Optional[bool] = None,
         max_tpm: Optional[int] = None,
         max_rpm: Optional[int] = None,
         max_review_loops: Optional[int] = None,
         quality_threshold: Optional[float] = None,
+        chunk_threshold_lines: Optional[int] = None,
+        target_chunk_lines: Optional[int] = None,
+        chunk_overlap_lines: Optional[int] = None,
         console: Optional[Console] = None
     )
 
@@ -307,8 +374,8 @@ class NovelRepository:
 * **`TranslationState` (`src/nousetsu/models/state.py`)**: The LangGraph state schema.
   * Fields: `chapter_id`, `chapter_num`, `source_text`, `draft_text`, `critique_notes`, `quality_audit`, `polished_text`, `review_iteration`, `max_review_loops`, `quality_threshold`, `best_polished_text`, `best_audit`, `metadata`.
 * **`ProjectConfig` (`src/nousetsu/models/config.py`)**: Project configuration settings.
-  * Fields: `project_id`, `title`, `source_language`, `target_language`, `raw_dir`, `output_dir`, `model_name`, `auto_update_bible`, `max_tpm`, `max_rpm`, `max_review_loops`, `quality_threshold`.
+  * Fields: `project_id`, `title`, `source_language`, `target_language`, `raw_dir`, `output_dir`, `model_name`, `fallback_model`, `extractor_model`, `drafter_model`, `critic_model`, `polisher_model`, `chronicler_model`, `auto_update_bible`, `max_tpm`, `max_rpm`, `max_review_loops`, `quality_threshold`, `chunk_threshold_lines`, `target_chunk_lines`, `chunk_overlap_lines`.
 * **`NovelBible` (`src/nousetsu/models/bible.py`)**: Root memory document holding `characters`, `glossary`, `summaries`, and `style_guide`.
-* **`ChapterMetadata` (`src/nousetsu/models/metadata.py`)**: Chapter metadata record with paired `CheckpointData`, `QualityAudit`, and `TranslationStats`.
+* **`ChapterMetadata` (`src/nousetsu/models/metadata.py`)**: Chapter metadata record with paired `CheckpointData`, `QualityAudit`, and `TranslationStats` (including cumulative tokens, `duration_seconds`, and granular `step_usage`).
 * **`CheckpointData` (`src/nousetsu/models/metadata.py`)**: Stage tracking with `status` (`PENDING`, `IN_PROGRESS`, `PAUSED`, `COMPLETED`, `FAILED`), `stage_artifacts`, and `error_logs`.
 * **`StageArtifacts` (`src/nousetsu/models/metadata.py`)**: Intermediate outputs (`extracted_characters`, `extracted_terms`, `draft_text`, `critique_notes`, `polished_text`).

@@ -7,39 +7,38 @@
 ## 🎨 TUI Layout Overview
 
 ```
-┌───────────────────────────┬────────────────────────────────────────────────────────┐
-│ 📁 Chapters (Sidebar)     │ 📖 Dual Reader Pane                                    │
-│                           │                                                        │
-│ [DONE] Ch.001 - Awakening │ ┌──────────────────────────┬─────────────────────────┐ │
-│ [FAILED] Ch.002 - Magic   │ │ 🇯🇵 Source Chapter       │ 🇬🇧 Translated Chapter   │ │
-│ [WAIT] Ch.003 - Forest    │ │                          │                         │ │
-│                           │ │ 少年は剣を手に取った。   │ The boy took the sword. │ │
-│                           │ └──────────────────────────┴─────────────────────────┘ │
-│                           ├────────────────────────────────────────────────────────┤
-│ [Translate Selected (T)]  │ ⚡ Live Progress Panel                                  │
-│ [Run All Batch (B)]       │ Stage: [3/5 CRITIQUE] [████████████░░░░░░░░] 60%       │
-│ [Stop Translation (X)]    │ Status: Auditing fidelity, tone, and glossary...       │
-│ [Novel Bible (E)]         ├────────────────────────────────────────────────────────┤
-│ [Projects (P)]            │ 📊 Checkpoint Inspector                                │
-│ [Settings (S)]            │ Status: COMPLETED | Fidelity: 9.5/10 | Style: 9.2/10   │
-└───────────────────────────┴────────────────────────────────────────────────────────┘
+┌─ NouSetsu ──────────────────────────────────────────────────────────── [12:00:00] ─┐
+│ 📚 Chapters (85%+ Height)         │ 📖 Dual Reader Pane (80% Viewport)             │
+│                                   │ ┌────────────────────────┬───────────────────┐ │
+│  ✓ Ch.001 - Awakening             │ │ 🇺🇸 English Source      │ 🇹🇭 Thai Polished  │ │
+│  ● Ch.002 - Magic Beast           │ │ The boy stepped out.   │ เด็กหนุ่มก้าวเดิน..│ │
+│  · Ch.003 - Forest Encounter      │ └────────────────────────┴───────────────────┘ │
+│  · Ch.004 - Royal Castle Gate     ├────────────────────────────────────────────────┤
+│  · Ch.005 - Ancient Dragon        │ ⚡ Progress: 📖 Ch.002 [████████░░░░░░░░] 50%    │
+│  · Ch.006 - Secret Library        │ Stage: [2/5 DRAFTING] | Status: Translating... │
+│  · Ch.007 - The Alchemist         ├────────────────────────────────────────────────┤
+│  · Ch.008 - Shadow Guild          │ 📊 Inspector: Fidelity: 9.5 | Style: 9.2       │
+│                                   │ Tokens: 1,284 in 3.9s | Status: COMPLETED      │
+├───────────────────────────────────┴────────────────────────────────────────────────┤
+│ [▶ Translate (T)]   [⚡ Batch All (B)]   [⏹ Stop (X)]       [📖 Bible (E)]          │
+│ [📁 Projects (P)]   [✨ New (N)]          [⚙ Settings (S)]   [✖ Quit (Q)]           │
+└────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## 🧭 Main Interface Components
 
-### 1. Chapter Sidebar & Status Badges
-Displays all discovered chapters in natural numerical order (`Ch.001`, `Ch.002`, `Ch.010`). Each chapter is prepended with a live reactive badge:
+### 1. Minimal Chapter Sidebar & Status Badges
+Displays all discovered chapters in natural numerical order (`Ch.001`, `Ch.002`, `Ch.010`) utilizing over 85% vertical height for maximum reading visibility. Each chapter is prepended with a minimal unicode status glyph:
 
-| Badge | Meaning | Action Available |
-| :--- | :--- | :--- |
-| `[bold green][DONE][/]` | Translation completed and verified against source SHA-256 hash. | Review in Dual Reader. |
-| `[bold magenta][PAUSED:DRAF][/]` | Translation paused mid-chapter by user; draft artifacts saved. | Press `T` or `B` to resume instantly. |
-| `[bold magenta][PAUSED:POLI][/]` | Translation paused during polishing review loop; candidate saved. | Press `T` or `B` to resume without re-drafting. |
-| `[bold red][FAILED][/]` | Translation encountered an unrecoverable error or exhausted retries. | Press `T` to retry with exponential backoff. |
-| `[bold yellow][RESUME:DRAF][/]` | Chapter has intermediate checkpoint artifacts saved. | Press `T` to resume from the last completed stage. |
-| `[dim][WAIT][/]` | Raw chapter discovered, pending processing. | Press `T` to translate or `B` to batch translate. |
+| Glyph | Status | Meaning | Action Available |
+| :---: | :--- | :--- | :--- |
+| `✓` | `COMPLETED` | Translation completed and verified against source SHA-256 hash. | Review in Dual Reader. |
+| `●` | `IN_PROGRESS` | Chapter actively undergoing pipeline execution. | Watch live progress / Press `X` to pause. |
+| `⏸` | `PAUSED` | Translation paused mid-chapter by user; stage artifacts preserved. | Press `T` or `B` to resume instantly. |
+| `✕` | `FAILED` | Translation encountered an unrecoverable error or exhausted retries. | Press `T` to retry with exponential backoff. |
+| `·` | `WAIT` / `PENDING` | Raw chapter discovered, pending processing. | Press `T` to translate or `B` to batch translate. |
 
 ---
 
@@ -52,7 +51,8 @@ Provides side-by-side synchronized comparison between the raw original text and 
 ---
 
 ### 3. Real-Time Progress Panel (`src/nousetsu/tui/widgets/progress_panel.py`)
-Visualizes live agent execution during translation:
+Visualizes live agent execution during translation in a compact 4-line strip:
+* **Active Chapter Label**: The progress bar header dynamically binds to the active chapter currently translating (e.g. `📖 Ch.002 - Magic Beast.txt [████████░░░░░░░░] 50%`).
 * **Stage Badge**: Displays the current executing agent stage (`1/5 EXTRACTION`, `2/5 DRAFTING`, `3/5 CRITIQUE`, `4/5 POLISHING`, `5/5 CHRONICLING`).
 * **Animated Progress Bar**: Smooth percentage progression reflecting stage completion.
 * **Status Messaging**: Relays active sub-agent actions (e.g. *"Auditing fidelity, tone, and glossary adherence..."* or *"Server busy (500). Retrying in 6.0s (Attempt 2/4)..."*).
@@ -60,12 +60,16 @@ Visualizes live agent execution during translation:
 ---
 
 ### 4. Checkpoint Inspector Bar (`src/nousetsu/tui/widgets/checkpoint_inspector.py`)
-Located at the bottom of the interface, displaying deep metadata diagnostics for the selected chapter:
+Located below the reader pane in a compact 5-line container, displaying deep metadata diagnostics for the selected chapter:
 * **Status & Checkpoint**: Displays status, last completed stage, and truncated SHA-256 hash.
 * **Quality Audit Scores**:
   * **Fidelity**: `0.0 to 10.0` score measuring semantic accuracy.
   * **Style**: `0.0 to 10.0` score measuring natural prose cadence.
   * **Glossary**: Percentage compliance against canonical terms.
+* **Granular Token & Duration Metrics**: Formats cumulative token usage and elapsed duration using human-friendly formatting (`3.9s`, `2m 15s`, `1h 4m`):
+  ```text
+  Tokens: 1,284 in 3.9s (In: 820 Out: 364)
+  ```
 * **Warnings & Error Diagnostics**: Lists dropped pronoun warnings, or highlights the exact `failed_stage`, `error_type`, and retry count if the chapter failed.
 
 ---
@@ -95,12 +99,18 @@ Located at the bottom of the interface, displaying deep metadata diagnostics for
 ---
 
 ### 4. Settings Modal (`S` key)
-* **Model & Provider**: Adjust LLM model name (e.g. `gemini-2.5-pro`, `gemini-2.5-flash`).
-* **Language Pairs**: Modify source and target languages.
+* **Model Configuration & Routing**:
+  * **Primary Model (`model_name`)**: Base model for unconfigured stages (default: `gemini-3.1-flash-lite`).
+  * **Fallback Model (`fallback_model`)**: Failover model used automatically on HTTP 429 quota exhaustion (default: `gemini-3.5-flash-lite`).
+  * **Per-Stage Agent Routing**: Assign specialized LLMs per role (e.g. `drafter_model="gemini-3.5-flash-lite"`, `critic_model="gemma-4-26b-a4b-it"`, `polisher_model="gemini-3.5-flash-lite"`, `chronicler_model="gemma-4-26b-a4b-it"`).
+* **Language Pairs**: Modify source and target languages (default: English $\to$ Thai for Villainess projects).
 * **Style Guide**: Configure narrative tense (past/present), POV (third/first person), reading level, and honorific mode.
 * **⚡ API Rate Limits & Throttling Guard**:
-  * `Max Tokens Per Minute (TPM)`: Default 16,000 TPM.
+  * `Max Tokens Per Minute (TPM)`: Default 32,000 TPM.
   * `Max Requests Per Minute (RPM)`: Default 60 RPM.
+* **Line-Based Semantic Chunking**:
+  * `Chunk Threshold Lines`: Minimum non-empty lines to trigger chunking (default: 85).
+  * `Target Chunk Lines`: Target line count per semantic chunk (default: 70).
 * **🔄 Review Loop & Quality Control**:
   * `Max Review Loops`: Allow 1 to 5 iterative passes (default: 3).
   * `Quality Threshold`: Score required to skip further review passes (default: 8.5/10).
@@ -110,7 +120,7 @@ Located at the bottom of the interface, displaying deep metadata diagnostics for
 
 ## 🛑 Thread-Safe Stop & Interruption Controls
 
-* **Sidebar Stop Button**: Clicking `[Stop Translation (X)]` (`#btn_stop`) or pressing `X` sends an immediate halt signal.
+* **Toolbar Stop Button**: Clicking `[⏹ Stop (X)]` (`#btn_stop`) in the bottom action bar or pressing `X` sends an immediate halt signal.
 * **UI Mutual Exclusion**: When translation starts, `btn_stop` is automatically enabled while `btn_translate` and `btn_batch` are disabled, preventing race conditions or double triggers.
 * **Interruptible Cooldown**: Rate limit sleep intervals are sliced into 200–250ms chunks, ensuring the application responds instantaneously to stop requests.
 * **Checkpoint Protection**: Pausing a chapter preserves all completed stages into `.novel/metadata.json` with status `StageStatus.PAUSED`, allowing seamless one-click resumption.

@@ -142,6 +142,7 @@ sequenceDiagram
 * **Outputs**:
   `str`: Raw narrative English draft translation.
 * **Key Innovations**:
+  * **Line-Based Semantic Chunking**: Chapters exceeding `chunk_threshold_lines` (default: 85 lines) are partitioned into ~70-line semantic chunks with 3-line overlap. Chunks are drafted sequentially with rolling sliding context.
   * **Zero-Anaphora Resolution**: In Japanese, Chinese, and Korean, subjects ("I", "he", "she") are routinely dropped. The drafter examines who is speaking and present in the scene to insert accurate pronouns without hallucinating actors.
   * **Character Voice Preservation**: Distinct dialogue registers ensure a noble villain sounds haughty while a young apprentice sounds eager.
 
@@ -202,6 +203,7 @@ sequenceDiagram
 * **Outputs**:
   `str`: Refined, publication-ready literary English text.
 * **Key Innovations**:
+  * **Chunk-Aware Polishing**: Refines prose across chunk boundaries maintaining emotional resonance and cadence consistency.
   * **Eliminate Translationese**: Removes awkward machine-translation structures (e.g., overusing "in order to", "it cannot be helped", robotic passive voice).
   * **Cadence Balancing**: Varies sentence length to match scene tension (punchy in action scenes, lyrical in descriptive scenes).
 
@@ -271,7 +273,7 @@ flowchart TD
 
 ---
 
-## ⚡ Sliding-Window Rate Limiting Engine (16K TPM / 60 RPM)
+## ⚡ Sliding-Window Rate Limiting Engine (32K TPM / 60 RPM) & Fallback Model
 
 NouSetsu protects upstream API quotas with a proactive sliding-window rate limiter in [`src/nousetsu/utils/rate_limiter.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/rate_limiter.py):
 
@@ -279,10 +281,10 @@ NouSetsu protects upstream API quotas with a proactive sliding-window rate limit
   * CJK characters (Japanese Kanji/Kana, Chinese Hanzi, Korean Hangul): ~1.7 tokens per character.
   * Latin words: ~1.3 tokens per word.
   * Operates offline with zero external dependencies.
-* **Rolling 60-Second Window**: Tracks request timestamps and cumulative tokens. If quota is projected to exceed 16,000 TPM or 60 RPM, the limiter sleeps until the rolling window clears.
-* **Smart 429 Quota Rollover Backoff**:
-  * When a Google API 429 quota error occurs, standard 2s exponential retries are ineffective against 60-second quotas.
-  * The system applies 25s–65s window rollover cooldowns (`25.0 * (1.5 ** attempt)`), allowing rolling quotas to completely reset before retrying.
+* **Rolling 60-Second Window**: Tracks request timestamps and cumulative tokens. If quota is projected to exceed 32,000 TPM or 60 RPM, the limiter sleeps until the rolling window clears.
+* **Smart 429 Quota Rollover Backoff & FallbackChatModel**:
+  * Upstream HTTP 429 or `RESOURCE_EXHAUSTED` errors trigger failover via `FallbackChatModel` to the configured fallback model (e.g. `gemini-3.5-flash-lite`).
+  * If both models exhaust quotas, the system applies 25s–65s window rollover cooldowns (`25.0 * (1.5 ** attempt)`), allowing rolling quotas to completely reset before retrying.
 
 ---
 

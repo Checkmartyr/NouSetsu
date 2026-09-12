@@ -99,20 +99,22 @@ nousetsu
 If you have an active novel project, it loads immediately. If you are in a new or uninitialized directory, the dashboard opens ready for you to create or pick a project!
 
 ```text
-┌─ Novel Translation Agent ───────────────────────────────────────────── [12:00:00] ─┐
-│ 📚 Chapters                       │  Progress: [====================] 100%         │
-│  [DONE] Ch.001 - Chapter 1.txt    │  Stage: CHRONICLING                            │
-│  [WAIT] Ch.002 - Chapter 2.txt    │                                                │
-│  [WAIT] Ch.003 - Chapter 3.txt    ├───────────────────────┬────────────────────────┤
-│                                   │ Original Source       │ Polished Translation   │
-│ [▶ Translate Selected (T)]        │                       │                        │
-│ [⚡ Run All Batch (B)]            │ 第一章：旅立ちの合図   │ Chapter 1: The Signal  │
-│ [⏹ Stop Translation (X)]          │ 少年は歩き出した。     │ The boy stepped out.   │
-│ [📖 Novel Bible (E)]               │                       │                        │
-│ [📁 Projects (P)]                 ├───────────────────────┴────────────────────────┤
-│ [✨ New Project (N)]               │ 🔍 Checkpoint Inspector: Fidelity: 9.5 | 9.2   │
-│ [⚙ Settings (S)]                  │ Warnings: None | Status: COMPLETED             │
-└───────────────────────────────────┴────────────────────────────────────────────────┘
+┌─ NouSetsu ──────────────────────────────────────────────────────────── [12:00:00] ─┐
+│ 📚 Chapters (85% Height)          │ 📖 Dual Reader Pane (80% Viewport)             │
+│  ✓ Ch.001 - Awakening             │ ┌────────────────────────┬───────────────────┐ │
+│  ⏸ Ch.002 - Magic Beast           │ │ 🇺🇸 English Source      │ 🇹🇭 Thai Polished  │ │
+│  · Ch.003 - Forest Encounter      │ │ The boy stepped out.   │ เด็กหนุ่มก้าวเดิน..│ │
+│  · Ch.004 - Kingdom Royal Gate    │ └────────────────────────┴───────────────────┘ │
+│  · Ch.005 - Ancient Dragon        ├────────────────────────────────────────────────┤
+│                                   │ ⚡ Progress: 📖 Ch.002 [████████░░░░░░░░] 50%    │
+│                                   │ Stage: [2/5 DRAFTING] | Status: Translating... │
+│                                   ├────────────────────────────────────────────────┤
+│                                   │ 📊 Inspector: Fidelity: 9.5 | Style: 9.2       │
+│                                   │ Tokens: 1,284 in 3.9s | Status: COMPLETED      │
+├───────────────────────────────────┴────────────────────────────────────────────────┤
+│ [▶ Translate (T)]   [⚡ Batch All (B)]   [⏹ Stop (X)]       [📖 Bible (E)]          │
+│ [📁 Projects (P)]   [✨ New (N)]          [⚙ Settings (S)]   [✖ Quit (Q)]           │
+└────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### TUI Keyboard Shortcuts
@@ -168,19 +170,25 @@ nousetsu tui --project-dir ./my_novel
 | `--project-dir` | `-p` | Current directory | Root folder of the novel project |
 | `--input-dir` | `-i` | `raw_chapters` | Folder containing raw chapter text files |
 | `--output-dir` | `-o` | `translated_chapters` | Folder where translated markdown files are written |
-| `--source-lang` | | `auto` | Override source language (`Japanese`, `Chinese`, `Korean`, etc.) |
+| `--source-lang` | | `auto` | Override source language (`Japanese`, `Chinese`, `Korean`, `English`, etc.) |
 | `--target-lang` | | `English` | Override target language (`English`, `Thai`, `Spanish`, etc.) |
 | `--genre` | `-g` | `general` | Novel genre (`xianxia`, `wuxia`, `isekai`, `litrpg`, `romance`, `general`) |
-| `--model` | `-m` | `gemini-2.5-pro` | LLM model name (or set `DEFAULT_MODEL` in `.env`) |
+| `--model` | `-m` | `gemini-3.1-flash-lite` | Primary LLM model name (or set `DEFAULT_MODEL` in `.env`) |
+| `--fallback-model` | | `gemini-3.5-flash-lite` | Automatic fallback model used upon HTTP 429 quota exhaustion |
+| `--extractor-model` | | `gemini-3.1-flash-lite` | Model for Stage 1: Entity Extractor (*Schriftdetektiv*) |
+| `--drafter-model` | | `gemini-3.5-flash-lite` | Model for Stage 2: Context-Aware Drafter (*Wortschmied*) |
+| `--critic-model` | | `gemma-4-26b-a4b-it` | Model for Stage 3: Critique Agent (*Zensor*) |
+| `--polisher-model` | | `gemini-3.5-flash-lite` | Model for Stage 4: Prose Polisher (*Feinschliff*) |
+| `--chronicler-model` | | `gemma-4-26b-a4b-it` | Model for Stage 5: Lore Chronicler (*Chronist*) |
 | `--limit` | `-l` | None (all) | Maximum number of chapters to process in this run |
 | `--force` | `-f` | False | Force re-translation even if chapter is already marked `COMPLETED` |
 | `--max-loops` | | `3` | Maximum review reflection loops between Critic and Polisher (1–5) |
 | `--quality-threshold` | | `8.5` | Target quality score (fidelity & style) to exit review loop early |
-| `--max-tpm` | | `16000` | Sliding-window Tokens Per Minute rate limit quota |
+| `--max-tpm` | | `32000` | Sliding-window Tokens Per Minute rate limit quota |
 | `--max-rpm` | | `60` | Sliding-window Requests Per Minute rate limit quota |
 | `--interactions / --no-interactions` | | True | Enable or disable Gemini Interactions API (`/v1beta/interactions`) with fallback |
 | `--chunking / --no-chunking` | | True | Enable or disable line-based semantic chunking for long chapters |
-| `--chunk-threshold-lines` | | `100` | Minimum non-empty lines to trigger chunked translation |
+| `--chunk-threshold-lines` | | `85` | Minimum non-empty lines to trigger chunked translation |
 | `--target-chunk-lines` | | `70` | Target line count per chunk |
 | `--auto-update-bible` | | True | Automatically merge newly discovered characters and terms into Novel Bible |
 
@@ -293,24 +301,27 @@ summaries:
 
 ## 🛡️ 7. Enterprise Safety Guards
 
-1. **Sliding-Window Rate Limiter (16K TPM / 60 RPM)**:
+1. **Sliding-Window Rate Limiter (32K TPM / 60 RPM)**:
    - Tracks token and request quotas across a rolling 60-second window.
    - Automatically pauses before API calls to guarantee your quota is never exceeded.
    - On Google API 429 quota exhaustion, performs an intelligent 25s–65s window rollover wait.
-2. **Language Regression Guard**:
+2. **Automatic Fallback Model Guard (429 Failover)**:
+   - When any agent stage encounters HTTP 429 or `RESOURCE_EXHAUSTED` errors, `FallbackChatModel` automatically fails over to the designated `fallback_model` (default: `gemini-3.5-flash-lite`).
+   - Ensures continuous batch translation even during sudden API tier limits.
+3. **Language Regression Guard**:
    - Polisher and Critic verify that outputs match `target_language` using offline Unicode script analysis (`detect_language`).
    - If an LLM attempts to translate back to `source_language`, the regression is immediately rejected and the valid target draft is preserved.
-3. **Best-Candidate Regression Guard**:
+4. **Best-Candidate Regression Guard**:
    - During multi-pass reflection loops, the system tracks the highest-scoring version. If a later loop pass scores lower, the best version is automatically restored.
-4. **Single-File Checkpoints (`.novel/metadata.json`)**:
+5. **Single-File Checkpoints (`.novel/metadata.json`)**:
    - All chapter checkpoints, error traces, and quality audits are stored in a single JSON file.
    - Enables fast directory scanning and instant resume.
-5. **Line-Based Semantic Chunking (16K TPM Rate-Limit Guard)**:
-   - Scans non-empty lines in source chapters. If line count exceeds `chunk_threshold_lines` (default: 100), automatically divides chapters into ~70-line chunks.
+6. **Line-Based Semantic Chunking (32K TPM Rate-Limit Guard)**:
+   - Scans non-empty lines in source chapters. If line count exceeds `chunk_threshold_lines` (default: 85), automatically divides chapters into ~70-line chunks.
    - Snaps to scene break lines (`***`, `---`, `◆◆◆`) and paragraph boundaries while strictly preserving multi-line dialogue quotes (`「...」`, `"..."`).
-   - Keeps individual chunk requests under ~3,500 total tokens (under 25% of the 16,000 TPM limit), completely preventing 60-second sliding-window freezes.
+   - Keeps individual chunk requests under ~3,500 total tokens (under 12% of the 32,000 TPM limit), completely preventing 60-second sliding-window freezes.
    - Passes sliding translation context (last 3 lines of preceding translation) to guarantee zero-anaphora pronoun continuity and character voice.
-6. **Active Chapter Glossary Optimization**:
+7. **Active Chapter Glossary Optimization**:
    - Dynamically filters the Novel Bible glossary to terms actually present in the chapter text before sending prompts to Critic and Polisher.
    - Prevents prompt bloat and eliminates false-positive compliance warnings.
 

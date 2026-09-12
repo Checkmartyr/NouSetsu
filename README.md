@@ -24,18 +24,19 @@
   | **5** | **ChroniclerAgent**<br>*(Chronist)* | `chronicle(...)`<br>`assemble_metadata(...)` | **The Memory Keeper**: Summarizes chapter events for future chapters and archives stats into `.novel/metadata.json`. |
 * **Gemini Interactions API & REST Fallback**: Seamless native support for the new `/v1beta/interactions` endpoint via Google GenAI SDK and HTTP REST fallback, enabling structured interaction steps and thought streaming.
 * **Granular Per-Task & Per-Step Token Tracking**: Complete token metrics (`input_tokens`, `output_tokens`, `thought_tokens`, `cached_tokens`, `total_tokens`) tracked for every chapter task and pipeline step (Extraction, Drafting, Critique passes, Polishing passes, Chronicling), logged in `.novel/metadata.json`, displayed live in the TUI inspector, and rendered in Rich summary tables.
-* **Line-Based Semantic Chunking (Rate-Limit & TPM Guard)**: Intelligently partitions long chapters (>100 lines) into ~70-line chunks along scene breaks (`***`) and dialogue boundaries, passing sliding translation context to maintain character voice and eliminate 16k TPM sliding-window freezes.
+* **Multi-Agent Per-Role Model Routing & Quota Fallback**: Route each pipeline agent to an optimal model (`extractor_model`, `drafter_model`, `critic_model`, `polisher_model`, `chronicler_model`) with automatic fallback on 429 quota exhaustion (`FallbackChatModel`).
+* **Line-Based Semantic Chunking (Rate-Limit & TPM Guard)**: Intelligently partitions long chapters (>85 lines) into ~70-line chunks along scene breaks (`***`, `---`) and paragraph boundaries, passing 3-line sliding translation context to maintain character voice and eliminate 32k TPM sliding-window freezes.
 * **Active Chapter Glossary Optimization**: Filters glossary terms to only those appearing in the active chapter, eliminating input prompt bloat and false-positive compliance warnings.
 * **Domain Skills System (17 Built-in Skills + Markdown Catalogs)**: Automatically activates targeted literary guidelines (e.g. cultivation hierarchies, adventurer guild ranks, 4-character idiom localization, villainess court etiquette) based on novel genre and source language.
 * **Programmatic Language Anti-Regression Guards**: Enforces target-language integrity with offline Unicode script detection, immediately rejecting any model reversion back into source language.
 * **Automated Critic-Polish Reflection Loop**: Automatically loops between `Feinschliff` and `Zensor` to refine prose until both fidelity and style meet strict quality thresholds (`>= 8.5/10`) or hit a configurable loop cap (default 3 loops). Includes an automatic **Best-Candidate Regression Guard** that always saves the highest-scoring version.
-* **Proactive Sliding-Window Rate Limiter (16K TPM / 60 RPM)**: Dual quota management across a rolling 60-second window, backed by offline mixed CJK/Latin token estimation and 25s–65s window rollover cooldowns for Google API 429 quota exhaustion.
+* **Proactive Sliding-Window Rate Limiter (32K TPM / 60 RPM)**: Dual quota management across a rolling 60-second window, backed by offline mixed CJK/Latin token estimation and 25s–65s window rollover cooldowns for Google API 429 quota exhaustion.
 * **Automatic Source Language Detection**: Automatically recognizes Japanese Kanji/Kana, Korean Hangul, and Chinese Hanzi during chapter scanning, removing manual setup barriers.
 * **Thread-Safe Graceful Stop & Resumption**: Cleanly pause or cancel batch processing via `X` shortcut / button in TUI or `SIGINT` (Ctrl+C) in CLI, saving mid-chapter checkpoints (`StageStatus.PAUSED`) without losing progress.
 * **Single Project Metadata Checkpoints (`.novel/metadata.json`)**: All chapter checkpoints, error diagnostics, and quality audit metrics are centralized in a single project file, keeping translated folders clean while enabling instant 1-read directory scanning.
 * **Transient Error Resilience & Backoff**: Exponential backoff retry absorbs Google `500 INTERNAL`, `503`, and `429` rate limits automatically with full stack trace diagnostics.
 * **Folder-to-Folder Batch Automation**: Automatically discovers and naturally sorts chapters (`001.txt`, `ch2.txt`, `ch10.txt`), sequentially translates them while passing state, and skips unaltered completed chapters.
-* **Interactive Terminal UI (TUI)**: Full dual-pane terminal reader built with `textual` and `rich`, featuring synchronized source/target inspection, live checkpoint badges, and an in-terminal Novel Bible editor.
+* **Minimalist Reactive Terminal UI (TUI)**: Distraction-free dashboard built with Textual and Rich, featuring an 85%+ height chapter list with minimal status glyphs (`✓`, `●`, `⏸`, `✕`, `·`), a compact 2-row bottom toolbar (`[▶ Trans] [⚡ Batch] [⏹ Stop]`, `[📖 Bible] [📁 Proj] [✨ New] [⚙ Set]`), an 80% reading viewport, a 4-line progress strip with live active chapter progress (`📖 {chapter} [████░░░░] 50%`), a 5-line checkpoint inspector with human-friendly duration formatting, and an in-terminal Novel Bible editor.
 * **Official Pip Package (`nousetsu`)**: Packaged with PyPA standards with console scripts `nousetsu` and `novel` that automatically open the interactive TUI when launched with no arguments.
 
 ---
@@ -62,7 +63,8 @@ flowchart TD
     end
 
     subgraph Safety_Guards ["3. Enterprise Safety Guards"]
-        RateLimiter["⚡ Sliding-Window Rate Limiter\n(16,000 TPM / 60 RPM + 429 Rollover)"]
+        RateLimiter["⚡ Sliding-Window Rate Limiter\n(32,000 TPM / 60 RPM + 429 Rollover)"]
+        FallbackGuard["🔄 Automatic Quota Fallback\n(FallbackChatModel catches 429 & switches)"]
         StopGuard["🛑 Thread-Safe Stop & Cancel\n(X Key / Ctrl+C -> PAUSED Checkpoint)"]
     end
 
@@ -134,7 +136,7 @@ nousetsu
 ### 1. Initialize a Project
 Create project directories and generate the default **Novel Bible**:
 ```bash
-nousetsu init --title "Reincarnated as a Swordmaster" --source-lang "Japanese" --target-lang "English"
+nousetsu init --title "Ascendance of a Bookworm" --source-lang "English" --target-lang "Thai"
 ```
 
 ### 2. Run Automated Folder-to-Folder Batch
@@ -146,18 +148,24 @@ nousetsu batch --input-dir raw_chapters --output-dir translated_chapters
 **CLI Flags**:
 * `--input-dir`, `-i`: Folder containing raw source chapters (default: `raw_chapters`).
 * `--output-dir`, `-o`: Folder for translated output and metadata (default: `translated_chapters`).
-* `--source-lang`: Source language (e.g., `Japanese`, `Chinese`, `Korean`, or auto-detected).
-* `--target-lang`: Target language (default: `English`).
-* `--model`, `-m`: LLM model name (default: `gemini-2.5-pro`).
+* `--source-lang`: Source language (default: `English`, or auto-detected).
+* `--target-lang`: Target language (default: `Thai`).
+* `--model`, `-m`: Default LLM model name (default: `gemini-3.1-flash-lite`).
+* `--fallback-model`: Global fallback LLM model name (default: `gemini-3.5-flash-lite`).
+* `--extractor-model`: Model override for Entity Extractor Agent (default: `gemini-3.1-flash-lite`).
+* `--drafter-model`: Model override for Context-Aware Drafter Agent (default: `gemini-3.5-flash-lite`).
+* `--critic-model`: Model override for Critique Agent (default: `gemma-4-26b-a4b-it`).
+* `--polisher-model`: Model override for Prose Polisher Agent (default: `gemini-3.5-flash-lite`).
+* `--chronicler-model`: Model override for Chronicler Agent (default: `gemma-4-26b-a4b-it`).
 * `--limit`, `-l`: Maximum number of chapters to process.
 * `--force`, `-f`: Force re-translation even if chapter is already marked completed.
 * `--max-loops`: Maximum review reflection loops per chapter (default: 3, bounds: 1–5).
 * `--quality-threshold`: Target quality score (fidelity & style) to exit review loop early (default: 8.5).
-* `--max-tpm`: Max tokens per minute rate limit quota (default: 16000).
+* `--max-tpm`: Max tokens per minute rate limit quota (default: 32000).
 * `--max-rpm`: Max requests per minute rate limit quota (default: 60).
 * `--interactions / --no-interactions`: Enable or disable Gemini Interactions API (`/v1beta/interactions`) with REST fallback (default: True).
 * `--chunking / --no-chunking`: Enable or disable line-based semantic chunking for long chapters (default: True).
-* `--chunk-threshold-lines`: Line threshold to trigger chunking (default: 100).
+* `--chunk-threshold-lines`: Line threshold to trigger chunking (default: 85).
 * `--target-chunk-lines`: Target line count per chunk (default: 70).
 * `--auto-update-bible / --no-auto-update-bible`: Automatically merge new characters and terms into Novel Bible.
 
@@ -172,7 +180,11 @@ nousetsu skills --agent drafter --genre isekai
 nousetsu tui --input-dir raw_chapters --output-dir translated_chapters
 ```
 
-#### TUI Keyboard Shortcuts
+#### TUI Minimal Dashboard Toolbar & Keyboard Shortcuts
+The minimal dashboard docks action buttons into a compact 2-row toolbar below the chapter list:
+* **Row 1 (Translation Controls)**: `[▶ Trans (T)]`, `[⚡ Batch (B)]`, `[⏹ Stop (X)]`
+* **Row 2 (Project Management)**: `[📖 Bible (E)]`, `[📁 Proj (P)]`, `[✨ New (N)]`, `[⚙ Set (S)]`
+
 | Key | Action | Description |
 |:---:|:---|:---|
 | `T` | **Translate Selected** | Run agentic translation on currently selected chapter |
@@ -181,7 +193,7 @@ nousetsu tui --input-dir raw_chapters --output-dir translated_chapters
 | `P` | **Projects** | Open Project Selector modal to switch active project |
 | `N` | **New Project** | Open Initialize Project modal with title, languages & folder names |
 | `E` | **Novel Bible** | Open in-terminal editor to inspect/add characters & terms |
-| `S` | **Settings** | Configure model, languages, rate limits, review loops, and paths |
+| `S` | **Settings** | Configure model routing, fallback models, rate limits, and chunking |
 | `R` | **Refresh** | Re-scan chapters and reload status badges |
 | `Q` | **Quit** | Exit the TUI application |
 
@@ -258,27 +270,30 @@ platform win32 -- Python 3.13.12, pytest-9.1.1, pluggy-1.6.0
 rootdir: D:\Code\novel_translation_Agent
 configfile: pyproject.toml
 plugins: anyio-4.15.1, langsmith-0.12.4, asyncio-1.4.0
-collected 91 items
+collected 107 items
 
 tests\test_checkpoint.py ....                                            [  4%]
-tests\test_chunker.py ......                                             [ 10%]
-tests\test_drafter_chunking.py .                                         [ 12%]
-tests\test_glossary_filter.py ..                                         [ 14%]
-tests\test_interactions.py ......                                        [ 20%]
-tests\test_language.py ...........                                       [ 32%]
+tests\test_chunker.py ......                                             [  9%]
+tests\test_drafter_chunking.py .                                         [ 10%]
+tests\test_formatting.py .....                                           [ 15%]
+tests\test_glossary_filter.py ..                                         [ 17%]
+tests\test_interactions.py ......                                        [ 22%]
+tests\test_language.py ...........                                       [ 33%]
 tests\test_models.py ...                                                 [ 36%]
-tests\test_polisher_language.py .......                                  [ 43%]
-tests\test_projects.py ....                                              [ 48%]
+tests\test_model_fallback.py ....                                        [ 39%]
+tests\test_polisher_language.py .......                                  [ 46%]
+tests\test_projects.py ....                                              [ 50%]
 tests\test_rate_limiter.py ........                                      [ 57%]
 tests\test_retry.py ....                                                 [ 61%]
-tests\test_review_loop.py ......                                         [ 68%]
-tests\test_runner.py ...                                                 [ 71%]
-tests\test_scanner.py ..                                                 [ 73%]
-tests\test_skills.py .........                                           [ 83%]
-tests\test_stop.py ..                                                    [ 85%]
-tests\test_token_tracking.py ....                                        [ 90%]
-tests\test_tui.py .........                                              [100%]
-============================= 91 passed in 31.60s =============================
+tests\test_review_loop.py ......                                         [ 66%]
+tests\test_runner.py ...                                                 [ 69%]
+tests\test_scanner.py ..                                                 [ 71%]
+tests\test_skills.py .........                                           [ 80%]
+tests\test_step_duration.py ...                                          [ 82%]
+tests\test_stop.py ..                                                    [ 84%]
+tests\test_token_tracking.py ....                                        [ 88%]
+tests\test_tui.py .............                                          [100%]
+============================ 107 passed in 48.92s =============================
 ```
 
 ### 2. End-to-End Batch Validation
@@ -352,7 +367,7 @@ NouSetsu/
 │   │   ├── widgets/                # Reader, Inspector, ProgressPanel, Modals
 │   │   └── app.py                  # Main Textual App
 │   └── utils/                      # Utilities (language detector, sliding window rate limiter)
-├── tests/                          # Automated pytest suite (72 tests across 13 modules)
+├── tests/                          # Automated pytest suite (107 tests across 21 modules)
 ├── main.py                         # Root entry point
 ├── pyproject.toml                  # Dependencies, hatchling build config, console scripts
 └── README.md                       # Repository overview and quickstart

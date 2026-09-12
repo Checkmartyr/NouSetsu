@@ -41,7 +41,9 @@ graph TD
 
     subgraph "Domain Skills & Utility Engine"
         SKILLS["SkillRegistry & Catalog<br>(src/skills/)"]
-        RL["SlidingWindowRateLimiter<br>(src/utils/rate_limiter.py)"]
+        RL["SlidingWindowRateLimiter<br>(32,000 TPM / 60 RPM)"]
+        FALLBACK["FallbackChatModel<br>(Per-Role Routing & 429 Guard)"]
+        CHUNKER["LineSemanticChunker<br>(85-line Threshold)"]
         GENRE["Genre Detection<br>(src/utils/genre.py)"]
         LANG["Language Detection<br>(src/utils/language.py)"]
     end
@@ -57,6 +59,8 @@ graph TD
     WF --> A4
     WF --> A5
     A1 & A2 & A3 & A4 & A5 --> SKILLS
+    A1 & A2 & A3 & A4 & A5 --> FALLBACK
+    A2 & A4 --> CHUNKER
     WF --> RL
     WF --> GENRE
     WF --> LANG
@@ -179,13 +183,17 @@ Active skills are dynamically filtered based on:
 ## 7. Rate Limiting, Safety & Threading
 
 1. **Sliding Window Limiter** ([`src/utils/rate_limiter.py`](file:///D:/Code/novel_translation_Agent/src/utils/rate_limiter.py)):
-   - Enforces a 60-second sliding window for 16,000 TPM and 60 RPM.
+   - Enforces a 60-second sliding window for 32,000 TPM and 60 RPM.
    - Rejects or delays calls exceeding capacity, calculating precise backoff sleep intervals until the window clears.
 2. **Offline Token Estimator**:
    - Accurately counts CJK ideographs, Hangul syllables, Kana characters (1.3x token ratio) and Latin words (1.4x word-to-token ratio) in `<1ms`.
-3. **Window Rollover Backoff**:
-   - Upon encountering upstream HTTP 429 or `RESOURCE_EXHAUSTED` errors, the system sleeps between 25s and 65s before retrying.
-4. **Thread-Safe Cancellation**:
+3. **Window Rollover Backoff & Automatic Model Fallback**:
+   - Upstream HTTP 429 or `RESOURCE_EXHAUSTED` errors trigger `FallbackChatModel` failover from primary model (e.g. `gemini-3.1-flash-lite`) to designated fallback model (e.g. `gemini-3.5-flash-lite`).
+   - Sleep intervals between 25s and 65s allow quota windows to rollover gracefully.
+4. **Line-Based Semantic Chunking** ([`src/utils/chunker.py`](file:///D:/Code/novel_translation_Agent/src/utils/chunker.py)):
+   - Chapters exceeding `chunk_threshold_lines` (default: 85 lines) are partitioned into ~70-line semantic chunks with 3-line overlap.
+   - Drafter and Polisher process chunks sequentially with running context, preventing token truncation.
+5. **Thread-Safe Cancellation**:
    - Supported via `threading.Event` across all worker threads.
    - Triggered via CLI `SIGINT` (Ctrl+C) or TUI `X` shortcut / button.
    - Raises `BatchStoppedException`, halting cleanly and saving `StageStatus.PAUSED` checkpoints.
@@ -200,7 +208,7 @@ All commands should be run using `uv`:
 # Install / sync dependencies
 uv sync
 
-# Run complete test suite (64 tests across 12 modules)
+# Run complete test suite (107 tests across 21 modules)
 uv run pytest
 
 # Run specific test modules

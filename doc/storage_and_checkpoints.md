@@ -60,6 +60,44 @@ flowchart TD
 * **Instant Batch Scanning**: The `ChapterScanner` reads `.novel/metadata.json` once, reducing I/O operations from $O(N)$ file reads to $O(1)$.
 * **Atomic Updates**: Updates to individual chapters are written safely with zero cross-chapter lock contention.
 
+### Document Structure Example (`.novel/metadata.json`)
+```json
+{
+  "schema_version": "1.0",
+  "project_id": "villainess_001",
+  "last_updated": "2026-09-11T12:00:00Z",
+  "chapters": {
+    "001 - Awakening": {
+      "chapter_id": "001 - Awakening",
+      "chapter_num": 1,
+      "source_file": "raw_chapters/001 - Awakening.txt",
+      "source_sha256": "3a7b9c...",
+      "output_file": "translated_chapters/001 - Awakening.md",
+      "stats": {
+        "duration_seconds": 4.1,
+        "input_tokens": 820,
+        "output_tokens": 364,
+        "thought_tokens": 100,
+        "cached_tokens": 0,
+        "total_tokens": 1284,
+        "step_usage": [
+          {"stage": "extracting", "step_name": "Entity Extraction", "iteration": 1, "duration_seconds": 0.52, "model": "gemini-3.1-flash-lite", "usage": {"input_tokens": 200, "output_tokens": 50, "thought_tokens": 0, "cached_tokens": 0, "total_tokens": 250}},
+          {"stage": "drafting", "step_name": "Context-Aware Drafting", "iteration": 1, "duration_seconds": 1.25, "model": "gemini-3.5-flash-lite", "usage": {"input_tokens": 220, "output_tokens": 120, "thought_tokens": 0, "cached_tokens": 0, "total_tokens": 340}},
+          {"stage": "critiquing", "step_name": "Critique Audit (Pass 1)", "iteration": 1, "duration_seconds": 0.88, "model": "gemma-4-26b-a4b-it", "usage": {"input_tokens": 150, "output_tokens": 74, "thought_tokens": 50, "cached_tokens": 0, "total_tokens": 274}},
+          {"stage": "polishing", "step_name": "Prose Polishing (Pass 1)", "iteration": 1, "duration_seconds": 1.10, "model": "gemini-3.5-flash-lite", "usage": {"input_tokens": 180, "output_tokens": 80, "thought_tokens": 50, "cached_tokens": 0, "total_tokens": 310}},
+          {"stage": "chronicling", "step_name": "Lore Chronicling", "iteration": 1, "duration_seconds": 0.35, "model": "gemma-4-26b-a4b-it", "usage": {"input_tokens": 70, "output_tokens": 40, "thought_tokens": 0, "cached_tokens": 0, "total_tokens": 110}}
+        ]
+      },
+      "checkpoint": {
+        "status": "COMPLETED",
+        "last_completed_stage": "CHRONICLING",
+        "retry_count": 0
+      }
+    }
+  }
+}
+```
+
 ---
 
 ## 🔄 Automatic Legacy Migration
@@ -154,7 +192,7 @@ class ErrorLogEntry(BaseModel):
 
 ### Inspected in TUI Checkpoint Inspector
 When a chapter fails, the TUI immediately renders:
-* **Sidebar Badge**: `[bold red][FAILED][/]`
+* **Sidebar Badge**: Minimal red glyph `✕` (`[bold red]✕[/]`)
 * **Inspector Status**: `Status: FAILED (InternalServerError)`
 * **Failed Stage**: `Failed at: CRITIQUE`
 * **Error Message Snippet**: `❌ 500 INTERNAL: Internal error encountered...`
