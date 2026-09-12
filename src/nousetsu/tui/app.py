@@ -5,7 +5,7 @@ from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Button, Footer, Header, Label, ListItem, ListView, Static
+from textual.widgets import Button, Footer, Header, Label, ListItem, ListView, Static, TabbedContent, TabPane
 from nousetsu.batch.runner import BatchRunner
 from nousetsu.batch.scanner import ChapterScanner, ChapterTask
 from nousetsu.models.config import ProjectConfig
@@ -18,6 +18,7 @@ from nousetsu.tui.widgets.progress_panel import ProgressPanel
 from nousetsu.tui.widgets.project_selector_modal import ProjectSelectorModal
 from nousetsu.tui.widgets.reader import DualReaderWidget
 from nousetsu.tui.widgets.settings_modal import SettingsModal
+from nousetsu.tui.widgets.token_analysis import TokenAnalysisWidget
 
 
 class ChapterListItem(ListItem):
@@ -91,6 +92,17 @@ class NovelAgentApp(App):
         width: 1fr;
         height: 1fr;
     }
+    #main-tabs {
+        height: 1fr;
+    }
+    #tab-reader {
+        height: 1fr;
+        padding: 0;
+    }
+    #tab-tokens {
+        height: 1fr;
+        padding: 0;
+    }
     """
 
     BINDINGS = [
@@ -103,6 +115,7 @@ class NovelAgentApp(App):
         Binding("p", "open_project_selector", "Projects"),
         Binding("n", "open_new_project", "New Project"),
         Binding("s", "open_settings", "Settings"),
+        Binding("m", "toggle_token_tab", "Tokens"),
     ]
 
     def __init__(
@@ -159,11 +172,17 @@ class NovelAgentApp(App):
                         yield Button("📁 Proj", variant="default", id="btn_projects", classes="tool-btn")
                         yield Button("✨ New", variant="success", id="btn_new_project", classes="tool-btn")
                         yield Button("⚙ Set", variant="default", id="btn_settings", classes="tool-btn")
+                    with Horizontal(classes="toolbar-row"):
+                        yield Button("📊 Tokens (M)", variant="default", id="btn_tokens", classes="tool-btn")
 
             with Vertical(id="content-pane"):
                 yield ProgressPanel(id="progress_panel")
-                yield DualReaderWidget(id="reader")
-                yield CheckpointInspectorWidget(id="inspector")
+                with TabbedContent(id="main-tabs", initial="tab-reader"):
+                    with TabPane("📖 Reader", id="tab-reader"):
+                        yield DualReaderWidget(id="reader")
+                        yield CheckpointInspectorWidget(id="inspector")
+                    with TabPane("📊 Token Analysis", id="tab-tokens"):
+                        yield TokenAnalysisWidget(self.repo, id="token_analysis")
 
         yield Footer()
 
@@ -197,6 +216,10 @@ class NovelAgentApp(App):
             pass
 
         self.notify(f"Active project: {cfg.title}", severity="information")
+        try:
+            self.query_one("#token_analysis", TokenAnalysisWidget).set_repo(self.repo)
+        except Exception:
+            pass
         self.action_refresh_chapters()
 
     def action_refresh_chapters(self) -> None:
@@ -207,6 +230,11 @@ class NovelAgentApp(App):
 
         for task in self.current_tasks:
             list_view.append(ChapterListItem(task))
+
+        try:
+            self.query_one("#token_analysis", TokenAnalysisWidget).refresh_metrics()
+        except Exception:
+            pass
 
         if self.current_tasks:
             self._select_task(self.current_tasks[0])
@@ -300,6 +328,27 @@ class NovelAgentApp(App):
             self.action_open_new_project()
         elif event.button.id == "btn_settings":
             self.action_open_settings()
+        elif event.button.id == "btn_tokens":
+            self.action_toggle_token_tab()
+
+    def action_toggle_token_tab(self) -> None:
+        """Toggle between reader tab and token analysis tab."""
+        try:
+            tabs = self.query_one("#main-tabs", TabbedContent)
+            if tabs.active == "tab-tokens":
+                tabs.active = "tab-reader"
+            else:
+                tabs.active = "tab-tokens"
+                self.query_one("#token_analysis", TokenAnalysisWidget).refresh_metrics()
+        except Exception:
+            pass
+
+    def on_tabbed_content_tab_activated(self, event: TabbedContent.TabActivated) -> None:
+        if event.pane.id == "tab-tokens":
+            try:
+                self.query_one("#token_analysis", TokenAnalysisWidget).refresh_metrics()
+            except Exception:
+                pass
 
     @work(thread=True)
     def action_translate_selected(self) -> None:

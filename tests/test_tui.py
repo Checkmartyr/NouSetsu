@@ -355,4 +355,49 @@ def test_bare_cli_launches_tui():
             assert mock_tui.called, "cmd_tui should be called automatically on bare nousetsu command"
 
 
+@pytest.mark.asyncio
+async def test_tui_token_analysis_tab():
+    """Verify Token Analysis tab renders properly and can be toggled via hotkey and button."""
+    from textual.widgets import DataTable, TabbedContent
+    from nousetsu.tui.widgets.token_analysis import TokenAnalysisWidget
+
+    app = NovelAgentApp(
+        input_dir="raw_chapters",
+        output_dir="translated_chapters",
+        model_name="mock-model"
+    )
+    async with app.run_test() as pilot:
+        tabs = app.query_one("#main-tabs", TabbedContent)
+        token_widget = app.query_one("#token_analysis", TokenAnalysisWidget)
+        assert tabs is not None
+        assert token_widget is not None
+
+        # Initially on reader tab
+        assert tabs.active == "tab-reader"
+
+        # Toggle tab via keybinding 'm'
+        await pilot.press("m")
+        await pilot.pause()
+        assert tabs.active == "tab-tokens"
+
+        # Verify DataTables exist and have columns
+        table_stages = token_widget.query_one("#table-stages", DataTable)
+        table_models = token_widget.query_one("#table-models", DataTable)
+        table_chapters = token_widget.query_one("#table-chapters", DataTable)
+        assert len(table_stages.columns) == 9
+        assert len(table_models.columns) == 9
+        assert len(table_chapters.columns) == 8
+
+        # Toggle back to reader via toolbar button click
+        btn_tokens = app.query_one("#btn_tokens")
+        await pilot.click(btn_tokens)
+        await pilot.pause()
+        assert tabs.active == "tab-reader"
+
+        # Toggle again via button
+        await pilot.click(btn_tokens)
+        await pilot.pause()
+        assert tabs.active == "tab-tokens"
+
+
 
