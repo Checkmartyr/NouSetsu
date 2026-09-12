@@ -10,7 +10,11 @@ from nousetsu.models.bible import CharacterProfile, GlossaryItem, NovelBible
 from nousetsu.models.metadata import TokenUsage
 from nousetsu.prompts.templates import EXTRACTION_SYSTEM_PROMPT
 from nousetsu.skills.registry import SkillRegistry
-from nousetsu.utils.translation_fallback import is_safety_block_exception
+from nousetsu.utils.translation_fallback import (
+    bisect_text,
+    can_subdivide_text,
+    is_safety_block_exception,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +27,10 @@ class EntityExtractorAgent:
         model_name: str = "gemini-3.1-flash-lite",
         fallback_model: Optional[str] = None,
         procedural_graph: Optional[ProceduralGraph] = None,
-        chunker: Optional[Any] = None
+        chunker: Optional[Any] = None,
+        enable_recursive_subdivision: bool = True,
+        subdivision_min_lines: int = 8,
+        subdivision_max_depth: int = 3,
     ):
         self.model_name = model_name
         self.fallback_model = fallback_model
@@ -32,6 +39,10 @@ class EntityExtractorAgent:
         self.procedural_graph = procedural_graph or get_default_extractor_graph()
         self.chunker = chunker
         self.safety_fallbacks_used: int = 0
+        self.enable_recursive_subdivision = enable_recursive_subdivision
+        self.subdivision_min_lines = subdivision_min_lines
+        self.subdivision_max_depth = subdivision_max_depth
+        self.subdivisions_count: int = 0
 
     @property
     def last_model_used(self) -> str:
@@ -46,7 +57,8 @@ class EntityExtractorAgent:
         genre: Optional[str] = None,
         procedural_graph: Optional[ProceduralGraph] = None,
         known_characters: Optional[List[CharacterProfile]] = None,
-        known_glossary: Optional[List[GlossaryItem]] = None
+        known_glossary: Optional[List[GlossaryItem]] = None,
+        depth: int = 0
     ) -> Tuple[List[CharacterProfile], List[GlossaryItem], List[str]]:
         all_chars = list(bible.characters) + (known_characters or [])
         all_gloss = list(bible.glossary) + (known_glossary or [])
@@ -85,6 +97,53 @@ class EntityExtractorAgent:
             self.last_usage = extract_usage_from_message(response)
         except Exception as e:
             if is_safety_block_exception(e):
+                can_sub = (
+                    self.enable_recursive_subdivision
+                    and depth < self.subdivision_max_depth
+                    and can_subdivide_text(text, min_lines=self.subdivision_min_lines)
+                )
+                if can_sub:
+                    self.subdivisions_count += 1
+                    left_text, right_text = bisect_text(text)
+                    line_count = len([l for l in text.splitlines() if l.strip()])
+                    logger.warning(
+                        f"⚠️ Extractor chunk blocked by safety filter ({line_count} lines) - "
+                        f"subdividing (depth {depth + 1}/{self.subdivision_max_depth})..."
+                    )
+                    c_left, t_left, a_left = self._extract_single_text(
+                        text=left_text,
+                        bible=bible,
+                        genre=genre,
+                        procedural_graph=procedural_graph,
+                        known_characters=known_characters,
+                        known_glossary=known_glossary,
+                        depth=depth + 1
+                    )
+                    c_right, t_right, a_right = self._extract_single_text(
+                        text=right_text,
+                        bible=bible,
+                        genre=genre,
+                        procedural_graph=procedural_graph,
+                        known_characters=(known_characters or []) + c_left,
+                        known_glossary=(known_glossary or []) + t_left,
+                        depth=depth + 1
+                    )
+                    merged_chars = []
+                    seen_names = set()
+                    for c in c_left + c_right:
+                        if c.name.lower() not in seen_names:
+                            seen_names.add(c.name.lower())
+                            merged_chars.append(c)
+
+                    merged_terms = []
+                    seen_sources = set()
+                    for t in t_left + t_right:
+                        if t.source.lower() not in seen_sources:
+                            seen_sources.add(t.source.lower())
+                            merged_terms.append(t)
+
+                    return merged_chars, merged_terms, list(dict.fromkeys(a_left + a_right))
+
                 self.safety_fallbacks_used += 1
                 logger.warning("⚠️ Extractor chunk blocked by safety filter - bypassing entity extraction for this chunk.")
                 return [], [], []

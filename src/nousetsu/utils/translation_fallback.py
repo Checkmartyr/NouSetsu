@@ -1,9 +1,87 @@
 """Translation fallback utility using Google Translate via deep-translator for safety blocked scenes."""
 import logging
 import re
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
+
+
+def bisect_text(text: str) -> Tuple[str, str]:
+    """Split text into two balanced halves prioritized by paragraph break, line break, sentence boundary, or midpoint."""
+    if not text or not text.strip():
+        return text, ""
+    if len(text) <= 1:
+        return text, ""
+
+    mid = len(text) // 2
+
+    # Priority 1: Paragraph break (\r?\n\s*\r?\n) closest to midpoint
+    para_matches = list(re.finditer(r"\r?\n\s*\r?\n", text))
+    best_match = None
+    best_dist = float("inf")
+    for m in para_matches:
+        start, end = m.start(), m.end()
+        left = text[:start].strip()
+        right = text[end:].strip()
+        if left and right:
+            dist = abs(start - mid)
+            if dist < best_dist:
+                best_dist = dist
+                best_match = (left, right)
+    if best_match:
+        return best_match
+
+    # Priority 2: Line break (\r?\n) closest to midpoint
+    line_matches = list(re.finditer(r"\r?\n", text))
+    best_match = None
+    best_dist = float("inf")
+    for m in line_matches:
+        start, end = m.start(), m.end()
+        left = text[:start].strip()
+        right = text[end:].strip()
+        if left and right:
+            dist = abs(start - mid)
+            if dist < best_dist:
+                best_dist = dist
+                best_match = (left, right)
+    if best_match:
+        return best_match
+
+    # Priority 3: Sentence boundary ([。！？] or [.!?] + whitespace) closest to midpoint
+    sentence_pattern = r"([。！？]+[」』\"'\u201d\u2019]?\s*|[.!?]+[\"'\u201d\u2019]?\s+)"
+    sent_matches = list(re.finditer(sentence_pattern, text))
+    best_match = None
+    best_dist = float("inf")
+    for m in sent_matches:
+        split_pos = m.end()
+        left = text[:split_pos].strip()
+        right = text[split_pos:].strip()
+        if left and right:
+            dist = abs(split_pos - mid)
+            if dist < best_dist:
+                best_dist = dist
+                best_match = (left, right)
+    if best_match:
+        return best_match
+
+    # Priority 4: Exact character midpoint if unpunctuated
+    left = text[:mid].strip()
+    right = text[mid:].strip()
+    if not left and right:
+        return text, ""
+    return left, right
+
+
+def can_subdivide_text(text: str, min_lines: int = 8, min_chars: int = 200) -> bool:
+    """Check if text can be recursively subdivided (has enough lines or chars and produces non-empty bisection)."""
+    if not text or not text.strip():
+        return False
+    lines = [l for l in text.splitlines() if l.strip()]
+    if len(lines) < min_lines and len(text.strip()) < min_chars:
+        return False
+    left, right = bisect_text(text)
+    return bool(left.strip()) and bool(right.strip())
+
 
 _LANG_MAP = {
     "japanese": "ja",

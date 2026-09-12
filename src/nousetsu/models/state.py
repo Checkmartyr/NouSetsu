@@ -40,5 +40,6 @@ class TranslationState(BaseModel):
     metadata: Optional[ChapterMetadata] = None
     step_token_records: List[StepTokenUsage] = Field(default_factory=list, description="Granular token metrics recorded for each pipeline step")
     safety_fallbacks_used: int = Field(default=0, description="Number of sensitive scene safety fallbacks triggered")
+    subdivisions_count: int = Field(default=0, description="Number of recursive subdivisions performed for sensitive scenes")
     error: Optional[str] = None
 

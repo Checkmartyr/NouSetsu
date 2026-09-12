@@ -8,7 +8,12 @@ from nousetsu.models.bible import CharacterProfile, ChapterSummary, GlossaryItem
 from nousetsu.models.metadata import TokenUsage
 from nousetsu.prompts.templates import DRAFTING_SYSTEM_PROMPT
 from nousetsu.skills.registry import SkillRegistry
-from nousetsu.utils.translation_fallback import is_safety_block_exception, translate_via_google
+from nousetsu.utils.translation_fallback import (
+    bisect_text,
+    can_subdivide_text,
+    is_safety_block_exception,
+    translate_via_google,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +27,10 @@ class ContextAwareDrafterAgent:
         fallback_model: Optional[str] = None,
         procedural_graph: Optional[ProceduralGraph] = None,
         temperature: Optional[float] = None,
-        polisher: Optional[Any] = None
+        polisher: Optional[Any] = None,
+        enable_recursive_subdivision: bool = True,
+        subdivision_min_lines: int = 8,
+        subdivision_max_depth: int = 4,
     ):
         self.model_name = model_name
         self.fallback_model = fallback_model
@@ -31,6 +39,10 @@ class ContextAwareDrafterAgent:
         self.procedural_graph = procedural_graph or get_default_drafter_graph()
         self.polisher = polisher
         self.safety_fallbacks_used: int = 0
+        self.enable_recursive_subdivision: bool = enable_recursive_subdivision
+        self.subdivision_min_lines: int = subdivision_min_lines
+        self.subdivision_max_depth: int = subdivision_max_depth
+        self.subdivisions_count: int = 0
 
     @property
     def last_model_used(self) -> str:
@@ -152,72 +164,22 @@ class ContextAwareDrafterAgent:
                 **kwargs
             )
 
-        chars_str = "\n".join([
-            f"- {c.name} (Original: {c.original_name}, Gender: {c.gender}, Role: {c.role}): Voice={c.voice}"
-            for c in active_characters
-        ]) or "No explicit character cards registered."
-
-        # Filter glossary to terms actually present in this chapter to avoid prompt bloat
-        relevant_glossary = [
-            item for item in active_glossary
-            if item.source.lower() in source_text.lower()
-        ]
-        eval_glossary = relevant_glossary if relevant_glossary else (active_glossary[:20] if active_glossary else [])
-
-        gloss_str = "\n".join([
-            f"- '{g.source}' MUST be translated as '{g.target}' ({g.category})"
-            for g in eval_glossary
-        ]) or "No specific glossary terms."
-
-        summaries_str = self.format_summaries(rolling_summaries, limit=3, bible=bible)
-
-        custom_rules_str = "\n".join([f"   - {r}" for r in bible.style_guide.custom_rules])
-
-        resolved_genre = genre or getattr(bible, "genre", "general")
-        skills_text = SkillRegistry.get_instance().build_prompt_section(
-            agent="drafter",
-            source_lang=bible.source_language,
-            genre=resolved_genre
+        self.last_usage = TokenUsage()
+        return self._draft_with_recursive_subdivision(
+            chunk_text=source_text,
+            preceding_context="",
+            bible=bible,
+            active_characters=active_characters,
+            active_glossary=active_glossary,
+            rolling_summaries=rolling_summaries,
+            genre=genre,
+            chunk_idx=1,
+            total_chunks=1,
+            depth=0,
+            procedural_graph=procedural_graph,
+            polisher=polisher,
+            **kwargs
         )
-        skills_section = f"\n{skills_text}\n" if skills_text else ""
-
-        # Procedural Graph guidance (Lu et al., arXiv:2609.09153v1)
-        active_pg = procedural_graph or self.procedural_graph
-        guidance_text = active_pg.to_compact_guidance("Scene_Init", max_hops=3) if active_pg else ""
-        procedural_section = f"\n{guidance_text}\n" if guidance_text else ""
-
-        sys_msg = DRAFTING_SYSTEM_PROMPT.format(
-            source_lang=bible.source_language,
-            target_lang=bible.target_language,
-            reading_level=bible.style_guide.target_reading_level,
-            tense=bible.style_guide.tense,
-            pov=bible.style_guide.pov,
-            honorific_mode=bible.style_guide.honorific_mode,
-            custom_rules=custom_rules_str,
-            rolling_summaries=summaries_str,
-            characters=chars_str,
-            glossary=gloss_str,
-            skills_section=skills_section,
-            procedural_guidance=procedural_section
-        )
-
-        try:
-            response = self.llm.invoke([
-                SystemMessage(content=sys_msg),
-                HumanMessage(content=f"Translate this fictional novel excerpt into literary prose:\n\n{source_text}")
-            ])
-            self.last_usage = extract_usage_from_message(response)
-            return extract_text_from_message(response.content)
-        except Exception as e:
-            if is_safety_block_exception(e):
-                return self._handle_safety_fallback(
-                    source_chunk_text=source_text,
-                    bible=bible,
-                    active_glossary=eval_glossary,
-                    genre=resolved_genre,
-                    polisher=polisher
-                )
-            raise
 
     def draft_chunked(
         self,
@@ -294,7 +256,7 @@ class ContextAwareDrafterAgent:
         self.last_usage = total_usage
         return "\n\n".join(drafted_parts)
 
-    def _draft_single_chunk(
+    def _invoke_llm_draft(
         self,
         chunk_text: str,
         preceding_context: str,
@@ -306,7 +268,6 @@ class ContextAwareDrafterAgent:
         chunk_idx: int = 1,
         total_chunks: int = 1,
         procedural_graph: Optional[ProceduralGraph] = None,
-        polisher: Optional[Any] = None,
         **kwargs: Any
     ) -> str:
         chars_str = "\n".join([
@@ -370,20 +331,137 @@ class ContextAwareDrafterAgent:
         user_parts.append(f"{chunk_header}{chunk_text}")
         user_content = "\n\n".join(user_parts)
 
+        response = self.llm.invoke([
+            SystemMessage(content=sys_msg),
+            HumanMessage(content=user_content)
+        ])
+        self.last_usage = self.last_usage.add(extract_usage_from_message(response))
+        return extract_text_from_message(response.content)
+
+    def _draft_with_recursive_subdivision(
+        self,
+        chunk_text: str,
+        preceding_context: str,
+        bible: NovelBible,
+        active_characters: List[CharacterProfile],
+        active_glossary: List[GlossaryItem],
+        rolling_summaries: List[ChapterSummary],
+        genre: Optional[str] = None,
+        chunk_idx: int = 1,
+        total_chunks: int = 1,
+        depth: int = 0,
+        procedural_graph: Optional[ProceduralGraph] = None,
+        polisher: Optional[Any] = None,
+        **kwargs: Any
+    ) -> str:
         try:
-            response = self.llm.invoke([
-                SystemMessage(content=sys_msg),
-                HumanMessage(content=user_content)
-            ])
-            self.last_usage = extract_usage_from_message(response)
-            return extract_text_from_message(response.content)
+            return self._invoke_llm_draft(
+                chunk_text=chunk_text,
+                preceding_context=preceding_context,
+                bible=bible,
+                active_characters=active_characters,
+                active_glossary=active_glossary,
+                rolling_summaries=rolling_summaries,
+                genre=genre,
+                chunk_idx=chunk_idx,
+                total_chunks=total_chunks,
+                procedural_graph=procedural_graph,
+                **kwargs
+            )
         except Exception as e:
-            if is_safety_block_exception(e):
-                return self._handle_safety_fallback(
-                    source_chunk_text=chunk_text,
-                    bible=bible,
-                    active_glossary=eval_glossary,
-                    genre=resolved_genre,
-                    polisher=polisher
+            if not is_safety_block_exception(e):
+                raise
+
+            can_sub = (
+                self.enable_recursive_subdivision
+                and depth < self.subdivision_max_depth
+                and can_subdivide_text(chunk_text, min_lines=self.subdivision_min_lines)
+            )
+
+            if can_sub:
+                self.subdivisions_count += 1
+                left_text, right_text = bisect_text(chunk_text)
+                line_count = len([l for l in chunk_text.splitlines() if l.strip()])
+                logger.warning(
+                    f"⚠️ Safety block on chunk ({line_count} lines) - "
+                    f"subdividing (depth {depth + 1}/{self.subdivision_max_depth})..."
                 )
-            raise
+                left_draft = self._draft_with_recursive_subdivision(
+                    chunk_text=left_text,
+                    preceding_context=preceding_context,
+                    bible=bible,
+                    active_characters=active_characters,
+                    active_glossary=active_glossary,
+                    rolling_summaries=rolling_summaries,
+                    genre=genre,
+                    chunk_idx=chunk_idx,
+                    total_chunks=total_chunks,
+                    depth=depth + 1,
+                    procedural_graph=procedural_graph,
+                    polisher=polisher,
+                    **kwargs
+                )
+                left_tail = "\n".join([l.strip() for l in left_draft.splitlines() if l.strip()][-3:])
+                right_draft = self._draft_with_recursive_subdivision(
+                    chunk_text=right_text,
+                    preceding_context=left_tail,
+                    bible=bible,
+                    active_characters=active_characters,
+                    active_glossary=active_glossary,
+                    rolling_summaries=rolling_summaries,
+                    genre=genre,
+                    chunk_idx=chunk_idx,
+                    total_chunks=total_chunks,
+                    depth=depth + 1,
+                    procedural_graph=procedural_graph,
+                    polisher=polisher,
+                    **kwargs
+                )
+                return f"{left_draft}\n\n{right_draft}"
+
+            # Base case: reached minimum lines or max depth -> isolated sensitive snippet
+            relevant_glossary = [
+                item for item in active_glossary
+                if item.source.lower() in chunk_text.lower()
+            ]
+            eval_glossary = relevant_glossary if relevant_glossary else (active_glossary[:15] if active_glossary else [])
+            resolved_genre = genre or getattr(bible, "genre", "general")
+            return self._handle_safety_fallback(
+                source_chunk_text=chunk_text,
+                bible=bible,
+                active_glossary=eval_glossary,
+                genre=resolved_genre,
+                polisher=polisher
+            )
+
+    def _draft_single_chunk(
+        self,
+        chunk_text: str,
+        preceding_context: str,
+        bible: NovelBible,
+        active_characters: List[CharacterProfile],
+        active_glossary: List[GlossaryItem],
+        rolling_summaries: List[ChapterSummary],
+        genre: Optional[str] = None,
+        chunk_idx: int = 1,
+        total_chunks: int = 1,
+        procedural_graph: Optional[ProceduralGraph] = None,
+        polisher: Optional[Any] = None,
+        **kwargs: Any
+    ) -> str:
+        self.last_usage = TokenUsage()
+        return self._draft_with_recursive_subdivision(
+            chunk_text=chunk_text,
+            preceding_context=preceding_context,
+            bible=bible,
+            active_characters=active_characters,
+            active_glossary=active_glossary,
+            rolling_summaries=rolling_summaries,
+            genre=genre,
+            chunk_idx=chunk_idx,
+            total_chunks=total_chunks,
+            depth=0,
+            procedural_graph=procedural_graph,
+            polisher=polisher,
+            **kwargs
+        )

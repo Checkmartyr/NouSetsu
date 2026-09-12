@@ -126,7 +126,8 @@ class ChroniclerAgent:
         polished_text: str,
         status: StageStatus = StageStatus.COMPLETED,
         step_usage: Optional[List[StepTokenUsage]] = None,
-        safety_fallbacks_used: int = 0
+        safety_fallbacks_used: int = 0,
+        subdivisions_count: int = 0
     ) -> ChapterMetadata:
         artifacts = StageArtifacts(
             extracted_terms=active_glossary,
@@ -134,7 +135,8 @@ class ChroniclerAgent:
             draft_text=draft_text,
             critique_notes=critique_notes,
             polished_text=polished_text,
-            safety_fallbacks_used=safety_fallbacks_used
+            safety_fallbacks_used=safety_fallbacks_used,
+            subdivisions_count=subdivisions_count
         )
 
         checkpoint = CheckpointData(
@@ -169,7 +171,8 @@ class ChroniclerAgent:
             total_tokens=total_tokens,
             duration_seconds=round(duration_seconds, 2),
             step_usage=step_records,
-            safety_fallbacks_used=safety_fallbacks_used
+            safety_fallbacks_used=safety_fallbacks_used,
+            subdivisions_count=subdivisions_count
         )
 
         return ChapterMetadata(

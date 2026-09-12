@@ -34,6 +34,9 @@ class ProjectConfig(BaseModel):
     target_chunk_lines: int = Field(default=70, description="Target line count per chunk")
     chunk_overlap_lines: int = Field(default=3, description="Lines of preceding translated context passed to next chunk")
     cross_folder_summaries: bool = Field(default=True, description="Enable rolling context backfill across sequential folders")
+    safety_recursive_subdivision: bool = Field(default=True, description="Enable recursive bisection of safety-blocked chunks")
+    safety_subdivision_min_lines: int = Field(default=8, description="Minimum non-empty lines before terminating subdivision")
+    safety_subdivision_max_depth: int = Field(default=4, description="Maximum recursion depth for bisection")
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     def get_raw_path(self, base_dir: Path) -> Path:

@@ -151,7 +151,10 @@ class BatchRunner:
             enable_chunking=resolved_chunking,
             chunk_threshold_lines=resolved_chunk_thresh,
             target_chunk_lines=resolved_target_lines,
-            chunk_overlap_lines=resolved_overlap_lines
+            chunk_overlap_lines=resolved_overlap_lines,
+            safety_recursive_subdivision=getattr(cfg, "safety_recursive_subdivision", True),
+            safety_subdivision_min_lines=getattr(cfg, "safety_subdivision_min_lines", 8),
+            safety_subdivision_max_depth=getattr(cfg, "safety_subdivision_max_depth", 4)
         )
         self.auto_update_bible = auto_update_bible if auto_update_bible is not None else cfg.auto_update_bible
         self.stop_event = threading.Event()
@@ -267,6 +270,8 @@ class BatchRunner:
                         initial_state.best_audit = task.existing_meta.quality_audit
                     if getattr(artifacts, "safety_fallbacks_used", 0):
                         initial_state.safety_fallbacks_used = artifacts.safety_fallbacks_used
+                    if getattr(artifacts, "subdivisions_count", 0):
+                        initial_state.subdivisions_count = artifacts.subdivisions_count
 
                 try:
                     # Run LangGraph pipeline with stage notification
@@ -348,7 +353,8 @@ class BatchRunner:
                                 draft_text=draft_text,
                                 critique_notes=critique_notes,
                                 polished_text=polished_text,
-                                safety_fallbacks_used=getattr(last_st, "safety_fallbacks_used", 0)
+                                safety_fallbacks_used=getattr(last_st, "safety_fallbacks_used", 0),
+                                subdivisions_count=getattr(last_st, "subdivisions_count", 0)
                             )
                         )
                     )
@@ -425,7 +431,8 @@ class BatchRunner:
                         draft_text=saved_draft,
                         critique_notes=saved_notes,
                         polished_text=saved_polish,
-                        safety_fallbacks_used=getattr(last_st, "safety_fallbacks_used", 0)
+                        safety_fallbacks_used=getattr(last_st, "safety_fallbacks_used", 0),
+                        subdivisions_count=getattr(last_st, "subdivisions_count", 0)
                     )
                     if completed_stage != PipelineStage.NONE:
                         failed_meta.checkpoint.last_completed_stage = completed_stage

@@ -42,7 +42,10 @@ class NovelTranslationWorkflow:
         target_chunk_lines: int = 70,
         chunk_overlap_lines: int = 3,
         extractor_pg: Optional[Any] = None,
-        drafter_pg: Optional[Any] = None
+        drafter_pg: Optional[Any] = None,
+        safety_recursive_subdivision: bool = True,
+        safety_subdivision_min_lines: int = 8,
+        safety_subdivision_max_depth: int = 4
     ):
         effective_model = model_name or os.environ.get("NOVEL_MODEL") or os.environ.get("DEFAULT_MODEL") or "gemini-3.1-flash-lite"
         self.model_name = effective_model
@@ -60,6 +63,9 @@ class NovelTranslationWorkflow:
         self.max_review_loops = max_review_loops
         self.quality_threshold = quality_threshold
         self.enable_chunking = enable_chunking
+        self.safety_recursive_subdivision = safety_recursive_subdivision
+        self.safety_subdivision_min_lines = safety_subdivision_min_lines
+        self.safety_subdivision_max_depth = safety_subdivision_max_depth
         self.chunker = (
             LineSemanticChunker(
                 threshold_lines=chunk_threshold_lines,
@@ -74,17 +80,26 @@ class NovelTranslationWorkflow:
             model_name=self.extractor_model,
             fallback_model=self.fallback_model,
             procedural_graph=extractor_pg,
-            chunker=self.chunker
+            chunker=self.chunker,
+            enable_recursive_subdivision=self.safety_recursive_subdivision,
+            subdivision_min_lines=self.safety_subdivision_min_lines,
+            subdivision_max_depth=self.safety_subdivision_max_depth
         )
         self.drafter = ContextAwareDrafterAgent(
             model_name=self.drafter_model,
             fallback_model=self.fallback_model,
-            procedural_graph=drafter_pg
+            procedural_graph=drafter_pg,
+            enable_recursive_subdivision=self.safety_recursive_subdivision,
+            subdivision_min_lines=self.safety_subdivision_min_lines,
+            subdivision_max_depth=self.safety_subdivision_max_depth
         )
         self.critic = CritiqueAgent(
             model_name=self.critic_model,
             fallback_model=self.fallback_model,
-            chunker=self.chunker
+            chunker=self.chunker,
+            enable_recursive_subdivision=self.safety_recursive_subdivision,
+            subdivision_min_lines=self.safety_subdivision_min_lines,
+            subdivision_max_depth=self.safety_subdivision_max_depth
         )
         self.polisher = PolishingAgent(
             model_name=self.polisher_model,
@@ -249,6 +264,10 @@ class NovelTranslationWorkflow:
         total_safety_used = state.safety_fallbacks_used + ext_safety_used
         self.extractor.safety_fallbacks_used = 0
 
+        ext_subdivisions = getattr(self.extractor, "subdivisions_count", 0)
+        total_subdivisions = state.subdivisions_count + ext_subdivisions
+        self.extractor.subdivisions_count = 0
+
         return {
             "current_stage": PipelineStage.EXTRACTION,
             "extracted_characters": new_chars,
@@ -257,7 +276,8 @@ class NovelTranslationWorkflow:
             "active_glossary": all_glossary,
             "active_skills": updated_skills,
             "step_token_records": updated_token_records,
-            "safety_fallbacks_used": total_safety_used
+            "safety_fallbacks_used": total_safety_used,
+            "subdivisions_count": total_subdivisions
         }
 
     def _draft_step(self, state: TranslationState) -> Dict[str, Any]:
@@ -345,12 +365,17 @@ class NovelTranslationWorkflow:
         total_safety_used = state.safety_fallbacks_used + drafter_safety_used
         self.drafter.safety_fallbacks_used = 0
 
+        drafter_subdivisions = getattr(self.drafter, "subdivisions_count", 0)
+        total_subdivisions = state.subdivisions_count + drafter_subdivisions
+        self.drafter.subdivisions_count = 0
+
         return {
             "current_stage": PipelineStage.DRAFTING,
             "draft_text": draft,
             "active_skills": updated_skills,
             "step_token_records": updated_token_records,
-            "safety_fallbacks_used": total_safety_used
+            "safety_fallbacks_used": total_safety_used,
+            "subdivisions_count": total_subdivisions
         }
 
     def _critique_step(self, state: TranslationState) -> Dict[str, Any]:
@@ -471,6 +496,10 @@ class NovelTranslationWorkflow:
         total_safety_used = state.safety_fallbacks_used + crt_safety_used
         self.critic.safety_fallbacks_used = 0
 
+        crt_subdivisions = getattr(self.critic, "subdivisions_count", 0)
+        total_subdivisions = state.subdivisions_count + crt_subdivisions
+        self.critic.subdivisions_count = 0
+
         if total_safety_used > 0:
             fallback_warn = f"⚠️ Sensitive scene safety block triggered fallback for {total_safety_used} chunk(s)."
             if fallback_warn not in audit.warnings:
@@ -488,7 +517,8 @@ class NovelTranslationWorkflow:
             "best_polished_text": best_text,
             "active_skills": updated_skills,
             "step_token_records": updated_token_records,
-            "safety_fallbacks_used": total_safety_used
+            "safety_fallbacks_used": total_safety_used,
+            "subdivisions_count": total_subdivisions
         }
 
     def _polish_step(self, state: TranslationState) -> Dict[str, Any]:
@@ -709,6 +739,10 @@ class NovelTranslationWorkflow:
         total_safety_used = state.safety_fallbacks_used + chr_safety_used
         self.chronicler.safety_fallbacks_used = 0
 
+        chr_subdivisions = getattr(self.chronicler, "subdivisions_count", 0)
+        total_subdivisions = state.subdivisions_count + chr_subdivisions
+        self.chronicler.subdivisions_count = 0
+
         if total_safety_used > 0:
             fallback_warn = f"⚠️ Sensitive scene safety block triggered fallback for {total_safety_used} chunk(s)."
             if fallback_warn not in final_audit.warnings:
@@ -732,7 +766,8 @@ class NovelTranslationWorkflow:
             polished_text=final_text,
             status=StageStatus.COMPLETED,
             step_usage=all_token_records,
-            safety_fallbacks_used=total_safety_used
+            safety_fallbacks_used=total_safety_used,
+            subdivisions_count=total_subdivisions
         )
 
         updated_skills = dict(state.active_skills)
@@ -746,7 +781,8 @@ class NovelTranslationWorkflow:
             "metadata": metadata,
             "active_skills": updated_skills,
             "step_token_records": all_token_records,
-            "safety_fallbacks_used": total_safety_used
+            "safety_fallbacks_used": total_safety_used,
+            "subdivisions_count": total_subdivisions
         }
 
     def run(
@@ -764,6 +800,8 @@ class NovelTranslationWorkflow:
         for agent_inst in [self.extractor, self.drafter, self.critic, self.polisher, self.chronicler]:
             if hasattr(agent_inst, "safety_fallbacks_used"):
                 agent_inst.safety_fallbacks_used = 0
+            if hasattr(agent_inst, "subdivisions_count"):
+                agent_inst.subdivisions_count = 0
 
         # Auto-resolve genre if general or unspecified
         if not initial_state.genre or initial_state.genre == "general":

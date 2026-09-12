@@ -10,7 +10,11 @@ from nousetsu.models.metadata import QualityAudit, TokenUsage
 from nousetsu.prompts.templates import CRITIQUE_SYSTEM_PROMPT
 from nousetsu.skills.registry import SkillRegistry
 from nousetsu.utils.language import detect_language
-from nousetsu.utils.translation_fallback import is_safety_block_exception
+from nousetsu.utils.translation_fallback import (
+    bisect_text,
+    can_subdivide_text,
+    is_safety_block_exception,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +26,10 @@ class CritiqueAgent:
         self,
         model_name: str = "gemma-4-26b-a4b-it",
         fallback_model: Optional[str] = None,
-        chunker: Optional[Any] = None
+        chunker: Optional[Any] = None,
+        enable_recursive_subdivision: bool = True,
+        subdivision_min_lines: int = 8,
+        subdivision_max_depth: int = 3,
     ):
         self.model_name = model_name
         self.fallback_model = fallback_model
@@ -30,6 +37,10 @@ class CritiqueAgent:
         self.last_usage: TokenUsage = TokenUsage()
         self.chunker = chunker
         self.safety_fallbacks_used: int = 0
+        self.enable_recursive_subdivision = enable_recursive_subdivision
+        self.subdivision_min_lines = subdivision_min_lines
+        self.subdivision_max_depth = subdivision_max_depth
+        self.subdivisions_count: int = 0
 
     @property
     def last_model_used(self) -> str:
@@ -101,7 +112,8 @@ class CritiqueAgent:
         active_glossary: List[GlossaryItem],
         genre: Optional[str] = None,
         chunk_idx: int = 1,
-        total_chunks: int = 1
+        total_chunks: int = 1,
+        depth: int = 0
     ) -> Tuple[QualityAudit, str]:
         # Filter glossary to terms actually present in this chapter to avoid prompt bloat
         relevant_glossary = [
@@ -144,6 +156,59 @@ class CritiqueAgent:
             self.last_usage = extract_usage_from_message(response)
         except Exception as e:
             if is_safety_block_exception(e):
+                can_sub = (
+                    self.enable_recursive_subdivision
+                    and depth < self.subdivision_max_depth
+                    and (
+                        can_subdivide_text(source_text, min_lines=self.subdivision_min_lines)
+                        or can_subdivide_text(draft_text, min_lines=self.subdivision_min_lines)
+                    )
+                )
+                if can_sub:
+                    self.subdivisions_count += 1
+                    s_left, s_right = bisect_text(source_text) if can_subdivide_text(source_text, min_lines=2, min_chars=20) else (source_text, source_text)
+                    d_left, d_right = bisect_text(draft_text) if can_subdivide_text(draft_text, min_lines=2, min_chars=20) else (draft_text, draft_text)
+                    line_count = len([l for l in draft_text.splitlines() if l.strip()])
+                    logger.warning(
+                        f"⚠️ Sensitive scene safety block in critique ({line_count} lines) - "
+                        f"subdividing (depth {depth + 1}/{self.subdivision_max_depth})..."
+                    )
+                    audit_left, notes_left = self._evaluate_single(
+                        source_text=s_left,
+                        draft_text=d_left,
+                        bible=bible,
+                        active_characters=active_characters,
+                        active_glossary=active_glossary,
+                        genre=genre,
+                        chunk_idx=chunk_idx,
+                        total_chunks=total_chunks,
+                        depth=depth + 1
+                    )
+                    audit_right, notes_right = self._evaluate_single(
+                        source_text=s_right,
+                        draft_text=d_right,
+                        bible=bible,
+                        active_characters=active_characters,
+                        active_glossary=active_glossary,
+                        genre=genre,
+                        chunk_idx=chunk_idx,
+                        total_chunks=total_chunks,
+                        depth=depth + 1
+                    )
+                    combined_fid = round((audit_left.fidelity_score + audit_right.fidelity_score) / 2.0, 1)
+                    combined_sty = round((audit_left.style_score + audit_right.style_score) / 2.0, 1)
+                    combined_glo = round((audit_left.glossary_compliance_pct + audit_right.glossary_compliance_pct) / 2.0, 1)
+                    combined_warn = list(dict.fromkeys(audit_left.warnings + audit_right.warnings))
+                    combined_audit = QualityAudit(
+                        fidelity_score=combined_fid,
+                        style_score=combined_sty,
+                        glossary_compliance_pct=combined_glo,
+                        warnings=combined_warn,
+                        passed=(combined_fid >= 7.5 and combined_sty >= 7.5)
+                    )
+                    combined_notes = f"{notes_left} {notes_right}".strip()
+                    return combined_audit, combined_notes
+
                 self.safety_fallbacks_used += 1
                 logger.warning("⚠️ Sensitive scene safety block bypassed during critique.")
                 return QualityAudit(
