@@ -16,11 +16,12 @@ class ContextAwareDrafterAgent:
         self,
         model_name: str = "gemini-3.5-flash-lite",
         fallback_model: Optional[str] = None,
-        procedural_graph: Optional[ProceduralGraph] = None
+        procedural_graph: Optional[ProceduralGraph] = None,
+        temperature: Optional[float] = None
     ):
         self.model_name = model_name
         self.fallback_model = fallback_model
-        self.llm = get_llm(model_name=model_name, fallback_model=fallback_model, temperature=0.3)
+        self.llm = get_llm(model_name=model_name, fallback_model=fallback_model, temperature=temperature)
         self.last_usage: TokenUsage = TokenUsage()
         self.procedural_graph = procedural_graph or get_default_drafter_graph()
 

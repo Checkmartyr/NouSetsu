@@ -202,7 +202,7 @@ class GeminiInteractionsChatModel(BaseChatModel):
     """LangChain BaseChatModel adapter powered by Google Gemini Interactions API."""
 
     model_name: str = "gemini-3.1-flash-lite"
-    temperature: float = 0.3
+    temperature: float = 1.0
     api_key: Optional[str] = None
     timeout: float = 180.0
     client: Optional[GeminiInteractionsClient] = None

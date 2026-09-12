@@ -218,7 +218,7 @@ class FallbackChatModel(BaseChatModel):
     """Wraps primary and fallback models, automatically switching on HTTP 429 quota exhaustion."""
     def __init__(self, primary: BaseChatModel, fallback: BaseChatModel)
 
-def get_llm(model_name: str, fallback_model: Optional[str] = None, temperature: float = 0.3) -> BaseChatModel:
+def get_llm(model_name: str, fallback_model: Optional[str] = None, temperature: float = 1.0) -> BaseChatModel:
     """Factory returning primary LLM wrapped with FallbackChatModel if fallback_model specified."""
 
 def extract_text_from_message(content: Any) -> str:

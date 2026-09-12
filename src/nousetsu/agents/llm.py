@@ -93,6 +93,7 @@ class MockNovelLLM(BaseChatModel):
     """Deterministic mock LLM for testing without external API keys."""
 
     model_name: str = "mock-novel-llm"
+    temperature: float = 1.0
 
     def _generate(self, messages: list[BaseMessage], stop: Optional[list[str]] = None, **kwargs: Any) -> ChatResult:
         last_msg = messages[-1].content if messages else ""
@@ -331,14 +332,27 @@ class FallbackChatModel(BaseChatModel):
             return res
 
 
+def _resolve_temperature(temp: Optional[float] = None) -> float:
+    if temp is not None:
+        return float(temp)
+    env_temp = os.environ.get("NOVEL_TEMPERATURE")
+    if env_temp:
+        try:
+            return float(env_temp)
+        except (ValueError, TypeError):
+            pass
+    return 1.0
+
+
 def _create_single_llm(
     model_name: str = "gemini-3.1-flash-lite",
-    temperature: float = 0.3,
+    temperature: Optional[float] = None,
     use_interactions: Optional[bool] = None
 ) -> BaseChatModel:
     """Instantiate a single LLM instance."""
+    resolved_temp = _resolve_temperature(temperature)
     if model_name.startswith("mock"):
-        return MockNovelLLM(model_name=model_name)
+        return MockNovelLLM(model_name=model_name, temperature=resolved_temp)
 
     import dotenv
     dotenv.load_dotenv()
@@ -355,7 +369,7 @@ def _create_single_llm(
                 from nousetsu.agents.interactions import GeminiInteractionsChatModel
                 return GeminiInteractionsChatModel(
                     model_name=model_name,
-                    temperature=temperature,
+                    temperature=resolved_temp,
                     api_key=api_key
                 )
             except Exception:
@@ -366,7 +380,7 @@ def _create_single_llm(
             return ChatGoogleGenerativeAI(
                 model=model_name,
                 google_api_key=api_key,
-                temperature=temperature,
+                temperature=resolved_temp,
                 max_retries=5,
                 timeout=180
             )
@@ -377,25 +391,26 @@ def _create_single_llm(
     if openai_key and ("gpt" in model_name or "o1" in model_name):
         try:
             from langchain_openai import ChatOpenAI
-            return ChatOpenAI(model=model_name, api_key=openai_key, temperature=temperature)
+            return ChatOpenAI(model=model_name, api_key=openai_key, temperature=resolved_temp)
         except Exception:
             pass
 
     # Fallback to deterministic mock if no key or provider fails
-    return MockNovelLLM(model_name=model_name)
+    return MockNovelLLM(model_name=model_name, temperature=resolved_temp)
 
 
 def get_llm(
     model_name: str = "gemini-3.1-flash-lite",
-    temperature: float = 0.3,
+    temperature: Optional[float] = None,
     use_interactions: Optional[bool] = None,
     fallback_model: Optional[str] = None,
     on_fallback: Optional[Callable[[str, Exception], None]] = None
 ) -> BaseChatModel:
     """Factory to instantiate appropriate LLM, optionally wrapped with automatic fallback support."""
+    resolved_temp = _resolve_temperature(temperature)
     primary_llm = _create_single_llm(
         model_name=model_name,
-        temperature=temperature,
+        temperature=resolved_temp,
         use_interactions=use_interactions
     )
 
@@ -403,7 +418,7 @@ def get_llm(
     if clean_fallback and clean_fallback != model_name:
         fallback_llm = _create_single_llm(
             model_name=clean_fallback,
-            temperature=temperature,
+            temperature=resolved_temp,
             use_interactions=use_interactions
         )
         return FallbackChatModel(

@@ -92,3 +92,42 @@ def test_initialize_project_does_not_save_hardcoded_models(tmp_path: Path):
     loaded_cfg = repo.load_config()
     assert loaded_cfg.model_name is None
     assert loaded_cfg.get_model_name() is not None
+
+
+def test_default_temperature_and_env_override(monkeypatch):
+    from nousetsu.agents.llm import get_llm
+    from nousetsu.agents.drafter import ContextAwareDrafterAgent
+    from nousetsu.agents.polisher import PolishingAgent
+
+    # Case 1: Unset NOVEL_TEMPERATURE defaults to 1.0
+    monkeypatch.delenv("NOVEL_TEMPERATURE", raising=False)
+    llm1 = get_llm(model_name="mock-test")
+    assert getattr(llm1, "temperature", None) == 1.0
+
+    drafter1 = ContextAwareDrafterAgent(model_name="mock-drafter")
+    assert getattr(drafter1.llm, "temperature", None) == 1.0
+
+    polisher1 = PolishingAgent(model_name="mock-polisher")
+    assert getattr(polisher1.llm, "temperature", None) == 1.0
+
+    # Case 2: NOVEL_TEMPERATURE environment variable overrides default
+    monkeypatch.setenv("NOVEL_TEMPERATURE", "0.85")
+    llm2 = get_llm(model_name="mock-test")
+    assert getattr(llm2, "temperature", None) == 0.85
+
+    drafter2 = ContextAwareDrafterAgent(model_name="mock-drafter")
+    assert getattr(drafter2.llm, "temperature", None) == 0.85
+
+    polisher2 = PolishingAgent(model_name="mock-polisher")
+    assert getattr(polisher2.llm, "temperature", None) == 0.85
+
+    # Case 3: Explicit argument overrides environment variable
+    llm3 = get_llm(model_name="mock-test", temperature=0.42)
+    assert getattr(llm3, "temperature", None) == 0.42
+
+    drafter3 = ContextAwareDrafterAgent(model_name="mock-drafter", temperature=0.55)
+    assert getattr(drafter3.llm, "temperature", None) == 0.55
+
+    polisher3 = PolishingAgent(model_name="mock-polisher", temperature=0.65)
+    assert getattr(polisher3.llm, "temperature", None) == 0.65
+

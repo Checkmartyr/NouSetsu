@@ -12,10 +12,15 @@ from nousetsu.utils.language import detect_language
 class PolishingAgent:
     """Refines drafted prose into natural, immersive literary target-language fiction based on critique notes."""
 
-    def __init__(self, model_name: str = "gemini-3.5-flash-lite", fallback_model: Optional[str] = None):
+    def __init__(
+        self,
+        model_name: str = "gemini-3.5-flash-lite",
+        fallback_model: Optional[str] = None,
+        temperature: Optional[float] = None
+    ):
         self.model_name = model_name
         self.fallback_model = fallback_model
-        self.llm = get_llm(model_name=model_name, fallback_model=fallback_model, temperature=0.3)
+        self.llm = get_llm(model_name=model_name, fallback_model=fallback_model, temperature=temperature)
         self.last_usage: TokenUsage = TokenUsage()
 
     @property
