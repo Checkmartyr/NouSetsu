@@ -134,6 +134,7 @@ class TranslationStats(BaseModel):
     total_tokens: int = Field(default=0, description="Cumulative total tokens across all steps")
     duration_seconds: float = Field(default=0.0)
     step_usage: List[StepTokenUsage] = Field(default_factory=list, description="Per-step breakdown of token usage")
+    safety_fallbacks_used: int = Field(default=0, description="Number of sensitive scene safety fallbacks triggered")
 
 
 class QualityAudit(BaseModel):

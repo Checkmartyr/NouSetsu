@@ -1,5 +1,6 @@
 """Entity and terminology extraction agent."""
 import json
+import logging
 import re
 from typing import Any, List, Optional, Tuple
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -9,6 +10,9 @@ from nousetsu.models.bible import CharacterProfile, GlossaryItem, NovelBible
 from nousetsu.models.metadata import TokenUsage
 from nousetsu.prompts.templates import EXTRACTION_SYSTEM_PROMPT
 from nousetsu.skills.registry import SkillRegistry
+from nousetsu.utils.translation_fallback import is_safety_block_exception
+
+logger = logging.getLogger(__name__)
 
 
 class EntityExtractorAgent:
@@ -72,11 +76,17 @@ class EntityExtractorAgent:
         )
 
         # Analytical task framing to avoid AI safety false positives on novel excerpts
-        response = self.llm.invoke([
-            SystemMessage(content=sys_msg),
-            HumanMessage(content=f"Extract fictional characters, factions, and world terminology from this novel excerpt:\n{text[:100000]}")
-        ])
-        self.last_usage = extract_usage_from_message(response)
+        try:
+            response = self.llm.invoke([
+                SystemMessage(content=sys_msg),
+                HumanMessage(content=f"Extract fictional characters, factions, and world terminology from this novel excerpt:\n{text[:100000]}")
+            ])
+            self.last_usage = extract_usage_from_message(response)
+        except Exception as e:
+            if is_safety_block_exception(e):
+                logger.warning("⚠️ Extractor chunk blocked by safety filter - bypassing entity extraction for this chunk.")
+                return [], [], []
+            raise
 
         raw_content = extract_text_from_message(response.content)
         # Extract JSON substring if wrapped in markdown code blocks

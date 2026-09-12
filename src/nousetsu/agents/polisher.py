@@ -1,4 +1,5 @@
 """Literary prose polisher and style editor agent."""
+import logging
 from typing import Any, Callable, List, Optional
 from langchain_core.messages import HumanMessage, SystemMessage
 from nousetsu.agents.llm import extract_text_from_message, extract_usage_from_message, get_llm
@@ -7,6 +8,9 @@ from nousetsu.models.metadata import TokenUsage
 from nousetsu.prompts.templates import POLISHING_SYSTEM_PROMPT
 from nousetsu.skills.registry import SkillRegistry
 from nousetsu.utils.language import detect_language
+from nousetsu.utils.translation_fallback import is_safety_block_exception
+
+logger = logging.getLogger(__name__)
 
 
 class PolishingAgent:
@@ -94,11 +98,17 @@ class PolishingAgent:
         )
         user_content = "\n\n".join(user_parts)
 
-        response = self.llm.invoke([
-            SystemMessage(content=sys_msg),
-            HumanMessage(content=user_content)
-        ])
-        self.last_usage = extract_usage_from_message(response)
+        try:
+            response = self.llm.invoke([
+                SystemMessage(content=sys_msg),
+                HumanMessage(content=user_content)
+            ])
+            self.last_usage = extract_usage_from_message(response)
+        except Exception as e:
+            if is_safety_block_exception(e):
+                logger.warning("⚠️ Polisher blocked by safety filter - retaining draft text.")
+                return draft_text
+            raise
 
         text = extract_text_from_message(response.content).strip()
         if text.startswith("```"):
@@ -245,11 +255,17 @@ class PolishingAgent:
         user_parts.append(f"{chunk_header}{chunk_draft}")
         user_content = "\n\n".join(user_parts)
 
-        response = self.llm.invoke([
-            SystemMessage(content=sys_msg),
-            HumanMessage(content=user_content)
-        ])
-        self.last_usage = extract_usage_from_message(response)
+        try:
+            response = self.llm.invoke([
+                SystemMessage(content=sys_msg),
+                HumanMessage(content=user_content)
+            ])
+            self.last_usage = extract_usage_from_message(response)
+        except Exception as e:
+            if is_safety_block_exception(e):
+                logger.warning("⚠️ Polisher chunk blocked by safety filter - retaining chunk draft.")
+                return chunk_draft
+            raise
 
         text = extract_text_from_message(response.content).strip()
         if text.startswith("```"):

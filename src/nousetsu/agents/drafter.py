@@ -1,4 +1,5 @@
 """Context-aware novelistic translation drafter agent."""
+import logging
 from typing import Any, Callable, List, Optional
 from langchain_core.messages import HumanMessage, SystemMessage
 from nousetsu.agents.llm import extract_text_from_message, extract_usage_from_message, get_llm
@@ -7,6 +8,9 @@ from nousetsu.models.bible import CharacterProfile, ChapterSummary, GlossaryItem
 from nousetsu.models.metadata import TokenUsage
 from nousetsu.prompts.templates import DRAFTING_SYSTEM_PROMPT
 from nousetsu.skills.registry import SkillRegistry
+from nousetsu.utils.translation_fallback import is_safety_block_exception, translate_via_google
+
+logger = logging.getLogger(__name__)
 
 
 class ContextAwareDrafterAgent:
@@ -17,13 +21,16 @@ class ContextAwareDrafterAgent:
         model_name: str = "gemini-3.5-flash-lite",
         fallback_model: Optional[str] = None,
         procedural_graph: Optional[ProceduralGraph] = None,
-        temperature: Optional[float] = None
+        temperature: Optional[float] = None,
+        polisher: Optional[Any] = None
     ):
         self.model_name = model_name
         self.fallback_model = fallback_model
         self.llm = get_llm(model_name=model_name, fallback_model=fallback_model, temperature=temperature)
         self.last_usage: TokenUsage = TokenUsage()
         self.procedural_graph = procedural_graph or get_default_drafter_graph()
+        self.polisher = polisher
+        self.safety_fallbacks_used: int = 0
 
     @property
     def last_model_used(self) -> str:
@@ -66,6 +73,49 @@ class ContextAwareDrafterAgent:
 
         return "## HIERARCHICAL NARRATIVE CONTEXT:\n" + "\n\n".join(sections)
 
+    def _get_polisher(self) -> Any:
+        if self.polisher is not None:
+            return self.polisher
+        from nousetsu.agents.polisher import PolishingAgent
+        self.polisher = PolishingAgent(
+            model_name=self.model_name,
+            fallback_model=self.fallback_model
+        )
+        return self.polisher
+
+    def _handle_safety_fallback(
+        self,
+        source_chunk_text: str,
+        bible: NovelBible,
+        active_glossary: List[GlossaryItem],
+        genre: Optional[str] = None,
+        polisher: Optional[Any] = None
+    ) -> str:
+        """Translate blocked sensitive chunk using Google Translate fallback and attempt literary polish."""
+        self.safety_fallbacks_used += 1
+        logger.warning("⚠️ Drafter encountered safety block on chunk - falling back to Google Translate and Feinschliff polishing.")
+        gt_text = translate_via_google(
+            text=source_chunk_text,
+            source_lang=bible.source_language,
+            target_lang=bible.target_language
+        )
+        active_pol = polisher or self._get_polisher()
+        try:
+            polished = active_pol.polish(
+                draft_text=gt_text,
+                critique_notes="Preserve clarity, natural cadence, and smooth literary flow.",
+                active_glossary=active_glossary,
+                bible=bible,
+                genre=genre,
+                source_text=source_chunk_text
+            )
+            return polished
+        except Exception as pe:
+            if is_safety_block_exception(pe):
+                logger.warning("⚠️ Polisher also blocked on sensitive chunk - retaining raw Google Translate output.")
+                return gt_text
+            raise
+
     def draft(
         self,
         source_text: str,
@@ -78,7 +128,9 @@ class ContextAwareDrafterAgent:
         notify_callback: Optional[Any] = None,
         rate_limiter: Optional[Any] = None,
         stop_event: Optional[Any] = None,
-        procedural_graph: Optional[ProceduralGraph] = None
+        procedural_graph: Optional[ProceduralGraph] = None,
+        polisher: Optional[Any] = None,
+        **kwargs: Any
     ) -> str:
         if chunks and len(chunks) > 1:
             return self.draft_chunked(
@@ -91,7 +143,9 @@ class ContextAwareDrafterAgent:
                 notify_callback=notify_callback,
                 rate_limiter=rate_limiter,
                 stop_event=stop_event,
-                procedural_graph=procedural_graph
+                procedural_graph=procedural_graph,
+                polisher=polisher,
+                **kwargs
             )
 
         chars_str = "\n".join([
@@ -143,13 +197,23 @@ class ContextAwareDrafterAgent:
             procedural_guidance=procedural_section
         )
 
-        response = self.llm.invoke([
-            SystemMessage(content=sys_msg),
-            HumanMessage(content=f"Translate this fictional novel excerpt into literary prose:\n\n{source_text}")
-        ])
-        self.last_usage = extract_usage_from_message(response)
-
-        return extract_text_from_message(response.content)
+        try:
+            response = self.llm.invoke([
+                SystemMessage(content=sys_msg),
+                HumanMessage(content=f"Translate this fictional novel excerpt into literary prose:\n\n{source_text}")
+            ])
+            self.last_usage = extract_usage_from_message(response)
+            return extract_text_from_message(response.content)
+        except Exception as e:
+            if is_safety_block_exception(e):
+                return self._handle_safety_fallback(
+                    source_chunk_text=source_text,
+                    bible=bible,
+                    active_glossary=eval_glossary,
+                    genre=resolved_genre,
+                    polisher=polisher
+                )
+            raise
 
     def draft_chunked(
         self,
@@ -162,7 +226,9 @@ class ContextAwareDrafterAgent:
         notify_callback: Optional[Any] = None,
         rate_limiter: Optional[Any] = None,
         stop_event: Optional[Any] = None,
-        procedural_graph: Optional[ProceduralGraph] = None
+        procedural_graph: Optional[ProceduralGraph] = None,
+        polisher: Optional[Any] = None,
+        **kwargs: Any
     ) -> str:
         """Drafts novel chunks sequentially with sliding translation context for pronoun/voice continuity."""
         from nousetsu.utils.rate_limiter import estimate_tokens
@@ -206,7 +272,9 @@ class ContextAwareDrafterAgent:
                 genre=genre,
                 chunk_idx=chunk_idx,
                 total_chunks=total_chunks,
-                procedural_graph=procedural_graph
+                procedural_graph=procedural_graph,
+                polisher=polisher,
+                **kwargs
             )
             drafted_parts.append(chunk_draft)
             total_usage = total_usage.add(self.last_usage)
@@ -233,7 +301,9 @@ class ContextAwareDrafterAgent:
         genre: Optional[str] = None,
         chunk_idx: int = 1,
         total_chunks: int = 1,
-        procedural_graph: Optional[ProceduralGraph] = None
+        procedural_graph: Optional[ProceduralGraph] = None,
+        polisher: Optional[Any] = None,
+        **kwargs: Any
     ) -> str:
         chars_str = "\n".join([
             f"- {c.name} (Original: {c.original_name}, Gender: {c.gender}, Role: {c.role}): Voice={c.voice}"
@@ -296,10 +366,20 @@ class ContextAwareDrafterAgent:
         user_parts.append(f"{chunk_header}{chunk_text}")
         user_content = "\n\n".join(user_parts)
 
-        response = self.llm.invoke([
-            SystemMessage(content=sys_msg),
-            HumanMessage(content=user_content)
-        ])
-        self.last_usage = extract_usage_from_message(response)
-
-        return extract_text_from_message(response.content)
+        try:
+            response = self.llm.invoke([
+                SystemMessage(content=sys_msg),
+                HumanMessage(content=user_content)
+            ])
+            self.last_usage = extract_usage_from_message(response)
+            return extract_text_from_message(response.content)
+        except Exception as e:
+            if is_safety_block_exception(e):
+                return self._handle_safety_fallback(
+                    source_chunk_text=chunk_text,
+                    bible=bible,
+                    active_glossary=eval_glossary,
+                    genre=resolved_genre,
+                    polisher=polisher
+                )
+            raise

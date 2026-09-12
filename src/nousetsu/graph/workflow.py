@@ -90,6 +90,7 @@ class NovelTranslationWorkflow:
             model_name=self.polisher_model,
             fallback_model=self.fallback_model
         )
+        self.drafter.polisher = self.polisher
         self.chronicler = ChroniclerAgent(
             model_name=self.chronicler_model,
             fallback_model=self.fallback_model
@@ -331,11 +332,16 @@ class NovelTranslationWorkflow:
         updated_skills = dict(state.active_skills)
         updated_skills["drafting"] = dft_skills
 
+        drafter_safety_used = getattr(self.drafter, "safety_fallbacks_used", 0)
+        total_safety_used = state.safety_fallbacks_used + drafter_safety_used
+        self.drafter.safety_fallbacks_used = 0
+
         return {
             "current_stage": PipelineStage.DRAFTING,
             "draft_text": draft,
             "active_skills": updated_skills,
-            "step_token_records": updated_token_records
+            "step_token_records": updated_token_records,
+            "safety_fallbacks_used": total_safety_used
         }
 
     def _critique_step(self, state: TranslationState) -> Dict[str, Any]:
@@ -451,6 +457,11 @@ class NovelTranslationWorkflow:
             usage=critique_usage
         )
         updated_token_records = list(state.step_token_records) + [critique_record]
+
+        if state.safety_fallbacks_used > 0:
+            fallback_warn = f"⚠️ Sensitive scene safety block triggered fallback for {state.safety_fallbacks_used} chunk(s)."
+            if fallback_warn not in audit.warnings:
+                audit.warnings.append(fallback_warn)
 
         updated_skills = dict(state.active_skills)
         updated_skills["critique"] = crt_skills
@@ -675,6 +686,11 @@ class NovelTranslationWorkflow:
         all_token_records = list(state.step_token_records) + [chronicle_record]
         total_duration = round(sum(r.duration_seconds for r in all_token_records), 2)
 
+        if state.safety_fallbacks_used > 0:
+            fallback_warn = f"⚠️ Sensitive scene safety block triggered fallback for {state.safety_fallbacks_used} chunk(s)."
+            if fallback_warn not in final_audit.warnings:
+                final_audit.warnings.append(fallback_warn)
+
         metadata = self.chronicler.assemble_metadata(
             chapter_id=state.chapter_id,
             chapter_num=state.chapter_num,
@@ -692,7 +708,8 @@ class NovelTranslationWorkflow:
             critique_notes=state.critique_notes,
             polished_text=final_text,
             status=StageStatus.COMPLETED,
-            step_usage=all_token_records
+            step_usage=all_token_records,
+            safety_fallbacks_used=state.safety_fallbacks_used
         )
 
         updated_skills = dict(state.active_skills)

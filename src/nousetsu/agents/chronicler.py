@@ -107,7 +107,8 @@ class ChroniclerAgent:
         critique_notes: str,
         polished_text: str,
         status: StageStatus = StageStatus.COMPLETED,
-        step_usage: Optional[List[StepTokenUsage]] = None
+        step_usage: Optional[List[StepTokenUsage]] = None,
+        safety_fallbacks_used: int = 0
     ) -> ChapterMetadata:
         artifacts = StageArtifacts(
             extracted_terms=active_glossary,
@@ -148,7 +149,8 @@ class ChroniclerAgent:
             cached_tokens=cached_tokens,
             total_tokens=total_tokens,
             duration_seconds=round(duration_seconds, 2),
-            step_usage=step_records
+            step_usage=step_records,
+            safety_fallbacks_used=safety_fallbacks_used
         )
 
         return ChapterMetadata(
