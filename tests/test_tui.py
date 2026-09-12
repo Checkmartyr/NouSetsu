@@ -34,12 +34,16 @@ async def test_tui_app_mount_and_widgets():
 
 
 @pytest.mark.asyncio
-async def test_tui_settings_modal():
+async def test_tui_settings_modal(tmp_path: Path):
     from textual.widgets import Button, Input
+    repo = NovelRepository(tmp_path)
+    repo.initialize_project("Init Title", "Japanese", "English")
+
     app = NovelAgentApp(
-        input_dir="raw_chapters",
-        output_dir="translated_chapters",
-        model_name="mock-model"
+        input_dir=str(tmp_path / "raw_chapters"),
+        output_dir=str(tmp_path / "translated_chapters"),
+        model_name="mock-model",
+        project_dir=tmp_path
     )
     async with app.run_test() as pilot:
         # Open settings via action
@@ -356,15 +360,19 @@ def test_bare_cli_launches_tui():
 
 
 @pytest.mark.asyncio
-async def test_tui_token_analysis_tab():
+async def test_tui_token_analysis_tab(tmp_path: Path):
     """Verify Token Analysis tab renders properly and can be toggled via hotkey and button."""
     from textual.widgets import DataTable, TabbedContent
     from nousetsu.tui.widgets.token_analysis import TokenAnalysisWidget
 
+    repo = NovelRepository(tmp_path)
+    repo.initialize_project("Token Test", "Japanese", "English")
+
     app = NovelAgentApp(
-        input_dir="raw_chapters",
-        output_dir="translated_chapters",
-        model_name="mock-model"
+        input_dir=str(tmp_path / "raw_chapters"),
+        output_dir=str(tmp_path / "translated_chapters"),
+        model_name="mock-model",
+        project_dir=tmp_path
     )
     async with app.run_test() as pilot:
         tabs = app.query_one("#main-tabs", TabbedContent)
@@ -389,13 +397,12 @@ async def test_tui_token_analysis_tab():
         assert len(table_chapters.columns) == 8
 
         # Toggle back to reader via toolbar button click
-        btn_tokens = app.query_one("#btn_tokens")
-        await pilot.click(btn_tokens)
+        await pilot.click("#btn_tokens")
         await pilot.pause()
         assert tabs.active == "tab-reader"
 
         # Toggle again via button
-        await pilot.click(btn_tokens)
+        await pilot.click("#btn_tokens")
         await pilot.pause()
         assert tabs.active == "tab-tokens"
 

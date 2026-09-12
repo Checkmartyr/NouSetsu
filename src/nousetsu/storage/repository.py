@@ -16,7 +16,9 @@ class ProjectRegistry:
 
     def __init__(self, storage_dir: Optional[Path] = None):
         self.is_custom_storage = storage_dir is not None
-        self.storage_dir = storage_dir or (Path.home() / ".novel_agent")
+        reg_env = os.environ.get("NOVEL_REGISTRY_DIR")
+        default_dir = Path(reg_env) if reg_env else (Path.home() / ".novel_agent")
+        self.storage_dir = storage_dir or default_dir
         self.storage_file = self.storage_dir / "projects.json"
 
     def _load_raw(self) -> dict:
@@ -44,7 +46,7 @@ class ProjectRegistry:
     def _load_data(self) -> List[str]:
         raw = self._load_raw()
         paths = raw.get("projects", [])
-        if not self.is_custom_storage:
+        if not self.is_custom_storage and not os.environ.get("NOVEL_REGISTRY_DIR"):
             return [p for p in paths if "pytest" not in p and "Temp" not in p]
         return paths
 
@@ -55,6 +57,8 @@ class ProjectRegistry:
 
     def get_last_active_project(self) -> Optional[Path]:
         """Retrieve the most recently active project path if valid."""
+        if os.environ.get("PYTEST_CURRENT_TEST") and not self.is_custom_storage and not os.environ.get("NOVEL_REGISTRY_DIR"):
+            return None
         raw = self._load_raw()
         last_str = raw.get("last_active")
         if last_str:
@@ -65,10 +69,10 @@ class ProjectRegistry:
 
     def set_last_active_project(self, project_path: Path) -> None:
         """Persist the currently active project path."""
-        if os.environ.get("PYTEST_CURRENT_TEST") and not self.is_custom_storage:
+        if os.environ.get("PYTEST_CURRENT_TEST") and not self.is_custom_storage and not os.environ.get("NOVEL_REGISTRY_DIR"):
             return
         resolved = str(Path(project_path).resolve())
-        if not self.is_custom_storage and ("pytest" in resolved or "Temp" in resolved):
+        if not self.is_custom_storage and not os.environ.get("NOVEL_REGISTRY_DIR") and ("pytest" in resolved or "Temp" in resolved):
             return
         raw = self._load_raw()
         raw["last_active"] = resolved
@@ -78,10 +82,10 @@ class ProjectRegistry:
 
     def register_project(self, project_path: Path) -> None:
         """Register a novel translation project in the global registry."""
-        if os.environ.get("PYTEST_CURRENT_TEST") and not self.is_custom_storage:
+        if os.environ.get("PYTEST_CURRENT_TEST") and not self.is_custom_storage and not os.environ.get("NOVEL_REGISTRY_DIR"):
             return
         resolved = str(Path(project_path).resolve())
-        if not self.is_custom_storage and ("pytest" in resolved or "Temp" in resolved):
+        if not self.is_custom_storage and not os.environ.get("NOVEL_REGISTRY_DIR") and ("pytest" in resolved or "Temp" in resolved):
             return
         paths = self._load_data()
         if resolved not in paths:
@@ -92,19 +96,21 @@ class ProjectRegistry:
         """Return list of project metadata for all known and discoverable projects."""
         paths = self._load_data()
         
-        # Auto-discover current working directory, projects/, and project/ subdirectories
-        cwd = Path.cwd().resolve()
-        if str(cwd) not in paths and (cwd / ".novel").exists():
-            paths.append(str(cwd))
+        # Auto-discover current working directory, projects/, and project/ subdirectories if not under isolated test
+        is_isolated_test = bool(os.environ.get("PYTEST_CURRENT_TEST") and not self.is_custom_storage and not os.environ.get("NOVEL_REGISTRY_DIR"))
+        if not is_isolated_test:
+            cwd = Path.cwd().resolve()
+            if str(cwd) not in paths and (cwd / ".novel").exists():
+                paths.append(str(cwd))
 
-        for folder_name in ["projects", "project"]:
-            projects_dir = cwd / folder_name
-            if projects_dir.exists() and projects_dir.is_dir():
-                for child in projects_dir.iterdir():
-                    if child.is_dir() and (child / ".novel").exists():
-                        p_str = str(child.resolve())
-                        if p_str not in paths:
-                            paths.append(p_str)
+            for folder_name in ["projects", "project"]:
+                projects_dir = cwd / folder_name
+                if projects_dir.exists() and projects_dir.is_dir():
+                    for child in projects_dir.iterdir():
+                        if child.is_dir() and (child / ".novel").exists():
+                            p_str = str(child.resolve())
+                            if p_str not in paths:
+                                paths.append(p_str)
 
         results = []
         valid_paths = []

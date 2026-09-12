@@ -1,4 +1,5 @@
 """Main Textual TUI Application for Novel Translation Agent."""
+import os
 from pathlib import Path
 from typing import List, Optional
 from textual import work
@@ -131,9 +132,12 @@ class NovelAgentApp(App):
         if project_dir is not None and str(project_dir) != ".":
             self.project_dir = Path(project_dir).expanduser().resolve()
         else:
-            last_proj = self.registry.get_last_active_project()
-            if last_proj:
-                self.project_dir = last_proj
+            if not os.environ.get("PYTEST_CURRENT_TEST"):
+                last_proj = self.registry.get_last_active_project()
+                if last_proj:
+                    self.project_dir = last_proj
+                else:
+                    self.project_dir = Path(project_dir or ".").expanduser().resolve()
             else:
                 self.project_dir = Path(project_dir or ".").expanduser().resolve()
 

@@ -205,10 +205,14 @@ async def test_tui_settings_modal_agent_models(tmp_path: Path):
     from nousetsu.tui.widgets.settings_modal import SettingsModal
     from textual.widgets import Button, Input
 
+    repo = NovelRepository(tmp_path)
+    repo.initialize_project("Test Models", "Japanese", "English")
+
     app = NovelAgentApp(
-        input_dir="raw_chapters",
-        output_dir="translated_chapters",
-        model_name="mock-model"
+        input_dir=str(tmp_path / "raw_chapters"),
+        output_dir=str(tmp_path / "translated_chapters"),
+        model_name="mock-model",
+        project_dir=tmp_path
     )
     async with app.run_test() as pilot:
         app.action_open_settings()
