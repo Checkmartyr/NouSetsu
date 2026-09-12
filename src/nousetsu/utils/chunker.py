@@ -14,6 +14,7 @@ class LineChunk:
     end_line: int
     content: str
     preceding_context_lines: str = ""
+    source_content: Optional[str] = None
 
 
 class LineSemanticChunker:

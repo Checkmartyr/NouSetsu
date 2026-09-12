@@ -38,7 +38,10 @@ class PolishingAgent:
         genre: Optional[str] = None,
         source_text: Optional[str] = None,
         draft_chunks: Optional[List[Any]] = None,
-        notify_callback: Optional[Any] = None
+        notify_callback: Optional[Any] = None,
+        rate_limiter: Optional[Any] = None,
+        stop_event: Optional[Any] = None,
+        **kwargs: Any
     ) -> str:
         if draft_chunks and len(draft_chunks) > 1:
             return self.polish_chunked(
@@ -48,7 +51,10 @@ class PolishingAgent:
                 bible=bible,
                 genre=genre,
                 source_text=source_text,
-                notify_callback=notify_callback
+                notify_callback=notify_callback,
+                rate_limiter=rate_limiter,
+                stop_event=stop_event,
+                **kwargs
             )
 
         # Filter glossary to terms actually present in this chapter to avoid prompt bloat
@@ -118,22 +124,49 @@ class PolishingAgent:
         bible: NovelBible,
         genre: Optional[str] = None,
         source_text: Optional[str] = None,
-        notify_callback: Optional[Any] = None
+        notify_callback: Optional[Any] = None,
+        rate_limiter: Optional[Any] = None,
+        stop_event: Optional[Any] = None,
+        **kwargs: Any
     ) -> str:
         """Polishes a long draft chunk-by-chunk with sliding context to avoid output limits and TPM stalls."""
+        from nousetsu.utils.rate_limiter import estimate_tokens
+
         polished_parts = []
         prev_polished_tail = ""
         total_usage = TokenUsage()
 
         for chunk in draft_chunks:
+            if stop_event and stop_event.is_set():
+                break
+
+            chunk_idx = getattr(chunk, "chunk_index", 1)
+            total_chunks = getattr(chunk, "total_chunks", len(draft_chunks))
+            start_line = getattr(chunk, "start_line", 1)
+            end_line = getattr(chunk, "end_line", 1)
+
             if notify_callback:
                 try:
-                    notify_callback(f"Polishing chunk {chunk.chunk_index}/{chunk.total_chunks} (lines {chunk.start_line}-{chunk.end_line})...")
+                    notify_callback(f"Polishing chunk {chunk_idx}/{total_chunks} (lines {start_line}-{end_line})...")
                 except Exception:
                     pass
 
             chunk_content = getattr(chunk, "content", str(chunk))
-            chunk_source = getattr(chunk, "source_content", None) or source_text
+            chunk_source = getattr(chunk, "source_content", None)
+            if not chunk_source and source_text:
+                # Sliced source lines per chunk instead of leaking the full unchunked source text
+                raw_src_lines = source_text.splitlines(keepends=True)
+                src_start = max(0, int((chunk_idx - 1) / total_chunks * len(raw_src_lines)) - 2)
+                src_end = min(len(raw_src_lines), int(chunk_idx / total_chunks * len(raw_src_lines)) + 2)
+                chunk_source = "".join(raw_src_lines[src_start:src_end])
+
+            if rate_limiter:
+                est_tokens = estimate_tokens(chunk_content) * 2 + 1000
+                rate_limiter.acquire(
+                    estimated_tokens=est_tokens,
+                    stop_event=stop_event,
+                    notify_callback=notify_callback
+                )
 
             chunk_polished = self._polish_single_chunk(
                 chunk_draft=chunk_content,
@@ -143,11 +176,14 @@ class PolishingAgent:
                 bible=bible,
                 genre=genre,
                 source_text=chunk_source,
-                chunk_idx=getattr(chunk, "chunk_index", 1),
-                total_chunks=getattr(chunk, "total_chunks", len(draft_chunks))
+                chunk_idx=chunk_idx,
+                total_chunks=total_chunks
             )
             polished_parts.append(chunk_polished)
             total_usage = total_usage.add(self.last_usage)
+
+            if rate_limiter and hasattr(rate_limiter, "record_usage") and self.last_usage.total_tokens > 0:
+                rate_limiter.record_usage(self.last_usage.total_tokens)
 
             # Extract last 3 non-empty lines for sliding context
             lines = [l.strip() for l in chunk_polished.splitlines() if l.strip()]

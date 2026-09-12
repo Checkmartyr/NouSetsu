@@ -18,13 +18,15 @@ class EntityExtractorAgent:
         self,
         model_name: str = "gemini-3.1-flash-lite",
         fallback_model: Optional[str] = None,
-        procedural_graph: Optional[ProceduralGraph] = None
+        procedural_graph: Optional[ProceduralGraph] = None,
+        chunker: Optional[Any] = None
     ):
         self.model_name = model_name
         self.fallback_model = fallback_model
         self.llm = get_llm(model_name=model_name, fallback_model=fallback_model, temperature=0.1)
         self.last_usage: TokenUsage = TokenUsage()
         self.procedural_graph = procedural_graph or get_default_extractor_graph()
+        self.chunker = chunker
 
     @property
     def last_model_used(self) -> str:
@@ -32,16 +34,20 @@ class EntityExtractorAgent:
             return self.llm.last_model_used
         return self.model_name
 
-    def extract(
+    def _extract_single_text(
         self,
-        source_text: str,
+        text: str,
         bible: NovelBible,
         genre: Optional[str] = None,
         procedural_graph: Optional[ProceduralGraph] = None,
-        **kwargs: Any
+        known_characters: Optional[List[CharacterProfile]] = None,
+        known_glossary: Optional[List[GlossaryItem]] = None
     ) -> Tuple[List[CharacterProfile], List[GlossaryItem], List[str]]:
-        known_chars_str = "\n".join([f"- {c.original_name} -> {c.name} ({c.role}, {c.voice})" for c in bible.characters]) or "None yet."
-        known_gloss_str = "\n".join([f"- {g.source} -> {g.target} ({g.category})" for g in bible.glossary]) or "None yet."
+        all_chars = list(bible.characters) + (known_characters or [])
+        all_gloss = list(bible.glossary) + (known_glossary or [])
+
+        known_chars_str = "\n".join([f"- {c.original_name} -> {c.name} ({c.role}, {c.voice})" for c in all_chars]) or "None yet."
+        known_gloss_str = "\n".join([f"- {g.source} -> {g.target} ({g.category})" for g in all_gloss]) or "None yet."
 
         resolved_genre = genre or getattr(bible, "genre", "general")
         skills_text = SkillRegistry.get_instance().build_prompt_section(
@@ -65,9 +71,10 @@ class EntityExtractorAgent:
             procedural_guidance=procedural_section
         )
 
+        # Analytical task framing to avoid AI safety false positives on novel excerpts
         response = self.llm.invoke([
             SystemMessage(content=sys_msg),
-            HumanMessage(content=f"Chapter Text:\n{source_text[:100000]}")
+            HumanMessage(content=f"Extract fictional characters, factions, and world terminology from this novel excerpt:\n{text[:100000]}")
         ])
         self.last_usage = extract_usage_from_message(response)
 
@@ -92,3 +99,124 @@ class EntityExtractorAgent:
             pass
 
         return new_chars, new_terms, active_terms
+
+    def extract(
+        self,
+        source_text: str,
+        bible: NovelBible,
+        genre: Optional[str] = None,
+        procedural_graph: Optional[ProceduralGraph] = None,
+        chunks: Optional[List[Any]] = None,
+        notify_callback: Optional[Any] = None,
+        rate_limiter: Optional[Any] = None,
+        stop_event: Optional[Any] = None,
+        **kwargs: Any
+    ) -> Tuple[List[CharacterProfile], List[GlossaryItem], List[str]]:
+        if chunks is None and self.chunker and hasattr(self.chunker, "should_chunk") and self.chunker.should_chunk(source_text):
+            chunks = self.chunker.split_lines(source_text)
+
+        if chunks and len(chunks) > 1:
+            return self.extract_chunked(
+                chunks=chunks,
+                bible=bible,
+                genre=genre,
+                procedural_graph=procedural_graph,
+                notify_callback=notify_callback,
+                rate_limiter=rate_limiter,
+                stop_event=stop_event,
+                **kwargs
+            )
+
+        return self._extract_single_text(
+            text=source_text,
+            bible=bible,
+            genre=genre,
+            procedural_graph=procedural_graph
+        )
+
+    def extract_chunked(
+        self,
+        chunks: List[Any],
+        bible: NovelBible,
+        genre: Optional[str] = None,
+        procedural_graph: Optional[ProceduralGraph] = None,
+        notify_callback: Optional[Any] = None,
+        rate_limiter: Optional[Any] = None,
+        stop_event: Optional[Any] = None,
+        **kwargs: Any
+    ) -> Tuple[List[CharacterProfile], List[GlossaryItem], List[str]]:
+        """Extracts entities across chapter chunks with rate limiting and deduplication."""
+        from nousetsu.utils.rate_limiter import estimate_tokens
+
+        all_chars: List[CharacterProfile] = []
+        all_terms: List[GlossaryItem] = []
+        all_active: List[str] = []
+        total_usage = TokenUsage()
+
+        for chunk in chunks:
+            if stop_event and stop_event.is_set():
+                break
+
+            chunk_idx = getattr(chunk, "chunk_index", 1)
+            total_chunks = getattr(chunk, "total_chunks", len(chunks))
+            chunk_content = getattr(chunk, "content", str(chunk))
+
+            if notify_callback:
+                try:
+                    notify_callback(f"Extracting entities from chunk {chunk_idx}/{total_chunks}...")
+                except Exception:
+                    pass
+
+            if rate_limiter:
+                est_tokens = estimate_tokens(chunk_content[:12000]) + 600
+                rate_limiter.acquire(
+                    estimated_tokens=est_tokens,
+                    stop_event=stop_event,
+                    notify_callback=notify_callback
+                )
+
+            c_list, t_list, a_list = self._extract_single_text(
+                text=chunk_content,
+                bible=bible,
+                genre=genre,
+                procedural_graph=procedural_graph,
+                known_characters=all_chars,
+                known_glossary=all_terms
+            )
+            all_chars.extend(c_list)
+            all_terms.extend(t_list)
+            all_active.extend(a_list)
+            total_usage = total_usage.add(self.last_usage)
+
+            if rate_limiter and hasattr(rate_limiter, "record_usage") and self.last_usage.total_tokens > 0:
+                rate_limiter.record_usage(self.last_usage.total_tokens)
+
+        # Deduplicate extracted characters
+        seen_chars = set()
+        unique_chars: List[CharacterProfile] = []
+        for c in all_chars:
+            key = (c.name.strip().lower(), c.original_name.strip().lower())
+            if key not in seen_chars:
+                seen_chars.add(key)
+                unique_chars.append(c)
+
+        # Deduplicate extracted glossary items
+        seen_terms = set()
+        unique_terms: List[GlossaryItem] = []
+        for t in all_terms:
+            key = t.source.strip().lower()
+            if key not in seen_terms:
+                seen_terms.add(key)
+                unique_terms.append(t)
+
+        # Deduplicate active terms in order
+        seen_active = set()
+        unique_active: List[str] = []
+        for act in all_active:
+            norm = act.strip()
+            if norm and norm.lower() not in seen_active:
+                seen_active.add(norm.lower())
+                unique_active.append(norm)
+
+        self.last_usage = total_usage
+        return unique_chars, unique_terms, unique_active

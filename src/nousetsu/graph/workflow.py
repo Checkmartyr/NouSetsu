@@ -72,17 +72,28 @@ class NovelTranslationWorkflow:
         self.current_stage: PipelineStage = PipelineStage.NONE
         self.extractor = EntityExtractorAgent(
             model_name=self.extractor_model,
-            fallback_model=fallback_model,
-            procedural_graph=extractor_pg
+            fallback_model=self.fallback_model,
+            procedural_graph=extractor_pg,
+            chunker=self.chunker
         )
         self.drafter = ContextAwareDrafterAgent(
             model_name=self.drafter_model,
-            fallback_model=fallback_model,
+            fallback_model=self.fallback_model,
             procedural_graph=drafter_pg
         )
-        self.critic = CritiqueAgent(model_name=self.critic_model, fallback_model=fallback_model)
-        self.polisher = PolishingAgent(model_name=self.polisher_model, fallback_model=fallback_model)
-        self.chronicler = ChroniclerAgent(model_name=self.chronicler_model, fallback_model=fallback_model)
+        self.critic = CritiqueAgent(
+            model_name=self.critic_model,
+            fallback_model=self.fallback_model,
+            chunker=self.chunker
+        )
+        self.polisher = PolishingAgent(
+            model_name=self.polisher_model,
+            fallback_model=self.fallback_model
+        )
+        self.chronicler = ChroniclerAgent(
+            model_name=self.chronicler_model,
+            fallback_model=self.fallback_model
+        )
         self.stage_callback: Optional[Callable[[PipelineStage, str, float], None]] = None
         self.stop_event: Optional[threading.Event] = None
         self.last_state: Optional[TranslationState] = None
@@ -182,11 +193,27 @@ class NovelTranslationWorkflow:
             }
 
         state.novel_bible.genre = state.genre
-        est_extract = estimate_tokens(state.source_text[:12000]) + 600
+
+        source_chunks = None
+        if self.chunker and self.chunker.should_chunk(state.source_text):
+            source_chunks = self.chunker.split_lines(state.source_text)
+            self._notify(
+                PipelineStage.EXTRACTION,
+                f"Divided chapter into {len(source_chunks)} line chunks for entity extraction...",
+                15.0
+            )
+
+        if source_chunks and len(source_chunks) > 1:
+            est_extract = estimate_tokens(source_chunks[0].content[:12000]) + 600
+        else:
+            est_extract = estimate_tokens(state.source_text[:12000]) + 600
+
         new_chars, new_terms, active_terms = invoke_with_retry(
             self.extractor.extract,
-            state.source_text,
-            state.novel_bible,
+            source_text=state.source_text,
+            bible=state.novel_bible,
+            genre=state.genre,
+            chunks=source_chunks,
             notify_callback=lambda msg: self._notify(PipelineStage.EXTRACTION, msg, 15.0),
             rate_limiter=self.rate_limiter,
             estimated_tokens=est_extract,
@@ -197,12 +224,14 @@ class NovelTranslationWorkflow:
         all_glossary = list(state.novel_bible.glossary) + new_terms
 
         extract_duration = round(time.time() - step_start, 2)
+        chunk_count = len(source_chunks) if source_chunks else 1
         extract_usage = getattr(self.extractor, "last_usage", TokenUsage())
         extract_record = StepTokenUsage(
             stage=PipelineStage.EXTRACTION,
             step_name="Extraction",
             iteration=1,
             model=getattr(self.extractor, "last_model_used", self.extractor_model),
+            chunk_count=chunk_count,
             duration_seconds=extract_duration,
             usage=extract_usage
         )
@@ -348,8 +377,23 @@ class NovelTranslationWorkflow:
             )
             text_to_audit = state.polished_text
 
+        critique_chunks = None
+        if self.chunker and hasattr(self.critic, "_build_paired_chunks"):
+            if self.chunker.should_chunk(state.source_text) or self.chunker.should_chunk(text_to_audit):
+                critique_chunks = self.critic._build_paired_chunks(state.source_text, text_to_audit)
+                if critique_chunks and len(critique_chunks) > 1:
+                    self._notify(
+                        PipelineStage.CRITIQUE,
+                        f"Divided chapter into {len(critique_chunks)} chunks for critique auditing (Pass {display_iter}/{state.max_review_loops})...",
+                        60.0
+                    )
+
         state.novel_bible.genre = state.genre
-        est_critique = estimate_tokens(state.source_text) + estimate_tokens(text_to_audit) + 500
+        if critique_chunks and len(critique_chunks) > 1:
+            est_critique = estimate_tokens(critique_chunks[0].content) * 2 + 500
+        else:
+            est_critique = estimate_tokens(state.source_text) + estimate_tokens(text_to_audit) + 500
+
         audit, notes = invoke_with_retry(
             self.critic.evaluate,
             source_text=state.source_text,
@@ -357,6 +401,7 @@ class NovelTranslationWorkflow:
             bible=state.novel_bible,
             active_characters=state.active_characters,
             active_glossary=state.active_glossary,
+            chunks=critique_chunks,
             notify_callback=lambda msg: self._notify(PipelineStage.CRITIQUE, msg, 60.0),
             rate_limiter=self.rate_limiter,
             estimated_tokens=est_critique,
@@ -391,12 +436,14 @@ class NovelTranslationWorkflow:
                         best_text = text_to_audit
 
         critique_duration = round(time.time() - step_start, 2)
+        chunk_count = len(critique_chunks) if critique_chunks else 1
         critique_usage = getattr(self.critic, "last_usage", TokenUsage())
         critique_record = StepTokenUsage(
             stage=PipelineStage.CRITIQUE,
             step_name=f"Critique (Pass {display_iter})",
             iteration=current_iter,
             model=getattr(self.critic, "last_model_used", self.critic_model),
+            chunk_count=chunk_count,
             duration_seconds=critique_duration,
             usage=critique_usage
         )
@@ -458,13 +505,54 @@ class NovelTranslationWorkflow:
         state.novel_bible.genre = state.genre
 
         draft_chunks = None
-        if self.chunker and self.chunker.should_chunk(base_text):
-            draft_chunks = self.chunker.split_lines(base_text)
-            self._notify(
-                PipelineStage.POLISHING,
-                f"Divided draft into {len(draft_chunks)} line chunks for paced polishing...",
-                80.0
+        if self.chunker:
+            source_content_lines = [l for l in state.source_text.splitlines() if l.strip()]
+            base_content_lines = [l for l in base_text.splitlines() if l.strip()]
+            is_condensed = state.novel_bible.target_language.lower() in ["thai", "th"]
+            condensed_threshold = max(25, self.chunker.threshold_lines // 2) if is_condensed else self.chunker.threshold_lines
+
+            should_chunk_polish = (
+                len(source_content_lines) > self.chunker.threshold_lines
+                or len(base_content_lines) > self.chunker.threshold_lines
+                or (is_condensed and len(base_content_lines) > condensed_threshold)
             )
+
+            if should_chunk_polish:
+                if len(base_content_lines) > self.chunker.threshold_lines:
+                    draft_chunks = self.chunker.split_lines(base_text)
+                elif is_condensed and len(base_content_lines) > condensed_threshold:
+                    condensed_chunker = LineSemanticChunker(
+                        threshold_lines=condensed_threshold,
+                        target_chunk_lines=max(20, self.chunker.target_chunk_lines // 2),
+                        overlap_lines=self.chunker.overlap_lines
+                    )
+                    draft_chunks = condensed_chunker.split_lines(base_text)
+                elif len(source_content_lines) > self.chunker.threshold_lines and len(base_content_lines) >= 10:
+                    src_chunks = self.chunker.split_lines(state.source_text)
+                    num_src = max(2, len(src_chunks))
+                    target_lines_prop = max(8, len(base_content_lines) // num_src)
+                    prop_chunker = LineSemanticChunker(
+                        threshold_lines=target_lines_prop,
+                        target_chunk_lines=target_lines_prop,
+                        overlap_lines=self.chunker.overlap_lines
+                    )
+                    draft_chunks = prop_chunker.split_lines(base_text)
+
+                if draft_chunks and len(draft_chunks) > 1:
+                    raw_src_lines = state.source_text.splitlines(keepends=True)
+                    total_src_lines = len(raw_src_lines)
+                    num_chunks = len(draft_chunks)
+
+                    for idx, d_chunk in enumerate(draft_chunks):
+                        src_start = max(0, int(idx / num_chunks * total_src_lines) - 2)
+                        src_end = min(total_src_lines, int((idx + 1) / num_chunks * total_src_lines) + 2)
+                        d_chunk.source_content = "".join(raw_src_lines[src_start:src_end])
+
+                    self._notify(
+                        PipelineStage.POLISHING,
+                        f"Divided draft into {len(draft_chunks)} line chunks for paced polishing (Pass {display_iter}/{state.max_review_loops})...",
+                        80.0
+                    )
 
         if draft_chunks and len(draft_chunks) > 1:
             est_polish = estimate_tokens(draft_chunks[0].content) * 2 + 1000
