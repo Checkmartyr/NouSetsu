@@ -12,23 +12,28 @@
 
 ## 🌟 Key Highlights
 
-* **Cross-Chapter Narrative Memory**: Maintains a persistent **Novel Bible** tracking character sheets, voice registers, canonical glossary terms, and rolling summaries of preceding chapters to eliminate character voice drift.
-* **Zero-Anaphora Resolution**: Context-augmented drafting specifically designed for East Asian languages (Japanese, Chinese, Korean) where subjects, agents, and pronouns are omitted.
-* **Procedural Graph Steering & Offline Self-Evolution (arXiv:2609.09153v1)**: Encodes procedural execution rules into explicit attributed graphs $G = (V, R, E, \Phi)$ carrying `(condition, guidance, pitfalls)`. Uses deterministic code-level localization (< 100 prompt tokens) rather than expensive runtime guidance LLMs, while pruning conversational junk terms in extraction (-300 to -800 output tokens) and switching chunk states (Scene Init vs Boundary Continuity) in drafting. Self-evolves offline from critic audit reports with zero inference token cost.
+* **3-Tier Hierarchical Narrative Memory**: Maintains a persistent 3-tier narrative memory in the **Novel Bible**: Macro (**Whole Story Progression**) > Meso (**Story Arcs** via `ArcSummary` with autonomous boundary/milestone detection) > Micro (**Immediate Situation** via volume-partitioned `ChapterSummary`), eliminating long-term narrative drift and forgotten character goals.
+* **Cross-Folder & Multi-Volume Continuous Memory**: Automatically detects volume sequences (`Villainess_04`, `Villainess_05`), partitioning chapter summaries into subfolders while automatically backfilling preceding summaries when entering a new volume. Injects volume badges (`[Villainess_04] Chapter 122`) to eliminate multi-volume numbering confusion.
+* **Zero-Anaphora Resolution & Nickname Discipline**: Context-augmented drafting specifically designed for East Asian languages (Japanese, Chinese, Korean) where subjects, agents, and pronouns are omitted. Enforces strict name vs. nickname register discipline across Drafter, Critic, and Polisher agents to preserve author intent without arbitrary normalization.
+* **Procedural Graph Steering & Offline Self-Evolution (arXiv:2609.09153v1)**: Encodes procedural execution rules into explicit attributed graphs $G = (V, R, E, \Phi)$ carrying `(condition, guidance, pitfalls)`. Uses deterministic code-level localization (< 100 prompt tokens) rather than expensive runtime guidance LLMs, while pruning conversational junk terms in extraction (-300 to -800 output tokens) and switching chunk states (Scene Init vs Boundary Continuity vs Name Discipline) in drafting. Self-evolves offline from critic audit reports with zero inference token cost. Inspectable via `nousetsu graph-info`.
 * **Multi-Stage Agentic Pipeline & Functions**:
   | Stage | Agent (German Codename) | Primary Function | Plain-English Role & Purpose |
   |:---:|:---|:---|:---|
   | **1** | **EntityExtractorAgent**<br>*(Schriftdetektiv)* | `extract(source_text, bible, ...)` | **The Detective**: Scans raw text *before* translation to discover unknown character names, spells, and items with Procedural Graph steering and anti-bloat term pruning. |
-  | **2** | **ContextAwareDrafterAgent**<br>*(Wortschmied)* | `draft(source_text, bible, ...)` | **The Wordsmith**: Writes the initial full translation, restoring omitted pronouns (*Zero-Anaphora*) and enforcing boundary continuity via chunk-aware Procedural Graph state localization. |
-  | **3** | **CritiqueAgent**<br>*(Zensor)* | `evaluate(source_text, draft_text, ...)` | **The Inspector**: Audits full-length chapters (up to 50k chars) against raw source text for fidelity (0-10) and style (0-10), checks glossary adherence, and generates actionable critique notes. |
-  | **4** | **PolishingAgent**<br>*(Feinschliff)* | `polish(draft_text, critique_notes, ..., source_text)` | **The Stylist**: Rewrites draft prose into natural literary target-language fiction using critique notes and source text reference, eliminating translationese while preserving 100% target language output. |
-  | **5** | **ChroniclerAgent**<br>*(Chronist)* | `chronicle(...)`<br>`assemble_metadata(...)` | **The Memory Keeper**: Summarizes chapter events for future chapters and archives stats into `.novel/metadata.json`. |
+  | **2** | **ContextAwareDrafterAgent**<br>*(Wortschmied)* | `draft(source_text, bible, ...)` | **The Wordsmith**: Writes the initial full translation, restoring omitted pronouns (*Zero-Anaphora*), enforcing nickname fidelity, and building 3-tier narrative context. |
+  | **3** | **CritiqueAgent**<br>*(Zensor)* | `evaluate(source_text, draft_text, ...)` | **The Inspector**: Audits full-length chapters (up to 50k chars) against raw source text for fidelity (0-10), style (0-10), glossary compliance, and nickname disparity. |
+  | **4** | **PolishingAgent**<br>*(Feinschliff)* | `polish(draft_text, critique_notes, ..., source_text)` | **The Stylist**: Rewrites draft prose into natural literary target-language fiction using critique notes and source text reference, preserving affectionate address forms and cadence. |
+  | **5** | **Chronist**<br>*(ChroniclerAgent)* | `chronicle(...)`<br>`assemble_metadata(...)` | **The Memory Keeper**: Autonomously identifies story arc progression, summarizes chapter events, archives completed arcs, and compiles metadata audit records into `.novel/metadata.json`. |
+* **Narrative Inspection & Summary Migration CLI**:
+  - `nousetsu narrative`: Renders an interactive 3-tier Rich tree displaying Whole Story progression, active and completed story arcs with milestones, and chapter summaries.
+  - `nousetsu migrate-summaries`: Seamlessly upgrades legacy flat summary novel projects to the 3-tier hierarchical system.
+* **Decoupled Central `.env` Model Precedence**: LLM model configurations reside in `.env` (`NOVEL_MODEL`, `NOVEL_FALLBACK_MODEL`, `NOVEL_EXTRACTOR_MODEL`, etc.) with a clean 4-tier cascade: CLI flag -> Project Config override -> Central `.env` -> Built-in Safe Fallback (`gemini-3.1-flash-lite`, `gemma-4-26b-a4b-it`).
 * **Gemini Interactions API & REST Fallback**: Seamless native support for the new `/v1beta/interactions` endpoint via Google GenAI SDK and HTTP REST fallback, enabling structured interaction steps and thought streaming.
-* **Granular Per-Task & Per-Step Token Tracking**: Complete token metrics (`input_tokens`, `output_tokens`, `thought_tokens`, `cached_tokens`, `total_tokens`) tracked for every chapter task and pipeline step (Extraction, Drafting, Critique passes, Polishing passes, Chronicling), logged in `.novel/metadata.json`, displayed live in the TUI inspector, and rendered in Rich summary tables.
+* **Granular Per-Task & Per-Step Token Tracking & TUI Dashboard**: Complete token metrics (`input_tokens`, `output_tokens`, `thought_tokens`, `cached_tokens`, `total_tokens`) tracked for every chapter task and pipeline step. Press `M` in the TUI to access the dedicated **Token Analysis Dashboard** with real-time KPI cards and interactive DataTables.
 * **Multi-Agent Per-Role Model Routing & Quota Fallback**: Route each pipeline agent to an optimal model (`extractor_model`, `drafter_model`, `critic_model`, `polisher_model`, `chronicler_model`) with automatic fallback on 429 quota exhaustion (`FallbackChatModel`).
 * **Line-Based Semantic Chunking (Rate-Limit & TPM Guard)**: Intelligently partitions long chapters (>85 lines) into ~70-line chunks along scene breaks (`***`, `---`) and paragraph boundaries, passing 3-line sliding translation context to maintain character voice and eliminate 32k TPM sliding-window freezes.
 * **Active Chapter Glossary Optimization**: Filters glossary terms to only those appearing in the active chapter, eliminating input prompt bloat and false-positive compliance warnings.
-* **Domain Skills System (17 Built-in Skills + Markdown Catalogs)**: Automatically activates targeted literary guidelines (e.g. cultivation hierarchies, adventurer guild ranks, 4-character idiom localization, villainess court etiquette) based on novel genre and source language.
+* **Domain Skills System (20 Built-in Skills + Markdown Catalogs)**: Automatically activates targeted literary guidelines (e.g. cultivation hierarchies, adventurer guild ranks, 4-character idiom localization, villainess court etiquette, nickname preservation) based on novel genre and source language.
 * **Programmatic Language Anti-Regression Guards**: Enforces target-language integrity with offline Unicode script detection, immediately rejecting any model reversion back into source language.
 * **Automated Critic-Polish Reflection Loop**: Automatically loops between `Feinschliff` and `Zensor` to refine prose until both fidelity and style meet strict quality thresholds (`>= 8.5/10`) or hit a configurable loop cap (default 3 loops). Includes an automatic **Best-Candidate Regression Guard** that always saves the highest-scoring version.
 * **Proactive Sliding-Window Rate Limiter (32K TPM / 60 RPM)**: Dual quota management across a rolling 60-second window, backed by offline mixed CJK/Latin token estimation and 25s–65s window rollover cooldowns for Google API 429 quota exhaustion.
@@ -271,30 +276,37 @@ platform win32 -- Python 3.13.12, pytest-9.1.1, pluggy-1.6.0
 rootdir: D:\Code\novel_translation_Agent
 configfile: pyproject.toml
 plugins: anyio-4.15.1, langsmith-0.12.4, asyncio-1.4.0
-collected 107 items
+collected 145 items
 
-tests\test_checkpoint.py ....                                            [  4%]
-tests\test_chunker.py ......                                             [  9%]
-tests\test_drafter_chunking.py .                                         [ 10%]
-tests\test_formatting.py .....                                           [ 15%]
+tests\test_checkpoint.py ....                                            [  2%]
+tests\test_chunker.py ......                                             [  6%]
+tests\test_cross_folder_summaries.py ........                            [ 12%]
+tests\test_drafter_chunking.py .                                         [ 13%]
+tests\test_formatting.py .....                                           [ 16%]
 tests\test_glossary_filter.py ..                                         [ 17%]
-tests\test_interactions.py ......                                        [ 22%]
+tests\test_hierarchy_summary.py .....                                    [ 21%]
+tests\test_interactions.py ......                                        [ 25%]
 tests\test_language.py ...........                                       [ 33%]
-tests\test_models.py ...                                                 [ 36%]
-tests\test_model_fallback.py ....                                        [ 39%]
-tests\test_polisher_language.py .......                                  [ 46%]
-tests\test_projects.py ....                                              [ 50%]
-tests\test_rate_limiter.py ........                                      [ 57%]
-tests\test_retry.py ....                                                 [ 61%]
-tests\test_review_loop.py ......                                         [ 66%]
-tests\test_runner.py ...                                                 [ 69%]
-tests\test_scanner.py ..                                                 [ 71%]
-tests\test_skills.py .........                                           [ 80%]
-tests\test_step_duration.py ...                                          [ 82%]
-tests\test_stop.py ..                                                    [ 84%]
-tests\test_token_tracking.py ....                                        [ 88%]
-tests\test_tui.py .............                                          [100%]
-============================ 107 passed in 48.92s =============================
+tests\test_migration.py ...                                              [ 35%]
+tests\test_model_env.py .....                                            [ 38%]
+tests\test_model_fallback.py ........                                    [ 44%]
+tests\test_models.py ...                                                 [ 46%]
+tests\test_multi_folder.py ....                                          [ 48%]
+tests\test_polisher_language.py .......                                  [ 53%]
+tests\test_procedural_graph.py .....                                     [ 57%]
+tests\test_projects.py ....                                              [ 60%]
+tests\test_rate_limiter.py ........                                      [ 65%]
+tests\test_retry.py ....                                                 [ 68%]
+tests\test_review_loop.py ......                                         [ 72%]
+tests\test_runner.py ...                                                 [ 74%]
+tests\test_scanner.py ..                                                 [ 75%]
+tests\test_skills.py ............                                        [ 84%]
+tests\test_step_duration.py ...                                          [ 86%]
+tests\test_stop.py ..                                                    [ 87%]
+tests\test_token_metrics.py ...                                          [ 89%]
+tests\test_token_tracking.py ....                                        [ 92%]
+tests\test_tui.py ...........                                            [100%]
+============================ 145 passed in 17.75s =============================
 ```
 
 ### 2. End-to-End Batch Validation
@@ -337,18 +349,18 @@ NouSetsu/
 │   ├── workflow.md                 # LangGraph pipeline and agent stages
 │   ├── agents_deep_dive.md         # In-depth architectural guide for all 5 pipeline agents
 │   ├── architecture.md             # System architecture and layer design
-│   ├── novel_bible.md              # Zero-anaphora and Novel Bible guide
-│   ├── storage_and_checkpoints.md  # Single metadata and error logging
-│   ├── tui_guide.md                # Textual TUI user guide and shortcuts
+│   ├── novel_bible.md              # Zero-anaphora, 3-tier memory, and Novel Bible guide
+│   ├── storage_and_checkpoints.md  # Single metadata, arc storage, and checkpoints
+│   ├── tui_guide.md                # Textual TUI user guide, token analytics, and shortcuts
 │   └── api_reference.md            # Developer API reference
 ├── .novel/                         # Project metadata and persistent memory
 │   ├── config.yaml                 # Project configuration (languages, raw/out folders)
 │   ├── metadata.json               # Consolidated chapter checkpoints & audit stats
 │   ├── bible/
-│   │   └── bible.yaml              # Characters, glossary, and style guide
+│   │   └── bible.yaml              # Characters, glossary, style guide, whole story summary
 │   └── summaries/
-│       ├── chapter_0001.json       # Per-chapter rolling plot summaries
-│       └── chapter_0002.json
+│       ├── arcs/                   # Story arc JSON archives (arc_0001.json, arc_0002.json)
+│       └── <volume>/               # Folder-scoped episodic chapter summaries (chapter_0001.json)
 ├── raw_chapters/                   # Input folder for source chapters
 │   ├── 001 - Awakening.txt
 │   └── 002 - Magic Beast.txt
@@ -363,14 +375,14 @@ NouSetsu/
 │   ├── models/                     # Pydantic schemas (bible, metadata, state, config)
 │   ├── prompts/                    # Translation and critique prompt templates
 │   ├── skills/                     # Domain skills registry, loader, and models
-│   │   ├── builtin/                # 17 built-in agent domain skills
+│   │   ├── builtin/                # 20 built-in agent domain skills
 │   │   └── catalog/                # Custom markdown skill catalogs (*.md)
-│   ├── storage/                    # File repository, registry, and persistence handlers
+│   ├── storage/                    # File repository, registry, migration, and persistence handlers
 │   ├── tui/                        # Textual TUI app and inspection widgets
-│   │   ├── widgets/                # Reader, Inspector, ProgressPanel, Modals
+│   │   ├── widgets/                # Reader, Inspector, ProgressPanel, Modals, Token Analytics
 │   │   └── app.py                  # Main Textual App
 │   └── utils/                      # Utilities (language detector, sliding window rate limiter)
-├── tests/                          # Automated pytest suite (107 tests across 21 modules)
+├── tests/                          # Automated pytest suite (145 tests across 25 modules)
 ├── main.py                         # Root entry point
 ├── pyproject.toml                  # Dependencies, hatchling build config, console scripts
 └── README.md                       # Repository overview and quickstart

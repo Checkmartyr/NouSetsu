@@ -16,15 +16,64 @@ Each novel project managed by NouSetsu contains the following structure:
 │   ├── bible/
 │   │   └── bible.yaml              # Novel Bible (characters, glossary, style guide)
 │   └── summaries/
-│       ├── chapter_0001.json       # Episodic chapter synopses
-│       └── chapter_0002.json
-├── raw_chapters/                   # Input folder (user-configurable name)
-│   ├── 001 - Awakening.txt
-│   └── 002 - Magic Beast.txt
+│       ├── arcs/                   # Archived Meso-tier story arc summaries
+│       │   ├── arc_0001.json       # Arc 1: Royal Academy Debut (Ch 1-122)
+│       │   └── arc_0002.json       # Arc 2: Sovereign Conflict (active)
+│       ├── Vol_01/                 # Volume-scoped episodic chapter summaries
+│       │   ├── chapter_0001.json   # Chapter synopses
+│       │   └── chapter_0002.json
+│       └── Vol_02/
+│           └── chapter_0001.json
+├── raw_chapters/                   # Input folder (supports subfolders / volumes)
+│   ├── Vol_01/
+│   │   ├── 001 - Awakening.txt
+│   │   └── 002 - Magic Beast.txt
+│   └── Vol_02/
+│       └── 001 - Capital Arrival.txt
 └── translated_chapters/            # Output folder (clean .md translations only)
-    ├── 001 - Awakening.md
-    └── 002 - Magic Beast.md
+    ├── Vol_01/
+    │   ├── 001 - Awakening.md
+    │   └── 002 - Magic Beast.md
+    └── Vol_02/
+        └── 001 - Capital Arrival.md
 ```
+
+---
+
+## 🏛️ Story Arc Storage & 3-Tier Summaries (`.novel/summaries/arcs/`)
+
+NouSetsu partitions narrative memory into three distinct tiers to provide rich context without blowing LLM context windows:
+
+### 1. Macro Tier: Whole-Story Premise
+Stored directly in `.novel/bible/bible.yaml` as `whole_story_summary`. Contains the high-level series premise, core conflicts, and global character trajectories.
+
+### 2. Meso Tier: Story Arc Summaries (`.novel/summaries/arcs/`)
+Stored in dedicated JSON files (`arc_0001.json`, `arc_0002.json`) within `.novel/summaries/arcs/`.
+
+```python
+class ArcSummary(BaseModel):
+    arc_id: str                      # e.g. "arc_0001"
+    arc_title: str                   # e.g. "Royal Academy Debut"
+    start_chapter: int               # e.g. 1
+    end_chapter: int                 # e.g. 122
+    milestones: List[str]            # Major narrative turns within the arc
+    climax: str                      # Climax resolution or arc turning point
+    status: str = "active"           # "active" or "completed"
+    created_at: str                  # ISO 8601 timestamp
+```
+
+* **Autonomous Arc Archiving**: When `Chronist` detects that a major narrative arc has concluded, it writes the completed `ArcSummary` to `.novel/summaries/arcs/` and activates a new arc.
+* **Volume Isolation**: The internal `arcs/` subfolder is automatically excluded from volume discovery (`NovelRepository.get_folder_order()`), ensuring it is never mistaken for a chapter folder.
+
+### 3. Micro Tier: Volume-Partitioned Episodic Summaries (`.novel/summaries/<volume>/`)
+* Chapter summaries are stored in folder-scoped directories (e.g. `.novel/summaries/Vol_01/chapter_0001.json`).
+* When transitioning across volume boundaries, `NovelBible.get_rolling_context()` automatically pulls trailing summaries from preceding volumes with volume badges (e.g. `[Vol_01] Chapter 122`), preventing cross-volume narrative amnesia.
+
+### 4. Summary Migration Engine (`nousetsu migrate-summaries`)
+For projects initialized on legacy flat summary layouts:
+* Detects flat summaries directly in `.novel/summaries/*.json`.
+* Computes whole-story premise, detects arc boundaries, and structures summaries into volume directories and Meso-tier `arc_XXXX.json` records.
+* Retains all original files without data loss.
 
 ---
 

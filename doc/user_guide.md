@@ -164,9 +164,16 @@ nousetsu skills --agent drafter --genre isekai
 
 # 5. Inspect Procedural Execution Graphs (Rich Tree)
 nousetsu graph-info
-nousetsu graph-info --agent drafter --verbose
+nousetsu graph-info --agent drafter
 
-# 6. Explicit TUI Launch with Custom Paths
+# 6. Inspect 3-Tier Hierarchical Story Memory (Rich Tree)
+nousetsu narrative
+nousetsu narrative -p ./my_novel
+
+# 7. Migrate Legacy Summaries to 3-Tier Hierarchy
+nousetsu migrate-summaries -p ./my_novel
+
+# 8. Explicit TUI Launch with Custom Paths
 nousetsu tui --project-dir ./my_novel
 ```
 
@@ -217,7 +224,7 @@ nousetsu skills
 nousetsu skills --agent drafter --genre wuxia
 ```
 
-### Built-in Skills (17 Total)
+### Built-in Skills (20 Total)
 
 | Agent | Skill Name | Genre / Language Scope | Description |
 |:---|:---|:---:|:---|
@@ -225,6 +232,7 @@ nousetsu skills --agent drafter --genre wuxia
 | **Extractor** | `cultivation_hierarchies` | Xianxia, Wuxia, LitRPG / CJK | Discovers martial/magic realms and meridians. |
 | **Extractor** | `relationship_mapping` | All genres / All languages | Maps master-disciple, senpai-kouhai, and clan hierarchies. |
 | **Drafter** | `zero_anaphora_resolution` | Japanese, Chinese, Korean | Reconstructs omitted subjects and pronouns from context. |
+| **Drafter** | `name_address_fidelity` | All genres / All languages | Enforces strict dialogue address registers; preserves nicknames without arbitrary full-name substitution. |
 | **Drafter** | `character_voice_differentiation` | All genres / All languages | Enforces distinct dialogue registers for each character. |
 | **Drafter** | `idiom_localization` | Chinese, Japanese, Korean | Localizes 4-character idioms (Chengyu/Yojijukugo) naturally. |
 | **Drafter** | `isekai_fantasy_tropes` | Isekai, Fantasy / All languages | Formats adventurer guild ranks, quest boards, and stat windows. |
@@ -233,9 +241,11 @@ nousetsu skills --agent drafter --genre wuxia
 | **Critic** | `omission_detector` | All genres / All languages | Audits for skipped sentences or condensed descriptions. |
 | **Critic** | `glossary_auditor` | All genres / All languages | Enforces exact canonical terms from Novel Bible. |
 | **Critic** | `hallucination_guard` | All genres / All languages | Flags fabricated plot events or unnatural additions. |
+| **Critic** | `nickname_disparity_auditor` | All genres / All languages | Flags unprovoked name/nickname swaps and register mismatches. |
 | **Critic** | `tone_consistency_auditor` | All genres / All languages | Audits narrative register against established tone. |
 | **Polisher** | `translationese_filter` | All genres / All languages | Purges clunky passive voice and repetitive translation tropes. |
 | **Polisher** | `prose_cadence_enhancer` | All genres / All languages | Crafts dynamic sentence rhythm and sensory prose. |
+| **Polisher** | `address_form_preservation` | All genres / All languages | Strictly forbids normalizing intimate pet names and emotional address forms. |
 | **Polisher** | `show_dont_tell` | All genres / All languages | Converts flat emotional labels into physical actions. |
 | **Polisher** | `dialogue_flow` | All genres / All languages | Ensures spoken dialogue sounds natural and fluid. |
 | **Polisher** | `otome_court_etiquette` | Romance, Otome, Drama / All | Refines aristocratic court banter and villainess poise. |

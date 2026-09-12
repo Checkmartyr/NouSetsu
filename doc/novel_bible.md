@@ -158,3 +158,76 @@ The `style_guide` section controls prose tone and conventions:
   * `adapt`: Translates honorifics into English approximations (e.g. `Lady Clara`, `Sir`, `Brother`).
   * `drop`: Omits honorifics in favor of natural Western fiction conventions.
 * **`custom_rules`**: A list of freeform translation rules injected directly into the drafter and critique prompts.
+
+---
+
+## 🏛️ 3-Tier Hierarchical Narrative Memory
+
+To translate long-running serial fiction without losing narrative momentum, NouSetsu structures story memory into three distinct, complementary tiers:
+
+```mermaid
+graph TD
+    Macro["1. Macro: Whole Story Progression\n(Global narrative arc, world state, long-term goals)"]
+    Meso["2. Meso: Active & Concluded Story Arcs\n(ArcSummary: title, core conflict, milestones achieved)"]
+    Micro["3. Micro: Immediate Preceding Situation\n(ChapterSummary: cliffhangers, status changes, volume badges)"]
+    
+    Macro --> Meso
+    Meso --> Micro
+    Micro --> Drafter["Wortschmied (Drafter System Prompt < 500 tokens)"]
+```
+
+### 1. Macro Context (`whole_story_summary`)
+* High-level synopsis of the novel's journey from chapter 1 to the current point.
+* Stored in `NovelBible.whole_story_summary` in `bible.yaml`.
+* Injected into the Drafter prompt as:
+  ```markdown
+  ### 1. Global Story Progression (Macro):
+  {whole_story_summary}
+  ```
+
+### 2. Meso Context: Story Arcs (`ArcSummary`)
+* **Autonomous AI Boundary Detection**: `Chronist` (ChroniclerAgent) monitors narrative tension, character breakthroughs, and climax events.
+* **Fields**:
+  * `arc_id`: Unique identifier (e.g. `arc_0001`).
+  * `arc_num`: Sequential arc index.
+  * `title`: Descriptive arc title (e.g. *"The Duller Exorcism"*).
+  * `synopsis`: High-level narrative progression for the arc.
+  * `core_conflict`: Central obstacle or antagonistic tension.
+  * `status`: `"active"` or `"completed"`.
+  * `start_chapter` / `end_chapter`: Numerical chapter bounds.
+  * `key_milestones`: Concrete milestones achieved during this arc.
+* **Storage**: Serialized to `.novel/summaries/arcs/arc_XXXX.json`.
+* **Climax Archiving**: When an arc concludes (`arc_completed=true`), the Chronicler transitions it to `status="completed"`, archives it into `NovelBible.archived_arcs`, synthesizes its outcome into `whole_story_summary`, and initializes the next active arc.
+
+### 3. Micro Context: Immediate Preceding Chapters (`ChapterSummary`)
+* Rolling context of the last 1–3 chapters providing immediate situational continuity, dialogue cliffhangers, and physical condition shifts (injuries, attire changes).
+
+---
+
+## 📁 Multi-Folder & Cross-Volume Narrative Memory
+
+For large projects organized by light novel volume (e.g. `Villainess_04` followed by `Villainess_05`):
+
+1. **Volume Partitioning**: Summaries are archived into folder subdirectories (`.novel/summaries/<volume>/chapter_XXXX.json`), preventing file collisions when chapter numbering resets to 1.
+2. **Cross-Volume Rolling Backfill**: When beginning a new volume (e.g. Chapter 1 of `Villainess_05`), `get_rolling_context(cross_folder=True)` automatically traverses preceding folders in natural volume order and backfills the concluding chapters of `Villainess_04`.
+3. **Volume Badges**: Context entries in LLM prompts are automatically tagged with volume badges (e.g. `[Villainess_04] Chapter 122: ...`), preventing LLM temporal confusion.
+
+---
+
+## 🏷️ Nickname & Address Form Discipline
+
+In East Asian webnovels, characters alternate between formal names, titles, and affectionate nicknames depending on emotional intimacy and social setting. Monolithic MT engines frequently:
+* Normalize affectionate pet names into formal names (e.g. translating Ifia's affectionate *"Fia"* as *"Ifia"*).
+* Erroneously invent nicknames in formal third-person narration where none exist.
+
+### The 3-Agent Enforcement Protocol
+1. **Drafter (`Wortschmied`)**:
+   - Activated via skill `name_address_fidelity` and Procedural Graph node `Name_Discipline`.
+   - Directs the LLM: *"When dialogue uses an affectionate nickname, preserve the exact nickname. When dialogue uses the formal name, do NOT substitute a nickname."*
+2. **Critic (`Zensor`)**:
+   - Activated via skill `nickname_disparity_auditor`.
+   - Audits dialogue line-by-line against raw source text, flagging unprovoked name/nickname swaps.
+3. **Polisher (`Feinschliff`)**:
+   - Activated via skill `address_form_preservation`.
+   - Forbids smoothing or modernizing intimate address forms into generic English equivalents.
+

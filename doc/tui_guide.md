@@ -79,26 +79,45 @@ Located below the reader pane in a compact 5-line container, displaying deep met
 ### 1. Novel Bible Modal (`E` key)
 * **Characters Tab**: Displays registered character sheets (name, original script, gender, role, vocal tone, aliases).
 * **Glossary Tab**: Formatted table of canonical terms, categories, and translation notes.
-* **Languages Tab**: Configure or swap source and target languages.
+* **Languages Tab**: Configure or swap source and target languages, or trigger auto-detection from raw chapters.
+* **Summaries Tab**: Comprehensive 3-tier narrative memory inspector displaying:
+  * **Whole Story Progression Banner**: High-level synopsis of the novel's journey.
+  * **Active Story Arc Card**: Active arc title, core conflict, and key milestones achieved.
+  * **Concluded Arcs Accordion**: Collapsible history of completed volumes/story arcs.
+  * **Chapter Summaries Tree**: Grouped by volume folder with key events and character state changes.
 * **Add New Term Tab**: Quick-form to inject new canonical terms directly into the Novel Bible.
 * **Dismissal**: Universal `Esc` key, `Q` key, or top-right `✖ Close (Esc)` button. The dialog body uses flex layout (`TabbedContent { height: 1fr; }`) to ensure close buttons are never pushed off screen.
 
 ---
 
-### 2. Project Selector Modal (`P` key)
+### 2. Token Analysis Dashboard (`M` key)
+* **Interactive Analytics**: Press `M` or click `[📊 Tokens (M)]` in the action toolbar to inspect real-time resource consumption.
+* **KPI Metric Cards**: Displays global totals for Prompt Tokens, Completion Tokens, Thought Tokens (Gemini reasoning), Cached Tokens, and Total Execution Duration.
+* **Pipeline Stage DataTable**: Per-stage breakdown of tokens and duration across Extraction, Drafting, Critique passes, Polishing passes, and Chronicling.
+* **Model Consumption DataTable**: Tracks cost and token distribution by LLM model (`gemini-3.1-flash-lite`, `gemini-3.5-flash-lite`, `gemma-4-26b-a4b-it`).
+* **Chapter Ranking DataTable**: Ranks chapters by total tokens and duration to pinpoint unusually dense chapters.
+
+---
+
+### 3. Folder / Volume Selector Modal (`F` key)
+* When working with multi-volume novels (e.g. `Villainess_04`, `Villainess_05`), allows switching the active working volume with a single click, auto-resolving input and output folders.
+
+---
+
+### 4. Project Selector Modal (`P` key)
 * Lists all known novel translation projects across the machine.
 * **Open from Path**: Paste any external folder path on your computer (e.g. `D:\Novels\MyBook` or `~/workspace/novel`) and hit Enter to open or auto-initialize.
 * Remembers the `last_active_project` so returning to NouSetsu automatically reopens your active book.
 
 ---
 
-### 3. New Project Modal (`N` key)
+### 5. New Project Modal (`N` key)
 * Initialize a brand-new translation project.
 * Configures project title, filesystem directory, source/target languages, custom raw chapter folder name (e.g. `raw_chapters`), and translated folder name (e.g. `translated_chapters`).
 
 ---
 
-### 4. Settings Modal (`S` key)
+### 6. Settings Modal (`S` key)
 * **Model Configuration & Routing**:
   * **Primary Model (`model_name`)**: Base model for unconfigured stages (default: `gemini-3.1-flash-lite`).
   * **Fallback Model (`fallback_model`)**: Failover model used automatically on HTTP 429 quota exhaustion (default: `gemini-3.5-flash-lite`).
@@ -134,7 +153,9 @@ Located below the reader pane in a compact 5-line container, displaying deep met
 | `T` | **Translate Selected** | Run agent translation on currently selected chapter (or resume if paused/failed) |
 | `B` | **Run All Batch** | Trigger background batch translation across all pending chapters |
 | `X` | **Stop Translation** | Gracefully halt active translation and save pause checkpoint |
-| `E` | **Novel Bible** | Open in-terminal editor to inspect/add characters, glossary, and languages |
+| `E` | **Novel Bible** | Open in-terminal editor to inspect/add characters, glossary, and 3-tier summaries |
+| `M` | **Token Analytics** | Open real-time Token & Latency Analytics dashboard with DataTables |
+| `F` | **Volume Selector** | Switch active translation folder/volume in multi-folder projects |
 | `P` | **Project Selector** | Switch active project or open an external project from folder path |
 | `N` | **New Project** | Open wizard to initialize a new novel translation workspace |
 | `S` | **Settings** | Adjust model, language pair, rate limits, review loops, and style guide |

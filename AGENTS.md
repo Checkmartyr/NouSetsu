@@ -178,12 +178,20 @@ Active skills are dynamically filtered based on:
 │   ├── config.yaml          # ProjectConfig (title, languages, paths, genre, chunking, review loops)
 │   ├── metadata.json        # Unified ProjectMetadataDocument with all chapter audits & token stats
 │   ├── bible/
-│   │   └── bible.yaml       # NovelBible (characters, glossary, style guide, genre)
+│   │   └── bible.yaml       # NovelBible (characters, glossary, style guide, genre, whole_story_summary)
 │   ├── checkpoints/         # Stage checkpoint recovery files
-│   └── summaries/           # ChapterSummary archives (scoped by volume/folder e.g. summaries/Vol_01/)
+│   └── summaries/           # Chapter summaries and story arc archives
+│       ├── arcs/            # Story Arc records (arc_0001.json, arc_0002.json)
+│       └── <volume>/        # Folder-scoped ChapterSummary archives (e.g. summaries/Vol_01/)
 ├── raw_chapters/            # Raw novel files (e.g. 0001.txt)
 └── translated_chapters/     # Final translated markdown outputs
 ```
+
+### 3-Tier Hierarchical Narrative Memory (Macro > Meso > Micro)
+To prevent narrative context drift over lengthy multi-hundred chapter novels, NouSetsu organizes memory into three distinct tiers:
+1. **Macro Context (`whole_story_summary`)**: An overarching narrative synthesis of the entire novel so far, capturing long-term character goals, world state changes, and major power shifts.
+2. **Meso Context (`ArcSummary`)**: Autonomous AI detection of story arc boundaries via `Chronist` (ChroniclerAgent). Tracks arc title, core conflict, milestones achieved, and active vs. completed status. Serialized into `.novel/summaries/arcs/arc_XXXX.json`. Upon story climax resolution (`arc_completed=true`), the arc is archived into `NovelBible.archived_arcs` and synthesized into the Macro summary.
+3. **Micro Context (`ChapterSummary`)**: Immediate preceding chapter outcomes, cliffhangers, and character state changes (injuries, deaths, relationship shifts) scoped by volume folder.
 
 ### Multi-Folder & Cross-Volume Narrative Memory
 For projects structured with multiple chapter folders (e.g. `Villainess_04`, `Villainess_05`):
@@ -246,10 +254,13 @@ All commands should be run using `uv`:
 # Install / sync dependencies
 uv sync
 
-# Run complete test suite (116 tests across 22 modules in ~16s)
+# Run complete test suite (145 tests across 25 modules in ~18s)
 uv run pytest
 
 # Run specific test modules
+uv run pytest tests/test_hierarchy_summary.py
+uv run pytest tests/test_migration.py
+uv run pytest tests/test_cross_folder_summaries.py
 uv run pytest tests/test_model_env.py
 uv run pytest tests/test_model_fallback.py
 uv run pytest tests/test_tui.py
@@ -262,15 +273,24 @@ uv run pytest tests/test_rate_limiter.py
 uv run nousetsu
 uv run nousetsu tui -p project/Villainess
 
+# Inspect 3-tier hierarchical story memory (Whole Story > Arcs > Situation)
+uv run nousetsu narrative -p project/Villainess
+
+# Migrate legacy novel summaries to 3-tier hierarchy
+uv run nousetsu migrate-summaries -p project/Villainess
+
+# Inspect Procedural Graphs with Rich tree formatting (arXiv:2609.09153v1)
+uv run nousetsu graph-info -a drafter
+
 # Initialize a new novel project
-uv run nousetsu init --title "Ascendance of a Bookworm" --genre isekai --source-lang Japanese --target-lang Thai
+uv run nousetsu init --title "The Villainess" --genre general --source-lang English --target-lang Thai
 
 # Run folder-to-folder batch translation
-uv run nousetsu batch --limit 5 --genre xianxia
+uv run nousetsu batch --limit 5 --genre general
 
 # Inspect registered domain skills
 uv run nousetsu skills
-uv run nousetsu skills --agent drafter --genre xianxia
+uv run nousetsu skills --agent drafter --genre general
 ```
 
 ---

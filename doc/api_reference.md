@@ -454,7 +454,7 @@ class BatchRunner:
 ## 💾 Storage & Repositories (`src/nousetsu/storage/`)
 
 ### `NovelRepository` (`src/nousetsu/storage/repository.py`)
-Manages on-disk state, Bible YAML, and single project metadata JSON.
+Manages on-disk state, Bible YAML, 3-tier summaries, story arcs, and single project metadata JSON.
 
 ```python
 class NovelRepository:
@@ -471,6 +471,15 @@ class NovelRepository:
     ) -> NovelBible: ...
     def set_languages(self, source_lang: Optional[str], target_lang: Optional[str]) -> NovelBible: ...
     
+    # 3-Tier Summaries & Story Arcs
+    def get_all_arcs(self) -> List[ArcSummary]: ...
+    def get_active_arc(self) -> Optional[ArcSummary]: ...
+    def save_arc_summary(self, arc: ArcSummary) -> Path: ...
+    def get_folder_order(self) -> List[str]: ...
+    def get_rolling_context(self, current_folder: Optional[str] = None, max_items: int = 3) -> List[ChapterSummary]: ...
+    def save_summary(self, summary: ChapterSummary, folder_name: Optional[str] = None) -> Path: ...
+    def load_summaries(self, folder_name: Optional[str] = None) -> List[ChapterSummary]: ...
+
     # Project Metadata (.novel/metadata.json)
     def project_metadata_file_path(self) -> Path: ...
     def load_project_metadata_doc(self) -> ProjectMetadataDocument: ...
@@ -486,6 +495,25 @@ class NovelRepository:
 
 ---
 
+### `SummaryMigrationEngine` (`src/nousetsu/storage/migration.py`)
+Upgrades legacy flat episodic summaries into 3-tier arc hierarchies and volume structures.
+
+```python
+def migrate_novel_summaries(
+    repo: NovelRepository,
+    model_name: Optional[str] = None,
+    dry_run: bool = False
+) -> Dict[str, Any]:
+    """
+    Scans legacy summaries in .novel/summaries/*.json.
+    Synthesizes whole_story_summary, detects story arc boundaries, archives
+    Meso-tier ArcSummary records, and partitions chapter summaries into volume folders.
+    Returns migration report dict with status, arcs created, and file paths.
+    """
+```
+
+---
+
 ## 📋 Data Schemas (`src/nousetsu/models/`)
 
 ### Key Pydantic Models
@@ -494,7 +522,10 @@ class NovelRepository:
   * Fields: `chapter_id`, `chapter_num`, `source_text`, `draft_text`, `critique_notes`, `quality_audit`, `polished_text`, `review_iteration`, `max_review_loops`, `quality_threshold`, `best_polished_text`, `best_audit`, `metadata`.
 * **`ProjectConfig` (`src/nousetsu/models/config.py`)**: Project configuration settings.
   * Fields: `project_id`, `title`, `source_language`, `target_language`, `raw_dir`, `output_dir`, `model_name`, `fallback_model`, `extractor_model`, `drafter_model`, `critic_model`, `polisher_model`, `chronicler_model`, `auto_update_bible`, `max_tpm`, `max_rpm`, `max_review_loops`, `quality_threshold`, `chunk_threshold_lines`, `target_chunk_lines`, `chunk_overlap_lines`.
-* **`NovelBible` (`src/nousetsu/models/bible.py`)**: Root memory document holding `characters`, `glossary`, `summaries`, and `style_guide`.
+* **`ArcSummary` (`src/nousetsu/models/bible.py`)**: Meso-tier story arc representation.
+  * Fields: `arc_id`, `arc_title`, `start_chapter`, `end_chapter`, `milestones`, `climax`, `status` (`"active"` or `"completed"`), `created_at`.
+* **`NovelBible` (`src/nousetsu/models/bible.py`)**: Root memory document holding `whole_story_summary`, `active_arc`, `characters`, `glossary`, `summaries`, and `style_guide`.
+  * Methods: `get_hierarchical_context()`, `get_rolling_context()`, `format_for_drafter()`.
 * **`ChapterMetadata` (`src/nousetsu/models/metadata.py`)**: Chapter metadata record with paired `CheckpointData`, `QualityAudit`, and `TranslationStats` (including cumulative tokens, `duration_seconds`, and granular `step_usage`).
 * **`CheckpointData` (`src/nousetsu/models/metadata.py`)**: Stage tracking with `status` (`PENDING`, `IN_PROGRESS`, `PAUSED`, `COMPLETED`, `FAILED`), `stage_artifacts`, and `error_logs`.
 * **`StageArtifacts` (`src/nousetsu/models/metadata.py`)**: Intermediate outputs (`extracted_characters`, `extracted_terms`, `draft_text`, `critique_notes`, `polished_text`).
