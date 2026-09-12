@@ -154,6 +154,47 @@ def cmd_skills(args: argparse.Namespace) -> None:
     console.print(table)
 
 
+def cmd_graph_info(args: argparse.Namespace) -> None:
+    """Display active Procedural Graphs with Rich tree formatting."""
+    from rich.panel import Panel
+    from rich.tree import Tree
+    from nousetsu.graph.procedural import get_default_drafter_graph, get_default_extractor_graph
+
+    agent_filter = (getattr(args, "agent", None) or "all").lower()
+
+    graphs_to_show = []
+    if agent_filter in ["all", "extractor"]:
+        graphs_to_show.append(("Extractor (Schriftdetektiv)", get_default_extractor_graph()))
+    if agent_filter in ["all", "drafter"]:
+        graphs_to_show.append(("Drafter (Wortschmied)", get_default_drafter_graph()))
+
+    if not graphs_to_show:
+        console.print(f"[yellow]No procedural graph found for agent '{args.agent}'. Use 'extractor', 'drafter', or 'all'.[/]")
+        return
+
+    for title, g in graphs_to_show:
+        tree = Tree(f"[bold cyan]Procedural Graph: {title}[/] [dim]({g.graph_id})[/]")
+        tree.add(f"[italic dim]{g.description}[/]")
+
+        # Nodes
+        nodes_branch = tree.add("[bold yellow]Nodes (V)[/]")
+        for n_id, n in g.nodes.items():
+            type_val = n.node_type.value if hasattr(n.node_type, "value") else str(n.node_type)
+            type_color = "green" if type_val == "ACTION" else "magenta"
+            nodes_branch.add(f"[bold]{n.name}[/] [dim]({n.id})[/] - [{type_color}]{type_val}[/]: [dim]{n.description}[/]")
+
+        # Edges
+        edges_branch = tree.add("[bold green]Transitions & Execution Directives (E, \u03a6)[/]")
+        for e in g.edges:
+            cond_str = f" [cyan][When: {e.condition}][/]" if e.condition else ""
+            edge_leaf = edges_branch.add(f"[bold]{e.source}[/] -> [bold]{e.target}[/]{cond_str}")
+            edge_leaf.add(f"[white]Guidance:[/] {e.guidance}")
+            if e.pitfalls:
+                edge_leaf.add(f"[red bold]Pitfalls to Avoid:[/] {e.pitfalls}")
+
+        console.print(Panel(tree, border_style="cyan", padding=(1, 2)))
+
+
 def cmd_tui(args: argparse.Namespace) -> None:
     project_dir = getattr(args, "project_dir", None)
     repo = NovelRepository(project_dir) if project_dir else NovelRepository()
@@ -217,6 +258,10 @@ def main() -> None:
     p_skills.add_argument("--genre", "-g", default=None, help="Filter by genre")
     p_skills.add_argument("--source-lang", "-l", default=None, help="Filter by source language")
 
+    # graph-info
+    p_graph = subparsers.add_parser("graph-info", help="Inspect Procedural Graphs with Rich tree formatting (arXiv:2609.09153v1)")
+    p_graph.add_argument("--agent", "-a", choices=["all", "extractor", "drafter"], default="all", help="Filter by agent graph (default: all)")
+
     # tui
     p_tui = subparsers.add_parser("tui", help="Launch interactive Textual TUI dashboard")
     p_tui.add_argument("--project-dir", "-p", default=None, help="Root folder of novel project")
@@ -237,6 +282,8 @@ def main() -> None:
         cmd_batch(args)
     elif args.command == "skills":
         cmd_skills(args)
+    elif args.command == "graph-info":
+        cmd_graph_info(args)
     elif args.command == "tui":
         cmd_tui(args)
     else:

@@ -12,10 +12,11 @@
 3. [60-Second Quickstart (The Textual TUI Dashboard)](#-3-60-second-quickstart-the-textual-tui-dashboard)
 4. [Headless CLI & Batch Automation](#-4-headless-cli--batch-automation)
 5. [Agent Skills System](#-5-agent-skills-system)
-6. [Managing the Novel Bible & Lore](#-6-managing-the-novel-bible--lore)
-7. [Enterprise Safety Guards](#-7-enterprise-safety-guards)
-8. [Gemini Interactions API & Granular Token Tracking](#-8-gemini-interactions-api--granular-token-tracking)
-9. [Troubleshooting & FAQ](#-9-troubleshooting--faq)
+6. [Procedural Graph Execution (Zero-Token Overhead)](#-6-procedural-graph-execution-zero-token-overhead)
+7. [Managing the Novel Bible & Lore](#-7-managing-the-novel-bible--lore)
+8. [Enterprise Safety Guards](#-8-enterprise-safety-guards)
+9. [Gemini Interactions API & Granular Token Tracking](#-9-gemini-interactions-api--granular-token-tracking)
+10. [Troubleshooting & FAQ](#-10-troubleshooting--faq)
 
 ---
 
@@ -159,7 +160,11 @@ nousetsu batch --input-dir raw_chapters --output-dir translated_chapters --limit
 # 4. Agent Domain Skills Catalog
 nousetsu skills --agent drafter --genre isekai
 
-# 5. Explicit TUI Launch with Custom Paths
+# 5. Inspect Procedural Execution Graphs (Rich Tree)
+nousetsu graph-info
+nousetsu graph-info --agent drafter --verbose
+
+# 6. Explicit TUI Launch with Custom Paths
 nousetsu tui --project-dir ./my_novel
 ```
 
@@ -252,7 +257,122 @@ priority: 110
 
 ---
 
-## 📖 6. Managing the Novel Bible & Lore
+## 🧠 6. Procedural Graph Execution (Zero-Token Overhead)
+
+NouSetsu integrates an innovative **Procedural Graph** engine based on Google DeepMind research (*Procedural Graphs: Self-Evolving Execution Structures for LLM Agents*, Lu et al., arXiv:2609.09153v1).
+
+### 💡 The Core Idea: Knowledge Graph vs. Procedural Graph in Plain English
+
+Most AI systems know **facts**, but get lost on **procedures** (what to do next):
+
+| Graph Type | What Question It Answers | Example Triplet | Real-World Analogy |
+|:---|:---|:---|:---|
+| **Knowledge Graph (KG)** | *"What is this thing?"* (Facts) | `(Clara, IS_A, Noble)`<br>`(Excalibur, LOCATED_IN, Stone)` | An Encyclopedia |
+| **Procedural Graph (PG)** | *"What should I do next?"* (Actions) | `(Scan Candidates, LEADS_TO, Filter Known)` | A Flight Checklist / GPS |
+
+```mermaid
+flowchart LR
+    subgraph KG ["Knowledge Graph: Facts ('What is')"]
+        E1["Clara"] -->|is_a| E2["Villainess"]
+        E1 -->|serves| E3["Amber Family"]
+    end
+
+    subgraph PG ["Procedural Graph: Workflow ('What to do')"]
+        P1["1. Scan Text"] -->|LEADS_TO| P2["2. Check Bible"]
+        P2 -->|LEADS_TO| P3["3. Infer Gender"]
+        P3 -->|LEADS_TO| P4["4. Prune Junk Terms"]
+    end
+```
+
+### 🗝️ The 3 Magic Attributes on Every Edge
+
+In a simple diagram, arrows just say "leads to". In a **Procedural Graph**, every transition edge carries three vital pieces of operational advice:
+
+$$\Phi(e) = (\text{Condition}, \text{Guidance}, \text{Pitfalls})$$
+
+1. **Condition**: *When* should this step trigger?  
+   *(e.g., "When a candidate character name appears in the scene")*
+2. **Guidance**: *How* should the model solve it?  
+   *(e.g., "Inspect speech honorifics like -sama or -kun to determine gender and status before guessing")*
+3. **Pitfalls (The Secret Weapon)**: *What mistakes* must the model NOT make?  
+   *(e.g., "DO NOT extract common conversational verbs, everyday adjectives, or greetings as novel terms!")*
+
+### ⚡ The Research Paper's Flaw vs. NouSetsu's Token-Frugal Architecture
+
+In the original academic paper:
+* At **every single step**, the agent asks a separate online "Guidance LLM": *"Look at the graph and tell me what to do."*
+* **The Problem**: Token consumption exploded by **+55% to +430%** (consuming up to 367,000 tokens on large tasks)!
+
+**NouSetsu's Lightweight Solution**:
+1. **Deterministic Localization (0 Extra LLM Calls, 0ms Latency)**:  
+   Fast Python code tracks pipeline state:
+   * Extractor running? $\rightarrow$ Select `Scan_Candidates` edge.
+   * Drafter translating Chunk 1? $\rightarrow$ Select `Scene_Init` edge.
+   * Drafter translating Chunk 2+? $\rightarrow$ Select `Boundary_Continuity` edge.
+2. **Compact Serialized Injection (< 80 Tokens)**:  
+   Only the active edge's guidance and pitfalls are injected into the agent's prompt.
+3. **Net Token Reduction (We Actually Save Tokens!)**:  
+   By giving the Extractor a strict anti-bloat pitfall rule (*"Do not extract everyday conversational vocabulary"*), the model stops outputting dozens of useless JSON dictionary entries.
+   * Prompt overhead: **+60 tokens**.
+   * Output reduction: **-300 to -800 tokens**.
+   * **Net Result: Translation uses FEWER tokens than without the graph!**
+
+### 🎬 Concrete Examples in Action
+
+#### Example A: In the Extractor (`Schriftdetektiv`)
+* **Without PG**: The model reads a Japanese sentence, finds common descriptive phrasing, and extracts everyday words ("quickly", "good", "run") into the glossary. The output is bloated with 1,200 tokens of junk.
+* **With PG**: The prompt injects:
+  > **Step $\rightarrow$ Prune Trivial Terms**: Extract only domain-specific martial ranks, spells, and unique items.  
+  > **Pitfalls to Avoid**: Strictly exclude ordinary conversational vocabulary, everyday verbs, and greetings.
+* **Result**: The LLM outputs only valid novel lore (`Azure Thunder Blade`, `Clara`), saving 300–800 output tokens.
+
+#### Example B: In the Drafter (`Wortschmied`) across Chunks
+* **Chunk 1**: Localizes at `Scene_Init`. Tells model: *"Anchor character POV, establish narrative past tense, and identify opening speakers."*
+* **Chunk 2+**: Localizes at `Boundary_Continuity`. Tells model:
+  > **Step $\rightarrow$ Boundary Continuity**: Read Preceding Scene Context to identify active speaker. Resume translating immediately.  
+  > **Pitfalls to Avoid**: DO NOT repeat or re-translate preceding text. DO NOT restart the scene or re-introduce known characters.
+* **Result**: Eliminates the classic chunk boundary bug where Chunk 2 re-translates lines from Chunk 1 or greets characters as if meeting them for the first time.
+
+### 🔍 Terminal Inspection Tool (`nousetsu graph-info`)
+
+You can inspect all active procedural graphs directly in your terminal using the built-in Rich tree viewer:
+
+```bash
+# View all active agent procedural graphs
+nousetsu graph-info
+
+# Filter by a specific agent with verbose edge attributes
+nousetsu graph-info --agent drafter --verbose
+```
+
+Terminal output displays the execution flow, transitions, guidance notes, and pitfall guards in colorful Rich trees:
+
+```text
+📦 NouSetsu Procedural Graph Inspection
+├── 🎭 Stage 1: Extractor (Schriftdetektiv)
+│   ├── [Scan_Candidates] ──(text_received)──> [Filter_Known]
+│   ├── [Filter_Known] ──(unregistered_found)──> [Deduce_Profiles]
+│   └── [Deduce_Profiles] ──(entities_resolved)──> [Prune_Trivial_Terms]
+│       └── ⚠️ Pitfall: Strictly exclude ordinary conversational vocabulary, everyday verbs, and greetings.
+└── ✍️ Stage 2: Drafter (Wortschmied)
+    ├── [Scene_Init] ──(chunk_1_or_single)──> [Zero_Anaphora_Resolution]
+    ├── [Boundary_Continuity] ──(chunk_gt_1)──> [Zero_Anaphora_Resolution]
+    │   └── ⚠️ Pitfall: DO NOT repeat or re-translate preceding text. DO NOT restart scene.
+    ├── [Zero_Anaphora_Resolution] ──(subjects_resolved)──> [Voice_Modulation]
+    └── [Voice_Modulation] ──(voices_locked)──> [Glossary_Lock]
+```
+
+### 🧬 Offline Self-Evolution (Learning Without Inference Costs)
+
+NouSetsu includes an offline refiner ([`pg_refiner.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/graph/pg_refiner.py)) based on Algorithm 1 of the paper:
+1. When `Zensor` (`CritiqueAgent`) flags translation flaws (e.g. pronoun drift or glossary omissions), a `DiagnosticTrace` records the failure.
+2. An offline evolution process compares successful vs. failed chapter runs and refines graph edge attributes (e.g. appending new specific pitfalls).
+3. Changes are committed only if structural validation passes and regression tests succeed.
+4. **Inference Token Cost: 0 tokens** (runs offline or post-batch).
+
+---
+
+## 📖 7. Managing the Novel Bible & Lore
 
 All persistent memory is stored in human-readable YAML at:
 ```text
@@ -299,7 +419,7 @@ summaries:
 
 ---
 
-## 🛡️ 7. Enterprise Safety Guards
+## 🛡️ 8. Enterprise Safety Guards
 
 1. **Sliding-Window Rate Limiter (32K TPM / 60 RPM)**:
    - Tracks token and request quotas across a rolling 60-second window.
@@ -327,7 +447,7 @@ summaries:
 
 ---
 
-## ⚡ 8. Gemini Interactions API & Granular Token Tracking
+## ⚡ 9. Gemini Interactions API & Granular Token Tracking
 
 NouSetsu natively integrates Google's cutting-edge **Gemini Interactions API** (`/v1beta/interactions`) to coordinate stateful multi-turn agent conversations, stream model thoughts, and provide high-fidelity token accounting across all pipeline stages.
 
@@ -369,7 +489,7 @@ NouSetsu tracks 5 precise token dimensions across every pipeline stage:
 
 ---
 
-## ❓ 9. Troubleshooting & FAQ
+## ❓ 10. Troubleshooting & FAQ
 
 ### Q: What should I do if I get a `429 Resource Exhausted` error?
 **A**: NouSetsu's sliding-window rate limiter automatically catches 429 errors, pauses execution until the current 60-second window clears, and retries with exponential backoff. If you are on a restricted tier, lower your TPM via CLI:
