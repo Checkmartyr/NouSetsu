@@ -4,6 +4,7 @@
 > Powered by **LangGraph**, **LangChain**, **Textual**, and **Rich**.
 
 [![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/)
+[![Version: v0.2.0](https://img.shields.io/badge/version-v0.2.0-blue.svg)](https://github.com/Checkmartyr/NouSetsu)
 [![Package Manager: uv](https://img.shields.io/badge/managed%20by-uv-purple.svg)](https://github.com/astral-sh/uv)
 [![Framework: LangGraph](https://img.shields.io/badge/agent-LangGraph-orange.svg)](https://github.com/langchain-ai/langgraph)
 [![UI: Textual](https://img.shields.io/badge/ui-Textual%20%26%20Rich-green.svg)](https://textual.textualize.io/)
@@ -13,6 +14,7 @@
 ## 🌟 Key Highlights
 
 * **3-Tier Hierarchical Narrative Memory**: Maintains a persistent 3-tier narrative memory in the **Novel Bible**: Macro (**Whole Story Progression**) > Meso (**Story Arcs** via `ArcSummary` with autonomous boundary/milestone detection) > Micro (**Immediate Situation** via volume-partitioned `ChapterSummary`), eliminating long-term narrative drift and forgotten character goals.
+* **AI Safety Block Resilience & Recursive Bisection**: Dual-resilience safety engine combining recursive binary bisection (`bisect_text`) to isolate sensitive scenes down to <= 8-line snippets with Google Translate fallback (`deep-translator`) when encountering Google AI `prohibited_content` blocks. Features standardized fiction task framing across all five pipeline agents to prevent safety false positives.
 * **Cross-Folder & Multi-Volume Continuous Memory**: Automatically detects volume sequences (`Villainess_04`, `Villainess_05`), partitioning chapter summaries into subfolders while automatically backfilling preceding summaries when entering a new volume. Injects volume badges (`[Villainess_04] Chapter 122`) to eliminate multi-volume numbering confusion.
 * **Zero-Anaphora Resolution & Nickname Discipline**: Context-augmented drafting specifically designed for East Asian languages (Japanese, Chinese, Korean) where subjects, agents, and pronouns are omitted. Enforces strict name vs. nickname register discipline across Drafter, Critic, and Polisher agents to preserve author intent without arbitrary normalization.
 * **Procedural Graph Steering & Offline Self-Evolution (arXiv:2609.09153v1)**: Encodes procedural execution rules into explicit attributed graphs $G = (V, R, E, \Phi)$ carrying `(condition, guidance, pitfalls)`. Uses deterministic code-level localization (< 100 prompt tokens) rather than expensive runtime guidance LLMs, while pruning conversational junk terms in extraction (-300 to -800 output tokens) and switching chunk states (Scene Init vs Boundary Continuity vs Name Discipline) in drafting. Self-evolves offline from critic audit reports with zero inference token cost. Inspectable via `nousetsu graph-info`.
@@ -276,37 +278,42 @@ platform win32 -- Python 3.13.12, pytest-9.1.1, pluggy-1.6.0
 rootdir: D:\Code\novel_translation_Agent
 configfile: pyproject.toml
 plugins: anyio-4.15.1, langsmith-0.12.4, asyncio-1.4.0
-collected 145 items
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 199 items
 
 tests\test_checkpoint.py ....                                            [  2%]
-tests\test_chunker.py ......                                             [  6%]
-tests\test_cross_folder_summaries.py ........                            [ 12%]
-tests\test_drafter_chunking.py .                                         [ 13%]
-tests\test_formatting.py .....                                           [ 16%]
-tests\test_glossary_filter.py ..                                         [ 17%]
-tests\test_hierarchy_summary.py .....                                    [ 21%]
-tests\test_interactions.py ......                                        [ 25%]
-tests\test_language.py ...........                                       [ 33%]
-tests\test_migration.py ...                                              [ 35%]
-tests\test_model_env.py .....                                            [ 38%]
-tests\test_model_fallback.py ........                                    [ 44%]
-tests\test_models.py ...                                                 [ 46%]
-tests\test_multi_folder.py ....                                          [ 48%]
-tests\test_polisher_language.py .......                                  [ 53%]
-tests\test_procedural_graph.py .....                                     [ 57%]
-tests\test_projects.py ....                                              [ 60%]
-tests\test_rate_limiter.py ........                                      [ 65%]
-tests\test_retry.py ....                                                 [ 68%]
-tests\test_review_loop.py ......                                         [ 72%]
-tests\test_runner.py ...                                                 [ 74%]
-tests\test_scanner.py ..                                                 [ 75%]
-tests\test_skills.py ............                                        [ 84%]
-tests\test_step_duration.py ...                                          [ 86%]
-tests\test_stop.py ..                                                    [ 87%]
-tests\test_token_metrics.py ...                                          [ 89%]
-tests\test_token_tracking.py ....                                        [ 92%]
+tests\test_chunker.py ......                                             [  5%]
+tests\test_cross_folder_summaries.py ........                            [  9%]
+tests\test_drafter_chunking.py .                                         [  9%]
+tests\test_formatting.py .....                                           [ 12%]
+tests\test_glossary_filter.py ..                                         [ 13%]
+tests\test_hierarchy_summary.py .....                                    [ 15%]
+tests\test_interactions.py ......                                        [ 18%]
+tests\test_language.py ...........                                       [ 24%]
+tests\test_migration.py ...                                              [ 25%]
+tests\test_model_env.py .....                                            [ 28%]
+tests\test_model_fallback.py ........                                    [ 32%]
+tests\test_models.py ...                                                 [ 33%]
+tests\test_multi_folder.py ....                                          [ 35%]
+tests\test_polisher_language.py .......                                  [ 39%]
+tests\test_procedural_graph.py .....                                     [ 41%]
+tests\test_projects.py ....                                              [ 43%]
+tests\test_rate_limiter.py ........                                      [ 47%]
+tests\test_recursive_subdivision.py ......................               [ 58%]
+tests\test_retry.py ....                                                 [ 60%]
+tests\test_review_loop.py ......                                         [ 63%]
+tests\test_runner.py .....                                               [ 66%]
+tests\test_safety_blocks.py ............                                 [ 72%]
+tests\test_scanner.py ..                                                 [ 73%]
+tests\test_skills.py ............                                        [ 79%]
+tests\test_step_duration.py ...                                          [ 80%]
+tests\test_stop.py ..                                                    [ 81%]
+tests\test_token_metrics.py ...                                          [ 83%]
+tests\test_token_tracking.py ....                                        [ 85%]
+tests\test_translation_fallback.py ..................                    [ 94%]
 tests\test_tui.py ...........                                            [100%]
-============================ 145 passed in 17.75s =============================
+
+============================ 199 passed in 17.98s =============================
 ```
 
 ### 2. End-to-End Batch Validation
@@ -382,7 +389,7 @@ NouSetsu/
 │   │   ├── widgets/                # Reader, Inspector, ProgressPanel, Modals, Token Analytics
 │   │   └── app.py                  # Main Textual App
 │   └── utils/                      # Utilities (language detector, sliding window rate limiter)
-├── tests/                          # Automated pytest suite (145 tests across 25 modules)
+├── tests/                          # Automated pytest suite (199 tests across 31 modules)
 ├── main.py                         # Root entry point
 ├── pyproject.toml                  # Dependencies, hatchling build config, console scripts
 └── README.md                       # Repository overview and quickstart
