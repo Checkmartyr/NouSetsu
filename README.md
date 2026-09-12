@@ -317,6 +317,7 @@ In-depth technical architecture, developer references, and end-user guides are l
 | :--- | :--- | :--- |
 | **End-User Guide** | [**`doc/user_guide.md`**](./doc/user_guide.md) | Complete manual: installation, auto-launch TUI, headless batch, Novel Bible, skills, and safety guards. |
 | **Workflow Pipeline** | [**`doc/workflow.md`**](./doc/workflow.md) | LangGraph stages, state machine, sequence diagrams, and retry backoff. |
+| **Agents Deep Dive** | [**`doc/agents_deep_dive.md`**](./doc/agents_deep_dive.md) | In-depth breakdown of all 5 specialized agents: cognitive roles, prompts, chunking, and safety guards. |
 | **System Architecture** | [**`doc/architecture.md`**](./doc/architecture.md) | Layer design, component boundaries, and clean architecture data flow. |
 | **Novel Bible & Memory** | [**`doc/novel_bible.md`**](./doc/novel_bible.md) | Zero-anaphora pronoun resolution, character voice preservation, and style guides. |
 | **Storage & Checkpoints** | [**`doc/storage_and_checkpoints.md`**](./doc/storage_and_checkpoints.md) | Single metadata document (`.novel/metadata.json`), error logs, and mid-run resumption. |
@@ -333,6 +334,7 @@ NouSetsu/
 │   ├── README.md                   # Documentation index
 │   ├── user_guide.md               # End-user manual (TUI, CLI, Novel Bible, Skills)
 │   ├── workflow.md                 # LangGraph pipeline and agent stages
+│   ├── agents_deep_dive.md         # In-depth architectural guide for all 5 pipeline agents
 │   ├── architecture.md             # System architecture and layer design
 │   ├── novel_bible.md              # Zero-anaphora and Novel Bible guide
 │   ├── storage_and_checkpoints.md  # Single metadata and error logging

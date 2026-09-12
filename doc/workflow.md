@@ -78,6 +78,9 @@ sequenceDiagram
 
 ## 🧭 Agent Function Quick Reference
 
+> [!TIP]
+> For a comprehensive, in-depth technical analysis of each agent's internal prompt templates, context assembly, chunking algorithms, and safety guards, see the dedicated [**Agents Deep-Dive Guide**](./agents_deep_dive.md).
+
 | Stage | German Codename | Agent Class | Primary Function | Plain-English Role |
 |:---:|:---|:---|:---|:---|
 | **1** | **Schriftdetektiv** | `EntityExtractorAgent` | `extract(...)` | **The Detective**: Discovers unknown character names, ranks, and magic terms before translation starts. |
