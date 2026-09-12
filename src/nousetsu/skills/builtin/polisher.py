@@ -36,6 +36,20 @@ POLISHER_SKILLS: List[AgentSkill] = [
         source="builtin"
     ),
     AgentSkill(
+        name="address_form_preservation",
+        agent="polisher",
+        title="Address Form & Nickname Preservation",
+        description="Preserves exact dialogue address choices (formal names vs. nicknames) during stylistic polishing.",
+        content="""### Address Form & Nickname Preservation Directives:
+- Retain the exact address forms (formal name, surname, title, diminutive, pet name, or nickname) established in the draft and Novel Bible.
+- NEVER rewrite a formal name into a nickname or vice-versa to make English dialogue "flow more naturally" or "sound friendlier."
+- Dialogue polish must respect the character's chosen level of intimacy and formality without alteration.""",
+        languages=["all"],
+        genres=["all"],
+        priority=95,
+        source="builtin"
+    ),
+    AgentSkill(
         name="show_dont_tell",
         agent="polisher",
         title="Show-Don't-Tell Emotional Depth Enhancer",

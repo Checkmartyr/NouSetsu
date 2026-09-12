@@ -7,6 +7,7 @@ from nousetsu.agents.drafter import ContextAwareDrafterAgent
 from nousetsu.agents.extractor import EntityExtractorAgent
 from nousetsu.agents.llm import MockNovelLLM
 from nousetsu.agents.polisher import PolishingAgent
+from nousetsu.graph.procedural import get_default_drafter_graph
 from nousetsu.graph.workflow import NovelTranslationWorkflow
 from nousetsu.models.bible import ChapterSummary, CharacterProfile, GlossaryItem, NovelBible, StyleGuide
 from nousetsu.models.state import TranslationState
@@ -46,6 +47,7 @@ def test_builtin_skills_present():
 
     drafter_skills = [s.name for s in reg.get_active_skills("drafter")]
     assert "zero_anaphora_resolution" in drafter_skills
+    assert "name_address_fidelity" in drafter_skills
     assert "character_voice_differentiation" in drafter_skills
     assert "idiom_localization" in drafter_skills
 
@@ -53,10 +55,12 @@ def test_builtin_skills_present():
     assert "omission_detector" in critic_skills
     assert "glossary_enforcer" in critic_skills
     assert "hallucination_guard" in critic_skills
+    assert "nickname_disparity_auditor" in critic_skills
 
     polisher_skills = [s.name for s in reg.get_active_skills("polisher")]
     assert "translationese_filter" in polisher_skills
     assert "prose_cadence_enhancer" in polisher_skills
+    assert "address_form_preservation" in polisher_skills
     assert "show_dont_tell" in polisher_skills
 
     chronicler_skills = [s.name for s in reg.get_active_skills("chronicler")]
@@ -200,3 +204,60 @@ def test_workflow_tracks_active_skills():
     assert "polishing" in final_state.active_skills
     assert "chronicling" in final_state.active_skills
     assert "zero_anaphora_resolution" in final_state.active_skills["drafting"]
+    assert "name_address_fidelity" in final_state.active_skills["drafting"]
+    assert "nickname_disparity_auditor" in final_state.active_skills["critique"]
+    assert "address_form_preservation" in final_state.active_skills["polishing"]
+
+
+def test_nickname_and_address_fidelity_skills_registered():
+    """Verify detailed attributes of nickname and address fidelity skills."""
+    reg = SkillRegistry.get_instance()
+    all_skills = {s.name: s for s in reg.list_skills()}
+
+    assert "name_address_fidelity" in all_skills
+    drafter_skill = all_skills["name_address_fidelity"]
+    assert drafter_skill.agent == "drafter"
+    assert drafter_skill.priority == 105
+    assert "formal/canonical" in drafter_skill.content
+    assert "nickname" in drafter_skill.content
+
+    assert "nickname_disparity_auditor" in all_skills
+    critic_skill = all_skills["nickname_disparity_auditor"]
+    assert critic_skill.agent == "critic"
+    assert critic_skill.priority == 92
+    assert "intimacy hallucinations" in critic_skill.content
+    assert "intimacy flattening" in critic_skill.content
+
+    assert "address_form_preservation" in all_skills
+    polisher_skill = all_skills["address_form_preservation"]
+    assert polisher_skill.agent == "polisher"
+    assert polisher_skill.priority == 95
+    assert "NEVER rewrite a formal name into a nickname" in polisher_skill.content
+
+
+def test_nickname_skills_injected_in_prompts():
+    """Verify that drafter, critic, and polisher prompt sections include nickname discipline."""
+    reg = SkillRegistry.get_instance()
+
+    drafter_section = reg.build_prompt_section("drafter")
+    assert "Name & Nickname Address Form Fidelity" in drafter_section
+    assert "NEVER swap it into a nickname" in drafter_section
+
+    critic_section = reg.build_prompt_section("critic")
+    assert "Nickname & Formal Address Disparity Auditor" in critic_section
+    assert "intimacy hallucinations" in critic_section
+
+    polisher_section = reg.build_prompt_section("polisher")
+    assert "Address Form & Nickname Preservation" in polisher_section
+    assert "NEVER rewrite a formal name into a nickname" in polisher_section
+
+
+def test_drafter_procedural_graph_nickname_discipline():
+    """Verify drafter procedural execution graph includes nickname rules and pitfalls."""
+    graph = get_default_drafter_graph()
+    guidance = graph.to_compact_guidance("Voice_Modulation")
+
+    assert "formal names and nicknames" in guidance
+    assert "Pitfalls to Avoid:" in guidance
+    assert "Do NOT substitute formal character names with nicknames" in guidance
+

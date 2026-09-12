@@ -46,6 +46,21 @@ CRITIC_SKILLS: List[AgentSkill] = [
         source="builtin"
     ),
     AgentSkill(
+        name="nickname_disparity_auditor",
+        agent="critic",
+        title="Nickname & Formal Address Disparity Auditor",
+        description="Audits dialogue and narration for unauthorized formal name to nickname substitutions or intimacy flattening.",
+        content="""### Nickname & Address Form Audit Directives:
+- Cross-examine character address in dialogue against the original source text line-by-line.
+- Flag unprompted intimacy hallucinations: if the source speaker used the formal/canonical name or family title, penalize translations that swapped it for a casual nickname or pet name.
+- Flag intimacy flattening: if the source speaker used an intimate diminutive, endearing pet name, or affectionate shorthand, penalize translations that normalized it into a stiff full name.
+- Explicitly list speaker, target character, and required address correction in critique notes.""",
+        languages=["all"],
+        genres=["all"],
+        priority=92,
+        source="builtin"
+    ),
+    AgentSkill(
         name="tone_consistency_auditor",
         agent="critic",
         title="Tone & Register Consistency Auditor",

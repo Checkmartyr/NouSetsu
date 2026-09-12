@@ -19,6 +19,22 @@ DRAFTER_SKILLS: List[AgentSkill] = [
         source="builtin"
     ),
     AgentSkill(
+        name="name_address_fidelity",
+        agent="drafter",
+        title="Name & Nickname Address Form Fidelity",
+        description="Preserves distinction between formal/canonical names and intimate nicknames/diminutives.",
+        content="""### Name & Nickname Address Fidelity Directives:
+- Distinguish strictly between formal/canonical names and nicknames/diminutives (e.g., registered under aliases or pet names in the Novel Bible).
+- Match the exact form of address used in each dialogue turn or narrative line:
+  * If the speaker uses the formal/canonical name, translate with the formal name. NEVER swap it into a nickname or diminutive based on assumed intimacy.
+  * If the speaker uses an intimate nickname, diminutive, or pet name, translate with the established nickname. NEVER sanitize or flatten it into a stiff formal name.
+- Respect social hierarchy and relational distance: address choice reflects etiquette, distance, affection, or sudden emotional shifts (e.g., slipping from a formal name to a pet name in private, or reverting to a formal surname in anger).""",
+        languages=["all"],
+        genres=["all"],
+        priority=105,
+        source="builtin"
+    ),
+    AgentSkill(
         name="character_voice_differentiation",
         agent="drafter",
         title="Distinct Character Voice Differentiation",

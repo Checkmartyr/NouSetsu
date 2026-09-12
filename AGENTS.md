@@ -136,11 +136,11 @@ class AgentSkill(BaseModel):
     source: str                # "builtin" or "file:<filename>"
 ```
 
-### Built-in Skills Catalog (17 Skills)
+### Built-in Skills Catalog (20 Skills)
 - **Extractor (`Schriftdetektiv`)**: `entity_disambiguation`, `cultivation_realm_extractor`, `relationship_mapper`.
-- **Drafter (`Wortschmied`)**: `zero_anaphora_resolution`, `character_voice_differentiation`, `idiom_localization`, `litrpg_system_framing`.
-- **Critic (`Zensor`)**: `omission_detector`, `glossary_enforcer`, `hallucination_guard`, `tone_consistency_auditor`.
-- **Polisher (`Feinschliff`)**: `translationese_filter`, `prose_cadence_enhancer`, `show_dont_tell`, `dialogue_flow`.
+- **Drafter (`Wortschmied`)**: `zero_anaphora_resolution`, `name_address_fidelity`, `character_voice_differentiation`, `idiom_localization`, `litrpg_system_framing`.
+- **Critic (`Zensor`)**: `omission_detector`, `glossary_enforcer`, `hallucination_guard`, `nickname_disparity_auditor`, `tone_consistency_auditor`.
+- **Polisher (`Feinschliff`)**: `translationese_filter`, `prose_cadence_enhancer`, `address_form_preservation`, `show_dont_tell`, `dialogue_flow`.
 - **Chronicler (`Chronist`)**: `lore_world_state_tracker`, `character_status_tracker`, `continuity_auditor`.
 
 ### Custom Markdown Skill Files ([`src/nousetsu/skills/catalog/`](file:///D:/Code/novel_translation_Agent/src/nousetsu/skills/catalog/))

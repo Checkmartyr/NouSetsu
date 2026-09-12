@@ -184,7 +184,7 @@ def get_default_drafter_graph() -> ProceduralGraph:
         source="Voice_Modulation",
         target="Glossary_Lock",
         condition="Character dialogue or domain terms present",
-        guidance="Match dialogue tone to character voice profile. Enforce exact canonical glossary targets.",
-        pitfalls="Do NOT flatten noble or formal registers into casual slang. Do NOT substitute synonyms for registered glossary terms."
+        guidance="Match dialogue tone to character voice profile. Enforce exact canonical glossary targets. Distinguish strictly between formal names and nicknames: translate using the exact address form present in the source sentence.",
+        pitfalls="Do NOT flatten noble or formal registers into casual slang. Do NOT substitute synonyms for registered glossary terms. CRITICAL: Do NOT substitute formal character names with nicknames, pet names, or diminutives unless explicitly used in that exact source line."
     ))
     return g
