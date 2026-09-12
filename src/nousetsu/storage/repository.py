@@ -3,7 +3,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 import yaml
 from nousetsu.models.bible import ChapterSummary, CharacterProfile, GlossaryItem, NovelBible, StyleGuide
 from nousetsu.models.config import ProjectConfig
@@ -249,11 +249,63 @@ class NovelRepository:
 
         return bible
 
+    def discover_folders(self) -> List[Tuple[str, str, int]]:
+        """Discover candidate raw translation folders and their matching output folders in project root.
+
+        Returns list of (raw_folder_rel, output_folder_rel, chapter_count) sorted naturally.
+        """
+        results: List[Tuple[str, str, int]] = []
+        ignored_names = {
+            ".novel", ".git", ".github", ".venv", "venv", "__pycache__",
+            "node_modules", "target", "build", "dist", ".pytest_cache"
+        }
+        cfg = self.load_config()
+
+        if not self.root_dir.exists():
+            return results
+
+        for child in self.root_dir.iterdir():
+            if not child.is_dir() or child.name in ignored_names:
+                continue
+            # Ignore folders known to be output folders
+            lname = child.name.lower()
+            if lname.endswith("_th") or lname.endswith("_trans") or lname.endswith("_out") or lname == "translated_chapters":
+                continue
+
+            # Check if directory contains text/markdown chapters
+            chapter_files = [f for f in child.iterdir() if f.is_file() and f.suffix.lower() in [".txt", ".md"]]
+            count = len(chapter_files)
+            if count > 0:
+                # Infer corresponding output folder
+                out_name = f"{child.name}_th"
+                if (self.root_dir / f"{child.name}_th").exists():
+                    out_name = f"{child.name}_th"
+                elif (self.root_dir / f"{child.name}_trans").exists():
+                    out_name = f"{child.name}_trans"
+                elif cfg.raw_dir in [child.name, str(child)] and cfg.output_dir:
+                    out_name = Path(cfg.output_dir).name
+                elif (self.root_dir / "translated_chapters").exists() and child.name == "raw_chapters":
+                    out_name = "translated_chapters"
+
+                results.append((child.name, out_name, count))
+
+        from natsort import natsorted
+        return natsorted(results, key=lambda r: r[0])
+
+    def set_active_folder(self, raw_dir: str, output_dir: Optional[str] = None) -> ProjectConfig:
+        """Update active input and output folder paths in config.yaml."""
+        cfg = self.load_config()
+        cfg.raw_dir = raw_dir
+        if output_dir:
+            cfg.output_dir = output_dir
+        self.save_config(cfg)
+        return cfg
+
     def bible_file_path(self) -> Path:
         return self.bible_dir / "bible.yaml"
 
-    def load_bible(self) -> NovelBible:
-        """Load Novel Bible from YAML, or initialize default if missing."""
+    def load_bible(self, folder: Optional[str] = None) -> NovelBible:
+        """Load Novel Bible from YAML, and sync chapter summaries (with folder scoping)."""
         path = self.bible_file_path()
         if not path.exists():
             return self.initialize_project()
@@ -261,15 +313,52 @@ class NovelRepository:
         with open(path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
 
-        # Also load individual chapter summaries from summaries directory if available
-        summaries = []
+        # Load chapter summaries with folder scoping
+        summaries: List[ChapterSummary] = []
         if self.summaries_dir.exists():
+            # Check subfolders (e.g. summaries/Villainess_04/, summaries/Villainess_05/)
+            for child in self.summaries_dir.iterdir():
+                if child.is_dir():
+                    for s_file in sorted(child.glob("chapter_*.json")):
+                        try:
+                            with open(s_file, "r", encoding="utf-8") as sf:
+                                sm = ChapterSummary.model_validate(json.load(sf))
+                                if not sm.folder:
+                                    sm.folder = child.name
+                                summaries.append(sm)
+                        except Exception:
+                            continue
+
+            # Also load root-level chapter summaries (legacy or un-scoped)
+            root_summaries: List[ChapterSummary] = []
             for s_file in sorted(self.summaries_dir.glob("chapter_*.json")):
                 try:
                     with open(s_file, "r", encoding="utf-8") as sf:
-                        summaries.append(ChapterSummary.model_validate(json.load(sf)))
+                        sm = ChapterSummary.model_validate(json.load(sf))
+                        root_summaries.append(sm)
                 except Exception:
                     continue
+
+            if root_summaries:
+                raw_folder_name = None
+                cfg_path = self.config_file_path()
+                if cfg_path.exists():
+                    try:
+                        with open(cfg_path, "r", encoding="utf-8") as cf:
+                            cdata = yaml.safe_load(cf) or {}
+                            if cdata.get("raw_dir"):
+                                raw_folder_name = Path(cdata["raw_dir"]).name
+                    except Exception:
+                        pass
+                # If no subfolder summaries exist yet and raw_folder_name is known, tag or migrate
+                if not summaries and raw_folder_name and raw_folder_name not in ["raw_chapters", "."]:
+                    for sm in root_summaries:
+                        sm.folder = raw_folder_name
+                        summaries.append(sm)
+                else:
+                    for sm in root_summaries:
+                        if not any(existing.chapter_num == sm.chapter_num and (existing.folder == sm.folder or sm.folder is None) for existing in summaries):
+                            summaries.append(sm)
 
         if summaries:
             data["summaries"] = [s.model_dump() for s in summaries]
@@ -277,7 +366,7 @@ class NovelRepository:
         return NovelBible.model_validate(data)
 
     def save_bible(self, bible: NovelBible) -> None:
-        """Save Novel Bible to YAML and sync chapter summaries."""
+        """Save Novel Bible to YAML and sync chapter summaries into folder subdirectories."""
         self.bible_dir.mkdir(parents=True, exist_ok=True)
         self.summaries_dir.mkdir(parents=True, exist_ok=True)
 
@@ -287,13 +376,24 @@ class NovelRepository:
 
         # Save summaries as individual JSON records for fast rolling context
         for summary in bible.summaries:
-            s_file = self.summaries_dir / f"chapter_{summary.chapter_num:04d}.json"
+            if summary.folder:
+                target_dir = self.summaries_dir / summary.folder
+                target_dir.mkdir(parents=True, exist_ok=True)
+                s_file = target_dir / f"chapter_{summary.chapter_num:04d}.json"
+            else:
+                s_file = self.summaries_dir / f"chapter_{summary.chapter_num:04d}.json"
             with open(s_file, "w", encoding="utf-8") as f:
                 json.dump(summary.model_dump(), f, indent=2, ensure_ascii=False)
 
-    def update_bible_memory(self, new_characters: List[CharacterProfile], new_terms: List[GlossaryItem], summary: Optional[ChapterSummary]) -> NovelBible:
+    def update_bible_memory(
+        self,
+        new_characters: List[CharacterProfile],
+        new_terms: List[GlossaryItem],
+        summary: Optional[ChapterSummary],
+        folder: Optional[str] = None
+    ) -> NovelBible:
         """Atomically merge new characters, glossary items, and chapter summary into Bible, evolving existing entries."""
-        bible = self.load_bible()
+        bible = self.load_bible(folder=folder)
 
         for new_char in new_characters:
             existing = bible.find_character(new_char.name) or bible.find_character(new_char.original_name)
@@ -330,10 +430,16 @@ class NovelRepository:
                     existing_term.category = new_term.category
 
         if summary:
-            # Replace existing summary for same chapter if present, else append
-            bible.summaries = [s for s in bible.summaries if s.chapter_num != summary.chapter_num]
+            if folder and not summary.folder:
+                summary.folder = folder
+            target_folder = summary.folder
+            # Replace existing summary for same chapter within the same folder scope, else append
+            bible.summaries = [
+                s for s in bible.summaries
+                if not (s.chapter_num == summary.chapter_num and (s.folder == target_folder or target_folder is None or s.folder is None))
+            ]
             bible.summaries.append(summary)
-            bible.summaries.sort(key=lambda s: s.chapter_num)
+            bible.summaries.sort(key=lambda s: (s.folder or "", s.chapter_num))
 
         self.save_bible(bible)
         return bible
@@ -398,13 +504,20 @@ class NovelRepository:
         return doc.chapters
 
     def load_metadata(self, output_file: Path) -> Optional[ChapterMetadata]:
-        """Load chapter metadata by output file stem from single project metadata file."""
+        """Load chapter metadata by composite folder/stem or stem from single project metadata file."""
         stem = output_file.stem
+        folder_prefix = f"{output_file.parent.name}/{stem}"
         doc = self.load_project_metadata_doc()
+
+        # 1. Composite key takes highest precedence for multi-folder isolation
+        if folder_prefix in doc.chapters:
+            return doc.chapters[folder_prefix]
+
+        # 2. Match by bare stem
         if stem in doc.chapters:
             return doc.chapters[stem]
 
-        # Check by filename as fallback
+        # 3. Check by filename as fallback
         if output_file.name in doc.chapters:
             return doc.chapters[output_file.name]
 
@@ -415,6 +528,7 @@ class NovelRepository:
                 with open(legacy_meta_path, "r", encoding="utf-8") as f:
                     meta = ChapterMetadata.model_validate(json.load(f))
                     # Auto-migrate into project metadata document
+                    doc.chapters[folder_prefix] = meta
                     doc.chapters[stem] = meta
                     self.save_project_metadata_doc(doc)
                     return meta
@@ -424,9 +538,11 @@ class NovelRepository:
         return None
 
     def save_metadata(self, metadata: ChapterMetadata, output_file: Path) -> Path:
-        """Save chapter metadata into the single project metadata file."""
+        """Save chapter metadata into the single project metadata file with composite and stem keys."""
         stem = output_file.stem
+        folder_prefix = f"{output_file.parent.name}/{stem}"
         doc = self.load_project_metadata_doc()
+        doc.chapters[folder_prefix] = metadata
         doc.chapters[stem] = metadata
         self.save_project_metadata_doc(doc)
         return self.project_metadata_file_path()

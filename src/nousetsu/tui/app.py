@@ -14,6 +14,7 @@ from nousetsu.models.metadata import PipelineStage, StageStatus
 from nousetsu.storage.repository import NovelRepository, ProjectRegistry
 from nousetsu.tui.widgets.bible_editor import NovelBibleModal
 from nousetsu.tui.widgets.checkpoint_inspector import CheckpointInspectorWidget
+from nousetsu.tui.widgets.folder_select_modal import FolderSelectModal
 from nousetsu.tui.widgets.new_project_modal import NewProjectModal
 from nousetsu.tui.widgets.progress_panel import ProgressPanel
 from nousetsu.tui.widgets.project_selector_modal import ProjectSelectorModal
@@ -114,6 +115,7 @@ class NovelAgentApp(App):
         Binding("x", "stop_translation", "Stop"),
         Binding("e", "edit_bible", "Novel Bible"),
         Binding("p", "open_project_selector", "Projects"),
+        Binding("f", "open_folder_selector", "Folder"),
         Binding("n", "open_new_project", "New Project"),
         Binding("s", "open_settings", "Settings"),
         Binding("m", "toggle_token_tab", "Tokens"),
@@ -177,6 +179,7 @@ class NovelAgentApp(App):
                         yield Button("✨ New", variant="success", id="btn_new_project", classes="tool-btn")
                         yield Button("⚙ Set", variant="default", id="btn_settings", classes="tool-btn")
                     with Horizontal(classes="toolbar-row"):
+                        yield Button("📂 Folder (F)", variant="default", id="btn_folder", classes="tool-btn")
                         yield Button("📊 Tokens (M)", variant="default", id="btn_tokens", classes="tool-btn")
 
             with Vertical(id="content-pane"):
@@ -225,6 +228,23 @@ class NovelAgentApp(App):
         except Exception:
             pass
         self.action_refresh_chapters()
+
+    def switch_folder(self, raw_dir: str, output_dir: str) -> None:
+        """Switch active translation folder within current project and reload state."""
+        cfg = self.repo.set_active_folder(raw_dir, output_dir)
+        self.input_dir = cfg.get_raw_path(self.project_dir)
+        self.output_dir = cfg.get_output_path(self.project_dir)
+        self.scanner = ChapterScanner(self.repo)
+        self.runner = BatchRunner(self.repo, model_name=self.model_name)
+        self.action_refresh_chapters()
+        try:
+            progress = self.query_one("#progress_panel", ProgressPanel)
+            progress.query_one("#engine_status_msg", Static).update(
+                f"[bold cyan]Active Folder:[/] {raw_dir} -> {output_dir}"
+            )
+        except Exception:
+            pass
+        self.notify(f"Active folder: {raw_dir} ({len(self.current_tasks)} chapters)", severity="information")
 
     def action_refresh_chapters(self) -> None:
         """Scan input directory and update chapter list view."""
@@ -287,6 +307,9 @@ class NovelAgentApp(App):
     def action_open_project_selector(self) -> None:
         self.push_screen(ProjectSelectorModal(self))
 
+    def action_open_folder_selector(self) -> None:
+        self.push_screen(FolderSelectModal(self))
+
     def action_open_new_project(self) -> None:
         self.push_screen(NewProjectModal(self))
 
@@ -328,6 +351,8 @@ class NovelAgentApp(App):
             self.action_edit_bible()
         elif event.button.id == "btn_projects":
             self.action_open_project_selector()
+        elif event.button.id == "btn_folder":
+            self.action_open_folder_selector()
         elif event.button.id == "btn_new_project":
             self.action_open_new_project()
         elif event.button.id == "btn_settings":

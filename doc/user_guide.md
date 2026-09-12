@@ -123,12 +123,14 @@ If you have an active novel project, it loads immediately. If you are in a new o
 | Key | Action | Description |
 |:---:|:---|:---|
 | `T` | **Translate Selected** | Triggers the 5-stage agentic translation graph on the highlighted chapter. |
-| `B` | **Run All Batch** | Concurrently batches through all untranslated or resumed chapters in order. |
+| `B` | **Run All Batch** | Batches through all untranslated or resumed chapters in order. |
 | `X` | **Stop Translation** | Safely pauses the active translation, saves a `PAUSED` checkpoint, and halts. |
-| `P` | **Projects** | Opens the Project Selector modal to switch between novel projects. |
-| `N` | **New Project** | Opens the Project Creator modal to configure novel title, languages, and genre. |
 | `E` | **Novel Bible** | Opens the in-terminal editor to inspect/add characters, relationships, and glossary terms. |
-| `S` | **Settings** | Opens the Settings modal to tune TPM/RPM rate limits and review loop caps. |
+| `P` | **Projects** | Opens the Project Selector modal to switch between novel projects. |
+| `F` | **Folder** | Opens the Folder Selector modal to switch between translation volumes/folders (e.g. Volume 4 vs Volume 5). |
+| `N` | **New Project** | Opens the Project Creator modal to configure novel title, languages, and genre. |
+| `S` | **Settings** | Opens the Settings modal to tune TPM/RPM rate limits, review loop caps, and model choices. |
+| `M` | **Tokens** | Toggles the dedicated Token & Duration Analytics dashboard. |
 | `Q` | **Quit** | Exits the application cleanly. |
 
 ### Step-by-Step Workflow in TUI
@@ -173,6 +175,7 @@ nousetsu tui --project-dir ./my_novel
 | Flag | Shorthand | Default | Description |
 |:---|:---:|:---:|:---|
 | `--project-dir` | `-p` | Current directory | Root folder of the novel project |
+| `--folder` | `-F` | None | Translation volume/folder within project (auto-resolves input and output folders, e.g. `-F Villainess_05`) |
 | `--input-dir` | `-i` | `raw_chapters` | Folder containing raw chapter text files |
 | `--output-dir` | `-o` | `translated_chapters` | Folder where translated markdown files are written |
 | `--source-lang` | | `auto` | Override source language (`Japanese`, `Chinese`, `Korean`, `English`, etc.) |

@@ -276,18 +276,21 @@ class BatchRunner:
                     with open(task.output_file, "w", encoding="utf-8") as out_f:
                         out_f.write(final_state.polished_text)
 
-                    # Update persistent memory across chapters
+                    # Update persistent memory across chapters (scoped to current folder)
+                    task_folder = task.folder or Path(task.source_file).parent.name
                     if self.auto_update_bible:
                         self.repo.update_bible_memory(
                             new_characters=final_state.extracted_characters,
                             new_terms=final_state.extracted_terms,
-                            summary=final_state.new_chapter_summary
+                            summary=final_state.new_chapter_summary,
+                            folder=task_folder
                         )
                     elif final_state.new_chapter_summary:
                         self.repo.update_bible_memory(
                             new_characters=[],
                             new_terms=[],
-                            summary=final_state.new_chapter_summary
+                            summary=final_state.new_chapter_summary,
+                            folder=task_folder
                         )
 
                     # Save chapter metadata and checkpoint

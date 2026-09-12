@@ -1,5 +1,6 @@
 """LangGraph translation workflow wiring the multi-agent pipeline."""
 import os
+from pathlib import Path
 import threading
 import time
 from typing import Any, Callable, Dict, Optional
@@ -255,13 +256,16 @@ class NovelTranslationWorkflow:
         else:
             est_draft = int(estimate_tokens(state.source_text) * 1.5) + 2000
 
+        current_folder = Path(state.source_file).parent.name if state.source_file else None
+        active_summaries = state.novel_bible.get_summaries_for_folder(current_folder) if hasattr(state.novel_bible, "get_summaries_for_folder") else state.novel_bible.summaries
+
         draft = invoke_with_retry(
             self.drafter.draft,
             source_text=state.source_text,
             bible=state.novel_bible,
             active_characters=state.active_characters,
             active_glossary=state.active_glossary,
-            rolling_summaries=state.novel_bible.summaries,
+            rolling_summaries=active_summaries,
             genre=state.genre,
             chunks=source_chunks,
             notify_callback=lambda msg: self._notify(PipelineStage.DRAFTING, msg, 35.0),
@@ -549,6 +553,10 @@ class NovelTranslationWorkflow:
             estimated_tokens=est_chronicle,
             stop_event=self.stop_event
         )
+
+        current_folder = Path(state.source_file).parent.name if state.source_file else None
+        if summary and current_folder and not getattr(summary, "folder", None):
+            summary.folder = current_folder
 
         chronicle_duration = round(time.time() - step_start, 2)
         chronicle_usage = getattr(self.chronicler, "last_usage", TokenUsage())

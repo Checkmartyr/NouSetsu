@@ -309,4 +309,8 @@ When modifying this repository, AI agents MUST adhere strictly to these conventi
    - Machine-level LLM models belong in `.env`.
    - `ProjectConfig` model fields default to `None` so novel projects cleanly inherit models from `.env`.
    - Project YAML files (`.novel/config.yaml`) should only store novel-specific metadata and explicit local overrides.
+10. **Mandatory End-of-Task Git Commit & Push**:
+    - AI agents MUST ALWAYS stage all modified/added files, create a clean conventional commit (e.g. `feat(...)`, `fix(...)`, `docs(...)`, `refactor(...)`), and push to `origin/main` at the conclusion of every task after all tests pass green.
+    - Never leave completed task work uncommitted in the working tree.
+
 

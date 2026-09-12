@@ -83,8 +83,24 @@ def cmd_batch(args: argparse.Namespace) -> None:
         target_chunk_lines=getattr(args, "target_chunk_lines", None),
         console=console
     )
-    input_path = Path(args.input_dir) if args.input_dir != "raw_chapters" else cfg.get_raw_path(repo.root_dir)
-    output_path = Path(args.output_dir) if args.output_dir != "translated_chapters" else cfg.get_output_path(repo.root_dir)
+    folder_arg = getattr(args, "folder", None)
+    if folder_arg:
+        raw_cand = repo.root_dir / folder_arg
+        if raw_cand.exists() and raw_cand.is_dir():
+            input_path = raw_cand
+            if args.output_dir:
+                output_path = Path(args.output_dir) if Path(args.output_dir).is_absolute() else (repo.root_dir / args.output_dir)
+            else:
+                out_cand_th = repo.root_dir / f"{folder_arg}_th"
+                out_cand_tr = repo.root_dir / f"{folder_arg}_trans"
+                output_path = out_cand_th if out_cand_th.exists() else (out_cand_tr if out_cand_tr.exists() else out_cand_th)
+            repo.set_active_folder(raw_dir=folder_arg, output_dir=output_path.name)
+        else:
+            input_path = Path(args.input_dir) if args.input_dir != "raw_chapters" else cfg.get_raw_path(repo.root_dir)
+            output_path = Path(args.output_dir) if args.output_dir != "translated_chapters" else cfg.get_output_path(repo.root_dir)
+    else:
+        input_path = Path(args.input_dir) if args.input_dir != "raw_chapters" else cfg.get_raw_path(repo.root_dir)
+        output_path = Path(args.output_dir) if args.output_dir != "translated_chapters" else cfg.get_output_path(repo.root_dir)
 
     import signal
 
@@ -200,9 +216,23 @@ def cmd_tui(args: argparse.Namespace) -> None:
     repo = NovelRepository(project_dir) if project_dir else NovelRepository()
     if getattr(args, "source_lang", None) or getattr(args, "target_lang", None):
         repo.set_languages(source_lang=args.source_lang, target_lang=args.target_lang)
+
+    in_dir = getattr(args, "input_dir", None)
+    out_dir = getattr(args, "output_dir", None)
+    folder_arg = getattr(args, "folder", None)
+    if folder_arg:
+        raw_cand = repo.root_dir / folder_arg
+        if raw_cand.exists() and raw_cand.is_dir():
+            in_dir = str(raw_cand)
+            if not out_dir:
+                out_cand_th = repo.root_dir / f"{folder_arg}_th"
+                out_cand_tr = repo.root_dir / f"{folder_arg}_trans"
+                out_dir = str(out_cand_th if out_cand_th.exists() else (out_cand_tr if out_cand_tr.exists() else out_cand_th))
+            repo.set_active_folder(raw_dir=folder_arg, output_dir=Path(out_dir).name)
+
     app = NovelAgentApp(
-        input_dir=getattr(args, "input_dir", None),
-        output_dir=getattr(args, "output_dir", None),
+        input_dir=in_dir,
+        output_dir=out_dir,
         model_name=getattr(args, "model", None),
         project_dir=project_dir
     )
@@ -228,6 +258,7 @@ def main() -> None:
     # batch
     p_batch = subparsers.add_parser("batch", help="Run folder-to-folder automated batch translation")
     p_batch.add_argument("--project-dir", "-p", default=None, help="Root folder of novel project")
+    p_batch.add_argument("--folder", "-F", default=None, help="Translation folder within project (auto-resolves matching input/output folders)")
     p_batch.add_argument("--input-dir", "-i", default="raw_chapters", help="Folder containing raw chapters")
     p_batch.add_argument("--output-dir", "-o", default="translated_chapters", help="Folder for translated output")
     p_batch.add_argument("--source-lang", default=None, help="Override source language")
@@ -265,6 +296,7 @@ def main() -> None:
     # tui
     p_tui = subparsers.add_parser("tui", help="Launch interactive Textual TUI dashboard")
     p_tui.add_argument("--project-dir", "-p", default=None, help="Root folder of novel project")
+    p_tui.add_argument("--folder", "-F", default=None, help="Translation folder within project (auto-resolves matching input/output folders)")
     p_tui.add_argument("--input-dir", "-i", default=None, help="Folder containing raw chapters")
     p_tui.add_argument("--output-dir", "-o", default=None, help="Folder for translated output")
     p_tui.add_argument("--source-lang", default=None, help="Override source language")

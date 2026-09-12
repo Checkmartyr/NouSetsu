@@ -21,6 +21,7 @@ class ChapterTask:
     last_error: Optional[str] = None
     needs_resume: bool = False
     resume_stage: PipelineStage = PipelineStage.NONE
+    folder: Optional[str] = None
 
 
 class ChapterScanner:
@@ -62,8 +63,9 @@ class ChapterScanner:
             out_file = output_path / f"{src_file.stem}.md"
             src_sha256 = self.repo.compute_sha256(src_file)
 
-            # Look up metadata from single project doc, fallback to load_metadata
-            meta = all_metadata.get(src_file.stem) or self.repo.load_metadata(out_file)
+            # Look up metadata from single project doc (composite key first, fallback to stem and load_metadata)
+            composite_key = f"{output_path.name}/{src_file.stem}"
+            meta = all_metadata.get(composite_key) or all_metadata.get(src_file.stem) or self.repo.load_metadata(out_file)
             is_done = False
             is_failed = False
             is_paused = False
@@ -101,7 +103,8 @@ class ChapterScanner:
                 is_paused=is_paused,
                 last_error=last_err,
                 needs_resume=needs_resume,
-                resume_stage=resume_stage
+                resume_stage=resume_stage,
+                folder=input_path.name
             ))
 
         return tasks

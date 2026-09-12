@@ -34,6 +34,7 @@ class ChapterSummary(BaseModel):
     synopsis: str = Field(..., description="Concise overview of plot progression")
     key_events: List[str] = Field(default_factory=list, description="Crucial plot points and reveals")
     character_state_changes: List[str] = Field(default_factory=list, description="Deaths, injuries, rank advances, relationship shifts")
+    folder: Optional[str] = Field(default=None, description="Folder/volume scope for chapter summary")
 
 
 class NovelBible(BaseModel):
@@ -59,3 +60,11 @@ class NovelBible(BaseModel):
             if item.source == source_term:
                 return item
         return None
+
+    def get_summaries_for_folder(self, folder: Optional[str] = None) -> List[ChapterSummary]:
+        """Return summaries filtered for a specific folder, falling back to all summaries if folder is empty or unspecified."""
+        if not folder:
+            return sorted(self.summaries, key=lambda s: s.chapter_num)
+        filtered = [s for s in self.summaries if s.folder == folder or s.folder is None]
+        return sorted(filtered, key=lambda s: s.chapter_num)
+
