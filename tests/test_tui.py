@@ -362,7 +362,7 @@ def test_bare_cli_launches_tui():
 @pytest.mark.asyncio
 async def test_tui_token_analysis_tab(tmp_path: Path):
     """Verify Token Analysis tab renders properly and can be toggled via hotkey and button."""
-    from textual.widgets import DataTable, TabbedContent
+    from textual.widgets import Button, DataTable, TabbedContent
     from nousetsu.tui.widgets.token_analysis import TokenAnalysisWidget
 
     repo = NovelRepository(tmp_path)
@@ -397,12 +397,13 @@ async def test_tui_token_analysis_tab(tmp_path: Path):
         assert len(table_chapters.columns) == 8
 
         # Toggle back to reader via toolbar button click
-        await pilot.click("#btn_tokens")
+        btn_tokens = app.query_one("#btn_tokens", Button)
+        btn_tokens.press()
         await pilot.pause()
         assert tabs.active == "tab-reader"
 
         # Toggle again via button
-        await pilot.click("#btn_tokens")
+        btn_tokens.press()
         await pilot.pause()
         assert tabs.active == "tab-tokens"
 

@@ -33,7 +33,7 @@ def cmd_init(args: argparse.Namespace) -> None:
         target_lang=target_lang,
         raw_dir=getattr(args, "raw_dir", "raw_chapters"),
         output_dir=getattr(args, "output_dir", "translated_chapters"),
-        model_name=getattr(args, "model", "gemini-3.1-flash-lite"),
+        model_name=getattr(args, "model", None),
         genre=getattr(args, "genre", "general")
     )
     console.print(Panel.fit(
@@ -182,6 +182,7 @@ def main() -> None:
     p_init.add_argument("--source-lang", default=default_src, help="Source language (e.g. Japanese, Chinese, Korean)")
     p_init.add_argument("--target-lang", default=default_tgt, help="Target language (e.g. English, Spanish)")
     p_init.add_argument("--genre", "-g", default="general", help="Novel genre (e.g. xianxia, wuxia, isekai, litrpg, romance, auto, general)")
+    p_init.add_argument("--model", "-m", default=None, help="LLM model override (defaults to .env NOVEL_MODEL)")
 
     # batch
     p_batch = subparsers.add_parser("batch", help="Run folder-to-folder automated batch translation")
@@ -191,7 +192,7 @@ def main() -> None:
     p_batch.add_argument("--source-lang", default=None, help="Override source language")
     p_batch.add_argument("--target-lang", default=None, help="Override target language")
     p_batch.add_argument("--genre", "-g", default=None, help="Override novel genre")
-    p_batch.add_argument("--model", "-m", default=os.environ.get("DEFAULT_MODEL", "gemini-3.1-flash-lite"), help="Default LLM model name")
+    p_batch.add_argument("--model", "-m", default=None, help="Default LLM model override (defaults to project config or .env NOVEL_MODEL)")
     p_batch.add_argument("--fallback-model", default=None, help="Global fallback LLM model name")
     p_batch.add_argument("--extractor-model", default=None, help="Override model for Entity Extractor Agent")
     p_batch.add_argument("--drafter-model", default=None, help="Override model for Drafter Agent")
@@ -223,7 +224,7 @@ def main() -> None:
     p_tui.add_argument("--output-dir", "-o", default=None, help="Folder for translated output")
     p_tui.add_argument("--source-lang", default=None, help="Override source language")
     p_tui.add_argument("--target-lang", default=None, help="Override target language")
-    p_tui.add_argument("--model", "-m", default=os.environ.get("DEFAULT_MODEL", "gemini-3.1-flash-lite"), help="LLM model name")
+    p_tui.add_argument("--model", "-m", default=None, help="LLM model override (defaults to project config or .env NOVEL_MODEL)")
     p_tui.add_argument("--fallback-model", default=None, help="Global fallback LLM model name")
     p_tui.add_argument("--interactions", action=argparse.BooleanOptionalAction, default=True, help="Use Gemini Interactions API (/v1beta/interactions) (default: True)")
     p_tui.add_argument("--chunking", action=argparse.BooleanOptionalAction, default=True, help="Enable line-based semantic chunking for long chapters (default: True)")
@@ -247,7 +248,7 @@ def main() -> None:
             project_dir=proj_dir,
             input_dir=None,
             output_dir=None,
-            model=getattr(args, "model", os.environ.get("DEFAULT_MODEL", "gemini-3.1-flash-lite")),
+            model=getattr(args, "model", None),
             source_lang=None,
             target_lang=None
         ))

@@ -1,4 +1,5 @@
 """Project configuration schema."""
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -14,13 +15,13 @@ class ProjectConfig(BaseModel):
     target_language: str = Field(default="Thai")
     raw_dir: str = Field(default="raw_chapters", description="Path to input raw chapter files")
     output_dir: str = Field(default="translated_chapters", description="Path to output translated files")
-    model_name: str = Field(default="gemini-3.1-flash-lite", description="Default LLM model name")
-    fallback_model: Optional[str] = Field(default="gemini-3.5-flash-lite", description="Global fallback LLM model name")
-    extractor_model: Optional[str] = Field(default="gemini-3.1-flash-lite", description="LLM model for Entity Extractor Agent")
-    drafter_model: Optional[str] = Field(default="gemini-3.5-flash-lite", description="LLM model for Drafter Agent")
-    critic_model: Optional[str] = Field(default="gemma-4-26b-a4b-it", description="LLM model for Critique Agent")
-    polisher_model: Optional[str] = Field(default="gemini-3.5-flash-lite", description="LLM model for Polisher Agent")
-    chronicler_model: Optional[str] = Field(default="gemma-4-26b-a4b-it", description="LLM model for Chronicler Agent")
+    model_name: Optional[str] = Field(default=None, description="Default LLM model override (defaults to .env NOVEL_MODEL)")
+    fallback_model: Optional[str] = Field(default=None, description="Global fallback LLM model override (defaults to .env NOVEL_FALLBACK_MODEL)")
+    extractor_model: Optional[str] = Field(default=None, description="LLM model override for Entity Extractor Agent")
+    drafter_model: Optional[str] = Field(default=None, description="LLM model override for Drafter Agent")
+    critic_model: Optional[str] = Field(default=None, description="LLM model override for Critique Agent")
+    polisher_model: Optional[str] = Field(default=None, description="LLM model override for Polisher Agent")
+    chronicler_model: Optional[str] = Field(default=None, description="LLM model override for Chronicler Agent")
     use_interactions_api: bool = Field(default=True, description="Use Gemini Interactions API for Gemini models")
     auto_update_bible: bool = Field(default=True, description="Automatically merge newly discovered characters, terms, and summaries into Novel Bible")
     max_tpm: int = Field(default=32000, description="Max tokens per minute rate limit quota")
@@ -66,8 +67,21 @@ class ProjectConfig(BaseModel):
             pass
         return candidate
 
+    def get_model_name(self) -> str:
+        """Resolve effective model_name: config override -> .env NOVEL_MODEL -> .env DEFAULT_MODEL -> default."""
+        return (
+            self.model_name
+            or os.environ.get("NOVEL_MODEL")
+            or os.environ.get("DEFAULT_MODEL")
+            or "gemini-3.1-flash-lite"
+        )
+
+    def get_fallback_model(self) -> Optional[str]:
+        """Resolve effective fallback_model: config override -> .env NOVEL_FALLBACK_MODEL -> default."""
+        return self.fallback_model or os.environ.get("NOVEL_FALLBACK_MODEL") or "gemini-3.5-flash-lite"
+
     def get_agent_model(self, role: str) -> str:
-        """Return configured model for agent role, falling back to model_name."""
+        """Return configured model for agent role with priority: project override -> .env -> global model."""
         role_map = {
             "extractor": self.extractor_model,
             "drafter": self.drafter_model,
@@ -75,9 +89,18 @@ class ProjectConfig(BaseModel):
             "polisher": self.polisher_model,
             "chronicler": self.chronicler_model,
         }
-        return role_map.get(role) or self.model_name
+        override = role_map.get(role)
+        if override:
+            return override
+        if self.model_name:
+            return self.model_name
+        env_val = os.environ.get(f"NOVEL_{role.upper()}_MODEL")
+        if env_val:
+            return env_val
+        return self.get_model_name()
 
     def get_agent_fallback_model(self, role: Optional[str] = None) -> Optional[str]:
         """Return fallback model for agent role or global fallback_model."""
-        return self.fallback_model
+        return self.get_fallback_model()
+
 

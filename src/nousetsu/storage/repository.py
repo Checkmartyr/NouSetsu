@@ -181,13 +181,13 @@ class NovelRepository:
         target_lang: str = "Thai",
         raw_dir: str = "raw_chapters",
         output_dir: str = "translated_chapters",
-        model_name: str = "gemini-3.1-flash-lite",
-        fallback_model: Optional[str] = "gemini-3.5-flash-lite",
-        extractor_model: Optional[str] = "gemini-3.1-flash-lite",
-        drafter_model: Optional[str] = "gemini-3.5-flash-lite",
-        critic_model: Optional[str] = "gemma-4-26b-a4b-it",
-        polisher_model: Optional[str] = "gemini-3.5-flash-lite",
-        chronicler_model: Optional[str] = "gemma-4-26b-a4b-it",
+        model_name: Optional[str] = None,
+        fallback_model: Optional[str] = None,
+        extractor_model: Optional[str] = None,
+        drafter_model: Optional[str] = None,
+        critic_model: Optional[str] = None,
+        polisher_model: Optional[str] = None,
+        chronicler_model: Optional[str] = None,
         genre: str = "general"
     ) -> NovelBible:
         """Create project folder structure, config, and default Novel Bible."""

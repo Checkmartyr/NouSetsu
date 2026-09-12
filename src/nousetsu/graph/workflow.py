@@ -1,4 +1,5 @@
 """LangGraph translation workflow wiring the multi-agent pipeline."""
+import os
 import threading
 import time
 from typing import Any, Callable, Dict, Optional
@@ -25,7 +26,7 @@ class NovelTranslationWorkflow:
 
     def __init__(
         self,
-        model_name: str = "gemini-3.1-flash-lite",
+        model_name: Optional[str] = None,
         fallback_model: Optional[str] = None,
         extractor_model: Optional[str] = None,
         drafter_model: Optional[str] = None,
@@ -40,16 +41,17 @@ class NovelTranslationWorkflow:
         target_chunk_lines: int = 70,
         chunk_overlap_lines: int = 3
     ):
-        self.model_name = model_name
-        is_mock = model_name.startswith("mock") or model_name.startswith("test")
-        default_agent = model_name if is_mock else None
+        effective_model = model_name or os.environ.get("NOVEL_MODEL") or os.environ.get("DEFAULT_MODEL") or "gemini-3.1-flash-lite"
+        self.model_name = effective_model
+        is_mock = effective_model.startswith("mock") or effective_model.startswith("test")
+        default_agent = effective_model if is_mock else None
 
-        self.fallback_model = fallback_model or default_agent or "gemini-3.5-flash-lite"
-        self.extractor_model = extractor_model or default_agent or "gemini-3.1-flash-lite"
-        self.drafter_model = drafter_model or default_agent or "gemini-3.5-flash-lite"
-        self.critic_model = critic_model or default_agent or "gemma-4-26b-a4b-it"
-        self.polisher_model = polisher_model or default_agent or "gemini-3.5-flash-lite"
-        self.chronicler_model = chronicler_model or default_agent or "gemma-4-26b-a4b-it"
+        self.fallback_model = fallback_model or default_agent or os.environ.get("NOVEL_FALLBACK_MODEL") or "gemini-3.5-flash-lite"
+        self.extractor_model = extractor_model or default_agent or os.environ.get("NOVEL_EXTRACTOR_MODEL") or "gemini-3.1-flash-lite"
+        self.drafter_model = drafter_model or default_agent or os.environ.get("NOVEL_DRAFTER_MODEL") or "gemini-3.5-flash-lite"
+        self.critic_model = critic_model or default_agent or os.environ.get("NOVEL_CRITIC_MODEL") or "gemma-4-26b-a4b-it"
+        self.polisher_model = polisher_model or default_agent or os.environ.get("NOVEL_POLISHER_MODEL") or "gemini-3.5-flash-lite"
+        self.chronicler_model = chronicler_model or default_agent or os.environ.get("NOVEL_CHRONICLER_MODEL") or "gemma-4-26b-a4b-it"
 
         self.rate_limiter = rate_limiter or SlidingWindowRateLimiter()
         self.max_review_loops = max_review_loops

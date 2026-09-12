@@ -10,13 +10,17 @@ def test_project_config_defaults(tmp_path: Path):
     assert cfg.title == "Ascendance of a Bookworm"
     assert cfg.source_language == "English"
     assert cfg.target_language == "Thai"
-    assert cfg.model_name == "gemini-3.1-flash-lite"
-    assert cfg.fallback_model == "gemini-3.5-flash-lite"
-    assert cfg.extractor_model == "gemini-3.1-flash-lite"
-    assert cfg.drafter_model == "gemini-3.5-flash-lite"
-    assert cfg.critic_model == "gemma-4-26b-a4b-it"
-    assert cfg.polisher_model == "gemini-3.5-flash-lite"
-    assert cfg.chronicler_model == "gemma-4-26b-a4b-it"
+    # Model fields default to None, indicating inheritance from .env
+    assert cfg.model_name is None
+    assert cfg.fallback_model is None
+    assert cfg.extractor_model is None
+    assert cfg.drafter_model is None
+    assert cfg.critic_model is None
+    assert cfg.polisher_model is None
+    assert cfg.chronicler_model is None
+    # Effective models resolve dynamically via getters
+    assert cfg.get_model_name() is not None
+    assert cfg.get_agent_model("extractor") is not None
     assert cfg.max_tpm == 32000
     assert cfg.chunk_threshold_lines == 85
     assert cfg.raw_dir == "raw_chapters"

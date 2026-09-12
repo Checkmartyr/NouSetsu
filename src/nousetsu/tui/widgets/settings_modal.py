@@ -77,29 +77,37 @@ class SettingsModal(ModalScreen):
             yield Label("⚙️ Project & Translation Settings", classes="pane-title")
 
             with VerticalScroll():
+                env_default_model = os.environ.get("NOVEL_MODEL") or os.environ.get("DEFAULT_MODEL") or "gemini-3.1-flash-lite"
+                env_fallback_model = os.environ.get("NOVEL_FALLBACK_MODEL") or "gemini-3.5-flash-lite"
+                env_extractor = os.environ.get("NOVEL_EXTRACTOR_MODEL") or env_default_model
+                env_drafter = os.environ.get("NOVEL_DRAFTER_MODEL") or env_default_model
+                env_critic = os.environ.get("NOVEL_CRITIC_MODEL") or "gemma-4-26b-a4b-it"
+                env_polisher = os.environ.get("NOVEL_POLISHER_MODEL") or env_default_model
+                env_chronicler = os.environ.get("NOVEL_CHRONICLER_MODEL") or "gemma-4-26b-a4b-it"
+
                 with Container(classes="settings-section"):
                     yield Label("Project & Model Configuration", classes="section-title")
                     yield Label("Novel Title:", classes="field-label")
                     yield Input(value=self.cfg.title or self.bible.title, id="set_title")
-                    yield Label("Default LLM Model Name (e.g. gemini-3.1-flash-lite, gemini-3.5-flash-lite):", classes="field-label")
-                    yield Input(value=self.cfg.model_name or self.app_instance.model_name, id="set_model")
-                    yield Label("Global Fallback Model (optional, e.g. gemini-3.5-flash-lite, mock-novel-llm):", classes="field-label")
-                    yield Input(value=self.cfg.fallback_model or "", id="set_fallback_model", placeholder="Leave blank if no fallback")
+                    yield Label("Default LLM Model Name (Leave blank to inherit from .env):", classes="field-label")
+                    yield Input(value=self.cfg.model_name or "", id="set_model", placeholder=f"Leave blank for .env default ({env_default_model})")
+                    yield Label("Global Fallback Model (optional):", classes="field-label")
+                    yield Input(value=self.cfg.fallback_model or "", id="set_fallback_model", placeholder=f"Leave blank for .env default ({env_fallback_model})")
                     yield Label("Novel Genre (general, xianxia, wuxia, isekai, litrpg, romance):", classes="field-label")
                     yield Input(value=self.cfg.genre or self.bible.genre, id="set_genre")
 
                 with Container(classes="settings-section"):
-                    yield Label("🤖 Multi-Agent Model Routing (Leave blank to use default model)", classes="section-title")
+                    yield Label("🤖 Multi-Agent Model Routing (Leave blank to inherit from .env)", classes="section-title")
                     yield Label("Entity Extractor Model:", classes="field-label")
-                    yield Input(value=self.cfg.extractor_model or "", id="set_extractor_model", placeholder="e.g. gemini-3.1-flash-lite")
+                    yield Input(value=self.cfg.extractor_model or "", id="set_extractor_model", placeholder=f"Leave blank for .env default ({env_extractor})")
                     yield Label("Translation Drafter Model:", classes="field-label")
-                    yield Input(value=self.cfg.drafter_model or "", id="set_drafter_model", placeholder="e.g. gemini-3.5-flash-lite")
+                    yield Input(value=self.cfg.drafter_model or "", id="set_drafter_model", placeholder=f"Leave blank for .env default ({env_drafter})")
                     yield Label("Critique & Quality Auditor Model:", classes="field-label")
-                    yield Input(value=self.cfg.critic_model or "", id="set_critic_model", placeholder="e.g. gemma-4-26b-a4b-it")
+                    yield Input(value=self.cfg.critic_model or "", id="set_critic_model", placeholder=f"Leave blank for .env default ({env_critic})")
                     yield Label("Prose Polisher Model:", classes="field-label")
-                    yield Input(value=self.cfg.polisher_model or "", id="set_polisher_model", placeholder="e.g. gemini-3.5-flash-lite")
+                    yield Input(value=self.cfg.polisher_model or "", id="set_polisher_model", placeholder=f"Leave blank for .env default ({env_polisher})")
                     yield Label("Chronicler Lore Memory Model:", classes="field-label")
-                    yield Input(value=self.cfg.chronicler_model or "", id="set_chronicler_model", placeholder="e.g. gemma-4-26b-a4b-it")
+                    yield Input(value=self.cfg.chronicler_model or "", id="set_chronicler_model", placeholder=f"Leave blank for .env default ({env_chronicler})")
 
                 with Container(classes="settings-section"):
                     yield Label("Language Pair Settings", classes="section-title")
@@ -224,8 +232,7 @@ class SettingsModal(ModalScreen):
         cfg = self.repo.load_config()
         if title_val:
             cfg.title = title_val
-        if model_val:
-            cfg.model_name = model_val
+        cfg.model_name = model_val or None
         cfg.fallback_model = fallback_val or None
         cfg.extractor_model = extractor_val or None
         cfg.drafter_model = drafter_val or None
