@@ -17,18 +17,19 @@ Unlike simplistic segment-by-segment machine translation systems, NouSetsu orche
 ```mermaid
 graph TD
     subgraph "Presentation Layer"
-        CLI["CLI Commands<br>(src/cli/app.py)"]
-        TUI["Textual TUI App<br>(src/tui/app.py)"]
+        CLI["CLI Commands<br>(src/nousetsu/cli/app.py)"]
+        TUI["Textual TUI App<br>(src/nousetsu/tui/app.py)"]
     end
 
     subgraph "Application Layer"
-        BR["BatchRunner<br>(src/batch/runner.py)"]
-        CS["ChapterScanner<br>(src/batch/scanner.py)"]
-        REPO["NovelRepository<br>(src/storage/repository.py)"]
+        BR["BatchRunner<br>(src/nousetsu/batch/runner.py)"]
+        CS["ChapterScanner<br>(src/nousetsu/batch/scanner.py)"]
+        REPO["NovelRepository<br>(src/nousetsu/storage/repository.py)"]
+        ENV["Central .env & Cascade<br>(.env, .env.example)"]
     end
 
     subgraph "Orchestration Layer"
-        WF["NovelTranslationWorkflow<br>(src/graph/workflow.py)"]
+        WF["NovelTranslationWorkflow<br>(src/nousetsu/graph/workflow.py)"]
     end
 
     subgraph "Five Pipeline Agents"
@@ -39,13 +40,15 @@ graph TD
         A5["5. Chronist<br>(ChroniclerAgent)"]
     end
 
-    subgraph "Domain Skills & Utility Engine"
-        SKILLS["SkillRegistry & Catalog<br>(src/skills/)"]
+    subgraph "Domain Skills, Metrics & Utility Engine"
+        SKILLS["SkillRegistry & Catalog<br>(src/nousetsu/skills/)"]
         RL["SlidingWindowRateLimiter<br>(32,000 TPM / 60 RPM)"]
         FALLBACK["FallbackChatModel<br>(Per-Role Routing & 429 Guard)"]
+        INTERACTIONS["Gemini Interactions API<br>(/v1beta/interactions)"]
         CHUNKER["LineSemanticChunker<br>(85-line Threshold)"]
-        GENRE["Genre Detection<br>(src/utils/genre.py)"]
-        LANG["Language Detection<br>(src/utils/language.py)"]
+        TOKEN_METRICS["Token & Duration Metrics<br>(src/nousetsu/utils/token_metrics.py)"]
+        GENRE["Genre Detection<br>(src/nousetsu/utils/genre.py)"]
+        LANG["Language Detection<br>(src/nousetsu/utils/language.py)"]
     end
 
     CLI --> BR
@@ -53,6 +56,7 @@ graph TD
     BR --> REPO
     BR --> CS
     BR --> WF
+    BR --> ENV
     WF --> A1
     WF --> A2
     WF --> A3
@@ -60,8 +64,10 @@ graph TD
     WF --> A5
     A1 & A2 & A3 & A4 & A5 --> SKILLS
     A1 & A2 & A3 & A4 & A5 --> FALLBACK
+    FALLBACK --> INTERACTIONS
     A2 & A4 --> CHUNKER
     WF --> RL
+    WF --> TOKEN_METRICS
     WF --> GENRE
     WF --> LANG
 ```
@@ -72,13 +78,16 @@ graph TD
 
 Each agent in the pipeline is given an official German designation reflecting its precise literary role:
 
-| Stage | German Codename | Agent Class | Source File | Core Responsibility |
-|:---:|:---|:---|:---|:---|
-| **1** | **Schriftdetektiv** | [`EntityExtractorAgent`](file:///D:/Code/novel_translation_Agent/src/agents/extractor.py) | `src/agents/extractor.py` | **The Detective**: Analyzes raw chapter text *before* translation to identify unknown character names, cultivate power realms, and discover terms not yet registered in the Novel Bible. |
-| **2** | **Wortschmied** | [`ContextAwareDrafterAgent`](file:///D:/Code/novel_translation_Agent/src/agents/drafter.py) | `src/agents/drafter.py` | **The Wordsmith**: Produces the initial full translation draft, resolving zero-anaphora (omitted pronouns/subjects), applying distinct dialogue registers, and strictly using active glossary terms. |
-| **3** | **Zensor** | [`CritiqueAgent`](file:///D:/Code/novel_translation_Agent/src/agents/critic.py) | `src/agents/critic.py` | **The Inspector**: Line-by-line auditor scoring fidelity and style (0–10), detecting skipped sentences (omissions), verifying glossary compliance, and writing actionable critique notes. |
-| **4** | **Feinschliff** | [`PolishingAgent`](file:///D:/Code/novel_translation_Agent/src/agents/polisher.py) | `src/agents/polisher.py` | **The Stylist**: Rewrites drafted prose into publication-grade English, purging machine-translation tropes ("couldn't help but", "as expected of"), optimizing cadence, and enhancing emotional depth. |
-| **5** | **Chronist** | [`ChroniclerAgent`](file:///D:/Code/novel_translation_Agent/src/agents/chronicler.py) | `src/agents/chronicler.py` | **The Memory Keeper**: Summarizes chapter events for rolling context, tracks character status shifts (injuries, deaths, breakthroughs), and compiles metadata audit records into `.novel/metadata.json`. |
+| Stage | German Codename | Agent Class | Production Model | Source File | Core Responsibility |
+|:---:|:---|:---|:---|:---|:---|
+| **1** | **Schriftdetektiv** | [`EntityExtractorAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/extractor.py) | `gemini-3.1-flash-lite` | `src/nousetsu/agents/extractor.py` | **The Detective**: Analyzes raw chapter text *before* translation to identify unknown character names, cultivate power realms, and discover terms not yet registered in the Novel Bible. |
+| **2** | **Wortschmied** | [`ContextAwareDrafterAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/drafter.py) | `gemini-3.5-flash-lite` | `src/nousetsu/agents/drafter.py` | **The Wordsmith**: Produces the initial full translation draft, resolving zero-anaphora (omitted pronouns/subjects), applying distinct dialogue registers, and strictly using active glossary terms. |
+| **3** | **Zensor** | [`CritiqueAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/critic.py) | `gemma-4-26b-a4b-it` | `src/nousetsu/agents/critic.py` | **The Inspector**: Line-by-line auditor scoring fidelity and style (0–10), detecting skipped sentences (omissions), verifying glossary compliance, and writing actionable critique notes. |
+| **4** | **Feinschliff** | [`PolishingAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/polisher.py) | `gemini-3.5-flash-lite` | `src/nousetsu/agents/polisher.py` | **The Stylist**: Rewrites drafted prose into publication-grade English, purging machine-translation tropes ("couldn't help but", "as expected of"), optimizing cadence, and enhancing emotional depth. |
+| **5** | **Chronist** | [`ChroniclerAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/chronicler.py) | `gemma-4-26b-a4b-it` | `src/nousetsu/agents/chronicler.py` | **The Memory Keeper**: Summarizes chapter events for rolling context, tracks character status shifts (injuries, deaths, breakthroughs), and compiles metadata audit records into `.novel/metadata.json`. |
+
+> [!NOTE]
+> Global fallback across all agent stages is anchored by `gemini-3.5-flash-lite`, activated automatically via `FallbackChatModel` when encountering HTTP 429 quota exhaustion or API exceptions.
 
 ---
 
@@ -108,11 +117,11 @@ stateDiagram-v2
 
 ---
 
-## 5. Agent Skills Architecture (`src/skills/`)
+## 5. Agent Skills Architecture (`src/nousetsu/skills/`)
 
 The Agent Skills System provides modular, pluggable domain instructions that enhance agent capabilities without code modifications.
 
-### Skill Data Model ([`src/skills/models.py`](file:///D:/Code/novel_translation_Agent/src/skills/models.py))
+### Skill Data Model ([`src/nousetsu/skills/models.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/skills/models.py))
 ```python
 class AgentSkill(BaseModel):
     name: str                  # Unique identifier (e.g. zero_anaphora_resolution)
@@ -134,8 +143,8 @@ class AgentSkill(BaseModel):
 - **Polisher (`Feinschliff`)**: `translationese_filter`, `prose_cadence_enhancer`, `show_dont_tell`, `dialogue_flow`.
 - **Chronicler (`Chronist`)**: `lore_world_state_tracker`, `character_status_tracker`, `continuity_auditor`.
 
-### Custom Markdown Skill Files ([`src/skills/catalog/`](file:///D:/Code/novel_translation_Agent/src/skills/catalog/))
-Custom skills can be added simply by creating a `.md` file with YAML frontmatter in `src/skills/catalog/`:
+### Custom Markdown Skill Files ([`src/nousetsu/skills/catalog/`](file:///D:/Code/novel_translation_Agent/src/nousetsu/skills/catalog/))
+Custom skills can be added simply by creating a `.md` file with YAML frontmatter in `src/nousetsu/skills/catalog/`:
 ```markdown
 ---
 name: custom_skill_name
@@ -158,13 +167,16 @@ Active skills are dynamically filtered based on:
 
 ---
 
-## 6. Storage, State Machine & Checkpoints
+## 6. Storage, Configuration & Environment Cascade
 
 ```text
 <project_root>/
-├── .novel/
-│   ├── config.yaml          # ProjectConfig (languages, paths, model, rate limits, genre)
-│   ├── metadata.json        # Unified ProjectMetadataDocument with all chapter audits
+├── .env                     # Central machine-level models, rate limits, API keys (gitignored)
+├── .env.example             # Documented template for environment variables
+├── pyproject.toml           # Project dependencies & console script (`nousetsu`)
+├── .novel/                  # Project-specific metadata & cache (gitignored)
+│   ├── config.yaml          # ProjectConfig (title, languages, paths, genre, chunking, review loops)
+│   ├── metadata.json        # Unified ProjectMetadataDocument with all chapter audits & token stats
 │   ├── bible/
 │   │   └── bible.yaml       # NovelBible (characters, glossary, style guide, genre)
 │   ├── checkpoints/         # Stage checkpoint recovery files
@@ -173,6 +185,20 @@ Active skills are dynamically filtered based on:
 └── translated_chapters/     # Final translated markdown outputs
 ```
 
+### 4-Tier Model Precedence Cascade
+LLM model selection is decoupled from project storage. Project YAML files contain novel-specific metadata, while machine-level model choices reside in `.env`.
+Every model lookup resolves through a strict four-tier precedence chain:
+1. **CLI Flag / Constructor Argument**: Explicit runtime override (e.g. `--model`, `extractor_model=...`).
+2. **Project Config Override**: Optional project-specific override in `.novel/config.yaml` (`cfg.model_name` or `cfg.<agent>_model`).
+3. **Central `.env` Variable**: Machine-level configuration (`NOVEL_MODEL`, `NOVEL_FALLBACK_MODEL`, `NOVEL_EXTRACTOR_MODEL`, etc.).
+4. **Built-in Safe Fallback**: Default model (`gemini-3.1-flash-lite`, `gemma-4-26b-a4b-it`).
+
+### Token & Step Duration Analytics
+NouSetsu tracks end-to-end token consumption and execution latency per pipeline step inside `.novel/metadata.json`:
+- **Token Breakdown**: `prompt_tokens`, `completion_tokens`, `thought_tokens` (Gemini reasoning), and `cached_tokens`.
+- **Duration Tracking**: `duration_seconds` per pipeline step, formatted into human-readable strings (`3.2s`, `1m 24s`, `2h 15m`).
+- **Interactive TUI Analytics**: Press `M` or click `[📊 Tokens (M)]` in the TUI to access the dedicated Token Analysis dashboard featuring real-time KPI cards and interactive DataTables broken down by pipeline stage, LLM model, and chapter ranking.
+
 ### Lifecycle States
 - `NONE` -> `EXTRACTION` -> `DRAFTING` -> `CRITIQUE` -> `POLISHING` -> `CHRONICLING` -> `COMPLETED`.
 - If interrupted by the user or an unrecoverable error, the state transitions to `PAUSED` or `FAILED`.
@@ -180,23 +206,29 @@ Active skills are dynamically filtered based on:
 
 ---
 
-## 7. Rate Limiting, Safety & Threading
+## 7. Rate Limiting, Safety & Performance
 
-1. **Sliding Window Limiter** ([`src/utils/rate_limiter.py`](file:///D:/Code/novel_translation_Agent/src/utils/rate_limiter.py)):
+1. **Sliding Window Limiter** ([`src/nousetsu/utils/rate_limiter.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/rate_limiter.py)):
    - Enforces a 60-second sliding window for 32,000 TPM and 60 RPM.
    - Rejects or delays calls exceeding capacity, calculating precise backoff sleep intervals until the window clears.
 2. **Offline Token Estimator**:
    - Accurately counts CJK ideographs, Hangul syllables, Kana characters (1.3x token ratio) and Latin words (1.4x word-to-token ratio) in `<1ms`.
-3. **Window Rollover Backoff & Automatic Model Fallback**:
+3. **Gemini Interactions API Integration** ([`src/nousetsu/agents/interactions.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/interactions.py)):
+   - Direct integration with Google's `/v1beta/interactions` endpoint for Gemini 3/2.5 models.
+   - Captures granular `thought_tokens` and native interaction session tracking.
+4. **Window Rollover Backoff & Automatic Model Fallback**:
    - Upstream HTTP 429 or `RESOURCE_EXHAUSTED` errors trigger `FallbackChatModel` failover from primary model (e.g. `gemini-3.1-flash-lite`) to designated fallback model (e.g. `gemini-3.5-flash-lite`).
    - Sleep intervals between 25s and 65s allow quota windows to rollover gracefully.
-4. **Line-Based Semantic Chunking** ([`src/utils/chunker.py`](file:///D:/Code/novel_translation_Agent/src/utils/chunker.py)):
+5. **Line-Based Semantic Chunking** ([`src/nousetsu/utils/chunker.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/chunker.py)):
    - Chapters exceeding `chunk_threshold_lines` (default: 85 lines) are partitioned into ~70-line semantic chunks with 3-line overlap.
    - Drafter and Polisher process chunks sequentially with running context, preventing token truncation.
-5. **Thread-Safe Cancellation**:
+6. **Thread-Safe Cancellation**:
    - Supported via `threading.Event` across all worker threads.
    - Triggered via CLI `SIGINT` (Ctrl+C) or TUI `X` shortcut / button.
    - Raises `BatchStoppedException`, halting cleanly and saving `StageStatus.PAUSED` checkpoints.
+7. **Hermetic Test Isolation & Mock Propagation**:
+   - Test harness isolates `ProjectRegistry` via `NOVEL_REGISTRY_DIR` so tests never read or mutate host project configurations.
+   - Models prefixed with `"mock"` or `"test"` automatically propagate across all five pipeline agent roles, eliminating live network calls and achieving a 27x test speedup (<17s for full test suite).
 
 ---
 
@@ -208,27 +240,31 @@ All commands should be run using `uv`:
 # Install / sync dependencies
 uv sync
 
-# Run complete test suite (107 tests across 21 modules)
+# Run complete test suite (116 tests across 22 modules in ~16s)
 uv run pytest
 
 # Run specific test modules
+uv run pytest tests/test_model_env.py
+uv run pytest tests/test_model_fallback.py
+uv run pytest tests/test_tui.py
 uv run pytest tests/test_skills.py
 uv run pytest tests/test_review_loop.py
 uv run pytest tests/test_stop.py
 uv run pytest tests/test_rate_limiter.py
 
+# Launch the interactive Textual TUI dashboard (default behavior on bare 'nousetsu')
+uv run nousetsu
+uv run nousetsu tui -p project/Villainess
+
 # Initialize a new novel project
-uv run python -m src.cli.app init --title "My Novel" --genre isekai --source-lang Japanese
+uv run nousetsu init --title "Ascendance of a Bookworm" --genre isekai --source-lang Japanese --target-lang Thai
 
 # Run folder-to-folder batch translation
-uv run python -m src.cli.app batch --limit 5 --genre xianxia
+uv run nousetsu batch --limit 5 --genre xianxia
 
 # Inspect registered domain skills
-uv run python -m src.cli.app skills
-uv run python -m src.cli.app skills --agent drafter --genre xianxia
-
-# Launch the interactive Textual TUI dashboard
-uv run python -m src.cli.app tui
+uv run nousetsu skills
+uv run nousetsu skills --agent drafter --genre xianxia
 ```
 
 ---
@@ -255,10 +291,22 @@ When modifying this repository, AI agents MUST adhere strictly to these conventi
    - Use `model_dump()` instead of deprecated `dict()`.
 4. **Deterministic Unit Testing**:
    - Never call external LLM APIs during unit tests.
-   - Always utilize `MockNovelLLM` from `src.agents.llm` to provide deterministic, fixture-independent responses.
+   - Always utilize `MockNovelLLM` from `nousetsu.agents.llm` to provide deterministic, fixture-independent responses.
 5. **Preserving Agent Signature Compatibility**:
    - Never remove existing keyword or positional arguments from agent methods (`extract`, `draft`, `evaluate`, `polish`, `chronicle`).
    - Mocks in existing tests may define explicit parameters (e.g. `mock_polish(draft_text, critique_notes, active_glossary, bible)`). Ensure all additions have defaults or are passed via the `bible` model to preserve backward compatibility.
 6. **Thread Safety & Mutual Exclusion**:
    - Background tasks must respect `stop_event.is_set()` and sleep in small interruptible slices (e.g. `100ms`).
    - TUI operations must enforce mutual exclusion: only one batch worker thread may run at a time.
+7. **Hermetic Test Project Isolation**:
+   - Tests must NEVER read or mutate host machine project files (`project/` or `~/.novel_agent/projects.json`).
+   - The test fixture in `tests/conftest.py` automatically routes `NOVEL_REGISTRY_DIR` to a temporary directory.
+   - Any test creating or testing `NovelRepository` or `NovelAgentApp` MUST pass `tmp_path` (e.g. `repo = NovelRepository(tmp_path)` and `app = NovelAgentApp(..., project_dir=tmp_path)`).
+8. **Mock Model Naming for Tests**:
+   - Unit and integration tests must configure model names starting with `"mock"` or `"test"` (e.g. `mock-model`).
+   - `BatchRunner` and `NovelTranslationWorkflow` automatically detect mock prefixes and propagate them to all five sub-agent roles, eliminating live network calls and ensuring lightning-fast execution.
+9. **Central Environment Model Precedence**:
+   - Machine-level LLM models belong in `.env`.
+   - `ProjectConfig` model fields default to `None` so novel projects cleanly inherit models from `.env`.
+   - Project YAML files (`.novel/config.yaml`) should only store novel-specific metadata and explicit local overrides.
+

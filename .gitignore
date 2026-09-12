@@ -21,3 +21,4 @@ project/*
 projects/*
 .novel/
 *.meta.json
+ideabook/

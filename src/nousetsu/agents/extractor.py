@@ -1,9 +1,10 @@
 """Entity and terminology extraction agent."""
 import json
 import re
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 from langchain_core.messages import HumanMessage, SystemMessage
 from nousetsu.agents.llm import extract_text_from_message, extract_usage_from_message, get_llm
+from nousetsu.graph.procedural import ProceduralGraph, get_default_extractor_graph
 from nousetsu.models.bible import CharacterProfile, GlossaryItem, NovelBible
 from nousetsu.models.metadata import TokenUsage
 from nousetsu.prompts.templates import EXTRACTION_SYSTEM_PROMPT
@@ -11,13 +12,19 @@ from nousetsu.skills.registry import SkillRegistry
 
 
 class EntityExtractorAgent:
-    """Extracts unknown characters and terms from novel chapters."""
+    """Extracts unknown characters and terms from novel chapters using Procedural Graph steering."""
 
-    def __init__(self, model_name: str = "gemini-3.1-flash-lite", fallback_model: Optional[str] = None):
+    def __init__(
+        self,
+        model_name: str = "gemini-3.1-flash-lite",
+        fallback_model: Optional[str] = None,
+        procedural_graph: Optional[ProceduralGraph] = None
+    ):
         self.model_name = model_name
         self.fallback_model = fallback_model
         self.llm = get_llm(model_name=model_name, fallback_model=fallback_model, temperature=0.1)
         self.last_usage: TokenUsage = TokenUsage()
+        self.procedural_graph = procedural_graph or get_default_extractor_graph()
 
     @property
     def last_model_used(self) -> str:
@@ -29,7 +36,9 @@ class EntityExtractorAgent:
         self,
         source_text: str,
         bible: NovelBible,
-        genre: Optional[str] = None
+        genre: Optional[str] = None,
+        procedural_graph: Optional[ProceduralGraph] = None,
+        **kwargs: Any
     ) -> Tuple[List[CharacterProfile], List[GlossaryItem], List[str]]:
         known_chars_str = "\n".join([f"- {c.original_name} -> {c.name} ({c.role}, {c.voice})" for c in bible.characters]) or "None yet."
         known_gloss_str = "\n".join([f"- {g.source} -> {g.target} ({g.category})" for g in bible.glossary]) or "None yet."
@@ -42,12 +51,18 @@ class EntityExtractorAgent:
         )
         skills_section = f"\n{skills_text}\n" if skills_text else ""
 
+        # Procedural Graph guidance (Lu et al., arXiv:2609.09153v1)
+        active_pg = procedural_graph or self.procedural_graph
+        guidance_text = active_pg.to_compact_guidance("Scan_Candidates", max_hops=2) if active_pg else ""
+        procedural_section = f"\n{guidance_text}\n" if guidance_text else ""
+
         sys_msg = EXTRACTION_SYSTEM_PROMPT.format(
             source_lang=bible.source_language,
             target_lang=bible.target_language,
             known_characters=known_chars_str,
             known_glossary=known_gloss_str,
-            skills_section=skills_section
+            skills_section=skills_section,
+            procedural_guidance=procedural_section
         )
 
         response = self.llm.invoke([

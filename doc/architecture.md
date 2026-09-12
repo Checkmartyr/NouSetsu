@@ -18,14 +18,15 @@ graph TD
         Runner["BatchRunner<br/>(sequential loop, stop_event, checkpoints, Rich progress)"]
     end
 
-    subgraph Workflow_Layer ["Agentic Workflow Layer (LangGraph)"]
+    subgraph Workflow_Layer ["Agentic Workflow Layer (LangGraph & Procedural Graphs)"]
         Workflow["NovelTranslationWorkflow<br/>(StateGraph, Review Reflection Loop, stage callbacks)"]
         State["TranslationState<br/>(source, draft, critique, polish, Bible memory, best candidate)"]
+        PG["ProceduralGraph & Refiner<br/>(G=(V,R,E,Phi), deterministic localization, offline self-evolution)"]
     end
 
     subgraph Agent_Layer ["Specialized Agent Layer (German Designations)"]
-        Extractor["Stage 1: Schriftdetektiv<br/>(EntityExtractorAgent)"]
-        Drafter["Stage 2: Wortschmied<br/>(ContextAwareDrafterAgent)"]
+        Extractor["Stage 1: Schriftdetektiv<br/>(EntityExtractorAgent + Scan_Candidates PG)"]
+        Drafter["Stage 2: Wortschmied<br/>(ContextAwareDrafterAgent + Chunk-Aware PG)"]
         Critic["Stage 3: Zensor<br/>(CritiqueAgent)"]
         Polisher["Stage 4: Feinschliff<br/>(PolishingAgent)"]
         Chronicler["Stage 5: Chronist<br/>(ChroniclerAgent)"]
@@ -49,6 +50,7 @@ graph TD
         M_Bible["NovelBible, CharacterProfile, GlossaryItem"]
         M_Meta["ChapterMetadata, CheckpointData, ErrorLogEntry"]
         M_Config["ProjectConfig, StyleGuideConfig"]
+        M_PG["ProceduralNode, ProceduralEdge, DiagnosticTrace"]
     end
 
     %% Dependencies
@@ -59,12 +61,16 @@ graph TD
     Scanner --> LangDetector
     Runner --> RateLimiter
     Workflow --> State
+    Workflow --> PG
     Workflow --> Extractor
     Workflow --> Drafter
     Workflow --> Critic
     Workflow --> Polisher
     Workflow --> Chronicler
     Workflow --> RateLimiter
+    PG --> Extractor
+    PG --> Drafter
+    Critic -.->|"Audit Traces"| PG
     Drafter --> Chunker
     Polisher --> Chunker
     RateLimiter --> TokenEstimator
@@ -94,17 +100,19 @@ graph TD
 * **`ChapterScanner`**: Discovers raw chapter files (`.txt`, `.md`), applies natural numerical sorting (`1, 2, 10`), computes SHA-256 checksums to detect file changes, triggers auto source language detection, and performs a single I/O read of `.novel/metadata.json` for instantaneous project discovery.
 * **`BatchRunner`**: Sequentially translates chapters, passes updated Novel Bible state forward, manages resumption checkpoints, manages thread-safe `stop()` and `reset_stop()` signals, and coordinates rate limits.
 
-### 3. Agentic Workflow Layer (`src/nousetsu/graph/`)
+### 3. Agentic Workflow & Procedural Graph Layer (`src/nousetsu/graph/`)
 * **`NovelTranslationWorkflow`**: Compiles a LangGraph `StateGraph` featuring an automated **Reflection Review Loop** between `Feinschliff` and `Zensor`:
   * Evaluates fidelity and style quality thresholds (`>= 8.5/10`).
   * Employs an automated **Best-Candidate Regression Guard** to retain the highest-scoring candidate if subsequent passes degrade.
   * Emits fine-grained progress notifications (`stage_callback`) to update the TUI and CLI in real time.
   * Wraps all agent invocations with `invoke_with_retry` and rate-limit acquisitions.
+* **Procedural Graph Engine (`src/nousetsu/graph/procedural.py`)**: Attributed directed graph $G = (V, R, E, \Phi)$ formalizing procedural execution knowledge (Lu et al., arXiv:2609.09153v1). Provides deterministic code-level localization without online guidance LLM token bloat.
+* **Offline Refiner (`src/nousetsu/graph/pg_refiner.py`)**: Analyzes chapter critique audit traces offline to propose mutations (add/update/delete edge pitfalls and guidance), gated by structural verification and rejection memory with zero live inference token cost.
 
 ### 4. Specialized Agent Layer (`src/nousetsu/agents/`)
 Each agent possesses a single cognitive responsibility:
-* **Stage 1: `EntityExtractorAgent` (*Schriftdetektiv*)**: Discovers unknown character names, spells, items, and titles before drafting.
-* **Stage 2: `ContextAwareDrafterAgent` (*Wortschmied*)**: First-pass translation with zero-anaphora subject inference, character voice registers, and rolling episodic summaries. Integrates `LineSemanticChunker` for long chapters.
+* **Stage 1: `EntityExtractorAgent` (*Schriftdetektiv*)**: Discovers unknown character names, spells, items, and titles before drafting. Steered by `Scan_Candidates` procedural graph directives with anti-bloat term pruning.
+* **Stage 2: `ContextAwareDrafterAgent` (*Wortschmied*)**: First-pass translation with zero-anaphora subject inference, character voice registers, and rolling episodic summaries. Localizes procedural state to `Scene_Init` for chunk 1 and `Boundary_Continuity` for subsequent chunks. Integrates `LineSemanticChunker` for long chapters.
 * **Stage 3: `CritiqueAgent` (*Zensor*)**: Line-by-line fidelity and stylistic auditing, generating scores and remediation notes.
 * **Stage 4: `PolishingAgent` (*Feinschliff*)**: High-cadence prose refinement and translationese elimination across semantic chunks.
 * **Stage 5: `ChroniclerAgent` (*Chronist*)**: Episodic synopses, world lore updates, and metadata compilation.

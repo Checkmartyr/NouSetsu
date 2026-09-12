@@ -9,7 +9,9 @@
 
 1. [Executive Summary & Pipeline Architecture](#1-executive-summary--pipeline-architecture)
 2. [Stage 1: Schriftdetektiv (EntityExtractorAgent)](#2-stage-1-schriftdetektiv-entityextractoragent)
+   - [2.5 Procedural Graph Steering & Anti-Bloat Pitfalls (arXiv:2609.09153v1)](#25-procedural-graph-steering--anti-bloat-pitfalls-arxiv260909153v1)
 3. [Stage 2: Wortschmied (ContextAwareDrafterAgent)](#3-stage-2-wortschmied-contextawaredrafteragent)
+   - [3.5 Procedural Graph Directives & Offline Evolution (arXiv:2609.09153v1)](#35-procedural-graph-directives--offline-evolution-arxiv260909153v1)
 4. [Stage 3: Zensor (CritiqueAgent)](#4-stage-3-zensor-critiqueagent)
 5. [Stage 4: Feinschliff (PolishingAgent)](#5-stage-4-feinschliff-polishingagent)
 6. [Stage 5: Chronist (ChroniclerAgent)](#6-stage-5-chronist-chronicleragent)
@@ -117,6 +119,12 @@ LLMs occasionally wrap JSON in markdown formatting (````json ... ````) or includ
 3. Validates each object using Pydantic V2 (`CharacterProfile.model_validate` and `GlossaryItem.model_validate`).
 4. If JSON parsing completely fails, falls back gracefully to empty lists without crashing the workflow.
 
+### 2.5 Procedural Graph Steering & Anti-Bloat Pitfalls (arXiv:2609.09153v1)
+`Schriftdetektiv` uses a lightweight, deterministic [`ProceduralGraph`](file:///D:/Code/novel_translation_Agent/src/nousetsu/graph/procedural.py) to guide entity extraction without runtime guidance LLM overhead:
+- **Active Node**: `Scan_Candidates` -> `Filter_Known` -> `Deduce_Profiles` -> `Prune_Trivial_Terms`.
+- **Injected Directives (< 80 tokens)**: Directs the model to check honorific suffixes (`-san`, `-sama`) before guessing character gender, and strictly bans extracting conversational verbs, everyday adjectives, greetings, or generic titles as new terms.
+- **Token Efficiency**: Prevents dumping dozens of trivial words into JSON output, saving 300–800 output tokens per chapter.
+
 ---
 
 ## 3. Stage 2: Wortschmied (`ContextAwareDrafterAgent`)
@@ -170,6 +178,12 @@ sequenceDiagram
     Drafter-->>Drafter: Merges drafted chunks into complete chapter
 ```
 The tail of the preceding translation is injected into the subsequent chunk prompt under `PRECEDING CONTEXT`, ensuring zero pronoun discontinuity across chunk boundaries.
+
+### 3.5 Procedural Graph Directives & Offline Evolution (arXiv:2609.09153v1)
+To preserve boundary continuity and eliminate pronoun hallucination with minimal token overhead:
+- **Chunk 1 Localization**: Active node `Scene_Init` -> `Zero_Anaphora_Resolution` steers scene anchoring, tense consistency, and initial POV attribution.
+- **Chunk N Localization**: Active node `Boundary_Continuity` -> `Zero_Anaphora_Resolution` injects explicit guidance to resume narrative flow from the preceding tail, with strict pitfalls forbidding repetition or restating introductory exposition.
+- **Offline Self-Evolution (`pg_refiner.py`)**: An offline diagnostic loop inspects Critic audit warnings, mutates edge pitfalls/guidance, and gates updates via structural verification, incurring zero tokens during translation runs.
 
 ---
 

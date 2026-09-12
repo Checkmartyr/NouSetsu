@@ -2,6 +2,7 @@
 from typing import Any, Callable, List, Optional
 from langchain_core.messages import HumanMessage, SystemMessage
 from nousetsu.agents.llm import extract_text_from_message, extract_usage_from_message, get_llm
+from nousetsu.graph.procedural import ProceduralGraph, get_default_drafter_graph
 from nousetsu.models.bible import CharacterProfile, ChapterSummary, GlossaryItem, NovelBible
 from nousetsu.models.metadata import TokenUsage
 from nousetsu.prompts.templates import DRAFTING_SYSTEM_PROMPT
@@ -9,13 +10,19 @@ from nousetsu.skills.registry import SkillRegistry
 
 
 class ContextAwareDrafterAgent:
-    """Produces initial novelistic translation draft with character voice and zero-anaphora context."""
+    """Produces initial novelistic translation draft with character voice and zero-anaphora context via Procedural Graph."""
 
-    def __init__(self, model_name: str = "gemini-3.5-flash-lite", fallback_model: Optional[str] = None):
+    def __init__(
+        self,
+        model_name: str = "gemini-3.5-flash-lite",
+        fallback_model: Optional[str] = None,
+        procedural_graph: Optional[ProceduralGraph] = None
+    ):
         self.model_name = model_name
         self.fallback_model = fallback_model
         self.llm = get_llm(model_name=model_name, fallback_model=fallback_model, temperature=0.3)
         self.last_usage: TokenUsage = TokenUsage()
+        self.procedural_graph = procedural_graph or get_default_drafter_graph()
 
     @property
     def last_model_used(self) -> str:
@@ -34,7 +41,8 @@ class ContextAwareDrafterAgent:
         chunks: Optional[List[Any]] = None,
         notify_callback: Optional[Any] = None,
         rate_limiter: Optional[Any] = None,
-        stop_event: Optional[Any] = None
+        stop_event: Optional[Any] = None,
+        procedural_graph: Optional[ProceduralGraph] = None
     ) -> str:
         if chunks and len(chunks) > 1:
             return self.draft_chunked(
@@ -46,7 +54,8 @@ class ContextAwareDrafterAgent:
                 genre=genre,
                 notify_callback=notify_callback,
                 rate_limiter=rate_limiter,
-                stop_event=stop_event
+                stop_event=stop_event,
+                procedural_graph=procedural_graph
             )
 
         chars_str = "\n".join([
@@ -81,6 +90,11 @@ class ContextAwareDrafterAgent:
         )
         skills_section = f"\n{skills_text}\n" if skills_text else ""
 
+        # Procedural Graph guidance (Lu et al., arXiv:2609.09153v1)
+        active_pg = procedural_graph or self.procedural_graph
+        guidance_text = active_pg.to_compact_guidance("Scene_Init", max_hops=3) if active_pg else ""
+        procedural_section = f"\n{guidance_text}\n" if guidance_text else ""
+
         sys_msg = DRAFTING_SYSTEM_PROMPT.format(
             source_lang=bible.source_language,
             target_lang=bible.target_language,
@@ -92,7 +106,8 @@ class ContextAwareDrafterAgent:
             rolling_summaries=summaries_str,
             characters=chars_str,
             glossary=gloss_str,
-            skills_section=skills_section
+            skills_section=skills_section,
+            procedural_guidance=procedural_section
         )
 
         response = self.llm.invoke([
@@ -113,7 +128,8 @@ class ContextAwareDrafterAgent:
         genre: Optional[str] = None,
         notify_callback: Optional[Any] = None,
         rate_limiter: Optional[Any] = None,
-        stop_event: Optional[Any] = None
+        stop_event: Optional[Any] = None,
+        procedural_graph: Optional[ProceduralGraph] = None
     ) -> str:
         """Drafts novel chunks sequentially with sliding translation context for pronoun/voice continuity."""
         from nousetsu.utils.rate_limiter import estimate_tokens
@@ -156,7 +172,8 @@ class ContextAwareDrafterAgent:
                 rolling_summaries=rolling_summaries,
                 genre=genre,
                 chunk_idx=chunk_idx,
-                total_chunks=total_chunks
+                total_chunks=total_chunks,
+                procedural_graph=procedural_graph
             )
             drafted_parts.append(chunk_draft)
             total_usage = total_usage.add(self.last_usage)
@@ -182,7 +199,8 @@ class ContextAwareDrafterAgent:
         rolling_summaries: List[ChapterSummary],
         genre: Optional[str] = None,
         chunk_idx: int = 1,
-        total_chunks: int = 1
+        total_chunks: int = 1,
+        procedural_graph: Optional[ProceduralGraph] = None
     ) -> str:
         chars_str = "\n".join([
             f"- {c.name} (Original: {c.original_name}, Gender: {c.gender}, Role: {c.role}): Voice={c.voice}"
@@ -215,6 +233,12 @@ class ContextAwareDrafterAgent:
         )
         skills_section = f"\n{skills_text}\n" if skills_text else ""
 
+        # Procedural Graph guidance (Lu et al., arXiv:2609.09153v1)
+        active_pg = procedural_graph or self.procedural_graph
+        active_node = "Scene_Init" if chunk_idx == 1 else "Boundary_Continuity"
+        guidance_text = active_pg.to_compact_guidance(active_node, max_hops=2) if active_pg else ""
+        procedural_section = f"\n{guidance_text}\n" if guidance_text else ""
+
         sys_msg = DRAFTING_SYSTEM_PROMPT.format(
             source_lang=bible.source_language,
             target_lang=bible.target_language,
@@ -226,7 +250,8 @@ class ContextAwareDrafterAgent:
             rolling_summaries=summaries_str,
             characters=chars_str,
             glossary=gloss_str,
-            skills_section=skills_section
+            skills_section=skills_section,
+            procedural_guidance=procedural_section
         )
 
         user_parts = []

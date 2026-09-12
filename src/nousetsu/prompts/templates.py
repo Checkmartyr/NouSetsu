@@ -13,6 +13,7 @@ Existing Known Characters:
 Existing Known Glossary:
 {known_glossary}
 {skills_section}
+{procedural_guidance}
 Respond strictly in valid JSON format:
 {{
   "new_characters": [
@@ -62,6 +63,7 @@ Preceding Chapter Summaries:
 ## ACTIVE GLOSSARY:
 {glossary}
 {skills_section}
+{procedural_guidance}
 Translate the entire chapter. Do not omit any scene, sentence, or dialogue line. Maintain standard novel paragraph breaks and dialogue quotes.
 """
 

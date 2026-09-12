@@ -39,7 +39,9 @@ class NovelTranslationWorkflow:
         enable_chunking: bool = True,
         chunk_threshold_lines: int = 85,
         target_chunk_lines: int = 70,
-        chunk_overlap_lines: int = 3
+        chunk_overlap_lines: int = 3,
+        extractor_pg: Optional[Any] = None,
+        drafter_pg: Optional[Any] = None
     ):
         effective_model = model_name or os.environ.get("NOVEL_MODEL") or os.environ.get("DEFAULT_MODEL") or "gemini-3.1-flash-lite"
         self.model_name = effective_model
@@ -67,8 +69,16 @@ class NovelTranslationWorkflow:
             else None
         )
         self.current_stage: PipelineStage = PipelineStage.NONE
-        self.extractor = EntityExtractorAgent(model_name=self.extractor_model, fallback_model=fallback_model)
-        self.drafter = ContextAwareDrafterAgent(model_name=self.drafter_model, fallback_model=fallback_model)
+        self.extractor = EntityExtractorAgent(
+            model_name=self.extractor_model,
+            fallback_model=fallback_model,
+            procedural_graph=extractor_pg
+        )
+        self.drafter = ContextAwareDrafterAgent(
+            model_name=self.drafter_model,
+            fallback_model=fallback_model,
+            procedural_graph=drafter_pg
+        )
         self.critic = CritiqueAgent(model_name=self.critic_model, fallback_model=fallback_model)
         self.polisher = PolishingAgent(model_name=self.polisher_model, fallback_model=fallback_model)
         self.chronicler = ChroniclerAgent(model_name=self.chronicler_model, fallback_model=fallback_model)

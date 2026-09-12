@@ -100,22 +100,28 @@ sequenceDiagram
   def extract(
       self,
       source_text: str,
-      bible: NovelBible
+      bible: NovelBible,
+      genre: Optional[str] = None,
+      procedural_graph: Optional[ProceduralGraph] = None,
+      **kwargs: Any
   ) -> Tuple[List[CharacterProfile], List[GlossaryItem], List[str]]:
   ```
 * **Plain English Explanation**:
-  Scans the raw source text *before* translation begins to discover unknown people names, titles, magical items, and fantasy terminology that are not yet recorded in the Novel Bible.
+  Scans raw source text *before* translation begins to discover unknown character names, titles, magical items, and fantasy terminology not yet recorded in the Novel Bible. Uses Procedural Graph steering (`Scan_Candidates` -> `Filter_Known` -> `Deduce_Profiles` -> `Prune_Trivial_Terms`) to guide extraction.
 * **Inputs**:
   | Argument | Type | Purpose |
   |:---|:---|:---|
   | `source_text` | `str` | Raw chapter text (first 12,000 characters). |
   | `bible` | `NovelBible` | Existing character profiles and glossary terms to avoid duplicates. |
+  | `genre` | `Optional[str]` | Optional genre override for domain-specific skill selection. |
+  | `procedural_graph` | `Optional[ProceduralGraph]` | Custom or evolved Procedural Graph overriding defaults. |
 * **Outputs**:
   A tuple containing:
   1. `List[CharacterProfile]`: Newly discovered characters with estimated gender, role, and voice.
   2. `List[GlossaryItem]`: Newly discovered glossary items with source term, target translation, and category.
   3. `List[str]`: Active glossary terms that appear in this specific chapter.
-* **Why It Matters**: Prevents character names from being mistranslated or inconsistently spelled across chapters (e.g. "Clara" turning into "Kurara" in chapter 5).
+* **Why It Matters & Token Impact**:
+  Prevents character names from drifting across chapters. The injected procedural pitfalls explicitly forbid extracting everyday conversational verbs, greetings, and common adjectives, trimming **300–800 junk output tokens** per chapter.
 
 ---
 
@@ -129,24 +135,34 @@ sequenceDiagram
       bible: NovelBible,
       active_characters: List[CharacterProfile],
       active_glossary: List[GlossaryItem],
-      rolling_summaries: List[ChapterSummary]
+      rolling_summaries: List[ChapterSummary],
+      genre: Optional[str] = None,
+      chunks: Optional[List[Any]] = None,
+      notify_callback: Optional[Any] = None,
+      rate_limiter: Optional[Any] = None,
+      stop_event: Optional[Any] = None,
+      procedural_graph: Optional[ProceduralGraph] = None
   ) -> str:
   ```
 * **Plain English Explanation**:
-  Produces the first complete narrative translation of the entire chapter, solving East Asian pronoun omission and adhering to character registers and style guide rules.
+  Produces the first complete narrative translation of the chapter, resolving East Asian pronoun omission and adhering to character registers and style guide rules.
 * **Inputs**:
   | Argument | Type | Purpose |
   |:---|:---|:---|
   | `source_text` | `str` | Full chapter source text to translate. |
   | `bible` | `NovelBible` | Language settings, reading level, tense, POV, and honorific mode. |
-  | `active_characters`| `List[CharacterProfile]` | Character cards containing canonical English names and voice tone guidelines. |
+  | `active_characters`| `List[CharacterProfile]` | Character cards containing canonical target names and voice tone guidelines. |
   | `active_glossary` | `List[GlossaryItem]` | Mandatory term translations that must appear in the text. |
   | `rolling_summaries`| `List[ChapterSummary]` | Synopses of the past 3 chapters providing immediate plot context. |
+  | `genre` | `Optional[str]` | Genre override for specialized drafting skills. |
+  | `chunks` | `Optional[List[LineChunk]]` | Pre-split semantic chunks if chapter exceeds threshold lines. |
+  | `procedural_graph` | `Optional[ProceduralGraph]` | Custom or evolved Procedural Graph for drafting. |
 * **Outputs**:
   `str`: Raw narrative English draft translation.
 * **Key Innovations**:
-  * **Line-Based Semantic Chunking**: Chapters exceeding `chunk_threshold_lines` (default: 85 lines) are partitioned into ~70-line semantic chunks with 3-line overlap. Chunks are drafted sequentially with rolling sliding context.
-  * **Zero-Anaphora Resolution**: In Japanese, Chinese, and Korean, subjects ("I", "he", "she") are routinely dropped. The drafter examines who is speaking and present in the scene to insert accurate pronouns without hallucinating actors.
+  * **Procedural Graph State Localization**: Dynamically localizes active node at `Scene_Init` for Chunk 1 (scene and POV anchoring) and switches to `Boundary_Continuity` for Chunk > 1 (prohibits repeating context and enforces seamless continuity from the preceding chunk tail).
+  * **Line-Based Semantic Chunking**: Chapters exceeding `chunk_threshold_lines` (default: 85 lines) are partitioned into ~70-line semantic chunks with 3-line overlap.
+  * **Zero-Anaphora Resolution**: Examines scene presence and speech register particles to insert accurate pronouns without blind guessing.
   * **Character Voice Preservation**: Distinct dialogue registers ensure a noble villain sounds haughty while a young apprentice sounds eager.
 
 ---
@@ -297,3 +313,43 @@ NouSetsu protects upstream API quotas with a proactive sliding-window rate limit
 * **Intra-Chapter Stop**: If stopped mid-chapter (via `SIGINT` / Ctrl+C or `X` shortcut in TUI), the workflow raises `BatchStoppedException`.
 * **Checkpoint Preservation**: Intermediate stage artifacts (`draft_text`, `critique_notes`, `extracted_terms`, `best_polished_text`) are safely saved to `.novel/metadata.json` with status `StageStatus.PAUSED`.
 * **Instant Resumption**: Subsequent runs skip completed stages and resume immediately from the paused stage.
+
+---
+
+## 🧭 Procedural Graph Execution & Offline Self-Evolution (arXiv:2609.09153v1)
+
+NouSetsu incorporates the **Procedural Graph (PG)** framework based on *Procedural Graphs: Self-Evolving Execution Structures for LLM Agents* (Lu et al., arXiv:2609.09153v1).
+
+### 1. Attributed Directed Graph Representation
+Task procedural knowledge is modeled outside model weights as an attributed directed graph $G = (V, R, E, \Phi)$:
+- **Nodes ($V$)**: Abstract operational states and stages (e.g. `Scan_Candidates`, `Scene_Init`, `Boundary_Continuity`, `Zero_Anaphora_Resolution`).
+- **Edges ($E$)**: Permissible procedural transitions $(u, r, v)$.
+- **Edge Attributes ($\Phi$)**: Each edge carries a triplet `(condition, guidance, pitfalls)`.
+
+### 2. Token-Frugal Deterministic Localization (Zero Extra API Calls)
+In the paper's default setup, a runtime **Guidance LLM ($\Psi$)** generates situational guidance at every decision step, causing a **+55% to +430% token overhead**. NouSetsu avoids this completely by replacing the guidance model with **code-level deterministic localization**:
+- **Extractor**: Injects localized transitions from `Scan_Candidates` into `EXTRACTION_SYSTEM_PROMPT` (< 80 tokens). Pitfalls strictly forbid extracting common verbs or conversational words.
+- **Drafter Chunk 1**: Localizes at `Scene_Init`, anchoring character POV, tense, and scene setting.
+- **Drafter Chunk > 1**: Localizes at `Boundary_Continuity`, requiring the model to inherit active speaker attributions from the preceding draft tail without re-translating or repeating context.
+
+### 3. Offline Feedback-Driven Self-Evolution Loop (Algorithm 1)
+Self-evolution runs completely offline or post-batch without adding tokens to live translation runs:
+
+```mermaid
+flowchart TD
+    Traces["Diagnostic Rollout<br/>(Chapter Draft + Critic QualityAudit)"] --> Partition{"Partition Traces"}
+    Partition -->|"Fidelity >= 8.5 & Warnings == 0"| Succ["Success Traces"]
+    Partition -->|"Fidelity < 8.5 OR Warnings > 0"| Fail["Failure Traces"]
+    
+    Fail & Succ --> Refiner["Offline LLM Refiner<br/>(ProceduralGraphRefiner)"]
+    Memory[("Rejection Memory<br/>(Previously Failed Edits)")] --> Refiner
+    
+    Refiner --> EditProposal["Propose Delta G<br/>(ADD / UPDATE / DELETE Pitfalls & Guidance)"]
+    EditProposal --> Apply["Candidate Graph G_cand = G + Delta G"]
+    
+    Apply --> ValGate{"Validation Gate<br/>(Structural & Connectivity Checks)"}
+    ValGate -- Passed --> Commit["Commit & Persist G_cand<br/>(.novel/procedural_graphs/)"]
+    ValGate -- Failed --> Rollback["Rollback to Current Graph<br/>Record in Rejection Memory"]
+```
+* **Rejection Memory**: Records discarded candidate edits to ensure the refiner never repeats invalid modifications across generations.
+

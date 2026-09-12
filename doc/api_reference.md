@@ -7,23 +7,27 @@ This document provides a technical API reference for core classes, functions, ut
 ## 🤖 Agents (`src/nousetsu/agents/`)
 
 ### `EntityExtractorAgent` (*Schriftdetektiv*) (`src/nousetsu/agents/extractor.py`)
-Extracts named entities, characters, and glossary candidates from source text before translation begins.
+Extracts named entities, characters, and glossary candidates from source text before translation begins with Procedural Graph steering.
 
 ```python
 class EntityExtractorAgent:
     def __init__(
         self,
         model_name: str = "gemini-3.1-flash-lite",
-        fallback_model: Optional[str] = None
+        fallback_model: Optional[str] = None,
+        procedural_graph: Optional[ProceduralGraph] = None
     )
     
     def extract(
         self,
         source_text: str,
-        bible: NovelBible
+        bible: NovelBible,
+        genre: Optional[str] = None,
+        procedural_graph: Optional[ProceduralGraph] = None,
+        **kwargs: Any
     ) -> Tuple[List[CharacterProfile], List[GlossaryItem], List[str]]:
         """
-        Extracts new characters and glossary terms.
+        Extracts new characters and glossary terms using Procedural Graph guidance.
         Returns: (new_characters, new_terms, active_terms_in_chapter)
         """
 ```
@@ -31,7 +35,7 @@ class EntityExtractorAgent:
 ---
 
 ### `ContextAwareDrafterAgent` (*Wortschmied*) (`src/nousetsu/agents/drafter.py`)
-Produces initial novelistic translation drafts with zero-anaphora resolution, character voices, and episodic memory. Supports line-based semantic chunking.
+Produces initial novelistic translation drafts with zero-anaphora resolution, character voices, episodic memory, and chunk-aware Procedural Graph guidance. Supports line-based semantic chunking.
 
 ```python
 class ContextAwareDrafterAgent:
@@ -39,9 +43,7 @@ class ContextAwareDrafterAgent:
         self,
         model_name: str = "gemini-3.5-flash-lite",
         fallback_model: Optional[str] = None,
-        chunk_threshold_lines: int = 85,
-        target_chunk_lines: int = 70,
-        chunk_overlap_lines: int = 3
+        procedural_graph: Optional[ProceduralGraph] = None
     )
     
     def draft(
@@ -50,10 +52,16 @@ class ContextAwareDrafterAgent:
         bible: NovelBible,
         active_characters: List[CharacterProfile],
         active_glossary: List[GlossaryItem],
-        rolling_summaries: List[ChapterSummary]
+        rolling_summaries: List[ChapterSummary],
+        genre: Optional[str] = None,
+        chunks: Optional[List[Any]] = None,
+        notify_callback: Optional[Any] = None,
+        rate_limiter: Optional[Any] = None,
+        stop_event: Optional[Any] = None,
+        procedural_graph: Optional[ProceduralGraph] = None
     ) -> str:
         """
-        Translates raw text with voice registers and rolling summaries.
+        Translates raw text with voice registers, rolling summaries, and chunk-aware Procedural Graph guidance.
         Returns: Raw draft string.
         """
 ```
@@ -261,9 +269,12 @@ class NovelTranslationWorkflow:
         rate_limiter: Optional[SlidingWindowRateLimiter] = None,
         max_review_loops: int = 3,
         quality_threshold: float = 8.5,
+        enable_chunking: bool = True,
         chunk_threshold_lines: int = 85,
         target_chunk_lines: int = 70,
-        chunk_overlap_lines: int = 3
+        chunk_overlap_lines: int = 3,
+        extractor_pg: Optional[Any] = None,
+        drafter_pg: Optional[Any] = None
     )
     
     def run(
@@ -276,6 +287,114 @@ class NovelTranslationWorkflow:
         Runs LangGraph workflow through extraction, drafting, and conditional
         reflection loop (critique <-> polish) until quality >= 8.5 or loop cap reached.
         """
+```
+
+---
+
+### `ProceduralGraph` & Attributed Edges (`src/nousetsu/graph/procedural.py`)
+Implements procedural execution structures based on Lu et al. (arXiv:2609.09153v1). Represents task procedures as attributed directed graphs $G = (V, R, E, \Phi)$ with deterministic code-level localization.
+
+```python
+class ProceduralNodeType(str, Enum):
+    STATE = "STATE"
+    ACTION = "ACTION"
+    VERIFICATION = "VERIFICATION"
+
+
+class ProceduralRelation(str, Enum):
+    LEADS_TO = "LEADS_TO"
+    TRIGGERS = "TRIGGERS"
+    REQUIRES = "REQUIRES"
+    PROVIDES_INPUT_FOR = "PROVIDES_INPUT_FOR"
+
+
+class ProceduralNode(BaseModel):
+    id: str
+    name: str
+    node_type: ProceduralNodeType = ProceduralNodeType.ACTION
+    description: str
+
+
+class ProceduralEdge(BaseModel):
+    source: str
+    target: str
+    relation: ProceduralRelation = ProceduralRelation.LEADS_TO
+    condition: Optional[str] = None
+    guidance: str
+    pitfalls: Optional[str] = None
+
+
+class ProceduralGraph(BaseModel):
+    graph_id: str
+    description: str
+    nodes: Dict[str, ProceduralNode] = Field(default_factory=dict)
+    edges: List[ProceduralEdge] = Field(default_factory=list)
+
+    def add_node(self, node: ProceduralNode) -> None: ...
+    def add_edge(self, edge: ProceduralEdge) -> None: ...
+
+    def localize(self, current_node_id: str, max_hops: int = 1) -> List[ProceduralEdge]:
+        """Extracts outgoing edges reachable within max_hops from active node."""
+
+    def to_compact_guidance(
+        self,
+        current_node_id: str,
+        max_hops: int = 1,
+        header: str = "PROCEDURAL DIRECTIVES (Procedural Graph Guidance)"
+    ) -> str:
+        """Serializes localized subgraph into a token-frugal markdown section (< 100 tokens)."""
+
+
+def get_default_extractor_graph() -> ProceduralGraph:
+    """Returns default Procedural Graph for EntityExtractorAgent."""
+
+def get_default_drafter_graph() -> ProceduralGraph:
+    """Returns default Procedural Graph for ContextAwareDrafterAgent."""
+```
+
+---
+
+### `ProceduralGraphRefiner` (`src/nousetsu/graph/pg_refiner.py`)
+Executes offline feedback-driven self-evolution (Algorithm 1) from chapter critique audits with zero inference token cost.
+
+```python
+class DiagnosticTrace(BaseModel):
+    trace_id: str
+    stage: str
+    context_snippet: str
+    output_snippet: str
+    fidelity_score: float = 9.0
+    style_score: float = 9.0
+    warnings: List[str] = Field(default_factory=list)
+    critique_notes: str = ""
+
+    @property
+    def is_success(self) -> bool: ...
+
+
+class GraphEditOperation(BaseModel):
+    operation: str = "UPDATE"  # "ADD", "UPDATE", "DELETE"
+    edge_source: str
+    edge_target: str
+    new_condition: Optional[str] = None
+    new_guidance: Optional[str] = None
+    new_pitfalls: Optional[str] = None
+    rationale: str = ""
+
+
+class ProceduralGraphRefiner:
+    def __init__(
+        self,
+        model_name: Optional[str] = None,
+        rejection_memory_path: Optional[Path] = None
+    ): ...
+
+    def evolve_graph(
+        self,
+        graph: ProceduralGraph,
+        traces: List[DiagnosticTrace]
+    ) -> ProceduralGraph:
+        """Applies feedback-driven mutations and commits only candidates passing structural validation."""
 ```
 
 ---
