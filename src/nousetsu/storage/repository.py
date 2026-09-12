@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 import yaml
-from nousetsu.models.bible import ChapterSummary, CharacterProfile, GlossaryItem, NovelBible, StyleGuide
+from nousetsu.models.bible import ArcSummary, ChapterSummary, CharacterProfile, GlossaryItem, NovelBible, StyleGuide
 from nousetsu.models.config import ProjectConfig
 from nousetsu.models.metadata import ChapterMetadata, CheckpointData, PipelineStage, ProjectMetadataDocument, StageStatus
 from nousetsu.utils.language import detect_language_from_dir
@@ -146,6 +146,7 @@ class NovelRepository:
         self.novel_dir = self.root_dir / ".novel"
         self.bible_dir = self.novel_dir / "bible"
         self.summaries_dir = self.novel_dir / "summaries"
+        self.arcs_dir = self.summaries_dir / "arcs"
 
     def config_file_path(self) -> Path:
         return self.novel_dir / "config.yaml"
@@ -385,6 +386,23 @@ class NovelRepository:
                         if not any(existing.chapter_num == sm.chapter_num and (existing.folder == sm.folder or sm.folder is None) for existing in summaries):
                             summaries.append(sm)
 
+        # Load arcs from .novel/summaries/arcs/ if directory exists
+        if self.arcs_dir.exists():
+            loaded_arcs: List[ArcSummary] = []
+            for a_file in sorted(self.arcs_dir.glob("arc_*.json")):
+                try:
+                    with open(a_file, "r", encoding="utf-8") as af:
+                        loaded_arcs.append(ArcSummary.model_validate(json.load(af)))
+                except Exception:
+                    continue
+            if loaded_arcs:
+                active_cand = [a for a in loaded_arcs if a.status == "active"]
+                archived_cand = [a for a in loaded_arcs if a.status != "active"]
+                if active_cand and not data.get("active_arc"):
+                    data["active_arc"] = active_cand[-1].model_dump()
+                if archived_cand and not data.get("archived_arcs"):
+                    data["archived_arcs"] = [a.model_dump() for a in archived_cand]
+
         if summaries:
             data["summaries"] = [s.model_dump() for s in summaries]
 
@@ -409,6 +427,15 @@ class NovelRepository:
                 s_file = self.summaries_dir / f"chapter_{summary.chapter_num:04d}.json"
             with open(s_file, "w", encoding="utf-8") as f:
                 json.dump(summary.model_dump(), f, indent=2, ensure_ascii=False)
+
+        # Save active and archived arcs as individual JSON records
+        all_arcs = bible.get_all_arcs()
+        if all_arcs:
+            self.arcs_dir.mkdir(parents=True, exist_ok=True)
+            for arc in all_arcs:
+                arc_file = self.arcs_dir / f"arc_{arc.arc_num:04d}.json"
+                with open(arc_file, "w", encoding="utf-8") as af:
+                    json.dump(arc.model_dump(), af, indent=2, ensure_ascii=False)
 
     def update_bible_memory(
         self,
@@ -465,6 +492,74 @@ class NovelRepository:
             ]
             bible.summaries.append(summary)
             bible.summaries.sort(key=lambda s: (s.folder or "", s.chapter_num))
+
+            # Process hierarchical arc update if provided
+            if summary.arc_update and isinstance(summary.arc_update, dict):
+                au = summary.arc_update
+                title = au.get("title") or au.get("arc_title") or "Ongoing Arc"
+                synopsis = au.get("synopsis") or au.get("arc_synopsis") or ""
+                conflict = au.get("core_conflict") or ""
+                milestones = au.get("milestones") or au.get("new_milestones") or []
+                is_completed = bool(au.get("is_completed") or au.get("arc_completed"))
+
+                if bible.active_arc:
+                    if title and title != "Ongoing Arc":
+                        bible.active_arc.title = title
+                    if synopsis:
+                        bible.active_arc.synopsis = synopsis
+                    if conflict:
+                        bible.active_arc.core_conflict = conflict
+                    for m in milestones:
+                        if m and m not in bible.active_arc.key_milestones:
+                            bible.active_arc.key_milestones.append(m)
+                    bible.active_arc.end_chapter = summary.chapter_num
+                    if is_completed:
+                        bible.active_arc.status = "completed"
+                        if not any(a.arc_num == bible.active_arc.arc_num for a in bible.archived_arcs):
+                            bible.archived_arcs.append(bible.active_arc)
+                        next_num = bible.active_arc.arc_num + 1
+                        bible.active_arc = ArcSummary(
+                            arc_id=f"arc_{next_num:04d}",
+                            arc_num=next_num,
+                            title="New Arc",
+                            synopsis="Beginning of new story arc.",
+                            core_conflict="",
+                            status="active",
+                            start_chapter=summary.chapter_num + 1,
+                            folder=folder,
+                            key_milestones=[]
+                        )
+                else:
+                    arc_num = len(bible.archived_arcs) + 1
+                    bible.active_arc = ArcSummary(
+                        arc_id=f"arc_{arc_num:04d}",
+                        arc_num=arc_num,
+                        title=title,
+                        synopsis=synopsis or f"Arc commencing at Chapter {summary.chapter_num}.",
+                        core_conflict=conflict,
+                        status="completed" if is_completed else "active",
+                        start_chapter=summary.chapter_num,
+                        end_chapter=summary.chapter_num if is_completed else None,
+                        folder=folder,
+                        key_milestones=list(milestones)
+                    )
+                    if is_completed:
+                        bible.archived_arcs.append(bible.active_arc)
+                        next_num = arc_num + 1
+                        bible.active_arc = ArcSummary(
+                            arc_id=f"arc_{next_num:04d}",
+                            arc_num=next_num,
+                            title="New Arc",
+                            synopsis="Beginning of new story arc.",
+                            core_conflict="",
+                            status="active",
+                            start_chapter=summary.chapter_num + 1,
+                            folder=folder,
+                            key_milestones=[]
+                        )
+
+            if summary.story_update and isinstance(summary.story_update, str) and summary.story_update.strip():
+                bible.whole_story_summary = summary.story_update.strip()
 
         self.save_bible(bible)
         return bible

@@ -208,7 +208,64 @@ def cmd_graph_info(args: argparse.Namespace) -> None:
             if e.pitfalls:
                 edge_leaf.add(f"[red bold]Pitfalls to Avoid:[/] {e.pitfalls}")
 
-        console.print(Panel(tree, border_style="cyan", padding=(1, 2)))
+def cmd_narrative(args: argparse.Namespace) -> None:
+    from rich.tree import Tree
+    project_dir = getattr(args, "project_dir", None)
+    repo = NovelRepository(project_dir) if project_dir else NovelRepository()
+    bible = repo.load_bible()
+
+    root_label = f"[bold cyan]📖 {bible.title}[/] [dim]({bible.source_language} -> {bible.target_language})[/]"
+    tree = Tree(root_label)
+
+    # 1. Macro: Whole Story
+    story_branch = tree.add("[bold magenta]🌐 1. Global Story Progression (Macro)[/]")
+    if bible.whole_story_summary:
+        story_branch.add(f"[white]{bible.whole_story_summary}[/]")
+    else:
+        story_branch.add("[dim italic]No whole-story progression recorded yet.[/]")
+
+    # 2. Meso: Story Arcs
+    arcs_branch = tree.add("[bold yellow]📚 2. Story Arcs (Meso)[/]")
+    all_arcs = bible.get_all_arcs()
+    if all_arcs or bible.active_arc:
+        if bible.active_arc:
+            a = bible.active_arc
+            act_node = arcs_branch.add(f"[bold green]▶ Arc {a.arc_num}: {a.title or 'Ongoing Arc'} [ACTIVE][/] [dim](From Ch. {a.start_chapter})[/]")
+            if a.core_conflict:
+                act_node.add(f"[yellow]Conflict:[/] {a.core_conflict}")
+            if a.synopsis:
+                act_node.add(f"[white]Summary:[/] {a.synopsis}")
+            if a.key_milestones:
+                act_node.add(f"[cyan]Milestones:[/] {', '.join(a.key_milestones)}")
+        for arc in bible.archived_arcs:
+            if bible.active_arc and arc.arc_num == bible.active_arc.arc_num:
+                continue
+            end_str = f" to {arc.end_chapter}" if arc.end_chapter else ""
+            arc_node = arcs_branch.add(f"[dim]✓ Arc {arc.arc_num}: {arc.title} [COMPLETED] (Ch. {arc.start_chapter}{end_str})[/]")
+            if arc.synopsis:
+                arc_node.add(f"[dim]{arc.synopsis}[/]")
+    else:
+        arcs_branch.add("[dim italic]No story arcs identified yet.[/]")
+
+    # 3. Micro: Chapter Summaries
+    all_by_folder = repo.get_all_summaries_by_folder()
+    if not all_by_folder and bible.summaries:
+        all_by_folder = {"Default": bible.summaries}
+
+    micro_branch = tree.add("[bold green]📄 3. Immediate Chapter Summaries (Micro)[/]")
+    if all_by_folder:
+        for folder_name, f_sums in all_by_folder.items():
+            f_node = micro_branch.add(f"[bold cyan]📁 {folder_name}[/] [dim]({len(f_sums)} chapters)[/]")
+            display_sums = f_sums[-5:] if len(f_sums) > 5 else f_sums
+            if len(f_sums) > 5:
+                f_node.add(f"[dim italic]... ({len(f_sums) - 5} earlier chapters omitted) ...[/]")
+            for s in display_sums:
+                ch_node = f_node.add(f"[bold]Chapter {s.chapter_num}[/] [dim]({s.title or 'Untitled'})[/]")
+                ch_node.add(f"[white]{s.synopsis}[/]")
+    else:
+        micro_branch.add("[dim italic]No chapter summaries recorded yet.[/]")
+
+    console.print(Panel(tree, border_style="cyan", padding=(1, 2)))
 
 
 def cmd_tui(args: argparse.Namespace) -> None:
@@ -293,6 +350,10 @@ def main() -> None:
     p_graph = subparsers.add_parser("graph-info", help="Inspect Procedural Graphs with Rich tree formatting (arXiv:2609.09153v1)")
     p_graph.add_argument("--agent", "-a", choices=["all", "extractor", "drafter"], default="all", help="Filter by agent graph (default: all)")
 
+    # narrative
+    p_narrative = subparsers.add_parser("narrative", help="Inspect 3-tier hierarchical story memory (Whole Story > Arcs > Situation)")
+    p_narrative.add_argument("--project-dir", "-p", default=None, help="Root folder of novel project")
+
     # tui
     p_tui = subparsers.add_parser("tui", help="Launch interactive Textual TUI dashboard")
     p_tui.add_argument("--project-dir", "-p", default=None, help="Root folder of novel project")
@@ -316,6 +377,8 @@ def main() -> None:
         cmd_skills(args)
     elif args.command == "graph-info":
         cmd_graph_info(args)
+    elif args.command == "narrative":
+        cmd_narrative(args)
     elif args.command == "tui":
         cmd_tui(args)
     else:

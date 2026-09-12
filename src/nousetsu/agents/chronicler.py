@@ -68,6 +68,14 @@ class ChroniclerAgent:
 
         try:
             parsed = json.loads(content_to_parse)
+            if "chapter_summary" in parsed and isinstance(parsed["chapter_summary"], dict):
+                chap_data = parsed["chapter_summary"]
+                chap_data["chapter_num"] = chapter_num
+                if "arc_update" in parsed and not chap_data.get("arc_update"):
+                    chap_data["arc_update"] = parsed["arc_update"]
+                if "story_update" in parsed and not chap_data.get("story_update"):
+                    chap_data["story_update"] = parsed["story_update"]
+                return ChapterSummary.model_validate(chap_data)
             parsed["chapter_num"] = chapter_num
             return ChapterSummary.model_validate(parsed)
         except Exception:

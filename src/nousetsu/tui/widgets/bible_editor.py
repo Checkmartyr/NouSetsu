@@ -77,12 +77,45 @@ class NovelBibleModal(ModalScreen):
 
                 with TabPane("Summaries"):
                     with VerticalScroll():
+                        blocks = []
+                        # 1. Macro: Whole Story Progression
+                        if self.bible.whole_story_summary:
+                            blocks.append(f"# 🌐 Whole Story Progression (Macro)\n{self.bible.whole_story_summary}\n---")
+
+                        # 2. Meso: Story Arcs
+                        all_arcs = self.bible.get_all_arcs() if hasattr(self.bible, "get_all_arcs") else []
+                        if all_arcs or self.bible.active_arc:
+                            blocks.append("# 📚 Story Arcs (Meso)")
+                            if self.bible.active_arc:
+                                a = self.bible.active_arc
+                                ms = ", ".join(a.key_milestones) if a.key_milestones else "None"
+                                blocks.append(
+                                    f"### ▶ Active Arc {a.arc_num}: `{a.title or 'Ongoing'}`\n"
+                                    f"- **Status:** [bold green]ACTIVE[/] (Started Ch. {a.start_chapter})\n"
+                                    f"- **Central Conflict:** {a.core_conflict or 'Not specified'}\n"
+                                    f"- **Arc Summary:** {a.synopsis or 'In progress...'}\n"
+                                    f"- **Key Milestones:** {ms}"
+                                )
+                            for arc in (self.bible.archived_arcs or []):
+                                if self.bible.active_arc and arc.arc_num == self.bible.active_arc.arc_num:
+                                    continue
+                                ms = ", ".join(arc.key_milestones) if arc.key_milestones else "None"
+                                end_str = f" to {arc.end_chapter}" if arc.end_chapter else ""
+                                blocks.append(
+                                    f"### ✓ Concluded Arc {arc.arc_num}: `{arc.title}`\n"
+                                    f"- **Status:** [dim]COMPLETED[/] (Ch. {arc.start_chapter}{end_str})\n"
+                                    f"- **Summary:** {arc.synopsis}\n"
+                                    f"- **Milestones:** {ms}"
+                                )
+                            blocks.append("---")
+
+                        # 3. Micro: Chapter Summaries by Folder
                         all_by_folder = self.repo.get_all_summaries_by_folder() if hasattr(self.repo, "get_all_summaries_by_folder") else {}
                         if not all_by_folder and self.bible.summaries:
                             all_by_folder = {"All": self.bible.summaries}
 
                         if all_by_folder:
-                            blocks = []
+                            blocks.append("# 📄 Immediate Chapter Summaries (Micro)")
                             for folder_name, folder_sums in all_by_folder.items():
                                 blocks.append(f"## 📁 Volume / Folder: `{folder_name}` ({len(folder_sums)} chapters)")
                                 for s in folder_sums:
@@ -94,9 +127,8 @@ class NovelBibleModal(ModalScreen):
                                         f"- **Key Events:** {events_str}\n"
                                         f"- **State Changes:** {state_str}"
                                     )
-                            sum_md = "\n\n".join(blocks)
-                        else:
-                            sum_md = "*No chapter summaries recorded yet.*"
+
+                        sum_md = "\n\n".join(blocks) if blocks else "*No narrative summaries or arcs recorded yet.*"
                         yield Markdown(sum_md, id="summaries_view")
 
                 with TabPane("Languages"):

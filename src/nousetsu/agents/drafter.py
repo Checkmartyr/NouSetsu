@@ -32,15 +32,39 @@ class ContextAwareDrafterAgent:
         return self.model_name
 
     @staticmethod
-    def format_summaries(rolling_summaries: List[ChapterSummary], limit: int = 3) -> str:
-        """Format preceding summaries into markdown context with optional folder badges."""
-        if not rolling_summaries:
-            return "This is the first chapter."
+    def format_summaries(
+        rolling_summaries: List[ChapterSummary],
+        limit: int = 3,
+        bible: Optional[NovelBible] = None
+    ) -> str:
+        """Format 3-tier narrative context (Macro Whole Story > Meso Story Arc > Micro Situation)."""
         selected = rolling_summaries[-limit:] if limit else rolling_summaries
-        return "\n".join([
+        micro_str = "\n".join([
             f"[{s.folder}] Chapter {s.chapter_num} ({s.title}): {s.synopsis}" if getattr(s, "folder", None) else f"Chapter {s.chapter_num} ({s.title}): {s.synopsis}"
             for s in selected
-        ]) or "This is the first chapter."
+        ]) if selected else "This is the first chapter."
+
+        if not bible or (not getattr(bible, "whole_story_summary", None) and not getattr(bible, "active_arc", None)):
+            return micro_str
+
+        sections = ["### 3. Immediate Preceding Situation (Micro):", micro_str]
+
+        arc = getattr(bible, "active_arc", None)
+        if arc and (arc.title or arc.synopsis or arc.core_conflict):
+            arc_lines = [f"### 2. Active Story Arc (Meso - Arc {arc.arc_num}: '{arc.title or 'Ongoing Arc'}'):"]
+            if arc.core_conflict:
+                arc_lines.append(f"- Central Conflict: {arc.core_conflict}")
+            if arc.synopsis:
+                arc_lines.append(f"- Arc Progress: {arc.synopsis}")
+            if arc.key_milestones:
+                arc_lines.append(f"- Milestones: {', '.join(arc.key_milestones)}")
+            sections = ["\n".join(arc_lines)] + sections
+
+        story = getattr(bible, "whole_story_summary", "")
+        if story:
+            sections = [f"### 1. Global Story Progression (Macro):\n{story}"] + sections
+
+        return "## HIERARCHICAL NARRATIVE CONTEXT:\n" + "\n\n".join(sections)
 
     def draft(
         self,
@@ -87,7 +111,7 @@ class ContextAwareDrafterAgent:
             for g in eval_glossary
         ]) or "No specific glossary terms."
 
-        summaries_str = self.format_summaries(rolling_summaries)
+        summaries_str = self.format_summaries(rolling_summaries, limit=3, bible=bible)
 
         custom_rules_str = "\n".join([f"   - {r}" for r in bible.style_guide.custom_rules])
 
@@ -227,7 +251,7 @@ class ContextAwareDrafterAgent:
             for g in eval_glossary
         ]) or "No specific glossary terms."
 
-        summaries_str = self.format_summaries(rolling_summaries)
+        summaries_str = self.format_summaries(rolling_summaries, limit=3, bible=bible)
 
         custom_rules_str = "\n".join([f"   - {r}" for r in bible.style_guide.custom_rules])
 

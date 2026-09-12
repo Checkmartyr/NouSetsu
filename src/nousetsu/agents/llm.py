@@ -4,6 +4,7 @@ from typing import Any, Callable, Optional
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
+from pydantic import Field
 from nousetsu.models.metadata import TokenUsage
 
 
@@ -94,24 +95,28 @@ class MockNovelLLM(BaseChatModel):
 
     model_name: str = "mock-novel-llm"
     temperature: float = 1.0
+    responses: list[str] = Field(default_factory=list)
 
     def _generate(self, messages: list[BaseMessage], stop: Optional[list[str]] = None, **kwargs: Any) -> ChatResult:
-        last_msg = messages[-1].content if messages else ""
-        first_msg = messages[0].content if messages else ""
-
-        # Check which prompt was passed based on content clues
-        if "new_characters" in str(first_msg) or "Extracting" in str(last_msg):
-            content = '{"new_characters": [], "new_terms": [], "active_terms_in_chapter": []}'
-        elif "fidelity_score" in str(first_msg):
-            content = '{"fidelity_score": 9.5, "style_score": 9.2, "glossary_compliance_pct": 100.0, "warnings": [], "critique_notes": "Good flow, prose is faithful."}'
-        elif "synopsis" in str(first_msg):
-            content = '{"chapter_num": 1, "title": "Chapter", "synopsis": "The journey begins.", "key_events": ["Protagonist departs"], "character_state_changes": []}'
-        elif "literary prose stylist" in str(first_msg) or "POLISHING RULES" in str(first_msg) or "elite novelist" in str(first_msg):
-            content = "# Polished Chapter\n\nChapter 1: The signal of departure. The boy stepped forward with quiet determination."
-        elif "CRITICAL TRANSLATION DIRECTIVES" in str(first_msg) or "literary translator" in str(first_msg):
-            content = "# Translated Chapter\n\nChapter 1: The signal of departure. The boy stepped forward into the unknown."
+        if self.responses:
+            content = self.responses.pop(0) if len(self.responses) > 1 else self.responses[0]
         else:
-            content = "# Translated Chapter\n\nChapter 1: The signal of departure. The boy stepped forward."
+            last_msg = messages[-1].content if messages else ""
+            first_msg = messages[0].content if messages else ""
+
+            # Check which prompt was passed based on content clues
+            if "new_characters" in str(first_msg) or "Extracting" in str(last_msg):
+                content = '{"new_characters": [], "new_terms": [], "active_terms_in_chapter": []}'
+            elif "fidelity_score" in str(first_msg):
+                content = '{"fidelity_score": 9.5, "style_score": 9.2, "glossary_compliance_pct": 100.0, "warnings": [], "critique_notes": "Good flow, prose is faithful."}'
+            elif "synopsis" in str(first_msg):
+                content = '{"chapter_num": 1, "title": "Chapter", "synopsis": "The journey begins.", "key_events": ["Protagonist departs"], "character_state_changes": []}'
+            elif "literary prose stylist" in str(first_msg) or "POLISHING RULES" in str(first_msg) or "elite novelist" in str(first_msg):
+                content = "# Polished Chapter\n\nChapter 1: The signal of departure. The boy stepped forward with quiet determination."
+            elif "CRITICAL TRANSLATION DIRECTIVES" in str(first_msg) or "literary translator" in str(first_msg):
+                content = "# Translated Chapter\n\nChapter 1: The signal of departure. The boy stepped forward into the unknown."
+            else:
+                content = "# Translated Chapter\n\nChapter 1: The signal of departure. The boy stepped forward."
 
         in_tokens = max(1, sum(len(str(m.content)) for m in messages) // 4)
         out_tokens = max(1, len(content) // 4)

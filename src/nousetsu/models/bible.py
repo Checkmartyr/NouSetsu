@@ -1,5 +1,5 @@
 """Novel Bible data models for characters, glossary, style rules, and narrative memory."""
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 
@@ -35,6 +35,21 @@ class ChapterSummary(BaseModel):
     key_events: List[str] = Field(default_factory=list, description="Crucial plot points and reveals")
     character_state_changes: List[str] = Field(default_factory=list, description="Deaths, injuries, rank advances, relationship shifts")
     folder: Optional[str] = Field(default=None, description="Folder/volume scope for chapter summary")
+    arc_update: Optional[Dict[str, Any]] = Field(default=None, description="Optional arc progression or transition update from Chronicler")
+    story_update: Optional[str] = Field(default=None, description="Optional synthesized whole story update from Chronicler")
+
+
+class ArcSummary(BaseModel):
+    arc_id: str = Field(default="", description="Unique identifier e.g. arc_0001")
+    arc_num: int = Field(default=1, description="Sequential arc number")
+    title: str = Field(default="", description="Arc title e.g. 'Royal Academy Entrance'")
+    synopsis: str = Field(default="", description="Summary of narrative progression in this arc")
+    core_conflict: str = Field(default="", description="Central conflict or goal of this arc")
+    status: str = Field(default="active", description="'active' or 'completed'")
+    start_chapter: int = Field(default=1, description="Starting chapter number of arc")
+    end_chapter: Optional[int] = Field(default=None, description="Ending chapter number if completed")
+    folder: Optional[str] = Field(default=None, description="Volume/folder scope")
+    key_milestones: List[str] = Field(default_factory=list, description="Key milestones achieved during arc")
 
 
 class NovelBible(BaseModel):
@@ -47,6 +62,9 @@ class NovelBible(BaseModel):
     style_guide: StyleGuide = Field(default_factory=StyleGuide, description="Tone, formatting, and translation style rules")
     summaries: List[ChapterSummary] = Field(default_factory=list, description="Rolling narrative summaries of preceding chapters")
     cross_folder_summaries: bool = Field(default=True, description="Enable rolling context backfill across sequential folders")
+    whole_story_summary: str = Field(default="", description="Overarching summary of the entire novel so far")
+    active_arc: Optional[ArcSummary] = Field(default=None, description="Currently ongoing story arc")
+    archived_arcs: List[ArcSummary] = Field(default_factory=list, description="Concluded story arcs")
 
     def find_character(self, name_or_alias: str) -> Optional[CharacterProfile]:
         for char in self.characters:
@@ -142,4 +160,40 @@ class NovelBible(BaseModel):
                     result = chosen_backfill + result
 
         return result[-limit:] if limit else result
+
+    def get_all_arcs(self) -> List[ArcSummary]:
+        """Return all story arcs (archived + active) sorted by arc_num."""
+        arcs = list(self.archived_arcs)
+        if self.active_arc and not any(a.arc_num == self.active_arc.arc_num for a in arcs):
+            arcs.append(self.active_arc)
+        return sorted(arcs, key=lambda a: a.arc_num)
+
+    def get_hierarchical_context(
+        self,
+        folder: Optional[str] = None,
+        current_chapter_num: Optional[int] = None,
+        limit: int = 3,
+        cross_folder: bool = True,
+        folder_order: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """
+        Return structured 3-tier narrative context:
+        - whole_story: Macro overview
+        - active_arc: Meso arc context
+        - rolling_summaries: Micro immediate chapter context
+        """
+        rolling = self.get_rolling_context(
+            folder=folder,
+            current_chapter_num=current_chapter_num,
+            limit=limit,
+            cross_folder=cross_folder,
+            folder_order=folder_order
+        )
+        return {
+            "whole_story": self.whole_story_summary,
+            "active_arc": self.active_arc,
+            "archived_arcs": self.archived_arcs,
+            "rolling_summaries": rolling
+        }
+
 

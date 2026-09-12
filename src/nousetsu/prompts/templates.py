@@ -130,6 +130,8 @@ Analyze the final translated chapter and produce:
 1. A concise synopsis of what transpired in this chapter.
 2. Key events and turning points.
 3. Character state changes (injuries, deaths, relationship developments, level-ups, item acquisitions).
+4. Story Arc updates (detect active arc title, core conflict, progress, milestones, and whether this chapter concludes the current arc).
+5. Overarching whole-story progression (synthesize if an arc completed or major milestone reached).
 
 Chapter Number: {chapter_num}
 Chapter Title: {chapter_title}
@@ -146,6 +148,16 @@ Respond strictly in valid JSON format:
   "character_state_changes": [
     "Allen acquired the Obsidian Relic",
     "Seraphina revealed her lineage"
-  ]
+  ],
+  "arc_update": {{
+    "title": "Current Arc Title (e.g. Royal Academy Entrance)",
+    "core_conflict": "Central conflict or objective of this arc",
+    "synopsis": "Cumulative progression of the active arc so far",
+    "milestones": [
+      "Milestone 1"
+    ],
+    "is_completed": false
+  }},
+  "story_update": "Optional overarching summary of the whole story (updated if an arc completed or major turning point occurred, else null)"
 }}
 """
