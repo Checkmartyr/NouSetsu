@@ -1,6 +1,7 @@
 """Batch runner for sequential chapter execution with checkpoint resumption."""
 import os
 from pathlib import Path
+import re
 import threading
 from typing import Callable, List, Optional
 from rich.console import Console
@@ -188,21 +189,33 @@ class BatchRunner:
         if tasks is None:
             tasks = self.scanner.scan_directory(input_dir, output_dir)
         if chapter_filter is not None:
-            filter_str = str(chapter_filter).strip().lower()
-            if filter_str.isdigit():
-                target_num = int(filter_str)
-                exact = [t for t in tasks if t.chapter_num == target_num]
-                if exact:
-                    tasks = exact
+            raw_filter = str(chapter_filter).strip()
+            if raw_filter:
+                filter_str = raw_filter.lower()
+                # Check if filter specifies a chapter number, e.g. "48", "048", "ch 48", "ch.48", "chapter 48", "第48話", "ep 48"
+                num_match = re.search(r"^(?:chapter|ch|ep|第)?\.?\s*(\d+)(?:話|章)?$", filter_str, re.IGNORECASE)
+                if num_match:
+                    target_num = int(num_match.group(1))
+                    exact = [t for t in tasks if t.chapter_num == target_num]
+                    if exact:
+                        tasks = exact
+                    else:
+                        tasks = [
+                            t for t in tasks
+                            if str(target_num) in t.source_file.stem.lower() or filter_str in t.source_file.stem.lower()
+                        ]
                 else:
-                    tasks = [t for t in tasks if filter_str in t.source_file.stem.lower()]
-            else:
-                tasks = [
-                    t for t in tasks
-                    if str(t.chapter_num) == filter_str or filter_str in t.source_file.stem.lower()
-                ]
+                    tasks = [
+                        t for t in tasks
+                        if str(t.chapter_num) == filter_str or filter_str in t.source_file.stem.lower()
+                    ]
+                if not tasks and self.console:
+                    self.console.print(f"[bold yellow]⚠️ No chapters matched filter: '{chapter_filter}'.[/]")
         if limit:
             tasks = tasks[:limit]
+
+        if not tasks:
+            return []
 
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)

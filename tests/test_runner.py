@@ -177,3 +177,43 @@ def test_batch_runner_chapter_filter(tmp_path: Path):
     assert results_pattern[0].chapter_num == 2
     assert (output_dir / "002_Chapter 2 - Journey.md").exists()
 
+    # Filter by common chapter prefixes like "ch 48", "ch. 1", "Chapter 1", "048"
+    results_prefix1 = runner.run_batch(input_dir=input_dir, output_dir=output_dir, chapter_filter="ch 48", force_retranslate=True)
+    assert len(results_prefix1) == 1
+    assert results_prefix1[0].chapter_num == 48
+
+    results_prefix2 = runner.run_batch(input_dir=input_dir, output_dir=output_dir, chapter_filter="ch. 1", force_retranslate=True)
+    assert len(results_prefix2) == 1
+    assert results_prefix2[0].chapter_num == 1
+
+    results_prefix3 = runner.run_batch(input_dir=input_dir, output_dir=output_dir, chapter_filter="048", force_retranslate=True)
+    assert len(results_prefix3) == 1
+    assert results_prefix3[0].chapter_num == 48
+
+    # Non-matching chapter filter returns empty list cleanly
+    results_none = runner.run_batch(input_dir=input_dir, output_dir=output_dir, chapter_filter=999)
+    assert len(results_none) == 0
+
+
+def test_cli_chapter_filter_argument():
+    import argparse
+    from unittest.mock import patch
+    import sys
+    from nousetsu.cli.app import main
+
+    # Verify --chapter and -c flag parse properly in CLI subparser
+    test_args = ["nousetsu", "batch", "-p", "dummy", "--chapter", "48"]
+    with patch.object(sys, "argv", test_args):
+        with patch("nousetsu.cli.app.cmd_batch") as mock_cmd:
+            main()
+            mock_cmd.assert_called_once()
+            assert mock_cmd.call_args[0][0].chapter == "48"
+
+    test_args_short = ["nousetsu", "batch", "-p", "dummy", "-c", "048"]
+    with patch.object(sys, "argv", test_args_short):
+        with patch("nousetsu.cli.app.cmd_batch") as mock_cmd:
+            main()
+            mock_cmd.assert_called_once()
+            assert mock_cmd.call_args[0][0].chapter == "048"
+
+
