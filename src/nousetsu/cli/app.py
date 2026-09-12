@@ -88,7 +88,7 @@ def cmd_batch(args: argparse.Namespace) -> None:
         raw_cand = repo.root_dir / folder_arg
         if raw_cand.exists() and raw_cand.is_dir():
             input_path = raw_cand
-            if args.output_dir:
+            if args.output_dir and args.output_dir != "translated_chapters":
                 output_path = Path(args.output_dir) if Path(args.output_dir).is_absolute() else (repo.root_dir / args.output_dir)
             else:
                 out_cand_th = repo.root_dir / f"{folder_arg}_th"
@@ -120,7 +120,8 @@ def cmd_batch(args: argparse.Namespace) -> None:
             input_dir=input_path,
             output_dir=output_path,
             limit=args.limit,
-            force_retranslate=args.force
+            force_retranslate=args.force,
+            chapter_filter=getattr(args, "chapter", None)
         )
     finally:
         try:
@@ -358,6 +359,7 @@ def main() -> None:
     p_batch.add_argument("--critic-model", default=None, help="Override model for Critique Agent")
     p_batch.add_argument("--polisher-model", default=None, help="Override model for Polisher Agent")
     p_batch.add_argument("--chronicler-model", default=None, help="Override model for Chronicler Agent")
+    p_batch.add_argument("--chapter", "-c", default=None, help="Target a specific chapter number or filename pattern (e.g. --chapter 48)")
     p_batch.add_argument("--limit", "-l", type=int, default=None, help="Maximum number of chapters to process")
     p_batch.add_argument("--force", "-f", action="store_true", help="Force re-translate completed chapters")
     p_batch.add_argument("--auto-update-bible", action=argparse.BooleanOptionalAction, default=None, help="Automatically merge new characters/terms into Novel Bible")

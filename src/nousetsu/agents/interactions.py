@@ -127,7 +127,26 @@ class GeminiInteractionsClient:
 
         with httpx.Client(timeout=timeout) as client:
             resp = client.post(url, headers=headers, json=payload)
-            resp.raise_for_status()
+            if resp.status_code >= 400:
+                err_body = ""
+                try:
+                    err_json = resp.json()
+                    err_msg = err_json.get("error", {}).get("message", "")
+                    err_code = err_json.get("error", {}).get("code", "")
+                    if err_code or err_msg:
+                        err_body = f"[{err_code}] {err_msg}".strip()
+                except Exception:
+                    err_body = resp.text
+                try:
+                    resp.raise_for_status()
+                except httpx.HTTPStatusError as exc:
+                    if err_body:
+                        raise httpx.HTTPStatusError(
+                            f"{exc}: {err_body}",
+                            request=exc.request,
+                            response=exc.response
+                        ) from exc
+                    raise
             data = resp.json()
 
         inter_id = data.get("id", "")

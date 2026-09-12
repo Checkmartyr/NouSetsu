@@ -145,3 +145,35 @@ def test_batch_runner_no_auto_update_bible(tmp_path: Path):
     # Summaries should still be tracked
     assert len(bible.summaries) == 1
 
+
+def test_batch_runner_chapter_filter(tmp_path: Path):
+    repo = NovelRepository(tmp_path)
+    repo.initialize_project("Test Novel", "Japanese", "English")
+
+    input_dir = tmp_path / "raw"
+    output_dir = tmp_path / "out"
+    input_dir.mkdir()
+    output_dir.mkdir()
+
+    # Create multiple chapters
+    (input_dir / "001_Chapter 1 - Awakening.txt").write_text("第一章：覚醒。\n少年は目覚めた。", encoding="utf-8")
+    (input_dir / "002_Chapter 2 - Journey.txt").write_text("第二章：旅立ち。\n少年は歩き出した。", encoding="utf-8")
+    (input_dir / "048_Chapter 48 - Displaying True Skills.txt").write_text("第四十八章：実力発揮。\n少女は戦った。", encoding="utf-8")
+
+    console = Console(record=True)
+    runner = BatchRunner(repo, model_name="mock-model", console=console)
+
+    # Filter by numeric int
+    results = runner.run_batch(input_dir=input_dir, output_dir=output_dir, chapter_filter=48)
+    assert len(results) == 1
+    assert results[0].chapter_num == 48
+    assert (output_dir / "048_Chapter 48 - Displaying True Skills.md").exists()
+    assert not (output_dir / "001_Chapter 1 - Awakening.md").exists()
+    assert not (output_dir / "002_Chapter 2 - Journey.md").exists()
+
+    # Filter by string pattern
+    results_pattern = runner.run_batch(input_dir=input_dir, output_dir=output_dir, chapter_filter="Journey")
+    assert len(results_pattern) == 1
+    assert results_pattern[0].chapter_num == 2
+    assert (output_dir / "002_Chapter 2 - Journey.md").exists()
+

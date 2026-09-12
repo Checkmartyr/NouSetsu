@@ -108,6 +108,27 @@ class PolishingAgent:
         except Exception as e:
             if is_safety_block_exception(e):
                 self.safety_fallbacks_used += 1
+                logger.warning("⚠️ Polisher blocked by safety filter - retrying without raw source text reference.")
+                if source_text and source_text.strip():
+                    try:
+                        retry_user = (
+                            f"### Draft Translation in {bible.target_language} to Polish "
+                            f"(CRITICAL: Output MUST remain 100% in {bible.target_language}, DO NOT translate back to {bible.source_language}):\n"
+                            f"{draft_text}"
+                        )
+                        retry_resp = self.llm.invoke([
+                            SystemMessage(content=sys_msg),
+                            HumanMessage(content=retry_user)
+                        ])
+                        self.last_usage = extract_usage_from_message(retry_resp)
+                        text = extract_text_from_message(retry_resp.content).strip()
+                        if text.startswith("```"):
+                            lines = text.splitlines()
+                            if len(lines) >= 2 and lines[0].startswith("```") and lines[-1].startswith("```"):
+                                text = "\n".join(lines[1:-1]).strip()
+                        return text
+                    except Exception:
+                        pass
                 logger.warning("⚠️ Polisher blocked by safety filter - retaining draft text.")
                 return draft_text
             raise
@@ -266,6 +287,32 @@ class PolishingAgent:
         except Exception as e:
             if is_safety_block_exception(e):
                 self.safety_fallbacks_used += 1
+                logger.warning("⚠️ Polisher chunk blocked by safety filter - retrying without raw source text reference.")
+                if source_text and source_text.strip():
+                    try:
+                        retry_parts = []
+                        if preceding_context and preceding_context.strip():
+                            retry_parts.append(
+                                f"### Preceding Polished Context ({bible.target_language} - Reference Only):\n"
+                                f"{preceding_context.strip()}\n"
+                                f"(CRITICAL: DO NOT duplicate or re-polish the above text. Seamlessly continue polishing from the draft chunk below.)"
+                            )
+                        retry_parts.append(f"{chunk_header}{chunk_draft}")
+                        retry_content = "\n\n".join(retry_parts)
+                        retry_resp = self.llm.invoke([
+                            SystemMessage(content=sys_msg),
+                            HumanMessage(content=retry_content)
+                        ])
+                        self.last_usage = extract_usage_from_message(retry_resp)
+                        text = extract_text_from_message(retry_resp.content).strip()
+                        if text.startswith("```"):
+                            lines = text.splitlines()
+                            if len(lines) >= 2 and lines[0].startswith("```") and lines[-1].startswith("```"):
+                                text = "\n".join(lines[1:-1]).strip()
+                        return text
+                    except Exception as retry_err:
+                        if not is_safety_block_exception(retry_err):
+                            logger.warning(f"⚠️ Polisher retry without source failed: {retry_err}")
                 logger.warning("⚠️ Polisher chunk blocked by safety filter - retaining chunk draft.")
                 return chunk_draft
             raise

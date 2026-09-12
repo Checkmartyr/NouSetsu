@@ -148,6 +148,14 @@ _LANG_MAP = {
 def is_safety_block_exception(err: Any) -> bool:
     """Check if an exception or message indicates a Google AI / provider safety block or content policy filter."""
     msg = str(err).lower()
+    resp = getattr(err, "response", None)
+    if resp is not None:
+        try:
+            resp_text = getattr(resp, "text", "") or ""
+            if resp_text:
+                msg = f"{msg} {resp_text.lower()}"
+        except Exception:
+            pass
 
     # Never treat transient server / network / parse errors as safety blocks
     if any(k in msg for k in ["500 internal server error", "502 bad gateway", "503 service unavailable", "504 gateway timeout"]):

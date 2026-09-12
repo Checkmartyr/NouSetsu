@@ -179,6 +179,7 @@ class BatchRunner:
         output_dir: Path,
         limit: Optional[int] = None,
         force_retranslate: bool = False,
+        chapter_filter: Optional[str | int] = None,
         tasks: Optional[List[ChapterTask]] = None,
         progress_callback: Optional[Callable[[str, int, int, str], None]] = None,
         stage_callback: Optional[Callable[[str, PipelineStage, str, float], None]] = None
@@ -186,6 +187,20 @@ class BatchRunner:
         """Execute batch translation across all chapters in directory."""
         if tasks is None:
             tasks = self.scanner.scan_directory(input_dir, output_dir)
+        if chapter_filter is not None:
+            filter_str = str(chapter_filter).strip().lower()
+            if filter_str.isdigit():
+                target_num = int(filter_str)
+                exact = [t for t in tasks if t.chapter_num == target_num]
+                if exact:
+                    tasks = exact
+                else:
+                    tasks = [t for t in tasks if filter_str in t.source_file.stem.lower()]
+            else:
+                tasks = [
+                    t for t in tasks
+                    if str(t.chapter_num) == filter_str or filter_str in t.source_file.stem.lower()
+                ]
         if limit:
             tasks = tasks[:limit]
 
