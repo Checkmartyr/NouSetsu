@@ -50,3 +50,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Line-based semantic chunker (85-line threshold) with 3-line sliding context.
 - Automatic CJK source language detection (Japanese, Chinese, Korean).
 - Console scripts `nousetsu` and `novel`.
+
+[0.2.0]: https://github.com/Checkmartyr/NouSetsu/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/Checkmartyr/NouSetsu/releases/tag/v0.1.0

@@ -254,7 +254,7 @@ All commands should be run using `uv`:
 # Install / sync dependencies
 uv sync
 
-# Run complete test suite (145 tests across 25 modules in ~18s)
+# Run complete test suite (199 tests across 31 modules in ~18s)
 uv run pytest
 
 # Run specific test modules

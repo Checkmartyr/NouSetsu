@@ -6,6 +6,7 @@ from pathlib import Path
 from rich.console import Console
 from rich.panel import Panel
 import dotenv
+from nousetsu import __version__
 from nousetsu.batch.runner import BatchRunner
 from nousetsu.storage.repository import NovelRepository, ProjectRegistry
 from nousetsu.tui.app import NovelAgentApp
@@ -329,6 +330,7 @@ def cmd_tui(args: argparse.Namespace) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Agentic Document-Level Novel Translation CLI")
+    parser.add_argument("--version", "-v", action="version", version=f"nousetsu {__version__}")
     subparsers = parser.add_subparsers(dest="command", help="Available subcommands")
 
     default_src = os.environ.get("SOURCE_LANG", "English")
