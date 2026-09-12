@@ -366,7 +366,10 @@ class NovelTranslationWorkflow:
             if state.critique_notes and state.quality_audit.fidelity_score > 0:
                 return {
                     "current_stage": PipelineStage.CRITIQUE,
-                    "review_iteration": current_iter
+                    "review_iteration": current_iter,
+                    "quality_audit": state.quality_audit,
+                    "best_audit": state.best_audit or state.quality_audit,
+                    "critique_notes": state.critique_notes
                 }
             text_to_audit = state.draft_text
         else:
@@ -485,11 +488,13 @@ class NovelTranslationWorkflow:
             80.0
         )
 
-        # Check checkpoint resume for pass 1 if paused previously
-        if is_initial_draft and state.polished_text and not state.best_polished_text:
+        # Check checkpoint resume for pass 1 if paused or failed previously
+        if is_initial_draft and (state.polished_text or state.best_polished_text):
+            p_text = state.best_polished_text or state.polished_text
             return {
                 "current_stage": PipelineStage.POLISHING,
-                "best_polished_text": state.polished_text
+                "polished_text": p_text,
+                "best_polished_text": p_text
             }
 
         base_text = state.draft_text if is_initial_draft else (state.polished_text or state.best_polished_text or state.draft_text)

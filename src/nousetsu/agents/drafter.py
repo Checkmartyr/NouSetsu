@@ -145,7 +145,7 @@ class ContextAwareDrafterAgent:
 
         response = self.llm.invoke([
             SystemMessage(content=sys_msg),
-            HumanMessage(content=f"Original Text to Translate:\n\n{source_text}")
+            HumanMessage(content=f"Translate this fictional novel excerpt into literary prose:\n\n{source_text}")
         ])
         self.last_usage = extract_usage_from_message(response)
 
@@ -292,7 +292,7 @@ class ContextAwareDrafterAgent:
                 f"(CRITICAL: DO NOT re-translate or repeat the above preceding context. Resume translating immediately from the lines below.)"
             )
 
-        chunk_header = f"### Chapter Lines to Translate (Chunk {chunk_idx} of {total_chunks}):\n\n" if total_chunks > 1 else "Original Text to Translate:\n\n"
+        chunk_header = f"### Fictional Novel Excerpt to Translate (Chunk {chunk_idx} of {total_chunks}):\n\n" if total_chunks > 1 else "Translate this fictional novel excerpt into literary prose:\n\n"
         user_parts.append(f"{chunk_header}{chunk_text}")
         user_content = "\n\n".join(user_parts)
 

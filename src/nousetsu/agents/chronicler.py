@@ -1,7 +1,7 @@
 """Chronicler agent for narrative continuity, summary generation, and metadata compilation."""
 import json
 import re
-from typing import List, Optional
+from typing import Any, List, Optional
 from langchain_core.messages import HumanMessage, SystemMessage
 from nousetsu.agents.llm import extract_text_from_message, extract_usage_from_message, get_llm
 from nousetsu.models.bible import ChapterSummary, CharacterProfile, GlossaryItem, NovelBible
@@ -41,7 +41,9 @@ class ChroniclerAgent:
         chapter_title: str,
         translated_text: str,
         genre: Optional[str] = None,
-        source_lang: Optional[str] = None
+        source_lang: Optional[str] = None,
+        bible: Optional[NovelBible] = None,
+        **kwargs: Any
     ) -> ChapterSummary:
         skills_text = SkillRegistry.get_instance().build_prompt_section(
             agent="chronicler",
@@ -58,7 +60,7 @@ class ChroniclerAgent:
 
         response = self.llm.invoke([
             SystemMessage(content=sys_msg),
-            HumanMessage(content=f"Translated Chapter:\n{translated_text[:12000]}")
+            HumanMessage(content=f"Analyze and summarize this translated novel chapter for story lore and plot events:\n{translated_text[:12000]}")
         ])
         self.last_usage = extract_usage_from_message(response)
 

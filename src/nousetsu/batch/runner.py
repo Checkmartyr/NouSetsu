@@ -262,6 +262,9 @@ class BatchRunner:
                     if artifacts.polished_text:
                         initial_state.polished_text = artifacts.polished_text
                         initial_state.best_polished_text = artifacts.polished_text
+                    if task.existing_meta.quality_audit and task.existing_meta.quality_audit.fidelity_score > 0:
+                        initial_state.quality_audit = task.existing_meta.quality_audit
+                        initial_state.best_audit = task.existing_meta.quality_audit
 
                 try:
                     # Run LangGraph pipeline with stage notification
@@ -373,23 +376,35 @@ class BatchRunner:
                     critique_notes = getattr(last_st, "critique_notes", None) or existing_artifacts.critique_notes
                     polished_text = getattr(last_st, "best_polished_text", None) or getattr(last_st, "polished_text", None) or existing_artifacts.polished_text
 
-                    # Determine last completed stage before failure
-                    stage_predecessors = {
-                        PipelineStage.EXTRACTION: PipelineStage.NONE,
-                        PipelineStage.DRAFTING: PipelineStage.EXTRACTION,
-                        PipelineStage.CRITIQUE: PipelineStage.DRAFTING,
-                        PipelineStage.POLISHING: PipelineStage.CRITIQUE,
-                        PipelineStage.CHRONICLING: PipelineStage.POLISHING,
+                    # Determine last completed stage strictly preceding the failed stage
+                    stage_order_map = {
+                        PipelineStage.NONE: 0,
+                        PipelineStage.EXTRACTION: 1,
+                        PipelineStage.DRAFTING: 2,
+                        PipelineStage.CRITIQUE: 3,
+                        PipelineStage.POLISHING: 4,
+                        PipelineStage.CHRONICLING: 5,
                     }
-                    completed_stage = stage_predecessors.get(failed_stage, PipelineStage.NONE)
-                    if polished_text and completed_stage in [PipelineStage.NONE, PipelineStage.EXTRACTION, PipelineStage.DRAFTING, PipelineStage.CRITIQUE]:
+                    failed_order = stage_order_map.get(failed_stage, 0)
+                    max_allowed_order = max(0, failed_order - 1)
+
+                    if max_allowed_order >= 4 and polished_text:
                         completed_stage = PipelineStage.POLISHING
-                    elif critique_notes and completed_stage in [PipelineStage.NONE, PipelineStage.EXTRACTION, PipelineStage.DRAFTING]:
+                    elif max_allowed_order >= 3 and critique_notes:
                         completed_stage = PipelineStage.CRITIQUE
-                    elif draft_text and completed_stage in [PipelineStage.NONE, PipelineStage.EXTRACTION]:
+                    elif max_allowed_order >= 2 and draft_text:
                         completed_stage = PipelineStage.DRAFTING
-                    elif (extracted_terms or extracted_chars) and completed_stage == PipelineStage.NONE:
+                    elif max_allowed_order >= 1 and (extracted_terms or extracted_chars):
                         completed_stage = PipelineStage.EXTRACTION
+                    else:
+                        completed_stage = PipelineStage.NONE
+
+                    completed_order = stage_order_map.get(completed_stage, 0)
+                    saved_chars = extracted_chars if completed_order >= 1 else []
+                    saved_terms = extracted_terms if completed_order >= 1 else []
+                    saved_draft = draft_text if completed_order >= 2 else None
+                    saved_notes = critique_notes if completed_order >= 3 else None
+                    saved_polish = polished_text if completed_order >= 4 else None
 
                     # Save failed checkpoint with detailed error diagnostics and preserved stage artifacts
                     failed_meta = ChapterMetadata(
@@ -402,11 +417,11 @@ class BatchRunner:
                         checkpoint=task.existing_meta.checkpoint if (task.existing_meta and task.existing_meta.checkpoint) else CheckpointData()
                     )
                     failed_meta.checkpoint.stage_artifacts = StageArtifacts(
-                        extracted_terms=extracted_terms,
-                        extracted_characters=extracted_chars,
-                        draft_text=draft_text,
-                        critique_notes=critique_notes,
-                        polished_text=polished_text,
+                        extracted_terms=saved_terms,
+                        extracted_characters=saved_chars,
+                        draft_text=saved_draft,
+                        critique_notes=saved_notes,
+                        polished_text=saved_polish,
                     )
                     if completed_stage != PipelineStage.NONE:
                         failed_meta.checkpoint.last_completed_stage = completed_stage

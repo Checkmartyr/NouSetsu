@@ -4,7 +4,9 @@ from unittest.mock import MagicMock
 import pytest
 from rich.console import Console
 
+from nousetsu.agents.chronicler import ChroniclerAgent
 from nousetsu.agents.critic import CritiqueAgent
+from nousetsu.agents.drafter import ContextAwareDrafterAgent
 from nousetsu.agents.extractor import EntityExtractorAgent
 from nousetsu.agents.llm import MockNovelLLM
 from nousetsu.agents.polisher import PolishingAgent
@@ -299,3 +301,173 @@ def test_checkpoint_preservation_on_exception_and_resumption(tmp_path: Path):
     assert len(resumed_results) == 1
     assert resumed_results[0].checkpoint.status == StageStatus.COMPLETED
     assert (output_dir / "ch_01.md").exists()
+
+
+def test_drafter_and_chronicler_task_framing():
+    """Verify Drafter and Chronicler use explicit analytical task framing."""
+    # Test Drafter
+    drafter = ContextAwareDrafterAgent(model_name="mock-model")
+    mock_llm_d = MagicMock()
+    mock_llm_d.invoke.return_value = MagicMock(content="Translated prose.")
+    drafter.llm = mock_llm_d
+
+    bible = NovelBible(title="Test", source_language="Japanese", target_language="English")
+    drafter.draft("Source line 1\nSource line 2", bible=bible, active_characters=[], active_glossary=[], rolling_summaries=[])
+
+    call_args_d = mock_llm_d.invoke.call_args[0][0]
+    human_msg_d = call_args_d[1].content
+    assert "Translate this fictional novel excerpt into literary prose:" in human_msg_d
+    assert not human_msg_d.startswith("Original Text to Translate:\n")
+
+    # Test Chronicler
+    chronicler = ChroniclerAgent(model_name="mock-model")
+    mock_llm_c = MagicMock()
+    mock_llm_c.invoke.return_value = MagicMock(content='{"chapter_num": 1, "title": "Ch 1", "synopsis": "Summary", "key_events": [], "character_state_changes": []}')
+    chronicler.llm = mock_llm_c
+
+    chronicler.chronicle(chapter_num=1, chapter_title="Ch 1", translated_text="Final translated chapter text", bible=bible)
+    call_args_c = mock_llm_c.invoke.call_args[0][0]
+    human_msg_c = call_args_c[1].content
+    assert "Analyze and summarize this translated novel chapter for story lore and plot events:" in human_msg_c
+    assert not human_msg_c.startswith("Translated Chapter:\n")
+
+
+def test_critic_paired_chunking_with_short_condensed_draft():
+    """Verify paired chunking never yields empty draft chunks even with single-line condensed draft."""
+    chunker = LineSemanticChunker(threshold_lines=5, target_chunk_lines=3)
+    critic = CritiqueAgent(model_name="mock-model", chunker=chunker)
+
+    source = "\n".join([f"Japanese line {i}" for i in range(10)])
+    draft = "Single line condensed Thai translation without newlines."
+
+    chunks = critic._build_paired_chunks(source, draft)
+    assert len(chunks) >= 2
+
+    # None of the chunks should receive empty content
+    for chunk in chunks:
+        assert chunk.content.strip() != "", f"Chunk {chunk.chunk_index} received empty content!"
+        assert chunk.source_content.strip() != "", f"Chunk {chunk.chunk_index} received empty source_content!"
+
+
+def test_polisher_step_resume_from_checkpoint(tmp_path: Path):
+    """Verify that _polish_step properly skips re-polishing when polished text exists in state."""
+    workflow = NovelTranslationWorkflow(model_name="mock-model")
+    bible = NovelBible(title="Test", source_language="Japanese", target_language="English")
+
+    state = TranslationState(
+        chapter_id="ch_01",
+        chapter_num=1,
+        source_text="Raw source",
+        draft_text="Draft text",
+        polished_text="Pre-existing polished text",
+        best_polished_text="Pre-existing polished text",
+        review_iteration=1,
+        novel_bible=bible
+    )
+
+    polisher_mock = MagicMock()
+    workflow.polisher.polish = polisher_mock
+
+    res = workflow._polish_step(state)
+
+    # Must NOT call polisher.polish because polished_text is already present from checkpoint
+    assert not polisher_mock.called
+    assert res["current_stage"] == PipelineStage.POLISHING
+    assert res["best_polished_text"] == "Pre-existing polished text"
+
+
+def test_failure_stage_bounding_and_artifact_isolation(tmp_path: Path):
+    """Verify that when a stage fails, last_completed_stage is bounded to predecessor and future artifacts are isolated."""
+    repo = NovelRepository(tmp_path)
+    repo.initialize_project("Isolation Test Novel", "Japanese", "English")
+
+    input_dir = tmp_path / "raw"
+    output_dir = tmp_path / "out"
+    input_dir.mkdir()
+    output_dir.mkdir()
+
+    raw_file = input_dir / "ch_01.txt"
+    raw_file.write_text("第一章：危険な試練。", encoding="utf-8")
+
+    console = Console(record=True)
+    runner = BatchRunner(repo, model_name="mock-model", console=console)
+
+    def failing_workflow_run(initial_state, stage_callback=None, stop_event=None):
+        runner.workflow.current_stage = PipelineStage.CRITIQUE
+        initial_state.extracted_characters = [CharacterProfile(name="Hero", original_name="主人公")]
+        initial_state.extracted_terms = [GlossaryItem(source="魔導", target="sorcery")]
+        initial_state.draft_text = "Draft content"
+        # Spurious critique notes and polished text simulating stale or uncompleted data
+        initial_state.critique_notes = "Stale notes"
+        initial_state.polished_text = "Stale polish"
+        runner.workflow.last_state = initial_state
+        raise RuntimeError("Prohibited content safety block during critique")
+
+    runner.workflow.run = MagicMock(side_effect=failing_workflow_run)
+    results = runner.run_batch(input_dir=input_dir, output_dir=output_dir)
+
+    assert len(results) == 0
+    all_meta = repo.load_all_metadata()
+    failed_meta = all_meta["ch_01"]
+
+    assert failed_meta.checkpoint.status == StageStatus.FAILED
+    assert failed_meta.checkpoint.failed_stage == PipelineStage.CRITIQUE
+    # CRITIQUE failed, so completed stage CANNOT be CRITIQUE or POLISHING! It must be DRAFTING.
+    assert failed_meta.checkpoint.last_completed_stage == PipelineStage.DRAFTING
+    # Critique notes and polished text must NOT be saved into stage artifacts
+    assert failed_meta.checkpoint.stage_artifacts.draft_text == "Draft content"
+    assert failed_meta.checkpoint.stage_artifacts.critique_notes is None
+    assert failed_meta.checkpoint.stage_artifacts.polished_text is None
+
+
+def test_real_workflow_exception_preserves_state_and_resumes(tmp_path: Path):
+    """End-to-end integration test: Real workflow execution fails at Critique, saves checkpoint, and resumes to completion."""
+    repo = NovelRepository(tmp_path)
+    repo.initialize_project("Real Workflow Test", "Japanese", "English")
+
+    input_dir = tmp_path / "raw"
+    output_dir = tmp_path / "out"
+    input_dir.mkdir()
+    output_dir.mkdir()
+
+    raw_file = input_dir / "ch_01.txt"
+    raw_file.write_text("第一章：危険な試練。\n少年は立ち向かった。", encoding="utf-8")
+
+    console = Console(record=True)
+    runner = BatchRunner(repo, model_name="mock-model", console=console)
+
+    # Make real workflow.critic.evaluate raise safety block on the first run
+    original_evaluate = runner.workflow.critic.evaluate
+    eval_call_count = 0
+
+    def mock_failing_evaluate(*args, **kwargs):
+        nonlocal eval_call_count
+        eval_call_count += 1
+        if eval_call_count == 1:
+            raise RuntimeError("GoogleGenerativeAIError: 400 Bad Request: prohibited_content safety block")
+        return original_evaluate(*args, **kwargs)
+
+    runner.workflow.critic.evaluate = mock_failing_evaluate
+
+    # Run batch: workflow.run is NOT mocked! Real LangGraph execution runs.
+    first_results = runner.run_batch(input_dir=input_dir, output_dir=output_dir)
+    assert len(first_results) == 0  # Chapter failed
+
+    # Verify checkpoint preserved by real workflow.current_stage and workflow.last_state
+    all_meta = repo.load_all_metadata()
+    assert "ch_01" in all_meta
+    failed_meta = all_meta["ch_01"]
+
+    assert failed_meta.checkpoint.status == StageStatus.FAILED
+    assert failed_meta.checkpoint.failed_stage == PipelineStage.CRITIQUE
+    assert failed_meta.checkpoint.last_completed_stage == PipelineStage.DRAFTING
+    assert failed_meta.checkpoint.stage_artifacts.draft_text is not None
+    assert len(failed_meta.checkpoint.stage_artifacts.draft_text) > 0
+    assert failed_meta.checkpoint.is_resumable() is True
+
+    # Resumption run: second evaluate call succeeds
+    second_results = runner.run_batch(input_dir=input_dir, output_dir=output_dir)
+    assert len(second_results) == 1
+    assert second_results[0].checkpoint.status == StageStatus.COMPLETED
+    assert (output_dir / "ch_01.md").exists()
+

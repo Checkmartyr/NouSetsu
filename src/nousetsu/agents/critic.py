@@ -48,9 +48,14 @@ class CritiqueAgent:
             total_d_lines = len(draft_lines)
             paired = []
             for idx, s_chunk in enumerate(src_chunks):
-                d_start = max(0, int(idx / num_chunks * total_d_lines))
-                d_end = min(total_d_lines, int((idx + 1) / num_chunks * total_d_lines))
-                d_content = "".join(draft_lines[d_start:d_end])
+                if total_d_lines >= num_chunks:
+                    d_start = max(0, int(idx / num_chunks * total_d_lines) - 2)
+                    d_end = min(total_d_lines, int((idx + 1) / num_chunks * total_d_lines) + 2)
+                    d_content = "".join(draft_lines[d_start:d_end])
+                else:
+                    d_content = draft_text
+                if not d_content.strip() and draft_text.strip():
+                    d_content = draft_text
                 paired.append(
                     LineChunk(
                         chunk_index=idx + 1,
@@ -69,9 +74,14 @@ class CritiqueAgent:
             total_s_lines = len(src_lines)
             paired = []
             for idx, d_chunk in enumerate(d_chunks):
-                s_start = max(0, int(idx / num_chunks * total_s_lines))
-                s_end = min(total_s_lines, int((idx + 1) / num_chunks * total_s_lines))
-                s_content = "".join(src_lines[s_start:s_end])
+                if total_s_lines >= num_chunks:
+                    s_start = max(0, int(idx / num_chunks * total_s_lines) - 2)
+                    s_end = min(total_s_lines, int((idx + 1) / num_chunks * total_s_lines) + 2)
+                    s_content = "".join(src_lines[s_start:s_end])
+                else:
+                    s_content = source_text
+                if not s_content.strip() and source_text.strip():
+                    s_content = source_text
                 d_chunk.source_content = s_content
                 paired.append(d_chunk)
             return paired
@@ -241,6 +251,8 @@ class CritiqueAgent:
             audit.warnings.extend(missing_terms)
             if len(source_present_terms) > 0:
                 audit.glossary_compliance_pct = max(0.0, 100.0 - (len(missing_terms) / len(source_present_terms) * 100.0))
+        elif source_present_terms:
+            audit.glossary_compliance_pct = 100.0
 
         # Programmatic Target Language Guard across full draft
         if bible.target_language.lower() != bible.source_language.lower():
