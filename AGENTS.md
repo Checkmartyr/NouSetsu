@@ -180,10 +180,16 @@ Active skills are dynamically filtered based on:
 │   ├── bible/
 │   │   └── bible.yaml       # NovelBible (characters, glossary, style guide, genre)
 │   ├── checkpoints/         # Stage checkpoint recovery files
-│   └── summaries/           # ChapterSummary archives
+│   └── summaries/           # ChapterSummary archives (scoped by volume/folder e.g. summaries/Vol_01/)
 ├── raw_chapters/            # Raw novel files (e.g. 0001.txt)
 └── translated_chapters/     # Final translated markdown outputs
 ```
+
+### Multi-Folder & Cross-Volume Narrative Memory
+For projects structured with multiple chapter folders (e.g. `Villainess_04`, `Villainess_05`):
+- Chapter summaries are partitioned by folder (`.novel/summaries/<folder>/chapter_XXXX.json`) preventing collision.
+- `get_rolling_context()` automatically backfills narrative summaries from preceding volumes when beginning a new folder/volume, providing unbroken rolling context to `Wortschmied` (Drafter) across volume boundaries.
+- Context prompt entries display folder badges (e.g. `[Villainess_04] Chapter 122`) to disambiguate volume boundaries for LLM generation.
 
 ### 4-Tier Model Precedence Cascade
 LLM model selection is decoupled from project storage. Project YAML files contain novel-specific metadata, while machine-level model choices reside in `.env`.

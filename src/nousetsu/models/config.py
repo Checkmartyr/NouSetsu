@@ -33,6 +33,7 @@ class ProjectConfig(BaseModel):
     chunk_threshold_lines: int = Field(default=85, description="Minimum non-empty lines to trigger chunked drafting and polishing")
     target_chunk_lines: int = Field(default=70, description="Target line count per chunk")
     chunk_overlap_lines: int = Field(default=3, description="Lines of preceding translated context passed to next chunk")
+    cross_folder_summaries: bool = Field(default=True, description="Enable rolling context backfill across sequential folders")
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     def get_raw_path(self, base_dir: Path) -> Path:

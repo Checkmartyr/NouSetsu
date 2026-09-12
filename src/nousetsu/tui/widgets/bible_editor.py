@@ -75,6 +75,30 @@ class NovelBibleModal(ModalScreen):
                         ]) if self.bible.glossary else "*No glossary items registered yet.*"
                         yield Markdown(gloss_md, id="gloss_view")
 
+                with TabPane("Summaries"):
+                    with VerticalScroll():
+                        all_by_folder = self.repo.get_all_summaries_by_folder() if hasattr(self.repo, "get_all_summaries_by_folder") else {}
+                        if not all_by_folder and self.bible.summaries:
+                            all_by_folder = {"All": self.bible.summaries}
+
+                        if all_by_folder:
+                            blocks = []
+                            for folder_name, folder_sums in all_by_folder.items():
+                                blocks.append(f"## 📁 Volume / Folder: `{folder_name}` ({len(folder_sums)} chapters)")
+                                for s in folder_sums:
+                                    events_str = ", ".join(s.key_events) if s.key_events else "None"
+                                    state_str = ", ".join(s.character_state_changes) if s.character_state_changes else "None"
+                                    blocks.append(
+                                        f"### Chapter {s.chapter_num}: {s.title or 'Untitled'}\n"
+                                        f"- **Synopsis:** {s.synopsis}\n"
+                                        f"- **Key Events:** {events_str}\n"
+                                        f"- **State Changes:** {state_str}"
+                                    )
+                            sum_md = "\n\n".join(blocks)
+                        else:
+                            sum_md = "*No chapter summaries recorded yet.*"
+                        yield Markdown(sum_md, id="summaries_view")
+
                 with TabPane("Languages"):
                     with VerticalScroll():
                         yield Label(f"Current Source Language: [bold cyan]{self.bible.source_language}[/]")

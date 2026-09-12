@@ -257,7 +257,18 @@ class NovelTranslationWorkflow:
             est_draft = int(estimate_tokens(state.source_text) * 1.5) + 2000
 
         current_folder = Path(state.source_file).parent.name if state.source_file else None
-        active_summaries = state.novel_bible.get_summaries_for_folder(current_folder) if hasattr(state.novel_bible, "get_summaries_for_folder") else state.novel_bible.summaries
+        cross_folder = getattr(state.novel_bible, "cross_folder_summaries", True)
+        if hasattr(state.novel_bible, "get_rolling_context"):
+            active_summaries = state.novel_bible.get_rolling_context(
+                folder=current_folder,
+                current_chapter_num=state.chapter_num,
+                limit=3,
+                cross_folder=cross_folder
+            )
+        elif hasattr(state.novel_bible, "get_summaries_for_folder"):
+            active_summaries = state.novel_bible.get_summaries_for_folder(current_folder)
+        else:
+            active_summaries = state.novel_bible.summaries
 
         draft = invoke_with_retry(
             self.drafter.draft,

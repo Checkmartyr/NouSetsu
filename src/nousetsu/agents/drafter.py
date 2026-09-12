@@ -31,6 +31,17 @@ class ContextAwareDrafterAgent:
             return self.llm.last_model_used
         return self.model_name
 
+    @staticmethod
+    def format_summaries(rolling_summaries: List[ChapterSummary], limit: int = 3) -> str:
+        """Format preceding summaries into markdown context with optional folder badges."""
+        if not rolling_summaries:
+            return "This is the first chapter."
+        selected = rolling_summaries[-limit:] if limit else rolling_summaries
+        return "\n".join([
+            f"[{s.folder}] Chapter {s.chapter_num} ({s.title}): {s.synopsis}" if getattr(s, "folder", None) else f"Chapter {s.chapter_num} ({s.title}): {s.synopsis}"
+            for s in selected
+        ]) or "This is the first chapter."
+
     def draft(
         self,
         source_text: str,
@@ -76,10 +87,7 @@ class ContextAwareDrafterAgent:
             for g in eval_glossary
         ]) or "No specific glossary terms."
 
-        summaries_str = "\n".join([
-            f"Chapter {s.chapter_num} ({s.title}): {s.synopsis}"
-            for s in rolling_summaries[-3:]
-        ]) or "This is the first chapter."
+        summaries_str = self.format_summaries(rolling_summaries)
 
         custom_rules_str = "\n".join([f"   - {r}" for r in bible.style_guide.custom_rules])
 
@@ -219,10 +227,7 @@ class ContextAwareDrafterAgent:
             for g in eval_glossary
         ]) or "No specific glossary terms."
 
-        summaries_str = "\n".join([
-            f"Chapter {s.chapter_num} ({s.title}): {s.synopsis}"
-            for s in rolling_summaries[-3:]
-        ]) or "This is the first chapter."
+        summaries_str = self.format_summaries(rolling_summaries)
 
         custom_rules_str = "\n".join([f"   - {r}" for r in bible.style_guide.custom_rules])
 

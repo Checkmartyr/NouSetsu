@@ -301,6 +301,31 @@ class NovelRepository:
         self.save_config(cfg)
         return cfg
 
+    def get_folder_order(self) -> List[str]:
+        """Return naturally sorted list of all active or historical volume/chapter folder names."""
+        folders = set()
+        for raw_folder, _, _ in self.discover_folders():
+            folders.add(raw_folder)
+        if self.summaries_dir.exists():
+            for child in self.summaries_dir.iterdir():
+                if child.is_dir():
+                    folders.add(child.name)
+        from natsort import natsorted
+        return natsorted(list(folders))
+
+    def get_all_summaries_by_folder(self) -> Dict[str, List[ChapterSummary]]:
+        """Return all summaries grouped by their folder/volume scope."""
+        bible = self.load_bible()
+        grouped: Dict[str, List[ChapterSummary]] = {}
+        for s in bible.summaries:
+            fname = s.folder or "Default"
+            if fname not in grouped:
+                grouped[fname] = []
+            grouped[fname].append(s)
+        for fname in grouped:
+            grouped[fname].sort(key=lambda s: s.chapter_num)
+        return grouped
+
     def bible_file_path(self) -> Path:
         return self.bible_dir / "bible.yaml"
 
