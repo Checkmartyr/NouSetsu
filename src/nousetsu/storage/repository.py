@@ -309,7 +309,7 @@ class NovelRepository:
             folders.add(raw_folder)
         if self.summaries_dir.exists():
             for child in self.summaries_dir.iterdir():
-                if child.is_dir():
+                if child.is_dir() and child.name not in ["arcs", "__pycache__", ".git"]:
                     folders.add(child.name)
         from natsort import natsorted
         return natsorted(list(folders))

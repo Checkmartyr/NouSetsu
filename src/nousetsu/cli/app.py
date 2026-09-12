@@ -268,6 +268,36 @@ def cmd_narrative(args: argparse.Namespace) -> None:
     console.print(Panel(tree, border_style="cyan", padding=(1, 2)))
 
 
+def cmd_migrate_summaries(args: argparse.Namespace) -> None:
+    from rich.panel import Panel
+    from rich.tree import Tree
+    from nousetsu.storage.migration import migrate_novel_summaries
+
+    project_dir = getattr(args, "project_dir", None)
+    repo = NovelRepository(project_dir) if project_dir else NovelRepository()
+    dry_run = getattr(args, "dry_run", False)
+    title_override = getattr(args, "title", None)
+
+    console.print(f"[bold cyan]🔄 {'[DRY-RUN] ' if dry_run else ''}Migrating summary system for {repo.root_dir}...[/]")
+    results = migrate_novel_summaries(repo=repo, title_override=title_override, dry_run=dry_run)
+
+    tree = Tree(f"[bold green]✓ Migration Complete: {results['title']}[/]")
+    tree.add(f"[magenta]Whole Story:[/] {results['whole_story_summary']}")
+
+    arcs_node = tree.add(f"[yellow]Story Arcs ({len(results['archived_arcs'])} archived, 1 active):[/]")
+    for a in results['archived_arcs']:
+        arcs_node.add(f"[dim]✓ Arc {a['arc_num']}: {a['title']} [COMPLETED] (Ch. {a['start_chapter']}-{a['end_chapter']})[/]")
+    if results['active_arc']:
+        act = results['active_arc']
+        act_node = arcs_node.add(f"[bold green]▶ Arc {act['arc_num']}: {act['title']} [ACTIVE] (From Ch. {act['start_chapter']})[/]")
+        act_node.add(f"[yellow]Conflict:[/] {act['core_conflict']}")
+        if act['key_milestones']:
+            act_node.add(f"[cyan]Milestones:[/] {', '.join(act['key_milestones'])}")
+
+    tree.add(f"[cyan]Folders Migrated:[/] {', '.join(results['folders_migrated'])} ({results['total_chapters']} total chapters)")
+    console.print(Panel(tree, border_style="green", padding=(1, 2)))
+
+
 def cmd_tui(args: argparse.Namespace) -> None:
     project_dir = getattr(args, "project_dir", None)
     repo = NovelRepository(project_dir) if project_dir else NovelRepository()
@@ -354,6 +384,12 @@ def main() -> None:
     p_narrative = subparsers.add_parser("narrative", help="Inspect 3-tier hierarchical story memory (Whole Story > Arcs > Situation)")
     p_narrative.add_argument("--project-dir", "-p", default=None, help="Root folder of novel project")
 
+    # migrate-summaries
+    p_migrate = subparsers.add_parser("migrate-summaries", help="Migrate legacy summaries to 3-tier hierarchical summary system")
+    p_migrate.add_argument("--project-dir", "-p", default=None, help="Root folder of novel project")
+    p_migrate.add_argument("--title", default=None, help="Optional novel title override")
+    p_migrate.add_argument("--dry-run", action="store_true", help="Preview migration without writing to disk")
+
     # tui
     p_tui = subparsers.add_parser("tui", help="Launch interactive Textual TUI dashboard")
     p_tui.add_argument("--project-dir", "-p", default=None, help="Root folder of novel project")
@@ -379,6 +415,8 @@ def main() -> None:
         cmd_graph_info(args)
     elif args.command == "narrative":
         cmd_narrative(args)
+    elif args.command == "migrate-summaries":
+        cmd_migrate_summaries(args)
     elif args.command == "tui":
         cmd_tui(args)
     else:
