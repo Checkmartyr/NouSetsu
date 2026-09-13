@@ -8,7 +8,7 @@
 [![Package Manager: uv](https://img.shields.io/badge/managed%20by-uv-purple.svg)](https://github.com/astral-sh/uv)
 [![Framework: LangGraph](https://img.shields.io/badge/agent-LangGraph-orange.svg)](https://github.com/langchain-ai/langgraph)
 [![UI: Textual](https://img.shields.io/badge/ui-Textual%20%26%20Rich-green.svg)](https://textual.textualize.io/)
-[![Tests: 199 Passed](https://img.shields.io/badge/tests-199%20passed-brightgreen.svg)](https://github.com/Checkmartyr/NouSetsu)
+[![Tests: 238 Passed](https://img.shields.io/badge/tests-238%20passed-brightgreen.svg)](https://github.com/Checkmartyr/NouSetsu)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
 ---
@@ -40,6 +40,8 @@ NouSetsu models the translation workflow as a collaborative literary publishing 
 | **3** | **Zensor** | [`CritiqueAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/critic.py) | `gemma-4-26b-a4b-it` | **The Inspector**: Line-by-line auditor scoring fidelity and style (0–10), detecting skipped sentences (omissions), verifying glossary compliance, auditing nickname disparities, and providing actionable critique notes. |
 | **4** | **Feinschliff** | [`PolishingAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/polisher.py) | `gemini-3.5-flash-lite` | **The Stylist**: Rewrites drafted prose into publication-grade target fiction, purging machine-translation tropes ("couldn't help but", "as expected of"), optimizing prose cadence, and enhancing emotional depth while preserving address forms. |
 | **5** | **Chronist** | [`ChroniclerAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/chronicler.py) | `gemma-4-26b-a4b-it` | **The Memory Keeper**: Autonomously tracks story arc progression, summarizes chapter events, detects character state shifts (injuries, deaths, breakthroughs), and compiles metadata audit records into `.novel/metadata.json`. |
+
+> 📘 *For the exhaustive technical breakdown of every agent file and method signature, see the [Agent Architecture Deep Dive](docs/architecture/agents_deep_dive.md).*
 
 ---
 
@@ -74,6 +76,11 @@ NouSetsu encodes procedural execution rules as explicit attributed graphs $G = (
 ### 6. 🖥️ Reactive Terminal User Interface (Textual + Rich)
 * **Distraction-Free Dashboard**: Features an 85%+ height chapter list with clean minimal status glyphs (`✓` done, `●` running, `⏸` paused, `✕` failed, `·` waiting), a compact 2-row toolbar, and an 80% reading viewport with dual original/translated panes.
 * **Real-Time Token & Duration Analytics**: Press `M` to access the dedicated **Token Analysis Dashboard** with live KPI cards and interactive DataTables broken down by pipeline stage, LLM model, and chapter duration.
+
+### 7. 🔍 Hybrid Search RAG Knowledge Store & Cross-Encoder Reranking
+* **Zero-Daemon Local Store**: Powered by SQLite FTS5 (BM25 lexical ranking) and dense 3072-dimensional vectors from **Gemini Embedding 2** (`models/gemini-embedding-2`), managed via **SQLAlchemy 2.0 ORM**.
+* **High-Precision Cross-Encoder**: Combines sparse and dense candidates via Reciprocal Rank Fusion (RRF, $k=60$) and reranks them with an LLM Cross-Encoder (`LLMCrossEncoderReranker`).
+* **Bi-Directional Pipeline Integration**: Injects episodic lore into `Wortschmied` (Drafter) and canonical TM references into `Zensor` (Critic), while `Chronist` (Chronicler) cross-references prior lore and automatically embeds/indexes completed summaries and scene chunks.
 
 ---
 

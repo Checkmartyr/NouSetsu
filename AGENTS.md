@@ -78,13 +78,13 @@ graph TD
 
 Each agent in the pipeline is given an official German designation reflecting its precise literary role:
 
-| Stage | German Codename | Agent Class | Production Model | Source File | Core Responsibility |
-|:---:|:---|:---|:---|:---|:---|
-| **1** | **Schriftdetektiv** | [`EntityExtractorAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/extractor.py) | `gemini-3.1-flash-lite` | `src/nousetsu/agents/extractor.py` | **The Detective**: Analyzes raw chapter text *before* translation to identify unknown character names, cultivate power realms, and discover terms not yet registered in the Novel Bible. |
-| **2** | **Wortschmied** | [`ContextAwareDrafterAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/drafter.py) | `gemini-3.5-flash-lite` | `src/nousetsu/agents/drafter.py` | **The Wordsmith**: Produces the initial full translation draft, resolving zero-anaphora (omitted pronouns/subjects), applying distinct dialogue registers, and strictly using active glossary terms. |
-| **3** | **Zensor** | [`CritiqueAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/critic.py) | `gemma-4-26b-a4b-it` | `src/nousetsu/agents/critic.py` | **The Inspector**: Line-by-line auditor scoring fidelity and style (0–10), detecting skipped sentences (omissions), verifying glossary compliance, and writing actionable critique notes. |
-| **4** | **Feinschliff** | [`PolishingAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/polisher.py) | `gemini-3.5-flash-lite` | `src/nousetsu/agents/polisher.py` | **The Stylist**: Rewrites drafted prose into publication-grade English, purging machine-translation tropes ("couldn't help but", "as expected of"), optimizing cadence, and enhancing emotional depth. |
-| **5** | **Chronist** | [`ChroniclerAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/chronicler.py) | `gemma-4-26b-a4b-it` | `src/nousetsu/agents/chronicler.py` | **The Memory Keeper**: Summarizes chapter events for rolling context, tracks character status shifts (injuries, deaths, breakthroughs), and compiles metadata audit records into `.novel/metadata.json`. |
+| Stage | German Codename | Agent Class | Production Model | Source File | Core Responsibility | RAG Role |
+|:---:|:---|:---|:---|:---|:---|:---:|
+| **1** | **Schriftdetektiv** | [`EntityExtractorAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/extractor.py) | `gemini-3.1-flash-lite` | `src/nousetsu/agents/extractor.py` | **The Detective**: Analyzes raw chapter text *before* translation to identify unknown character names, cultivate power realms, and discover terms not yet registered in the Novel Bible. | Feeds Bible Terms |
+| **2** | **Wortschmied** | [`ContextAwareDrafterAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/drafter.py) | `gemini-3.5-flash-lite` | `src/nousetsu/agents/drafter.py` | **The Wordsmith**: Produces the initial full translation draft, resolving zero-anaphora (omitted pronouns/subjects), applying distinct dialogue registers, and strictly using active glossary terms. | Inbound ($k=2$) |
+| **3** | **Zensor** | [`CritiqueAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/critic.py) | `gemma-4-26b-a4b-it` | `src/nousetsu/agents/critic.py` | **The Inspector**: Line-by-line auditor scoring fidelity and style (0–10), detecting skipped sentences (omissions), verifying glossary compliance, and writing actionable critique notes. | Inbound TM ($k=2$) |
+| **4** | **Feinschliff** | [`PolishingAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/polisher.py) | `gemini-3.5-flash-lite` | `src/nousetsu/agents/polisher.py` | **The Stylist**: Rewrites drafted prose into publication-grade English, purging machine-translation tropes ("couldn't help but", "as expected of"), optimizing cadence, and enhancing emotional depth. | Indirect via Notes |
+| **5** | **Chronist** | [`ChroniclerAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/chronicler.py) | `gemma-4-26b-a4b-it` | `src/nousetsu/agents/chronicler.py` | **The Memory Keeper**: Summarizes chapter events for rolling context, tracks character status shifts (injuries, deaths, breakthroughs), and compiles metadata audit records into `.novel/metadata.json`. | Bi-directional (Read $k=3$ / Write) |
 
 > [!NOTE]
 > Global fallback across all agent stages is anchored by `gemini-3.5-flash-lite`, activated automatically via `FallbackChatModel` when encountering HTTP 429 quota exhaustion or API exceptions.
@@ -247,6 +247,12 @@ NouSetsu tracks end-to-end token consumption and execution latency per pipeline 
    - Catches commercial AI safety blocks (`prohibited_content` HTTP 400) on visceral combat or romantic intimacy.
    - Recursively bisects chunks (`bisect_text`) down to minimal sensitive snippets ($\le 8$ lines or depth 4).
    - Translates safe portions with the primary LLM in full literary prose, while routing only the minimal sensitive sub-block to Google Translate fallback (`translate_via_google`) and `Feinschliff` polishing.
+9. **Hybrid Search RAG Knowledge Store & Cross-Encoder Reranking**:
+   - Backed by zero-daemon local SQLite database (`.novel/rag/lore.db`) managed via **SQLAlchemy 2.0 ORM** (`LoreDocumentORM`).
+   - Sparse lexical search powered by native SQLite **FTS5** virtual table (`lore_fts`) with BM25 ranking.
+   - Dense semantic vector search using **Gemini Embedding 2** (`models/gemini-embedding-2`, 3072 dimensions) with cosine similarity.
+   - Ranked candidates combined via **Reciprocal Rank Fusion (RRF, $k=60$)** and evaluated by a joint LLM **Cross-Encoder Reranker** (`LLMCrossEncoderReranker`).
+   - Fully bi-directional across pipeline agents: `Wortschmied` (episodic lore), `Zensor` (canonical TM), and `Chronist` (preceding state retrieval + auto-indexing of summaries and scene chunks).
 
 ---
 
@@ -261,7 +267,7 @@ uv sync
 # Query CLI version
 uv run nousetsu --version
 
-# Run complete test suite (199 tests across 31 modules in ~18s)
+# Run complete test suite (238 tests across 37 modules in ~23s)
 uv run pytest
 
 # Run specific test modules
@@ -354,5 +360,40 @@ When modifying this repository, AI agents MUST adhere strictly to these conventi
     - When operating under planning mode (`/plan`), AI agents MUST ALWAYS present the detailed implementation plan artifact and STOP to wait for explicit manual approval from the user in chat before modifying any project files or executing modifying commands.
     - AI agents MUST NEVER assume implicit approval, rely on automatic system hook overrides, or begin execution until the human user explicitly approves the plan in chat.
 
+---
 
+## 10. Per-File Pipeline Agent Technical Reference
 
+For the complete in-depth architectural handbook with flowcharts, method contracts, and failure recovery protocols, consult [`docs/architecture/agents_deep_dive.md`](file:///D:/Code/novel_translation_Agent/docs/architecture/agents_deep_dive.md).
+
+### Summary of Agent Files & Contracts
+
+#### 1. Schriftdetektiv — Pre-Translation Entity Detective
+- **File**: [`src/nousetsu/agents/extractor.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/extractor.py)
+- **Class**: `EntityExtractorAgent` | **Model**: `gemini-3.1-flash-lite` (Fallback: `gemini-3.5-flash-lite`)
+- **Signature**: `extract(source_text, bible, chunks=None, ...) -> Tuple[List[CharacterProfile], List[GlossaryItem]]`
+- **Core Role**: Discovers unregistered character names, realms, and terminology prior to drafting. Wraps source in analytical task framing to bypass safety blocks. Prunes conversational noise via Procedural Graphs.
+
+#### 2. Wortschmied — Context-Aware Literary Drafter
+- **File**: [`src/nousetsu/agents/drafter.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/drafter.py)
+- **Class**: `ContextAwareDrafterAgent` | **Model**: `gemini-3.5-flash-lite`
+- **Signature**: `draft(source_text, bible, active_characters, active_glossary, rolling_summaries, genre, chunks=None, rag_results=None, ...) -> str`
+- **Core Role**: Produces initial publication-quality prose draft. Resolves zero-anaphora (omitted subjects/pronouns). Integrates episodic lore ($k=2$) from RAG. Features recursive binary bisection (`bisect_text`) with Google Translate fallback on sensitive scenes.
+
+#### 3. Zensor — Line-by-Line Quality Auditor
+- **File**: [`src/nousetsu/agents/critic.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/critic.py)
+- **Class**: `CritiqueAgent` | **Model**: `gemma-4-26b-a4b-it` (Fallback: `gemini-3.5-flash-lite`)
+- **Signature**: `evaluate(source_text, draft_text, bible, active_characters, active_glossary, genre, chunks=None, rag_context=None, ...) -> Tuple[QualityAudit, str]`
+- **Core Role**: Scores fidelity (0–10) and style (0–10). Detects omissions, glossary non-compliance, and register flattening. Integrates canonical Translation Memory (TM) snippets ($k=2$) from RAG on Pass 1. Enforces language regression fail-safe.
+
+#### 4. Feinschliff — Publication Prose Stylist
+- **File**: [`src/nousetsu/agents/polisher.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/polisher.py)
+- **Class**: `PolishingAgent` | **Model**: `gemini-3.5-flash-lite`
+- **Signature**: `polish(draft_text, critique_notes, active_glossary, bible, source_text=None, genre=None, chunks=None, ...) -> str`
+- **Core Role**: Rewrites drafted prose based on critique notes. Purges machine-translation tropes ("couldn't help but", "as expected of"). Enhances cadence, dialogue pacing, and emotional depth while consulting source text for nuance.
+
+#### 5. Chronist — Narrative Memory & Lore Keeper
+- **File**: [`src/nousetsu/agents/chronicler.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/chronicler.py)
+- **Class**: `ChroniclerAgent` | **Model**: `gemma-4-26b-a4b-it` (Fallback: `gemini-3.5-flash-lite`)
+- **Signature**: `chronicle(chapter_num, chapter_title, translated_text, genre, source_lang, bible, rag_context=None, ...) -> ChapterSummary`
+- **Core Role**: Maintains 3-tier narrative memory (Micro chapter synopsis, Meso ArcSummary, Macro whole_story_summary). Fully bi-directional with RAG: retrieves historical character states ($k=3$) before summarizing, then auto-indexes the resulting summary and 20-line scene chunks into SQLite FTS5 and Gemini Embedding 2 vectors.
