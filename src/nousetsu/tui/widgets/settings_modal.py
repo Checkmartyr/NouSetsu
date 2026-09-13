@@ -151,6 +151,8 @@ class SettingsModal(ModalScreen):
                     yield Input(value=str(self.cfg.quality_threshold), id="set_quality_threshold")
                     yield Label("Auto-Update Novel Bible (true / false):", classes="field-label")
                     yield Input(value="true" if self.cfg.auto_update_bible else "false", id="set_auto_bible")
+                    yield Label("Filter Extractor Entities (true / false):", classes="field-label")
+                    yield Input(value="true" if getattr(self.cfg, "filter_extractor_entities", True) else "false", id="set_filter_extractor")
 
                 with Container(classes="settings-section"):
                     yield Label("📏 Line-Based Semantic Chunking", classes="section-title")
@@ -202,6 +204,7 @@ class SettingsModal(ModalScreen):
         loops_val = self.query_one("#set_max_loops", Input).value.strip()
         thresh_val = self.query_one("#set_quality_threshold", Input).value.strip()
         auto_bible_val = self.query_one("#set_auto_bible", Input).value.strip().lower() in ("true", "1", "yes")
+        filter_extractor_val = self.query_one("#set_filter_extractor", Input).value.strip().lower() in ("true", "1", "yes")
 
         chunking_val = self.query_one("#set_enable_chunking", Input).value.strip().lower() in ("true", "1", "yes")
         chunk_thresh_val = self.query_one("#set_chunk_threshold_lines", Input).value.strip()
@@ -267,6 +270,7 @@ class SettingsModal(ModalScreen):
             pass
 
         cfg.auto_update_bible = auto_bible_val
+        cfg.filter_extractor_entities = filter_extractor_val
         cfg.enable_chunking = chunking_val
 
         if chunk_thresh_val.isdigit():

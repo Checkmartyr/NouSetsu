@@ -44,6 +44,7 @@ class ProjectConfig(BaseModel):
     rag_reranker_model: Optional[str] = Field(default=None, description="Model override for Cross-Encoder reranker (defaults to gemini-3.5-flash-lite)")
     filter_scene_characters: bool = Field(default=True, description="Filter character roster per scene/chunk based on textual presence and core roles")
     max_scene_characters: int = Field(default=15, ge=1, le=50, description="Maximum characters retained in per-scene filter fallback")
+    filter_extractor_entities: bool = Field(default=True, description="Filter known characters and glossary per chunk/chapter in Entity Extractor to save tokens and avoid quota exhaustion")
     enable_patch_polishing: bool = Field(default=True, description="Enable search/replace diff patching for secondary polish passes to save output tokens")
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
@@ -130,5 +131,12 @@ class ProjectConfig(BaseModel):
             or os.environ.get("NOVEL_RAG_RERANKER_MODEL")
             or "gemini-3.5-flash-lite"
         )
+
+    def get_filter_extractor_entities(self) -> bool:
+        """Resolve effective filter_extractor_entities: .env -> config override -> default (True)."""
+        env_val = os.environ.get("NOVEL_FILTER_EXTRACTOR_ENTITIES")
+        if env_val is not None:
+            return env_val.strip().lower() in ("true", "1", "yes")
+        return self.filter_extractor_entities
 
 

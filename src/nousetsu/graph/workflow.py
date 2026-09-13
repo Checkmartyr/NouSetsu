@@ -63,11 +63,13 @@ class NovelTranslationWorkflow:
         reranker: Optional[Any] = None,
         traces_dir: Optional[Path] = None,
         prompt_tracker: Optional[PromptTracker] = None,
-        enable_patch_polishing: bool = True
+        enable_patch_polishing: bool = True,
+        filter_extractor_entities: bool = True
     ):
         self.traces_dir = traces_dir
         self.prompt_tracker = prompt_tracker
         self.enable_patch_polishing = enable_patch_polishing
+        self.filter_extractor_entities = filter_extractor_entities
         effective_model = model_name or os.environ.get("NOVEL_MODEL") or os.environ.get("DEFAULT_MODEL") or "gemini-3.1-flash-lite"
         self.model_name = effective_model
         is_mock = effective_model.startswith("mock") or effective_model.startswith("test")
@@ -104,7 +106,8 @@ class NovelTranslationWorkflow:
             chunker=self.chunker,
             enable_recursive_subdivision=self.safety_recursive_subdivision,
             subdivision_min_lines=self.safety_subdivision_min_lines,
-            subdivision_max_depth=self.safety_subdivision_max_depth
+            subdivision_max_depth=self.safety_subdivision_max_depth,
+            enable_entity_filtering=self.filter_extractor_entities
         )
         self.drafter = ContextAwareDrafterAgent(
             model_name=self.drafter_model,
@@ -278,7 +281,8 @@ class NovelTranslationWorkflow:
             rate_limiter=self.rate_limiter,
             estimated_tokens=est_extract,
             stop_event=self.stop_event,
-            prompt_tracker=self.prompt_tracker
+            prompt_tracker=self.prompt_tracker,
+            enable_entity_filtering=self.filter_extractor_entities
         )
         
         all_chars = list(state.novel_bible.characters) + new_chars

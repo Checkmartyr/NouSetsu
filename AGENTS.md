@@ -75,7 +75,7 @@ graph TD
     FALLBACK --> INTERACTIONS
     A2 & A4 --> CHUNKER
     A4 --> PATCH
-    A2 & A3 --> CHAR_FILTER
+    A1 & A2 & A3 --> CHAR_FILTER
     A2 & A3 & A5 <--> RAG_STORE
     WF --> RL
     WF --> TOKEN_METRICS
@@ -278,9 +278,11 @@ NouSetsu tracks end-to-end token consumption and execution latency per pipeline 
 12. **Forensic Prompt Tracking & Web Visualizer**:
     - [`PromptTracker`](file:///D:/Code/novel_translation_Agent/src/nousetsu/analysis/tracker.py) records system prompts, user inputs, raw outputs, and duration/token telemetry for every stage into `.novel/traces/`.
     - Integrated with Vite + React 19 + TypeScript web trace visualizer (`nousetsu web`) with real-time TUI sync via `W` hotkey.
-13. **Script-Aware Word Boundary & Scene-Level Character Filtering**:
+13. **Script-Aware Word Boundary & Scene-Level Entity/Glossary Filtering**:
     - Script-aware regex matching ensures CJK ideographs match without Latin `\b` word boundaries while ASCII terms enforce `\b` to prevent false substring matches.
-    - Dynamically filters character rosters to only include active participants per chunk/scene, drastically trimming prompt token bloat.
+    - Dynamically filters character rosters and known glossary items per scene chunk across `Wortschmied` (Drafter), `Zensor` (Critic), and `Schriftdetektiv` (`EntityExtractorAgent`).
+    - Extractor filtering utilizes `max_characters=0` (preserving all matching scene characters without the 15-character dialogue cap) and `fallback_on_empty=False` (preventing synthetic dummy terms from entering extraction context).
+    - Fully configurable via the 4-tier cascade: CLI flag (`--filter-extractor` / `--no-filter-extractor`), `ProjectConfig.filter_extractor_entities`, environment variable `NOVEL_FILTER_EXTRACTOR_ENTITIES`, or built-in default (`True`).
 14. **High-Performance TUI Subsystem & Memoized Rendering**:
     - Chapter scanner caches file SHA-256 hashes via `(path, size, mtime)` tuples, speeding up directory re-scans by >100x.
     - Dual reader widget memoizes rendered source and target markdown to prevent redundant AST re-parsing.
@@ -302,10 +304,11 @@ uv sync
 # Query CLI version
 uv run nousetsu --version
 
-# Run complete test suite (305 tests across 46 modules in ~88s)
+# Run complete test suite (311 tests across 47 modules in ~90s)
 uv run pytest
 
 # Run specific test modules
+uv run pytest tests/test_extractor_filtering.py
 uv run pytest tests/test_hierarchy_summary.py
 uv run pytest tests/test_migration.py
 uv run pytest tests/test_cross_folder_summaries.py

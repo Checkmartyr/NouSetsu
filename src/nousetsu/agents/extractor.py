@@ -11,6 +11,8 @@ from nousetsu.models.bible import CharacterProfile, GlossaryItem, NovelBible
 from nousetsu.models.metadata import PipelineStage, TokenUsage
 from nousetsu.prompts.templates import EXTRACTION_SYSTEM_PROMPT
 from nousetsu.skills.registry import SkillRegistry
+from nousetsu.utils.character_filter import filter_characters_for_scene
+from nousetsu.utils.glossary_filter import filter_glossary_for_scene
 from nousetsu.utils.translation_fallback import (
     bisect_text,
     can_subdivide_text,
@@ -33,6 +35,7 @@ class EntityExtractorAgent:
         subdivision_min_lines: int = 8,
         subdivision_max_depth: int = 3,
         prompt_tracker: Optional[Any] = None,
+        enable_entity_filtering: bool = True,
     ):
         self.model_name = model_name
         self.fallback_model = fallback_model
@@ -46,6 +49,7 @@ class EntityExtractorAgent:
         self.subdivision_min_lines = subdivision_min_lines
         self.subdivision_max_depth = subdivision_max_depth
         self.subdivisions_count: int = 0
+        self.enable_entity_filtering = enable_entity_filtering
 
     @property
     def last_model_used(self) -> str:
@@ -64,13 +68,31 @@ class EntityExtractorAgent:
         depth: int = 0,
         prompt_tracker: Optional[Any] = None,
         chunk_idx: int = 1,
-        total_chunks: int = 1
+        total_chunks: int = 1,
+        enable_filtering: Optional[bool] = None,
     ) -> Tuple[List[CharacterProfile], List[GlossaryItem], List[str]]:
         all_chars = list(bible.characters) + (known_characters or [])
         all_gloss = list(bible.glossary) + (known_glossary or [])
 
-        known_chars_str = "\n".join([f"- {c.original_name} -> {c.name} ({c.role}, {c.voice})" for c in all_chars]) or "None yet."
-        known_gloss_str = "\n".join([f"- {g.source} -> {g.target} ({g.category})" for g in all_gloss]) or "None yet."
+        should_filter = self.enable_entity_filtering if enable_filtering is None else enable_filtering
+        if should_filter:
+            active_chars = filter_characters_for_scene(
+                all_chars,
+                source_text=text,
+                fallback_on_empty=False,
+                max_characters=0
+            )
+            active_gloss = filter_glossary_for_scene(
+                all_gloss,
+                source_text=text,
+                fallback_on_empty=False
+            )
+        else:
+            active_chars = all_chars
+            active_gloss = all_gloss
+
+        known_chars_str = "\n".join([f"- {c.original_name} -> {c.name} ({c.role}, {c.voice})" for c in active_chars]) or "None yet."
+        known_gloss_str = "\n".join([f"- {g.source} -> {g.target} ({g.category})" for g in active_gloss]) or "None yet."
 
         resolved_genre = genre or getattr(bible, "genre", "general")
         skills_text = SkillRegistry.get_instance().build_prompt_section(
@@ -232,8 +254,11 @@ class EntityExtractorAgent:
         notify_callback: Optional[Any] = None,
         rate_limiter: Optional[Any] = None,
         stop_event: Optional[Any] = None,
+        enable_entity_filtering: Optional[bool] = None,
         **kwargs: Any
     ) -> Tuple[List[CharacterProfile], List[GlossaryItem], List[str]]:
+        should_filter = self.enable_entity_filtering if enable_entity_filtering is None else enable_entity_filtering
+
         if chunks is None and self.chunker and hasattr(self.chunker, "should_chunk") and self.chunker.should_chunk(source_text):
             chunks = self.chunker.split_lines(source_text)
 
@@ -246,6 +271,7 @@ class EntityExtractorAgent:
                 notify_callback=notify_callback,
                 rate_limiter=rate_limiter,
                 stop_event=stop_event,
+                enable_entity_filtering=should_filter,
                 **kwargs
             )
 
@@ -255,7 +281,8 @@ class EntityExtractorAgent:
             bible=bible,
             genre=genre,
             procedural_graph=procedural_graph,
-            prompt_tracker=kwargs.get("prompt_tracker") or getattr(self, "prompt_tracker", None)
+            prompt_tracker=kwargs.get("prompt_tracker") or getattr(self, "prompt_tracker", None),
+            enable_filtering=should_filter
         )
 
     def extract_chunked(
@@ -267,10 +294,13 @@ class EntityExtractorAgent:
         notify_callback: Optional[Any] = None,
         rate_limiter: Optional[Any] = None,
         stop_event: Optional[Any] = None,
+        enable_entity_filtering: Optional[bool] = None,
         **kwargs: Any
     ) -> Tuple[List[CharacterProfile], List[GlossaryItem], List[str]]:
         """Extracts entities across chapter chunks with rate limiting and deduplication."""
         from nousetsu.utils.rate_limiter import estimate_tokens
+
+        should_filter = self.enable_entity_filtering if enable_entity_filtering is None else enable_entity_filtering
 
         all_chars: List[CharacterProfile] = []
         all_terms: List[GlossaryItem] = []
@@ -309,7 +339,8 @@ class EntityExtractorAgent:
                 known_glossary=all_terms,
                 prompt_tracker=kwargs.get("prompt_tracker") or getattr(self, "prompt_tracker", None),
                 chunk_idx=chunk_idx,
-                total_chunks=total_chunks
+                total_chunks=total_chunks,
+                enable_filtering=should_filter
             )
             all_chars.extend(c_list)
             all_terms.extend(t_list)

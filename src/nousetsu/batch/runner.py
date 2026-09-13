@@ -42,6 +42,7 @@ class BatchRunner:
         chunk_overlap_lines: Optional[int] = None,
         enable_rag: Optional[bool] = None,
         enable_rag_reranker: Optional[bool] = None,
+        filter_extractor_entities: Optional[bool] = None,
         console: Optional[Console] = None
     ):
         self.repo = repository
@@ -141,6 +142,15 @@ class BatchRunner:
 
         resolved_rag = enable_rag if enable_rag is not None else getattr(cfg, "enable_rag", True)
         resolved_reranker = enable_rag_reranker if enable_rag_reranker is not None else getattr(cfg, "enable_rag_reranker", True)
+        resolved_filter_extractor = (
+            filter_extractor_entities
+            if filter_extractor_entities is not None
+            else (
+                cfg.get_filter_extractor_entities()
+                if hasattr(cfg, "get_filter_extractor_entities")
+                else getattr(cfg, "filter_extractor_entities", True)
+            )
+        )
 
         self.rate_limiter = SlidingWindowRateLimiter(max_tpm=resolved_tpm, max_rpm=resolved_rpm)
         self.workflow = NovelTranslationWorkflow(
@@ -168,7 +178,8 @@ class BatchRunner:
             enable_rag_reranker=resolved_reranker,
             rag_reranker_model=default_agent_model if is_mock else (cfg.get_rag_reranker_model() if hasattr(cfg, "get_rag_reranker_model") else getattr(cfg, "rag_reranker_model", "gemini-3.5-flash-lite")),
             traces_dir=self.repo.traces_dir,
-            enable_patch_polishing=getattr(cfg, "enable_patch_polishing", True)
+            enable_patch_polishing=getattr(cfg, "enable_patch_polishing", True),
+            filter_extractor_entities=resolved_filter_extractor
         )
         self.rag_engine = self.workflow.rag_engine
         self.auto_update_bible = auto_update_bible if auto_update_bible is not None else cfg.auto_update_bible
