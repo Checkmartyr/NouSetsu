@@ -2,11 +2,13 @@
 import json
 import logging
 import re
+import time
 from typing import Any, List, Optional, Tuple
 from langchain_core.messages import HumanMessage, SystemMessage
 from nousetsu.agents.llm import extract_text_from_message, extract_usage_from_message, get_llm
 from nousetsu.models.bible import CharacterProfile, GlossaryItem, NovelBible
 from nousetsu.models.metadata import QualityAudit, TokenUsage
+from nousetsu.models.trace import PipelineStage
 from nousetsu.prompts.templates import CRITIQUE_SYSTEM_PROMPT
 from nousetsu.skills.registry import SkillRegistry
 from nousetsu.utils.character_filter import filter_characters_for_scene
@@ -43,6 +45,7 @@ class CritiqueAgent:
         self.subdivision_min_lines = subdivision_min_lines
         self.subdivision_max_depth = subdivision_max_depth
         self.subdivisions_count: int = 0
+        self.prompt_tracker: Optional[Any] = None
 
     @property
     def last_model_used(self) -> str:
@@ -116,7 +119,9 @@ class CritiqueAgent:
         chunk_idx: int = 1,
         total_chunks: int = 1,
         depth: int = 0,
-        rag_context: Optional[List[Any]] = None
+        rag_context: Optional[List[Any]] = None,
+        prompt_tracker: Optional[Any] = None,
+        iteration: int = 1
     ) -> Tuple[QualityAudit, str]:
         # Filter glossary to terms actually present in this chapter to avoid prompt bloat
         eval_glossary = filter_glossary_for_scene(
@@ -171,13 +176,32 @@ class CritiqueAgent:
             f"### Draft Translation ({bible.target_language}):\n{draft_text[:50000]}"
         )
 
+        tracker = prompt_tracker or getattr(self, "prompt_tracker", None)
+        t0 = time.time()
         try:
             response = self.llm.invoke([
                 SystemMessage(content=sys_msg),
                 HumanMessage(content=user_content)
             ])
+            duration = time.time() - t0
             self.last_usage = extract_usage_from_message(response)
         except Exception as e:
+            duration = time.time() - t0
+            if tracker:
+                tracker.record_error(
+                    stage=PipelineStage.CRITIQUE,
+                    agent="critic",
+                    system_prompt=sys_msg,
+                    user_prompt=user_content,
+                    model=getattr(self, "last_model_used", self.model_name),
+                    err=e,
+                    duration_seconds=duration,
+                    chunk_index=chunk_idx,
+                    total_chunks=total_chunks,
+                    depth=depth,
+                    iteration=iteration,
+                    status="safety_blocked" if is_safety_block_exception(e) else "error"
+                )
             if is_safety_block_exception(e):
                 can_sub = (
                     self.enable_recursive_subdivision
@@ -205,7 +229,9 @@ class CritiqueAgent:
                             chunk_idx=chunk_idx,
                             total_chunks=total_chunks,
                             depth=depth + 1,
-                            rag_context=rag_context
+                            rag_context=rag_context,
+                            prompt_tracker=tracker,
+                            iteration=iteration
                         )
                         left_usage = self.last_usage
                         audit_right, notes_right = self._evaluate_single(
@@ -218,7 +244,9 @@ class CritiqueAgent:
                             chunk_idx=chunk_idx,
                             total_chunks=total_chunks,
                             depth=depth + 1,
-                            rag_context=rag_context
+                            rag_context=rag_context,
+                            prompt_tracker=tracker,
+                            iteration=iteration
                         )
                         self.last_usage = left_usage.add(self.last_usage)
                         combined_fid = round((audit_left.fidelity_score + audit_right.fidelity_score) / 2.0, 1)
@@ -284,6 +312,30 @@ class CritiqueAgent:
                 audit.warnings.append("Critique JSON could not be parsed; conservative failing scores assigned.")
                 critique_notes = "Critique response malformed. Review prose for rhythm, zero-pronoun clarity, and verify proper nouns."
 
+        if tracker:
+            tracker.record(
+                stage=PipelineStage.CRITIQUE,
+                agent="critic",
+                system_prompt=sys_msg,
+                user_prompt=user_content,
+                raw_output=raw_content,
+                parsed_output={
+                    "fidelity_score": audit.fidelity_score,
+                    "style_score": audit.style_score,
+                    "glossary_compliance_pct": audit.glossary_compliance_pct,
+                    "passed": audit.passed,
+                    "warnings_count": len(audit.warnings),
+                    "critique_notes_preview": critique_notes[:200]
+                },
+                model=getattr(self, "last_model_used", self.model_name),
+                token_usage=self.last_usage,
+                duration_seconds=duration,
+                chunk_index=chunk_idx,
+                total_chunks=total_chunks,
+                depth=depth,
+                iteration=iteration
+            )
+
         return audit, critique_notes
 
     def evaluate_chunked(
@@ -344,7 +396,9 @@ class CritiqueAgent:
                 genre=genre,
                 chunk_idx=chunk_idx,
                 total_chunks=total_chunks,
-                rag_context=rag_context
+                rag_context=rag_context,
+                prompt_tracker=kwargs.get("prompt_tracker") or getattr(self, "prompt_tracker", None),
+                iteration=kwargs.get("iteration", 1)
             )
             fidelity_scores.append(chunk_audit.fidelity_score)
             style_scores.append(chunk_audit.style_score)
@@ -450,7 +504,9 @@ class CritiqueAgent:
             active_characters=active_characters,
             active_glossary=active_glossary,
             genre=genre,
-            rag_context=rag_context
+            rag_context=rag_context,
+            prompt_tracker=kwargs.get("prompt_tracker") or getattr(self, "prompt_tracker", None),
+            iteration=kwargs.get("iteration", 1)
         )
 
         # Programmatic check only against glossary terms that actually appeared in the source text

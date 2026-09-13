@@ -14,6 +14,7 @@ from nousetsu.agents.drafter import ContextAwareDrafterAgent
 from nousetsu.agents.extractor import EntityExtractorAgent
 from nousetsu.agents.llm import invoke_with_retry
 from nousetsu.agents.polisher import PolishingAgent
+from nousetsu.analysis.tracker import PromptTracker
 from nousetsu.models.bible import ChapterSummary, NovelBible
 from nousetsu.models.exceptions import BatchStoppedException
 from nousetsu.models.metadata import PipelineStage, StageStatus, StepTokenUsage, TokenUsage
@@ -58,8 +59,14 @@ class NovelTranslationWorkflow:
         embedding_client: Optional[Any] = None,
         enable_rag_reranker: bool = True,
         rag_reranker_model: str = "gemini-3.5-flash-lite",
-        reranker: Optional[Any] = None
+        reranker: Optional[Any] = None,
+        traces_dir: Optional[Path] = None,
+        prompt_tracker: Optional[PromptTracker] = None,
+        enable_patch_polishing: bool = True
     ):
+        self.traces_dir = traces_dir
+        self.prompt_tracker = prompt_tracker
+        self.enable_patch_polishing = enable_patch_polishing
         effective_model = model_name or os.environ.get("NOVEL_MODEL") or os.environ.get("DEFAULT_MODEL") or "gemini-3.1-flash-lite"
         self.model_name = effective_model
         is_mock = effective_model.startswith("mock") or effective_model.startswith("test")
@@ -269,7 +276,8 @@ class NovelTranslationWorkflow:
             notify_callback=lambda msg: self._notify(PipelineStage.EXTRACTION, msg, 15.0),
             rate_limiter=self.rate_limiter,
             estimated_tokens=est_extract,
-            stop_event=self.stop_event
+            stop_event=self.stop_event,
+            prompt_tracker=self.prompt_tracker
         )
         
         all_chars = list(state.novel_bible.characters) + new_chars
@@ -302,10 +310,11 @@ class NovelTranslationWorkflow:
 
         return {
             "current_stage": PipelineStage.EXTRACTION,
-            "extracted_characters": new_chars,
-            "extracted_terms": new_terms,
             "active_characters": all_chars,
             "active_glossary": all_glossary,
+            "extracted_characters": new_chars,
+            "extracted_terms": new_terms,
+            "active_terms_in_chapter": active_terms,
             "active_skills": updated_skills,
             "step_token_records": updated_token_records,
             "safety_fallbacks_used": total_safety_used,
@@ -399,7 +408,8 @@ class NovelTranslationWorkflow:
             rate_limiter=self.rate_limiter,
             estimated_tokens=est_draft,
             stop_event=self.stop_event,
-            rag_results=rag_hits
+            rag_results=rag_hits,
+            prompt_tracker=self.prompt_tracker
         )
 
         draft_duration = round(time.time() - step_start, 2)
@@ -532,7 +542,9 @@ class NovelTranslationWorkflow:
             notify_callback=lambda msg: self._notify(PipelineStage.CRITIQUE, msg, 60.0),
             rate_limiter=self.rate_limiter,
             estimated_tokens=est_critique,
-            stop_event=self.stop_event
+            stop_event=self.stop_event,
+            prompt_tracker=self.prompt_tracker,
+            iteration=current_iter
         )
 
         # Best-candidate regression guard
@@ -703,6 +715,12 @@ class NovelTranslationWorkflow:
         else:
             est_polish = estimate_tokens(base_text) * 2 + 1000
 
+        can_use_patch = False
+        if self.enable_patch_polishing and not is_initial_draft and state.quality_audit:
+            has_lang_reg = any("LANGUAGE REGRESSION" in str(w) for w in state.quality_audit.warnings)
+            if state.quality_audit.fidelity_score >= 8.0 and not has_lang_reg:
+                can_use_patch = True
+
         polished = invoke_with_retry(
             self.polisher.polish,
             draft_text=base_text,
@@ -715,7 +733,10 @@ class NovelTranslationWorkflow:
             notify_callback=lambda msg: self._notify(PipelineStage.POLISHING, msg, 80.0),
             rate_limiter=self.rate_limiter,
             estimated_tokens=est_polish,
-            stop_event=self.stop_event
+            stop_event=self.stop_event,
+            prompt_tracker=self.prompt_tracker,
+            iteration=display_iter,
+            use_patch=can_use_patch
         )
 
         # Language regression guard on polished output:
@@ -824,7 +845,8 @@ class NovelTranslationWorkflow:
             notify_callback=lambda msg: self._notify(PipelineStage.CHRONICLING, msg, 95.0),
             rate_limiter=self.rate_limiter,
             estimated_tokens=est_chronicle,
-            stop_event=self.stop_event
+            stop_event=self.stop_event,
+            prompt_tracker=self.prompt_tracker
         )
 
         current_folder = Path(state.source_file).parent.name if state.source_file else None
@@ -857,6 +879,13 @@ class NovelTranslationWorkflow:
             if fallback_warn not in final_audit.warnings:
                 final_audit.warnings.append(fallback_warn)
 
+        trace_file_path = None
+        prompt_trace_count = 0
+        if self.prompt_tracker:
+            doc = self.prompt_tracker.finalize()
+            trace_file_path = str(self.prompt_tracker.json_path)
+            prompt_trace_count = len(doc.traces)
+
         metadata = self.chronicler.assemble_metadata(
             chapter_id=state.chapter_id,
             chapter_num=state.chapter_num,
@@ -876,7 +905,11 @@ class NovelTranslationWorkflow:
             status=StageStatus.COMPLETED,
             step_usage=all_token_records,
             safety_fallbacks_used=total_safety_used,
-            subdivisions_count=total_subdivisions
+            subdivisions_count=total_subdivisions,
+            extracted_characters=state.extracted_characters,
+            extracted_terms=state.extracted_terms,
+            trace_file=trace_file_path,
+            prompt_trace_count=prompt_trace_count
         )
 
         updated_skills = dict(state.active_skills)
@@ -903,7 +936,8 @@ class NovelTranslationWorkflow:
             "active_skills": updated_skills,
             "step_token_records": all_token_records,
             "safety_fallbacks_used": total_safety_used,
-            "subdivisions_count": total_subdivisions
+            "subdivisions_count": total_subdivisions,
+            "prompt_traces": self.prompt_tracker.traces if self.prompt_tracker else []
         }
 
     def _index_chapter_into_rag(
@@ -977,11 +1011,26 @@ class NovelTranslationWorkflow:
         self.stop_event = stop_event
         self.current_stage = PipelineStage.NONE
 
+        # Setup PromptTracker
+        folder = initial_state.folder
+        if not folder and initial_state.source_file:
+            folder = Path(initial_state.source_file).parent.name
+
+        traces_dir = self.traces_dir or Path(".novel/traces")
+        self.prompt_tracker = PromptTracker(
+            traces_dir=traces_dir,
+            chapter_id=initial_state.chapter_id,
+            chapter_num=initial_state.chapter_num,
+            folder=folder
+        )
+
         for agent_inst in [self.extractor, self.drafter, self.critic, self.polisher, self.chronicler]:
             if hasattr(agent_inst, "safety_fallbacks_used"):
                 agent_inst.safety_fallbacks_used = 0
             if hasattr(agent_inst, "subdivisions_count"):
                 agent_inst.subdivisions_count = 0
+            if hasattr(agent_inst, "prompt_tracker"):
+                agent_inst.prompt_tracker = self.prompt_tracker
 
         # Auto-resolve genre if general or unspecified
         if not initial_state.genre or initial_state.genre == "general":
@@ -1002,6 +1051,11 @@ class NovelTranslationWorkflow:
         final_state_dict = self.graph.invoke(initial_state)
         result = TranslationState.model_validate(final_state_dict)
         self.last_state = result
+        if self.prompt_tracker:
+            result.prompt_traces = self.prompt_tracker.traces
+            if result.metadata:
+                result.metadata.trace_file = str(self.prompt_tracker.json_path)
+                result.metadata.prompt_trace_count = len(self.prompt_tracker.traces)
         if result.metadata:
             result.metadata.stats.duration_seconds = round(time.time() - start_time, 2)
         self._notify(PipelineStage.CHRONICLING, "Chapter translation completed!", 100.0)

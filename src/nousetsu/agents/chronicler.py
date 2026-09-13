@@ -2,6 +2,7 @@
 import json
 import logging
 import re
+import time
 from typing import Any, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -35,6 +36,7 @@ class ChroniclerAgent:
         self.llm = get_llm(model_name=model_name, fallback_model=fallback_model, temperature=0.2)
         self.last_usage: TokenUsage = TokenUsage()
         self.safety_fallbacks_used: int = 0
+        self.prompt_tracker: Optional[Any] = None
 
     @property
     def last_model_used(self) -> str:
@@ -77,13 +79,29 @@ class ChroniclerAgent:
             rag_context_section=rag_section
         )
 
+        tracker = kwargs.get("prompt_tracker") or getattr(self, "prompt_tracker", None)
+        user_msg = f"Analyze and summarize this translated novel chapter for story lore and plot events:\n{translated_text[:12000]}"
+        t0 = time.time()
         try:
             response = self.llm.invoke([
                 SystemMessage(content=sys_msg),
-                HumanMessage(content=f"Analyze and summarize this translated novel chapter for story lore and plot events:\n{translated_text[:12000]}")
+                HumanMessage(content=user_msg)
             ])
+            duration = time.time() - t0
             self.last_usage = extract_usage_from_message(response)
         except Exception as e:
+            duration = time.time() - t0
+            if tracker:
+                tracker.record_error(
+                    stage=PipelineStage.CHRONICLING,
+                    agent="chronicler",
+                    system_prompt=sys_msg,
+                    user_prompt=user_msg,
+                    model=getattr(self, "last_model_used", self.model_name),
+                    err=e,
+                    duration_seconds=duration,
+                    status="safety_blocked" if is_safety_block_exception(e) else "error"
+                )
             if is_safety_block_exception(e):
                 self.safety_fallbacks_used += 1
                 logger.warning("⚠️ Chronicler blocked by safety filter on sensitive scene - assigning default chapter summary.")
@@ -100,6 +118,7 @@ class ChroniclerAgent:
         json_match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", raw_content)
         content_to_parse = json_match.group(1) if json_match else raw_content
 
+        summary = None
         try:
             parsed = json.loads(content_to_parse)
             if "chapter_summary" in parsed and isinstance(parsed["chapter_summary"], dict):
@@ -109,17 +128,37 @@ class ChroniclerAgent:
                     chap_data["arc_update"] = parsed["arc_update"]
                 if "story_update" in parsed and not chap_data.get("story_update"):
                     chap_data["story_update"] = parsed["story_update"]
-                return ChapterSummary.model_validate(chap_data)
-            parsed["chapter_num"] = chapter_num
-            return ChapterSummary.model_validate(parsed)
+                summary = ChapterSummary.model_validate(chap_data)
+            else:
+                parsed["chapter_num"] = chapter_num
+                summary = ChapterSummary.model_validate(parsed)
         except Exception:
-            return ChapterSummary(
+            summary = ChapterSummary(
                 chapter_num=chapter_num,
                 title=chapter_title or f"Chapter {chapter_num}",
                 synopsis=f"Events of Chapter {chapter_num} concluded.",
                 key_events=["Chapter concluded."],
                 character_state_changes=[]
             )
+
+        if tracker:
+            tracker.record(
+                stage=PipelineStage.CHRONICLING,
+                agent="chronicler",
+                system_prompt=sys_msg,
+                user_prompt=user_msg,
+                raw_output=raw_content,
+                parsed_output={
+                    "synopsis": summary.synopsis[:200],
+                    "key_events_count": len(summary.key_events),
+                    "character_state_changes_count": len(summary.character_state_changes)
+                },
+                model=getattr(self, "last_model_used", self.model_name),
+                token_usage=self.last_usage,
+                duration_seconds=duration
+            )
+
+        return summary
 
     def assemble_metadata(
         self,
@@ -141,11 +180,15 @@ class ChroniclerAgent:
         status: StageStatus = StageStatus.COMPLETED,
         step_usage: Optional[List[StepTokenUsage]] = None,
         safety_fallbacks_used: int = 0,
-        subdivisions_count: int = 0
+        subdivisions_count: int = 0,
+        extracted_characters: Optional[List[CharacterProfile]] = None,
+        extracted_terms: Optional[List[GlossaryItem]] = None,
+        trace_file: Optional[str] = None,
+        prompt_trace_count: int = 0
     ) -> ChapterMetadata:
         artifacts = StageArtifacts(
-            extracted_terms=active_glossary,
-            extracted_characters=active_characters,
+            extracted_terms=extracted_terms if extracted_terms is not None else [],
+            extracted_characters=extracted_characters if extracted_characters is not None else [],
             draft_text=draft_text,
             critique_notes=critique_notes,
             polished_text=polished_text,
@@ -192,7 +235,9 @@ class ChroniclerAgent:
         present_chars = filter_characters_for_scene(
             characters=active_characters,
             source_text=source_text,
-            target_text=final_text
+            target_text=final_text,
+            always_include_roles=set(),
+            fallback_on_empty=False
         )
 
         present_glossary = filter_glossary_for_scene(
@@ -213,5 +258,7 @@ class ChroniclerAgent:
             quality_audit=quality_audit,
             entities_present=[c.name for c in present_chars],
             glossary_terms_applied=present_glossary,
-            paragraph_alignments=[]
+            paragraph_alignments=[],
+            trace_file=trace_file,
+            prompt_trace_count=prompt_trace_count
         )

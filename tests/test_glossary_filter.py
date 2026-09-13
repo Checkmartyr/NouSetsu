@@ -125,3 +125,10 @@ def test_filter_glossary_for_scene_fallback_and_no_fallback():
     assert len(filter_glossary_for_scene(glossary, source_text=text, fallback_on_empty=True)) == 2
     # Without fallback: returns empty list
     assert len(filter_glossary_for_scene(glossary, source_text=text, fallback_on_empty=False)) == 0
+
+
+def test_is_term_present_cjk_adjacent_latin():
+    # Latin word adjacent to CJK characters should still match on word boundaries
+    assert is_term_present("Sword", "彼はSwordを持って立ち上がった。")
+    # But should still avoid substring overlaps with longer English words
+    assert not is_term_present("Sword", "The broadsword was heavy.")

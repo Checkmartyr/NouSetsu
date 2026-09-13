@@ -169,6 +169,8 @@ class ChapterMetadata(BaseModel):
     glossary_terms_applied: List[GlossaryItem] = Field(default_factory=list)
     paragraph_alignments: List[ParagraphAlignment] = Field(default_factory=list)
     review_status: str = Field(default="draft", description="draft, reviewed, approved")
+    trace_file: Optional[str] = Field(default=None, description="Relative path to prompt/output trace document")
+    prompt_trace_count: int = Field(default=0, description="Total number of LLM interactions recorded for this chapter")
 
 
 class ProjectMetadataDocument(BaseModel):

@@ -1,16 +1,19 @@
+from __future__ import annotations
 """Migration engine to backfill existing novel data into Hybrid Search RAG (LoreVault)."""
 import logging
 import re
 import time
 from pathlib import Path
-from typing import Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Callable, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 from nousetsu.models.bible import ArcSummary, ChapterSummary, NovelBible
 from nousetsu.rag.embeddings import EmbeddingClient
 from nousetsu.rag.engine import HybridSearchEngine
 from nousetsu.rag.models import DocumentType, LoreDocument
-from nousetsu.storage.repository import NovelRepository
+
+if TYPE_CHECKING:
+    from nousetsu.storage.repository import NovelRepository
 
 logger = logging.getLogger(__name__)
 

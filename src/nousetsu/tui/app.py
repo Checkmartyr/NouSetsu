@@ -119,6 +119,7 @@ class NovelAgentApp(App):
         Binding("n", "open_new_project", "New Project"),
         Binding("s", "open_settings", "Settings"),
         Binding("m", "toggle_token_tab", "Tokens"),
+        Binding("w", "launch_web_visualizer", "Web Traces"),
     ]
 
     def __init__(
@@ -307,6 +308,38 @@ class NovelAgentApp(App):
 
     def action_open_project_selector(self) -> None:
         self.push_screen(ProjectSelectorModal(self))
+
+    def action_launch_web_visualizer(self) -> None:
+        """Launch or focus the Nousetsu Web Trace Visualizer."""
+        import threading
+        import urllib.request
+        import webbrowser
+
+        self.registry.set_last_active_project(self.project_dir)
+        port = 5173
+        url = f"http://localhost:{port}"
+
+        running = False
+        try:
+            req = urllib.request.Request(f"{url}/api/sync-state")
+            with urllib.request.urlopen(req, timeout=0.5) as resp:
+                if resp.status == 200:
+                    running = True
+        except Exception:
+            running = False
+
+        if running:
+            webbrowser.open(url)
+            self.notify(f"Opened Web Visualizer for {self.project_dir.name} nya~!", severity="information")
+        else:
+            from nousetsu.cli.web_server import run_web_server
+            t = threading.Thread(
+                target=run_web_server,
+                kwargs={"port": port, "host": "127.0.0.1", "open_browser": True},
+                daemon=True
+            )
+            t.start()
+            self.notify(f"Started Web Visualizer on {url} nya~!", severity="information")
 
     def action_open_folder_selector(self) -> None:
         self.push_screen(FolderSelectModal(self))

@@ -19,6 +19,7 @@ from nousetsu.models.metadata import (
 )
 from nousetsu.models.config import ProjectConfig
 from nousetsu.models.state import TranslationState
+from nousetsu.models.trace import AgentPromptTrace, ChapterTraceDocument
 
 __all__ = [
     "ProjectConfig",
@@ -37,4 +38,6 @@ __all__ = [
     "QualityAudit",
     "ChapterMetadata",
     "TranslationState",
+    "AgentPromptTrace",
+    "ChapterTraceDocument",
 ]

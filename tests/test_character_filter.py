@@ -174,3 +174,36 @@ def test_critic_uses_scene_filtered_characters():
     assert "Protagonist" in sys_prompt
     assert "Target Person" in sys_prompt
     assert "Ignored Person" not in sys_prompt
+
+
+def test_character_filter_empty_fallback_flag():
+    chars = [
+        CharacterProfile(name="Char 1", original_name="名前1", role="supporting"),
+        CharacterProfile(name="Char 2", original_name="名前2", role="supporting"),
+    ]
+    # No matches and fallback_on_empty=False returns empty list
+    assert filter_characters_for_scene(chars, source_text="Unrelated text", fallback_on_empty=False) == []
+    # No matches and fallback_on_empty=True returns up to max_characters
+    assert len(filter_characters_for_scene(chars, source_text="Unrelated text", fallback_on_empty=True)) == 2
+
+
+def test_character_filter_always_include_roles_empty_set():
+    chars = [
+        CharacterProfile(name="Hero", original_name="主人公", role="protagonist"),
+        CharacterProfile(name="Friend", original_name="友人", role="supporting"),
+    ]
+    # Passing always_include_roles=set() disables core role inclusion for strict text auditing
+    res = filter_characters_for_scene(chars, source_text="友人だけが現れた。", always_include_roles=set())
+    names = [c.name for c in res]
+    assert "Friend" in names
+    assert "Hero" not in names
+
+
+def test_character_filter_max_characters_capping():
+    chars = [
+        CharacterProfile(name=f"Char_{i}", original_name=f"名前_{i}", role="protagonist")
+        for i in range(25)
+    ]
+    # With 25 core characters, max_characters=10 should cap the return list to 10
+    res = filter_characters_for_scene(chars, source_text="Some text", max_characters=10)
+    assert len(res) == 10

@@ -16,6 +16,7 @@ def filter_characters_for_scene(
     source_text: Optional[str] = None,
     target_text: Optional[str] = None,
     always_include_roles: Optional[Set[str]] = None,
+    fallback_on_empty: bool = True,
     max_characters: int = 15,
 ) -> List[CharacterProfile]:
     """Filters character roster to characters relevant to a specific scene or chunk.
@@ -28,13 +29,14 @@ def filter_characters_for_scene(
     4. Characters whose `aliases` appear in the source or target text.
 
     Fallback:
-    If zero characters match, returns the first `max_characters` from the input roster
-    to ensure the model still receives a valid character roster for general scene context.
+    If zero characters match and fallback_on_empty is True, returns the first `max_characters`
+    from the input roster to ensure the model still receives a valid character roster for
+    general scene context. If fallback_on_empty is False, returns an empty list.
     """
     if not characters:
         return []
 
-    core_roles = {r.lower() for r in (always_include_roles or CORE_ROLES)}
+    core_roles = {r.lower() for r in always_include_roles} if always_include_roles is not None else CORE_ROLES
 
     # Build lower-cased search corpus
     search_corpus = ""
@@ -45,7 +47,7 @@ def filter_characters_for_scene(
 
     # If no text was provided, fallback to top characters
     if not search_corpus.strip():
-        return characters[:max_characters]
+        return characters[:max_characters] if fallback_on_empty else []
 
     core_matches: List[CharacterProfile] = []
     scene_matches: List[CharacterProfile] = []
@@ -86,6 +88,6 @@ def filter_characters_for_scene(
 
     combined = core_matches + scene_matches
     if not combined:
-        return characters[:max_characters]
+        return characters[:max_characters] if fallback_on_empty else []
 
-    return combined
+    return combined[:max_characters] if max_characters > 0 else combined

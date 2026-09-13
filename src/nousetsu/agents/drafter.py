@@ -1,11 +1,13 @@
 """Context-aware novelistic translation drafter agent."""
 import logging
+import time
 from typing import Any, Callable, List, Optional
 from langchain_core.messages import HumanMessage, SystemMessage
 from nousetsu.agents.llm import extract_text_from_message, extract_usage_from_message, get_llm
 from nousetsu.graph.procedural import ProceduralGraph, get_default_drafter_graph
 from nousetsu.models.bible import CharacterProfile, ChapterSummary, GlossaryItem, NovelBible
 from nousetsu.models.metadata import TokenUsage
+from nousetsu.models.trace import PipelineStage
 from nousetsu.prompts.templates import DRAFTING_SYSTEM_PROMPT
 from nousetsu.skills.registry import SkillRegistry
 from nousetsu.utils.character_filter import filter_characters_for_scene
@@ -45,6 +47,7 @@ class ContextAwareDrafterAgent:
         self.subdivision_min_lines: int = subdivision_min_lines
         self.subdivision_max_depth: int = subdivision_max_depth
         self.subdivisions_count: int = 0
+        self.prompt_tracker: Optional[Any] = None
 
     @property
     def last_model_used(self) -> str:
@@ -114,7 +117,8 @@ class ContextAwareDrafterAgent:
         bible: NovelBible,
         active_glossary: List[GlossaryItem],
         genre: Optional[str] = None,
-        polisher: Optional[Any] = None
+        polisher: Optional[Any] = None,
+        **kwargs: Any
     ) -> str:
         """Translate blocked sensitive chunk using Google Translate fallback and attempt literary polish."""
         self.safety_fallbacks_used += 1
@@ -128,6 +132,9 @@ class ContextAwareDrafterAgent:
             return gt_text
 
         active_pol = polisher or self._get_polisher()
+        tracker = kwargs.get("prompt_tracker") or getattr(self, "prompt_tracker", None)
+        if tracker and hasattr(active_pol, "prompt_tracker"):
+            setattr(active_pol, "prompt_tracker", tracker)
         try:
             polished = active_pol.polish(
                 draft_text=gt_text,
@@ -135,7 +142,8 @@ class ContextAwareDrafterAgent:
                 active_glossary=active_glossary,
                 bible=bible,
                 genre=genre,
-                source_text=None
+                source_text=None,
+                prompt_tracker=tracker
             )
             return polished if (polished and polished.strip()) else gt_text
         except Exception as pe:
@@ -292,7 +300,7 @@ class ContextAwareDrafterAgent:
             max_characters=15
         )
         chars_str = "\n".join([
-            f"- {c.name} (Original: {c.original_name}, Gender: {c.gender}, Role: {c.role}): Voice={c.voice}"
+            f"- {c.name} ({c.original_name} / {c.gender} / {c.role}): Voice={c.voice}"
             for c in eval_characters
         ]) or "No explicit character cards registered."
 
@@ -304,7 +312,7 @@ class ContextAwareDrafterAgent:
         )
 
         gloss_str = "\n".join([
-            f"- '{g.source}' MUST be translated as '{g.target}' ({g.category})"
+            f"- '{g.source}' -> '{g.target}' ({g.category})"
             for g in eval_glossary
         ]) or "No specific glossary terms."
 
@@ -324,7 +332,7 @@ class ContextAwareDrafterAgent:
         # Procedural Graph guidance (Lu et al., arXiv:2609.09153v1)
         active_pg = procedural_graph or self.procedural_graph
         active_node = "Scene_Init" if chunk_idx == 1 else "Boundary_Continuity"
-        guidance_text = active_pg.to_compact_guidance(active_node, max_hops=2) if active_pg else ""
+        guidance_text = active_pg.to_compact_guidance(active_node, max_hops=1) if active_pg else ""
         procedural_section = f"\n{guidance_text}\n" if guidance_text else ""
 
         sys_msg = DRAFTING_SYSTEM_PROMPT.format(
@@ -354,12 +362,52 @@ class ContextAwareDrafterAgent:
         user_parts.append(f"{chunk_header}{chunk_text}")
         user_content = "\n\n".join(user_parts)
 
-        response = self.llm.invoke([
-            SystemMessage(content=sys_msg),
-            HumanMessage(content=user_content)
-        ])
-        self.last_usage = self.last_usage.add(extract_usage_from_message(response))
-        return extract_text_from_message(response.content)
+        tracker = kwargs.get("prompt_tracker") or getattr(self, "prompt_tracker", None)
+        depth = kwargs.get("depth", 0)
+        t0 = time.time()
+        try:
+            response = self.llm.invoke([
+                SystemMessage(content=sys_msg),
+                HumanMessage(content=user_content)
+            ])
+            duration = time.time() - t0
+            usage = extract_usage_from_message(response)
+            self.last_usage = self.last_usage.add(usage)
+            raw_text = extract_text_from_message(response.content)
+            if tracker:
+                tracker.record(
+                    stage=PipelineStage.DRAFTING,
+                    agent="drafter",
+                    system_prompt=sys_msg,
+                    user_prompt=user_content,
+                    raw_output=raw_text,
+                    parsed_output=None,
+                    model=getattr(self, "last_model_used", self.model_name),
+                    token_usage=usage,
+                    duration_seconds=duration,
+                    chunk_index=chunk_idx,
+                    total_chunks=total_chunks,
+                    depth=depth,
+                    metadata={"preceding_context_len": len(preceding_context)}
+                )
+            return raw_text
+        except Exception as e:
+            duration = time.time() - t0
+            if tracker:
+                tracker.record_error(
+                    stage=PipelineStage.DRAFTING,
+                    agent="drafter",
+                    system_prompt=sys_msg,
+                    user_prompt=user_content,
+                    model=getattr(self, "last_model_used", self.model_name),
+                    err=e,
+                    duration_seconds=duration,
+                    chunk_index=chunk_idx,
+                    total_chunks=total_chunks,
+                    depth=depth,
+                    status="safety_blocked" if is_safety_block_exception(e) else "error"
+                )
+            raise
 
     def _draft_with_recursive_subdivision(
         self,
@@ -389,6 +437,7 @@ class ContextAwareDrafterAgent:
                 chunk_idx=chunk_idx,
                 total_chunks=total_chunks,
                 procedural_graph=procedural_graph,
+                depth=depth,
                 **kwargs
             )
         except Exception as e:
@@ -445,18 +494,20 @@ class ContextAwareDrafterAgent:
                 return "\n\n".join(draft_parts)
 
             # Base case: reached minimum lines or max depth -> isolated sensitive snippet
-            relevant_glossary = [
-                item for item in active_glossary
-                if item.source.lower() in chunk_text.lower()
-            ]
-            eval_glossary = relevant_glossary if relevant_glossary else (active_glossary[:15] if active_glossary else [])
+            eval_glossary = filter_glossary_for_scene(
+                glossary=active_glossary,
+                source_text=chunk_text,
+                fallback_on_empty=True,
+                max_fallback=15
+            )
             resolved_genre = genre or getattr(bible, "genre", "general")
             return self._handle_safety_fallback(
                 source_chunk_text=chunk_text,
                 bible=bible,
                 active_glossary=eval_glossary,
                 genre=resolved_genre,
-                polisher=polisher
+                polisher=polisher,
+                **kwargs
             )
 
     def _draft_single_chunk(

@@ -9,6 +9,7 @@ import yaml
 from nousetsu.models.bible import ArcSummary, ChapterSummary, CharacterProfile, GlossaryItem, NovelBible, StyleGuide
 from nousetsu.models.config import ProjectConfig
 from nousetsu.models.metadata import ChapterMetadata, CheckpointData, PipelineStage, ProjectMetadataDocument, StageStatus
+from nousetsu.models.trace import ChapterTraceDocument
 from nousetsu.utils.language import detect_language_from_dir
 
 
@@ -178,6 +179,7 @@ class NovelRepository:
         self.arcs_dir = self.summaries_dir / "arcs"
         self.rag_dir = self.novel_dir / "rag"
         self.rag_db_path = self.rag_dir / "lore.db"
+        self.traces_dir = self.novel_dir / "traces"
 
     def get_rag_engine(self) -> Any:
         """Get or create the HybridSearchEngine for this project."""
@@ -697,3 +699,78 @@ class NovelRepository:
         doc.chapters[stem] = metadata
         self.save_project_metadata_doc(doc)
         return self.project_metadata_file_path()
+
+    def get_trace_file_path(self, chapter_num: int, folder: Optional[str] = None, ext: str = "json") -> Path:
+        """Return the path to a chapter's trace file (.json or .jsonl)."""
+        target_dir = self.traces_dir / folder if folder else self.traces_dir
+        return target_dir / f"chapter_{chapter_num:04d}.{ext}"
+
+    def load_chapter_traces(self, chapter_num: int, folder: Optional[str] = None) -> Optional[ChapterTraceDocument]:
+        """Load the consolidated ChapterTraceDocument for a chapter."""
+        from nousetsu.analysis.tracker import PromptTracker
+        if folder:
+            json_path = self.get_trace_file_path(chapter_num, folder, ext="json")
+            if json_path.exists():
+                return PromptTracker.load_from_json(json_path)
+            jsonl_path = self.get_trace_file_path(chapter_num, folder, ext="jsonl")
+            if jsonl_path.exists():
+                traces = PromptTracker.load_from_jsonl(jsonl_path)
+                if traces:
+                    return ChapterTraceDocument(
+                        chapter_id=f"chapter_{chapter_num:04d}",
+                        chapter_num=chapter_num,
+                        folder=folder,
+                        total_interactions=len(traces),
+                        total_duration_seconds=round(sum(t.duration_seconds for t in traces), 2),
+                        traces=traces
+                    )
+            return None
+
+        # folder is None: first check root traces_dir, then search across folder subdirectories
+        root_json = self.get_trace_file_path(chapter_num, ext="json")
+        if root_json.exists():
+            return PromptTracker.load_from_json(root_json)
+
+        if self.traces_dir.exists():
+            matching_json = list(self.traces_dir.rglob(f"chapter_{chapter_num:04d}.json"))
+            if matching_json:
+                return PromptTracker.load_from_json(matching_json[0])
+
+        root_jsonl = self.get_trace_file_path(chapter_num, ext="jsonl")
+        if root_jsonl.exists():
+            traces = PromptTracker.load_from_jsonl(root_jsonl)
+            if traces:
+                return ChapterTraceDocument(
+                    chapter_id=f"chapter_{chapter_num:04d}",
+                    chapter_num=chapter_num,
+                    folder=None,
+                    total_interactions=len(traces),
+                    total_duration_seconds=round(sum(t.duration_seconds for t in traces), 2),
+                    traces=traces
+                )
+
+        if self.traces_dir.exists():
+            matching_jsonl = list(self.traces_dir.rglob(f"chapter_{chapter_num:04d}.jsonl"))
+            if matching_jsonl:
+                traces = PromptTracker.load_from_jsonl(matching_jsonl[0])
+                if traces:
+                    found_folder = matching_jsonl[0].parent.name if matching_jsonl[0].parent != self.traces_dir else None
+                    return ChapterTraceDocument(
+                        chapter_id=f"chapter_{chapter_num:04d}",
+                        chapter_num=chapter_num,
+                        folder=found_folder,
+                        total_interactions=len(traces),
+                        total_duration_seconds=round(sum(t.duration_seconds for t in traces), 2),
+                        traces=traces
+                    )
+
+        return None
+
+    def list_chapter_traces(self, folder: Optional[str] = None) -> List[Path]:
+        """List all chapter trace documents (.json) available in the project."""
+        if not self.traces_dir.exists():
+            return []
+        target_dir = self.traces_dir / folder if folder else self.traces_dir
+        if not target_dir.exists():
+            return []
+        return sorted(target_dir.rglob("chapter_*.json"))

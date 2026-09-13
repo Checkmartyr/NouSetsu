@@ -1,10 +1,15 @@
 """CLI entry point for Novel Translation Agent."""
 import argparse
+import json
 import os
+import re
 import sys
 from pathlib import Path
 from rich.console import Console
+from rich.markdown import Markdown
 from rich.panel import Panel
+from rich.syntax import Syntax
+from rich.table import Table
 import dotenv
 from nousetsu import __version__
 from nousetsu.batch.runner import BatchRunner
@@ -456,6 +461,232 @@ def cmd_tui(args: argparse.Namespace) -> None:
     app.run()
 
 
+def cmd_traces(args: argparse.Namespace) -> None:
+    """Inspect, analyze, and export LLM prompt and output traces."""
+    project_dir = getattr(args, "project_dir", None)
+    repo = NovelRepository(project_dir) if project_dir else NovelRepository()
+    folder_arg = getattr(args, "folder", None)
+    chapter_arg = getattr(args, "chapter", None)
+
+    if chapter_arg is None:
+        # List all available traces
+        trace_files = repo.list_chapter_traces(folder=folder_arg)
+        if not trace_files:
+            # Also check for .jsonl streaming files
+            if repo.traces_dir.exists():
+                search_dir = repo.traces_dir / folder_arg if folder_arg else repo.traces_dir
+                if search_dir.exists():
+                    trace_files = sorted(search_dir.rglob("chapter_*.jsonl"))
+
+        if not trace_files:
+            console.print(Panel(
+                f"[yellow]No agent prompt traces found in [cyan]{repo.traces_dir}[/].[/]\n"
+                "Traces will be recorded automatically when running batch translations nya~!",
+                title="Prompt & Output Traces",
+                border_style="yellow"
+            ))
+            return
+
+        table = Table(title="🐾 Agent Prompt & Output Traces", border_style="cyan", show_header=True)
+        table.add_column("Folder", style="magenta")
+        table.add_column("File", style="cyan")
+        table.add_column("Chapter", justify="right", style="yellow")
+        table.add_column("Format", style="green")
+        table.add_column("Size", justify="right")
+        table.add_column("Interactions", justify="right")
+
+        for tf in trace_files:
+            rel_folder = tf.parent.name if tf.parent != repo.traces_dir else "-"
+            m = re.search(r"chapter_(\d+)", tf.stem)
+            chap_num_str = m.group(1) if m else "?"
+            fmt = "Consolidated JSON" if tf.suffix == ".json" else "Streaming JSONL"
+            size_kb = f"{tf.stat().st_size / 1024:.1f} KB"
+
+            interactions_str = "-"
+            if tf.suffix == ".json":
+                try:
+                    with open(tf, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                        interactions_str = str(data.get("total_interactions", len(data.get("traces", []))))
+                except Exception:
+                    pass
+            elif tf.suffix == ".jsonl":
+                try:
+                    with open(tf, "r", encoding="utf-8") as f:
+                        interactions_str = str(sum(1 for _ in f))
+                except Exception:
+                    pass
+
+            table.add_row(rel_folder, tf.name, chap_num_str, fmt, size_kb, interactions_str)
+
+        console.print(table)
+        console.print("\n[dim]Tip: Use [bold]nousetsu traces --chapter <NUM>[/] to inspect detailed prompts and outputs for a specific chapter nya~![/]\n")
+        return
+
+    # Parse chapter number
+    try:
+        chap_cleaned = str(chapter_arg).lower().replace("chapter_", "").replace("chapter", "").strip()
+        chap_num = int(chap_cleaned)
+    except ValueError:
+        console.print(f"[bold red]Invalid chapter number:[/] {chapter_arg}")
+        return
+
+    doc = repo.load_chapter_traces(chapter_num=chap_num, folder=folder_arg)
+    if not doc:
+        console.print(f"[bold red]No traces found for Chapter {chap_num}[/] (folder: {folder_arg or 'root'}).")
+        return
+
+    traces = doc.traces
+    if getattr(args, "agent", None):
+        agent_filter = args.agent.strip().lower()
+        traces = [t for t in traces if t.agent.lower() == agent_filter]
+    if getattr(args, "stage", None):
+        stage_filter = args.stage.strip().lower()
+        traces = [t for t in traces if (t.stage.value if hasattr(t.stage, "value") else str(t.stage)).lower() == stage_filter]
+
+    if getattr(args, "export", None):
+        export_path = Path(args.export)
+        export_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(export_path, "w", encoding="utf-8") as ef:
+            json.dump([t.model_dump() for t in traces], ef, indent=2, ensure_ascii=False)
+        console.print(f"[bold green]Successfully exported {len(traces)} traces to [cyan]{export_path}[/]![/]")
+        return
+
+    # Render summary table
+    summary_table = Table(
+        title=f"📜 Chapter {chap_num} Trace Log ({len(traces)} Interactions)",
+        border_style="magenta",
+        show_header=True
+    )
+    summary_table.add_column("#", justify="right", style="dim")
+    summary_table.add_column("Stage", style="cyan")
+    summary_table.add_column("Agent", style="bold yellow")
+    summary_table.add_column("Model", style="blue")
+    summary_table.add_column("Status", justify="center")
+    summary_table.add_column("Tokens (In/Out)", justify="right")
+    summary_table.add_column("Time", justify="right")
+    summary_table.add_column("Output Preview", style="italic")
+
+    for idx, tr in enumerate(traces, 1):
+        status_style = "green" if tr.status == "success" else ("yellow" if tr.status == "safety_blocked" else "red")
+        status_text = f"[{status_style}]{tr.status}[/]"
+        tok_str = f"{tr.token_usage.input_tokens:,} / {tr.token_usage.output_tokens:,}"
+        time_str = f"{tr.duration_seconds:.2f}s"
+        preview = (tr.raw_output or "").replace("\n", " ").strip()[:60]
+        if tr.parsed_output and isinstance(tr.parsed_output, dict):
+            preview = json.dumps(tr.parsed_output)[:60]
+        if tr.error_message:
+            preview = f"[red]{tr.error_message[:60]}[/]"
+
+        summary_table.add_row(
+            str(idx),
+            tr.stage.value if hasattr(tr.stage, "value") else str(tr.stage),
+            tr.agent,
+            tr.model,
+            status_text,
+            tok_str,
+            time_str,
+            preview
+        )
+
+    console.print(summary_table)
+
+    show_prompts = getattr(args, "show_prompts", False)
+    show_outputs = getattr(args, "show_outputs", False)
+
+    if show_prompts or show_outputs:
+        for idx, tr in enumerate(traces, 1):
+            st_val = tr.stage.value if hasattr(tr.stage, "value") else str(tr.stage)
+            header = f"Interaction #{idx}: [{tr.agent.upper()}] - {st_val} ({tr.model}) - {tr.duration_seconds:.2f}s"
+            console.print(Panel(
+                f"[bold cyan]Timestamp:[/] {tr.timestamp} | [bold cyan]Status:[/] {tr.status} | [bold cyan]Tokens:[/] In={tr.token_usage.input_tokens}, Out={tr.token_usage.output_tokens}",
+                title=header,
+                border_style="cyan"
+            ))
+
+            if show_prompts:
+                console.print(Panel(
+                    Syntax(tr.system_prompt, "markdown", word_wrap=True) if tr.system_prompt else Markdown("_None_"),
+                    title=f"🛠️ System Prompt (#{idx})",
+                    border_style="dim blue"
+                ))
+                console.print(Panel(
+                    Syntax(tr.user_prompt, "markdown", word_wrap=True) if tr.user_prompt else Markdown("_None_"),
+                    title=f"👤 User Prompt (#{idx})",
+                    border_style="blue"
+                ))
+
+            if show_outputs:
+                out_content = tr.raw_output or tr.error_message or "No output."
+                console.print(Panel(
+                    Syntax(out_content, "markdown", word_wrap=True),
+                    title=f"✨ Output (#{idx})",
+                    border_style="green" if tr.status == "success" else "red"
+                ))
+    else:
+        console.print("[dim]Tip: Add [bold]--show-prompts[/] or [bold]--show-outputs[/] to inspect full prompt and completion texts.[/]\n")
+
+
+def cmd_web(args: argparse.Namespace) -> None:
+    """Launch the Nousetsu Vite Trace Visualizer web app."""
+    import subprocess
+    import threading
+    import webbrowser
+    from nousetsu.cli.web_server import NousetsuWebHandler, run_web_server
+
+    port = getattr(args, "port", 5173) or 5173
+    dev_mode = getattr(args, "dev", False)
+    do_build = getattr(args, "build", False)
+
+    # Locate web/ directory
+    repo = NovelRepository()
+    web_dir = repo.root_dir / "web"
+    if not web_dir.exists():
+        console.print(f"[bold red]Web frontend directory not found at:[/] {web_dir}")
+        return
+
+    dist_dir = web_dir / "dist"
+
+    if do_build or (not dev_mode and not dist_dir.exists()):
+        console.print("[cyan]Building frontend assets with npm run build...[/]")
+        try:
+            subprocess.run(["npm", "run", "build"], cwd=str(web_dir), check=True, shell=(sys.platform == "win32"))
+        except Exception as e:
+            console.print(f"[bold yellow]Build warning or error:[/] {e}")
+
+    url = f"http://localhost:{port}"
+    reg = ProjectRegistry()
+    active_p = reg.get_last_active_project() or repo.root_dir
+
+    if dev_mode or not dist_dir.exists():
+        # Start API server on 5174 in background thread for Vite proxy
+        api_port = 5174
+        t = threading.Thread(
+            target=run_web_server,
+            kwargs={"port": api_port, "host": "127.0.0.1", "open_browser": False, "dist_dir": dist_dir},
+            daemon=True
+        )
+        t.start()
+        console.print(f"[bold green]Starting Vite dev server on[/] [cyan]{url}[/] (API backend on :{api_port}) nya~!")
+        console.print(f"[dim]Active TUI Project: {active_p}[/]")
+        webbrowser.open(url)
+        try:
+            subprocess.run(["npm", "run", "dev", "--", "--port", str(port)], cwd=str(web_dir), shell=(sys.platform == "win32"))
+        except KeyboardInterrupt:
+            console.print("\n[yellow]Dev server stopped.[/]")
+    else:
+        console.print(Panel.fit(
+            f"[bold green]🐾 Nousetsu Trace Visualizer Running![/]\n\n"
+            f"URL: [link={url}][cyan]{url}[/link][/]\n"
+            f"Active TUI Project: [bold cyan]{active_p.name}[/] ([dim]{active_p}[/])\n"
+            f"Serving: [dim]{dist_dir}[/]\n\n"
+            f"[magenta]Press Ctrl+C to stop the server (=^･ω･^=)[/]",
+            title="Web Visualizer Active",
+            border_style="cyan"
+        ))
+        run_web_server(port=port, host="127.0.0.1", open_browser=True, dist_dir=dist_dir)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Agentic Document-Level Novel Translation CLI")
     parser.add_argument("--version", "-v", action="version", version=f"nousetsu {__version__}")
@@ -547,6 +778,17 @@ def main() -> None:
     p_mrag.add_argument("--include-chunks", action=argparse.BooleanOptionalAction, default=True, help="Index translated scene chunks (default: True)")
     p_mrag.add_argument("--dry-run", action="store_true", help="Preview document counts without modifying database")
 
+    # traces
+    p_traces = subparsers.add_parser("traces", help="Inspect, analyze, and export agent prompt and output traces")
+    p_traces.add_argument("--project-dir", "-p", default=None, help="Root folder of novel project")
+    p_traces.add_argument("--folder", "-F", default=None, help="Filter by specific volume folder")
+    p_traces.add_argument("--chapter", "-c", default=None, help="Chapter number to inspect (e.g. 1 or 48)")
+    p_traces.add_argument("--agent", "-a", choices=["extractor", "drafter", "critic", "polisher", "chronicler"], default=None, help="Filter by specific agent")
+    p_traces.add_argument("--stage", "-s", choices=["extraction", "drafting", "critique", "polishing", "chronicling"], default=None, help="Filter by pipeline stage")
+    p_traces.add_argument("--show-prompts", action="store_true", help="Display full system and user input prompts")
+    p_traces.add_argument("--show-outputs", action="store_true", help="Display full raw agent outputs")
+    p_traces.add_argument("--export", default=None, help="Export filtered traces to specified JSON file")
+
     # tui
     p_tui = subparsers.add_parser("tui", help="Launch interactive Textual TUI dashboard")
     p_tui.add_argument("--project-dir", "-p", default=None, help="Root folder of novel project")
@@ -560,12 +802,22 @@ def main() -> None:
     p_tui.add_argument("--interactions", action=argparse.BooleanOptionalAction, default=True, help="Use Gemini Interactions API (/v1beta/interactions) (default: True)")
     p_tui.add_argument("--chunking", action=argparse.BooleanOptionalAction, default=True, help="Enable line-based semantic chunking for long chapters (default: True)")
 
+    # web
+    p_web = subparsers.add_parser("web", help="Launch interactive Trace Visualizer web app in your browser")
+    p_web.add_argument("--port", "-p", type=int, default=5173, help="Port to run visualizer server on (default: 5173)")
+    p_web.add_argument("--dev", action="store_true", help="Run with live Vite dev server instead of production dist")
+    p_web.add_argument("--build", action="store_true", help="Rebuild frontend assets before launching")
+
     args = parser.parse_args()
 
     if args.command == "init":
         cmd_init(args)
     elif args.command == "batch":
         cmd_batch(args)
+    elif args.command == "traces":
+        cmd_traces(args)
+    elif args.command == "web":
+        cmd_web(args)
     elif args.command == "skills":
         cmd_skills(args)
     elif args.command == "graph-info":
