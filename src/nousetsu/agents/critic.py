@@ -5,9 +5,10 @@ import re
 import time
 from typing import Any, List, Optional, Tuple
 from langchain_core.messages import HumanMessage, SystemMessage
-from nousetsu.agents.llm import extract_text_from_message, extract_usage_from_message, get_llm
+from nousetsu.agents.llm import extract_text_from_message, extract_usage_from_message, get_llm, invoke_structured
 from nousetsu.models.bible import CharacterProfile, GlossaryItem, NovelBible
 from nousetsu.models.metadata import QualityAudit, TokenUsage
+from nousetsu.models.schemas import CritiqueResult
 from nousetsu.models.trace import PipelineStage
 from nousetsu.prompts.templates import CRITIQUE_SYSTEM_PROMPT
 from nousetsu.skills.registry import SkillRegistry
@@ -180,10 +181,14 @@ class CritiqueAgent:
         tracker = prompt_tracker or getattr(self, "prompt_tracker", None)
         t0 = time.time()
         try:
-            response = self.llm.invoke([
-                SystemMessage(content=sys_msg),
-                HumanMessage(content=user_content)
-            ])
+            parsed_result, response, parse_err = invoke_structured(
+                self.llm,
+                CritiqueResult,
+                [
+                    SystemMessage(content=sys_msg),
+                    HumanMessage(content=user_content)
+                ]
+            )
             duration = time.time() - t0
             self.last_usage = extract_usage_from_message(response)
         except Exception as e:
@@ -277,43 +282,47 @@ class CritiqueAgent:
             raise
 
         raw_content = extract_text_from_message(response.content)
-        json_match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", raw_content)
-        content_to_parse = json_match.group(1) if json_match else raw_content
 
         audit = QualityAudit()
         critique_notes = ""
 
-        try:
-            parsed = json.loads(content_to_parse, strict=False)
-            audit.fidelity_score = float(parsed.get("fidelity_score", 8.0))
-            audit.style_score = float(parsed.get("style_score", 7.8))
-            audit.glossary_compliance_pct = float(parsed.get("glossary_compliance_pct", 100.0))
-            audit.warnings = parsed.get("warnings", [])
-            audit.passed = (audit.fidelity_score >= 7.5 and audit.style_score >= 7.5)
-            critique_notes = str(parsed.get("critique_notes", ""))
-        except Exception:
-            # Attempt regex recovery of scores from raw text
-            m_fid = re.search(r"['\"]?fidelity_score['\"]?\s*[:=]\s*(\d+(?:\.\d+)?)", raw_content, re.IGNORECASE)
-            m_sty = re.search(r"['\"]?style_score['\"]?\s*[:=]\s*(\d+(?:\.\d+)?)", raw_content, re.IGNORECASE)
-            m_glo = re.search(r"['\"]?glossary_compliance_pct['\"]?\s*[:=]\s*(\d+(?:\.\d+)?)", raw_content, re.IGNORECASE)
-            m_notes = re.search(r"['\"]?critique_notes['\"]?\s*[:=]\s*['\"]([\s\S]*?)['\"]\s*(?:,\s*['\"][a-zA-Z_]+['\"]|\s*\})", raw_content, re.IGNORECASE)
-            if not m_notes:
-                m_notes = re.search(r"['\"]?critique_notes['\"]?\s*[:=]\s*['\"]([\s\S]*?)(?:['\"]|\Z)", raw_content, re.IGNORECASE)
-
-            if m_fid or m_sty:
-                audit.fidelity_score = float(m_fid.group(1)) if m_fid else 6.0
-                audit.style_score = float(m_sty.group(1)) if m_sty else 6.0
-                audit.glossary_compliance_pct = float(m_glo.group(1)) if m_glo else 100.0
+        if parsed_result is not None:
+            audit = parsed_result.to_quality_audit()
+            critique_notes = parsed_result.critique_notes
+        else:
+            json_match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", raw_content)
+            content_to_parse = json_match.group(1) if json_match else raw_content
+            try:
+                parsed = json.loads(content_to_parse, strict=False)
+                audit.fidelity_score = float(parsed.get("fidelity_score", 8.0))
+                audit.style_score = float(parsed.get("style_score", 7.8))
+                audit.glossary_compliance_pct = float(parsed.get("glossary_compliance_pct", 100.0))
+                audit.warnings = parsed.get("warnings", [])
                 audit.passed = (audit.fidelity_score >= 7.5 and audit.style_score >= 7.5)
-                critique_notes = m_notes.group(1).strip() if m_notes else "Review prose for rhythm and consistency."
-                audit.warnings.append("Critique JSON recovered via regex fallback.")
-            else:
-                audit.fidelity_score = 6.0
-                audit.style_score = 6.0
-                audit.glossary_compliance_pct = 100.0
-                audit.passed = False
-                audit.warnings.append("Critique JSON could not be parsed; conservative failing scores assigned.")
-                critique_notes = "Critique response malformed. Review prose for rhythm, zero-pronoun clarity, and verify proper nouns."
+                critique_notes = str(parsed.get("critique_notes", ""))
+            except Exception:
+                # Attempt regex recovery of scores from raw text
+                m_fid = re.search(r"['\"]?fidelity_score['\"]?\s*[:=]\s*(\d+(?:\.\d+)?)", raw_content, re.IGNORECASE)
+                m_sty = re.search(r"['\"]?style_score['\"]?\s*[:=]\s*(\d+(?:\.\d+)?)", raw_content, re.IGNORECASE)
+                m_glo = re.search(r"['\"]?glossary_compliance_pct['\"]?\s*[:=]\s*(\d+(?:\.\d+)?)", raw_content, re.IGNORECASE)
+                m_notes = re.search(r"['\"]?critique_notes['\"]?\s*[:=]\s*['\"]([\s\S]*?)['\"]\s*(?:,\s*['\"][a-zA-Z_]+['\"]|\s*\})", raw_content, re.IGNORECASE)
+                if not m_notes:
+                    m_notes = re.search(r"['\"]?critique_notes['\"]?\s*[:=]\s*['\"]([\s\S]*?)(?:['\"]|\Z)", raw_content, re.IGNORECASE)
+
+                if m_fid or m_sty:
+                    audit.fidelity_score = float(m_fid.group(1)) if m_fid else 6.0
+                    audit.style_score = float(m_sty.group(1)) if m_sty else 6.0
+                    audit.glossary_compliance_pct = float(m_glo.group(1)) if m_glo else 100.0
+                    audit.passed = (audit.fidelity_score >= 7.5 and audit.style_score >= 7.5)
+                    critique_notes = m_notes.group(1).strip() if m_notes else "Review prose for rhythm and consistency."
+                    audit.warnings.append("Critique JSON recovered via regex fallback.")
+                else:
+                    audit.fidelity_score = 6.0
+                    audit.style_score = 6.0
+                    audit.glossary_compliance_pct = 100.0
+                    audit.passed = False
+                    audit.warnings.append("Critique JSON could not be parsed; conservative failing scores assigned.")
+                    critique_notes = "Critique response malformed. Review prose for rhythm, zero-pronoun clarity, and verify proper nouns."
 
         if tracker:
             trace_meta: dict[str, Any] = {}

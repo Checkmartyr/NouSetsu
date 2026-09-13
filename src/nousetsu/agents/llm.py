@@ -1,6 +1,6 @@
 """LLM client factory supporting Google Gemini, OpenAI, Anthropic, and local mock fallback."""
 import os
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, Tuple, Type
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
@@ -144,6 +144,39 @@ class MockNovelLLM(BaseChatModel):
     @property
     def _llm_type(self) -> str:
         return "mock_novel_llm"
+
+    def with_structured_output(
+        self,
+        schema: Any,
+        include_raw: bool = False,
+        **kwargs: Any
+    ) -> Any:
+        """Return a deterministic Runnable mock producing structured schema outputs."""
+        from langchain_core.output_parsers import PydanticOutputParser
+        from langchain_core.runnables import RunnableLambda
+
+        parser = PydanticOutputParser(pydantic_object=schema)
+
+        def _invoke_structured(input_data: Any) -> Any:
+            ai_msg = self.invoke(input_data, **kwargs)
+            try:
+                parsed = parser.parse(ai_msg.content)
+                err = None
+            except Exception as e:
+                # If mock returned default text or empty fallback, attempt instantiation
+                try:
+                    parsed = schema()
+                    err = None
+                except Exception:
+                    parsed = None
+                    err = e
+            if include_raw:
+                return {"raw": ai_msg, "parsed": parsed, "parsing_error": err}
+            if err:
+                raise err
+            return parsed
+
+        return RunnableLambda(_invoke_structured)
 
 
 import re
@@ -339,6 +372,67 @@ class FallbackChatModel(BaseChatModel):
             self.last_model_used = self.fallback_model_name
             return res
 
+    def with_structured_output(
+        self,
+        schema: Any,
+        include_raw: bool = False,
+        **kwargs: Any
+    ) -> Any:
+        """Return a Runnable producing structured output with automatic secondary model fallback."""
+        from langchain_core.output_parsers import PydanticOutputParser
+        from langchain_core.runnables import RunnableLambda
+        from nousetsu.models.exceptions import BatchStoppedException
+        import logging
+        logger = logging.getLogger(__name__)
+
+        def _make_runnable(model: BaseChatModel) -> Any:
+            if hasattr(model, "with_structured_output") and callable(getattr(model, "with_structured_output")):
+                try:
+                    return model.with_structured_output(schema, include_raw=include_raw, **kwargs)
+                except NotImplementedError:
+                    pass
+            parser = PydanticOutputParser(pydantic_object=schema)
+            def _fallback_run(inp: Any) -> Any:
+                ai_msg = model.invoke(inp)
+                try:
+                    parsed = parser.parse(ai_msg.content)
+                    err = None
+                except Exception as e:
+                    parsed = None
+                    err = e
+                if include_raw:
+                    return {"raw": ai_msg, "parsed": parsed, "parsing_error": err}
+                if err:
+                    raise err
+                return parsed
+            return RunnableLambda(_fallback_run)
+
+        primary_runnable = _make_runnable(self.primary)
+        fallback_runnable = _make_runnable(self.fallback)
+
+        def _invoke_structured_with_fallback(input_data: Any) -> Any:
+            try:
+                res = primary_runnable.invoke(input_data)
+                self.last_model_used = self.primary_model_name
+                return res
+            except Exception as err:
+                if isinstance(err, BatchStoppedException):
+                    raise
+                logger.warning(
+                    f"⚠️ Primary model '{self.primary_model_name}' structured call failed ({type(err).__name__}: {err}). "
+                    f"Falling back to model '{self.fallback_model_name}'."
+                )
+                if self.on_fallback:
+                    try:
+                        self.on_fallback(self.fallback_model_name, err)
+                    except Exception:
+                        pass
+                res = fallback_runnable.invoke(input_data)
+                self.last_model_used = self.fallback_model_name
+                return res
+
+        return RunnableLambda(_invoke_structured_with_fallback)
+
 
 def _resolve_temperature(temp: Optional[float] = None) -> float:
     if temp is not None:
@@ -438,4 +532,89 @@ def get_llm(
         )
 
     return primary_llm
+
+
+def invoke_structured(
+    llm: Any,
+    schema: Any,
+    messages: list[BaseMessage],
+    method: Optional[str] = None,
+    **kwargs: Any
+) -> Tuple[Optional[Any], AIMessage, Optional[Exception]]:
+    """
+    Invoke an LLM with structured output, returning (parsed_pydantic_instance, raw_ai_message, error).
+    Supports native provider schemas, FallbackChatModel failover, MockNovelLLM, and direct parser fallback.
+    """
+    import logging
+    from unittest.mock import MagicMock
+    from langchain_core.messages import AIMessage
+    from langchain_core.output_parsers import PydanticOutputParser
+    logger = logging.getLogger(__name__)
+
+    # Path 1: If LLM implements with_structured_output and is not an unconfigured MagicMock
+    use_wso = hasattr(llm, "with_structured_output") and callable(getattr(llm, "with_structured_output"))
+    if isinstance(llm, MagicMock) and "with_structured_output" not in getattr(llm, "__dict__", {}):
+        use_wso = False
+
+    if use_wso:
+        try:
+            wso_kwargs = {"include_raw": True}
+            if method:
+                wso_kwargs["method"] = method
+            wso_kwargs.update(kwargs)
+            structured_runnable = llm.with_structured_output(schema, **wso_kwargs)
+            res = structured_runnable.invoke(messages)
+
+            if isinstance(res, dict) and "raw" in res:
+                raw_msg = res.get("raw")
+                parsed_obj = res.get("parsed")
+                parsing_err = res.get("parsing_error")
+                if not isinstance(raw_msg, AIMessage):
+                    content = getattr(raw_msg, "content", str(raw_msg))
+                    raw_usage = getattr(raw_msg, "usage_metadata", None)
+                    usage_meta = raw_usage if isinstance(raw_usage, dict) else None
+                    raw_resp = getattr(raw_msg, "response_metadata", None)
+                    resp_meta = raw_resp if isinstance(raw_resp, dict) else {}
+                    msg_kwargs = {}
+                    if usage_meta and isinstance(usage_meta, dict) and "input_tokens" in usage_meta and "output_tokens" in usage_meta:
+                        msg_kwargs["usage_metadata"] = usage_meta
+                    if resp_meta and isinstance(resp_meta, dict):
+                        msg_kwargs["response_metadata"] = resp_meta
+                    raw_msg = AIMessage(content=str(content), **msg_kwargs)
+                return parsed_obj, raw_msg, parsing_err
+
+            if isinstance(res, schema):
+                raw_msg = AIMessage(content=res.model_dump_json())
+                return res, raw_msg, None
+        except NotImplementedError:
+            pass
+        except Exception as err:
+            logger.debug(f"with_structured_output failed ({type(err).__name__}: {err}); attempting direct invoke with PydanticOutputParser.")
+
+    # Path 2: Direct invoke and parse with PydanticOutputParser
+    response = llm.invoke(messages)
+    content = getattr(response, "content", None)
+    if content is None:
+        content = str(response)
+
+    if isinstance(response, AIMessage):
+        raw_msg = response
+    else:
+        raw_usage = getattr(response, "usage_metadata", None)
+        usage_meta = raw_usage if isinstance(raw_usage, dict) else None
+        raw_resp = getattr(response, "response_metadata", None)
+        resp_meta = raw_resp if isinstance(raw_resp, dict) else {}
+        msg_kwargs = {}
+        if usage_meta and isinstance(usage_meta, dict) and "input_tokens" in usage_meta and "output_tokens" in usage_meta:
+            msg_kwargs["usage_metadata"] = usage_meta
+        if resp_meta and isinstance(resp_meta, dict):
+            msg_kwargs["response_metadata"] = resp_meta
+        raw_msg = AIMessage(content=str(content), **msg_kwargs)
+
+    parser = PydanticOutputParser(pydantic_object=schema)
+    try:
+        parsed_obj = parser.parse(str(content))
+        return parsed_obj, raw_msg, None
+    except Exception as parse_err:
+        return None, raw_msg, parse_err
 

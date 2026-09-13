@@ -290,6 +290,10 @@ NouSetsu tracks end-to-end token consumption and execution latency per pipeline 
     - Real-time progress panel throttles sub-30ms micro-updates (<0.5% delta) to maintain smooth 60 FPS terminal frame rates.
     - Token analytics widget employs lazy rendering (`_dirty` flag) to avoid rebuilding 4 DataTables when running in the background.
     - List view mounts items in batch via `ListView.extend` and preserves active chapter selection across directory refreshes.
+15. **Native LangChain Structured Output & Typed Pydantic Schemas**:
+    - Migrates `Schriftdetektiv` (`EntityExtractorAgent`), `Zensor` (`CritiqueAgent`), and `Chronist` (`ChroniclerAgent`) from brittle regex / JSON parsing to native LangChain structured outputs backed by strongly typed Pydantic models (`ExtractorResult`, `CritiqueResult`, `ChroniclerResult`).
+    - Unified `invoke_structured` utility transparently orchestrates provider schema constraints (`response_json_schema`), `FallbackChatModel` secondary failover on 429 quota exhaustion, `MockNovelLLM` zero-network testing, and emergency regex parsing recovery.
+    - Preserves `include_raw=True` for full token usage (`usage_metadata`, `thought_tokens`) and forensic trace logging via `PromptTracker`.
 
 ---
 
@@ -304,10 +308,11 @@ uv sync
 # Query CLI version
 uv run nousetsu --version
 
-# Run complete test suite (314 tests across 48 modules in ~89s)
+# Run complete test suite (320 tests across 49 modules in ~89s)
 uv run pytest
 
 # Run specific test modules
+uv run pytest tests/test_structured_output.py
 uv run pytest tests/test_critic_parsing.py
 uv run pytest tests/test_extractor_filtering.py
 uv run pytest tests/test_hierarchy_summary.py

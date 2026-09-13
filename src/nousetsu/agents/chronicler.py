@@ -7,8 +7,9 @@ from typing import Any, List, Optional
 
 logger = logging.getLogger(__name__)
 from langchain_core.messages import HumanMessage, SystemMessage
-from nousetsu.agents.llm import extract_text_from_message, extract_usage_from_message, get_llm
+from nousetsu.agents.llm import extract_text_from_message, extract_usage_from_message, get_llm, invoke_structured
 from nousetsu.models.bible import ChapterSummary, CharacterProfile, GlossaryItem, NovelBible
+from nousetsu.models.schemas import ChroniclerResult
 from nousetsu.models.metadata import (
     ChapterMetadata,
     CheckpointData,
@@ -84,10 +85,14 @@ class ChroniclerAgent:
         user_msg = f"Analyze and summarize this translated novel chapter for story lore and plot events:\n{translated_text[:12000]}"
         t0 = time.time()
         try:
-            response = self.llm.invoke([
-                SystemMessage(content=sys_msg),
-                HumanMessage(content=user_msg)
-            ])
+            parsed_result, response, parse_err = invoke_structured(
+                self.llm,
+                ChroniclerResult,
+                [
+                    SystemMessage(content=sys_msg),
+                    HumanMessage(content=user_msg)
+                ]
+            )
             duration = time.time() - t0
             self.last_usage = extract_usage_from_message(response)
         except Exception as e:
@@ -116,31 +121,38 @@ class ChroniclerAgent:
             raise
 
         raw_content = extract_text_from_message(response.content)
-        json_match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", raw_content)
-        content_to_parse = json_match.group(1) if json_match else raw_content
 
         summary = None
-        try:
-            parsed = json.loads(content_to_parse)
-            if "chapter_summary" in parsed and isinstance(parsed["chapter_summary"], dict):
-                chap_data = parsed["chapter_summary"]
-                chap_data["chapter_num"] = chapter_num
-                if "arc_update" in parsed and not chap_data.get("arc_update"):
-                    chap_data["arc_update"] = parsed["arc_update"]
-                if "story_update" in parsed and not chap_data.get("story_update"):
-                    chap_data["story_update"] = parsed["story_update"]
-                summary = ChapterSummary.model_validate(chap_data)
-            else:
-                parsed["chapter_num"] = chapter_num
-                summary = ChapterSummary.model_validate(parsed)
-        except Exception:
-            summary = ChapterSummary(
-                chapter_num=chapter_num,
-                title=chapter_title or f"Chapter {chapter_num}",
-                synopsis=f"Events of Chapter {chapter_num} concluded.",
-                key_events=["Chapter concluded."],
-                character_state_changes=[]
+        if parsed_result is not None:
+            summary = parsed_result.to_chapter_summary(
+                default_chapter_num=chapter_num,
+                default_title=chapter_title or f"Chapter {chapter_num}",
+                folder=kwargs.get("folder")
             )
+        else:
+            json_match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", raw_content)
+            content_to_parse = json_match.group(1) if json_match else raw_content
+            try:
+                parsed = json.loads(content_to_parse)
+                if "chapter_summary" in parsed and isinstance(parsed["chapter_summary"], dict):
+                    chap_data = parsed["chapter_summary"]
+                    chap_data["chapter_num"] = chapter_num
+                    if "arc_update" in parsed and not chap_data.get("arc_update"):
+                        chap_data["arc_update"] = parsed["arc_update"]
+                    if "story_update" in parsed and not chap_data.get("story_update"):
+                        chap_data["story_update"] = parsed["story_update"]
+                    summary = ChapterSummary.model_validate(chap_data)
+                else:
+                    parsed["chapter_num"] = chapter_num
+                    summary = ChapterSummary.model_validate(parsed)
+            except Exception:
+                summary = ChapterSummary(
+                    chapter_num=chapter_num,
+                    title=chapter_title or f"Chapter {chapter_num}",
+                    synopsis=f"Events of Chapter {chapter_num} concluded.",
+                    key_events=["Chapter concluded."],
+                    character_state_changes=[]
+                )
 
         if tracker:
             trace_meta: dict[str, Any] = {}

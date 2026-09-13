@@ -5,10 +5,11 @@ import re
 import time
 from typing import Any, List, Optional, Tuple
 from langchain_core.messages import HumanMessage, SystemMessage
-from nousetsu.agents.llm import extract_text_from_message, extract_usage_from_message, get_llm
+from nousetsu.agents.llm import extract_text_from_message, extract_usage_from_message, get_llm, invoke_structured
 from nousetsu.graph.procedural import ProceduralGraph, get_default_extractor_graph
 from nousetsu.models.bible import CharacterProfile, GlossaryItem, NovelBible
 from nousetsu.models.metadata import PipelineStage, TokenUsage
+from nousetsu.models.schemas import ExtractorResult
 from nousetsu.prompts.templates import EXTRACTION_SYSTEM_PROMPT
 from nousetsu.skills.registry import SkillRegistry
 from nousetsu.utils.character_filter import filter_characters_for_scene
@@ -122,10 +123,14 @@ class EntityExtractorAgent:
 
         # Analytical task framing to avoid AI safety false positives on novel excerpts
         try:
-            response = self.llm.invoke([
-                SystemMessage(content=sys_msg),
-                HumanMessage(content=user_msg)
-            ])
+            parsed_result, response, parse_err = invoke_structured(
+                self.llm,
+                ExtractorResult,
+                [
+                    SystemMessage(content=sys_msg),
+                    HumanMessage(content=user_msg)
+                ]
+            )
             duration = time.time() - t0
             self.last_usage = extract_usage_from_message(response)
         except Exception as e:
@@ -207,24 +212,28 @@ class EntityExtractorAgent:
             raise
 
         raw_content = extract_text_from_message(response.content)
-        # Extract JSON substring if wrapped in markdown code blocks
-        json_match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", raw_content)
-        content_to_parse = json_match.group(1) if json_match else raw_content
 
         new_chars: List[CharacterProfile] = []
         new_terms: List[GlossaryItem] = []
         active_terms: List[str] = []
 
-        try:
-            parsed = json.loads(content_to_parse)
-            for c in parsed.get("new_characters", []):
-                new_chars.append(CharacterProfile.model_validate(c))
-            for t in parsed.get("new_terms", []):
-                new_terms.append(GlossaryItem.model_validate(t))
-            active_terms = parsed.get("active_terms_in_chapter", [])
-        except Exception:
-            # Fallback if json parsing fails
-            pass
+        if parsed_result is not None:
+            new_chars = list(parsed_result.new_characters)
+            new_terms = list(parsed_result.new_terms)
+            active_terms = list(parsed_result.active_terms_in_chapter)
+        else:
+            # Fallback parsing in case of parsing exception
+            json_match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", raw_content)
+            content_to_parse = json_match.group(1) if json_match else raw_content
+            try:
+                parsed = json.loads(content_to_parse)
+                for c in parsed.get("new_characters", []):
+                    new_chars.append(CharacterProfile.model_validate(c))
+                for t in parsed.get("new_terms", []):
+                    new_terms.append(GlossaryItem.model_validate(t))
+                active_terms = parsed.get("active_terms_in_chapter", [])
+            except Exception:
+                pass
 
         if tracker:
             tracker.record(

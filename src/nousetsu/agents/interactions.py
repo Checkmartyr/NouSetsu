@@ -324,3 +324,31 @@ class GeminiInteractionsChatModel(BaseChatModel):
         )
 
         return ChatResult(generations=[ChatGeneration(message=ai_message)])
+
+    def with_structured_output(
+        self,
+        schema: Any,
+        include_raw: bool = False,
+        **kwargs: Any
+    ) -> Any:
+        """Return a Runnable producing structured output conforming to the schema."""
+        from langchain_core.output_parsers import PydanticOutputParser
+        from langchain_core.runnables import RunnableLambda
+
+        parser = PydanticOutputParser(pydantic_object=schema)
+
+        def _invoke_structured(input_data: Any) -> Any:
+            ai_msg = self.invoke(input_data, **kwargs)
+            try:
+                parsed = parser.parse(ai_msg.content)
+                err = None
+            except Exception as e:
+                parsed = None
+                err = e
+            if include_raw:
+                return {"raw": ai_msg, "parsed": parsed, "parsing_error": err}
+            if err:
+                raise err
+            return parsed
+
+        return RunnableLambda(_invoke_structured)
