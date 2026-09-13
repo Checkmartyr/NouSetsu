@@ -8,6 +8,7 @@ Welcome to the **NouSetsu** (濃説 / 脳説) technical documentation. This dire
 
 | Guide | Document | Description |
 | :--- | :--- | :--- |
+| **Five Pipeline Agents** | [**`agents/README.md`**](./agents/README.md) | Dedicated per-agent operational guides with method contracts, RAG roles, cognitive mechanics, and domain skills ([`01_entity_extractor`](./agents/01_entity_extractor.md), [`02_drafter`](./agents/02_drafter.md), [`03_critic`](./agents/03_critic.md), [`04_polisher`](./agents/04_polisher.md), [`05_chronicler`](./agents/05_chronicler.md)). |
 | **End-User Guide** | [**`user_guide.md`**](./user_guide.md) | Complete end-user manual covering installation, minimal TUI dashboard, headless batch automation, per-agent model routing, Novel Bible management, 20 custom domain skills, narrative inspection CLI, and safety guards. |
 | **Workflow & Pipeline** | [**`workflow.md`**](./workflow.md) | LangGraph multi-agent execution, reflection review loop, agent functions, line-based semantic chunking, rate limiting (32K TPM / 60 RPM), and sequence diagrams. |
 | **Agents Deep Dive** | [**`agents_deep_dive.md`**](./agents_deep_dive.md) | Comprehensive cognitive breakdown of all 5 agents (Schriftdetektiv, Wortschmied, Zensor, Feinschliff, Chronist): prompt engineering, 3-tier memory injection, chunking mechanics, nickname discipline, and safety guards. |

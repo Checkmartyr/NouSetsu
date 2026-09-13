@@ -364,6 +364,7 @@ For deep architectural analyses, developer guides, and end-user documentation, v
 
 | Document | Focus Area |
 | :--- | :--- |
+| [**Five Pipeline Agents**](file:///D:/Code/novel_translation_Agent/doc/agents/README.md) | Dedicated operational guides for each pipeline stage: [**`01_entity_extractor`**](file:///D:/Code/novel_translation_Agent/doc/agents/01_entity_extractor.md), [**`02_drafter`**](file:///D:/Code/novel_translation_Agent/doc/agents/02_drafter.md), [**`03_critic`**](file:///D:/Code/novel_translation_Agent/doc/agents/03_critic.md), [**`04_polisher`**](file:///D:/Code/novel_translation_Agent/doc/agents/04_polisher.md), [**`05_chronicler`**](file:///D:/Code/novel_translation_Agent/doc/agents/05_chronicler.md). |
 | [**User Guide**](file:///D:/Code/novel_translation_Agent/doc/user_guide.md) | Complete end-user manual: TUI navigation, CLI batch, Novel Bible, and custom skills. |
 | [**Workflow Pipeline**](file:///D:/Code/novel_translation_Agent/doc/workflow.md) | LangGraph stages, sequence diagrams, reflection review loop, and state machine. |
 | [**Agents Deep Dive**](file:///D:/Code/novel_translation_Agent/doc/agents_deep_dive.md) | In-depth breakdown of all 5 specialized agents, prompt templates, and cognitive roles. |
