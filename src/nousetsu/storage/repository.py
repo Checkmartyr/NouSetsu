@@ -176,6 +176,14 @@ class NovelRepository:
         self.bible_dir = self.novel_dir / "bible"
         self.summaries_dir = self.novel_dir / "summaries"
         self.arcs_dir = self.summaries_dir / "arcs"
+        self.rag_dir = self.novel_dir / "rag"
+        self.rag_db_path = self.rag_dir / "lore.db"
+
+    def get_rag_engine(self) -> Any:
+        """Get or create the HybridSearchEngine for this project."""
+        from nousetsu.rag.engine import HybridSearchEngine
+        self.rag_dir.mkdir(parents=True, exist_ok=True)
+        return HybridSearchEngine(self.rag_db_path)
 
     def config_file_path(self) -> Path:
         return self.novel_dir / "config.yaml"

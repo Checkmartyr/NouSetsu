@@ -300,6 +300,64 @@ def cmd_migrate_summaries(args: argparse.Namespace) -> None:
     console.print(Panel(tree, border_style="green", padding=(1, 2)))
 
 
+def cmd_lore_search(args: argparse.Namespace) -> None:
+    from rich.box import ROUNDED
+    from rich.table import Table
+    from nousetsu.rag.embeddings import EmbeddingClient
+
+    project_dir = getattr(args, "project_dir", None)
+    repo = NovelRepository(project_dir) if project_dir else NovelRepository()
+    engine = repo.get_rag_engine()
+
+    total_docs = engine.count_documents()
+    if total_docs == 0:
+        console.print(f"[yellow]⚠️ Lore Vault is empty for project at [bold]{repo.root_dir}[/]. Run a batch translation first to index chapters.[/]")
+        return
+
+    query = args.query
+    limit = getattr(args, "limit", 5) or 5
+    folder = getattr(args, "folder", None)
+    emb_model = getattr(args, "embedding_model", "text-embedding-004")
+
+    emb_client = EmbeddingClient(model_name=emb_model)
+    query_vec = emb_client.embed_text(query) if emb_client.is_available else None
+
+    results = engine.hybrid_search(query=query, query_vector=query_vec, limit=limit, folder=folder)
+
+    if not results:
+        console.print(f"[yellow]No lore entries matched query: '{query}'[/]")
+        return
+
+    table = Table(title=f"📚 Lore Vault Search: '{query}' (Hybrid BM25 + Vector RRF)", box=ROUNDED)
+    table.add_column("Rank", justify="center", style="dim")
+    table.add_column("Type", style="cyan")
+    table.add_column("Chapter", justify="center", style="bold")
+    table.add_column("RRF Score", justify="right", style="green")
+    table.add_column("Sparse Rank", justify="right")
+    table.add_column("Dense Rank", justify="right")
+    table.add_column("Snippet", style="white")
+
+    for idx, r in enumerate(results, start=1):
+        s_rank_str = f"#{r.sparse_rank}" if r.sparse_rank else "[dim]-[/]"
+        d_rank_str = f"#{r.dense_rank}" if r.dense_rank else "[dim]-[/]"
+        ch_str = f"Ch.{r.chapter_num}" if r.chapter_num else "-"
+        if r.folder:
+            ch_str = f"[{r.folder}] {ch_str}"
+        snippet = r.content.replace("\n", " ")
+        if len(snippet) > 100:
+            snippet = snippet[:100] + "..."
+        table.add_row(
+            str(idx),
+            r.doc_type.value,
+            ch_str,
+            f"{r.rrf_score:.4f}",
+            s_rank_str,
+            d_rank_str,
+            snippet
+        )
+    console.print(table)
+
+
 def cmd_tui(args: argparse.Namespace) -> None:
     project_dir = getattr(args, "project_dir", None)
     repo = NovelRepository(project_dir) if project_dir else NovelRepository()
@@ -373,6 +431,7 @@ def main() -> None:
     p_batch.add_argument("--chunking", action=argparse.BooleanOptionalAction, default=True, help="Enable line-based semantic chunking for long chapters (default: True)")
     p_batch.add_argument("--chunk-threshold-lines", type=int, default=None, help="Line threshold to trigger chunking (default: 85)")
     p_batch.add_argument("--target-chunk-lines", type=int, default=None, help="Target line count per chunk (default: 70)")
+    p_batch.add_argument("--rag", action=argparse.BooleanOptionalAction, default=True, help="Enable hybrid search episodic lore retrieval (default: True)")
 
     # skills
     p_skills = subparsers.add_parser("skills", help="List registered agent domain skills and active capabilities")
@@ -393,6 +452,14 @@ def main() -> None:
     p_migrate.add_argument("--project-dir", "-p", default=None, help="Root folder of novel project")
     p_migrate.add_argument("--title", default=None, help="Optional novel title override")
     p_migrate.add_argument("--dry-run", action="store_true", help="Preview migration without writing to disk")
+
+    # lore
+    p_lore = subparsers.add_parser("lore", help="Search the project Lore Vault using Hybrid RAG (FTS5 BM25 + Vector Embeddings)")
+    p_lore.add_argument("query", help="Text search query (e.g. 'Claire magic sword')")
+    p_lore.add_argument("--project-dir", "-p", default=None, help="Root folder of novel project")
+    p_lore.add_argument("--folder", "-F", default=None, help="Filter by specific volume folder")
+    p_lore.add_argument("--limit", "-l", type=int, default=5, help="Number of results to display (default: 5)")
+    p_lore.add_argument("--embedding-model", default="text-embedding-004", help="Embedding model for dense search")
 
     # tui
     p_tui = subparsers.add_parser("tui", help="Launch interactive Textual TUI dashboard")
@@ -421,6 +488,8 @@ def main() -> None:
         cmd_narrative(args)
     elif args.command == "migrate-summaries":
         cmd_migrate_summaries(args)
+    elif args.command == "lore":
+        cmd_lore_search(args)
     elif args.command == "tui":
         cmd_tui(args)
     else:

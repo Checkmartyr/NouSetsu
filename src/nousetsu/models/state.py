@@ -3,6 +3,7 @@ from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
 from nousetsu.models.bible import CharacterProfile, ChapterSummary, GlossaryItem, NovelBible
 from nousetsu.models.metadata import ChapterMetadata, PipelineStage, QualityAudit, StepTokenUsage
+from nousetsu.rag.models import SearchResult
 
 
 class TranslationState(BaseModel):
@@ -30,6 +31,7 @@ class TranslationState(BaseModel):
     quality_audit: QualityAudit = Field(default_factory=QualityAudit)
     polished_text: str = Field(default="")
     new_chapter_summary: Optional[ChapterSummary] = None
+    rag_retrieved_lore: List[SearchResult] = Field(default_factory=list, description="Historical lore snippets retrieved via Hybrid Search RAG")
 
     review_iteration: int = Field(default=1, description="Current review loop iteration (1-indexed)")
     max_review_loops: int = Field(default=3, description="Maximum review passes allowed")

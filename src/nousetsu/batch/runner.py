@@ -155,8 +155,13 @@ class BatchRunner:
             chunk_overlap_lines=resolved_overlap_lines,
             safety_recursive_subdivision=getattr(cfg, "safety_recursive_subdivision", True),
             safety_subdivision_min_lines=getattr(cfg, "safety_subdivision_min_lines", 8),
-            safety_subdivision_max_depth=getattr(cfg, "safety_subdivision_max_depth", 4)
+            safety_subdivision_max_depth=getattr(cfg, "safety_subdivision_max_depth", 4),
+            rag_engine=self.repo.get_rag_engine() if getattr(cfg, "enable_rag", True) else None,
+            enable_rag=getattr(cfg, "enable_rag", True),
+            rag_top_k=getattr(cfg, "rag_top_k", 2),
+            rag_embedding_model=getattr(cfg, "rag_embedding_model", "text-embedding-004")
         )
+        self.rag_engine = self.workflow.rag_engine
         self.auto_update_bible = auto_update_bible if auto_update_bible is not None else cfg.auto_update_bible
         self.stop_event = threading.Event()
         self.batch_token_usage = TokenUsage()

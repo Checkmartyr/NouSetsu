@@ -37,6 +37,9 @@ class ProjectConfig(BaseModel):
     safety_recursive_subdivision: bool = Field(default=True, description="Enable recursive bisection of safety-blocked chunks")
     safety_subdivision_min_lines: int = Field(default=8, description="Minimum non-empty lines before terminating subdivision")
     safety_subdivision_max_depth: int = Field(default=4, description="Maximum recursion depth for bisection")
+    enable_rag: bool = Field(default=True, description="Enable hybrid search episodic lore retrieval (Tier 4 Memory)")
+    rag_top_k: int = Field(default=2, ge=1, le=10, description="Top N historical lore snippets to retrieve per chapter")
+    rag_embedding_model: str = Field(default="text-embedding-004", description="Model name for vector embeddings")
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     def get_raw_path(self, base_dir: Path) -> Path:

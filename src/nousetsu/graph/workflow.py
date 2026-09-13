@@ -11,6 +11,7 @@ from nousetsu.agents.drafter import ContextAwareDrafterAgent
 from nousetsu.agents.extractor import EntityExtractorAgent
 from nousetsu.agents.llm import invoke_with_retry
 from nousetsu.agents.polisher import PolishingAgent
+from nousetsu.models.bible import ChapterSummary, NovelBible
 from nousetsu.models.exceptions import BatchStoppedException
 from nousetsu.models.metadata import PipelineStage, StageStatus, StepTokenUsage, TokenUsage
 from nousetsu.models.state import TranslationState
@@ -45,7 +46,12 @@ class NovelTranslationWorkflow:
         drafter_pg: Optional[Any] = None,
         safety_recursive_subdivision: bool = True,
         safety_subdivision_min_lines: int = 8,
-        safety_subdivision_max_depth: int = 4
+        safety_subdivision_max_depth: int = 4,
+        rag_engine: Optional[Any] = None,
+        enable_rag: bool = True,
+        rag_top_k: int = 2,
+        rag_embedding_model: str = "text-embedding-004",
+        embedding_client: Optional[Any] = None
     ):
         effective_model = model_name or os.environ.get("NOVEL_MODEL") or os.environ.get("DEFAULT_MODEL") or "gemini-3.1-flash-lite"
         self.model_name = effective_model
@@ -110,6 +116,17 @@ class NovelTranslationWorkflow:
             model_name=self.chronicler_model,
             fallback_model=self.fallback_model
         )
+        self.rag_engine = rag_engine
+        self.enable_rag = enable_rag
+        self.rag_top_k = rag_top_k
+        self.rag_embedding_model = rag_embedding_model
+        if self.enable_rag and embedding_client is None and self.rag_engine is not None:
+            from nousetsu.rag.embeddings import EmbeddingClient
+            emb_model = "mock-embedding" if is_mock else rag_embedding_model
+            self.embedding_client = EmbeddingClient(model_name=emb_model)
+        else:
+            self.embedding_client = embedding_client
+
         self.stage_callback: Optional[Callable[[PipelineStage, str, float], None]] = None
         self.stop_event: Optional[threading.Event] = None
         self.last_state: Optional[TranslationState] = None
@@ -329,6 +346,28 @@ class NovelTranslationWorkflow:
         else:
             active_summaries = state.novel_bible.summaries
 
+        rag_hits = []
+        if self.enable_rag and self.rag_engine:
+            try:
+                char_names = " ".join([c.name for c in state.active_characters[:5]])
+                first_lines = " ".join([l.strip() for l in state.source_text.splitlines() if l.strip()][:3])
+                query_text = f"{char_names} {first_lines}".strip()[:250]
+
+                query_vec = None
+                if self.embedding_client and self.embedding_client.is_available:
+                    query_vec = self.embedding_client.embed_text(query_text)
+
+                rag_hits = self.rag_engine.hybrid_search(
+                    query=query_text,
+                    query_vector=query_vec,
+                    limit=self.rag_top_k
+                )
+                if rag_hits:
+                    self._notify(PipelineStage.DRAFTING, f"Retrieved {len(rag_hits)} episodic lore entries via Hybrid RAG...", 32.0)
+            except Exception as e:
+                logger.warning(f"RAG retrieval failed: {e}")
+                rag_hits = []
+
         draft = invoke_with_retry(
             self.drafter.draft,
             source_text=state.source_text,
@@ -341,7 +380,8 @@ class NovelTranslationWorkflow:
             notify_callback=lambda msg: self._notify(PipelineStage.DRAFTING, msg, 35.0),
             rate_limiter=self.rate_limiter,
             estimated_tokens=est_draft,
-            stop_event=self.stop_event
+            stop_event=self.stop_event,
+            rag_results=rag_hits
         )
 
         draft_duration = round(time.time() - step_start, 2)
@@ -372,6 +412,7 @@ class NovelTranslationWorkflow:
         return {
             "current_stage": PipelineStage.DRAFTING,
             "draft_text": draft,
+            "rag_retrieved_lore": rag_hits,
             "active_skills": updated_skills,
             "step_token_records": updated_token_records,
             "safety_fallbacks_used": total_safety_used,
@@ -773,6 +814,18 @@ class NovelTranslationWorkflow:
         updated_skills = dict(state.active_skills)
         updated_skills["chronicling"] = chr_skills
 
+        if self.enable_rag and self.rag_engine and summary:
+            try:
+                self._index_chapter_into_rag(
+                    chapter_num=state.chapter_num,
+                    folder=current_folder,
+                    title=f"Chapter {state.chapter_num}",
+                    summary=summary,
+                    final_text=final_text
+                )
+            except Exception as e:
+                logger.warning(f"RAG auto-indexing failed for chapter {state.chapter_num}: {e}")
+
         return {
             "current_stage": PipelineStage.CHRONICLING,
             "polished_text": final_text,
@@ -784,6 +837,65 @@ class NovelTranslationWorkflow:
             "safety_fallbacks_used": total_safety_used,
             "subdivisions_count": total_subdivisions
         }
+
+    def _index_chapter_into_rag(
+        self,
+        chapter_num: int,
+        folder: Optional[str],
+        title: str,
+        summary: ChapterSummary,
+        final_text: str
+    ) -> None:
+        """Index completed chapter summary and scene chunks into HybridSearchEngine."""
+        if not self.rag_engine:
+            return
+        from nousetsu.rag.models import DocumentType, LoreDocument
+
+        folder_clean = folder or "default"
+        docs: List[LoreDocument] = []
+
+        # 1. Index Chapter Summary
+        summary_content = f"Synopsis: {summary.synopsis}\nKey Events: {'; '.join(summary.key_events)}"
+        if summary.character_state_changes:
+            summary_content += f"\nCharacter Shifts: {'; '.join(summary.character_state_changes)}"
+
+        docs.append(LoreDocument(
+            doc_id=f"summary:{folder_clean}:{chapter_num:04d}",
+            doc_type=DocumentType.SUMMARY,
+            chapter_num=chapter_num,
+            folder=folder,
+            title=title,
+            content=summary_content
+        ))
+
+        # 2. Index Scene Chunks (~20 lines per chunk)
+        lines = [l.strip() for l in final_text.splitlines() if l.strip()]
+        chunk_size = 20
+        chunk_idx = 1
+        for i in range(0, len(lines), chunk_size):
+            chunk_slice = lines[i:i + chunk_size]
+            if not chunk_slice:
+                continue
+            chunk_content = "\n".join(chunk_slice)
+            docs.append(LoreDocument(
+                doc_id=f"chunk:{folder_clean}:{chapter_num:04d}:{chunk_idx:03d}",
+                doc_type=DocumentType.CHUNK,
+                chapter_num=chapter_num,
+                folder=folder,
+                title=f"{title} (Part {chunk_idx})",
+                content=chunk_content
+            ))
+            chunk_idx += 1
+
+        embeddings = None
+        if self.embedding_client and self.embedding_client.is_available:
+            try:
+                embeddings = self.embedding_client.embed_documents([d.content for d in docs])
+            except Exception as e:
+                logger.warning(f"Embedding generation failed during chapter indexing: {e}")
+                embeddings = None
+
+        self.rag_engine.index_documents(docs, embeddings)
 
     def run(
         self,

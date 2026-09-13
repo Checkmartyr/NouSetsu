@@ -54,21 +54,19 @@ class ContextAwareDrafterAgent:
     def format_summaries(
         rolling_summaries: List[ChapterSummary],
         limit: int = 3,
-        bible: Optional[NovelBible] = None
+        bible: Optional[NovelBible] = None,
+        rag_results: Optional[List[Any]] = None
     ) -> str:
-        """Format 3-tier narrative context (Macro Whole Story > Meso Story Arc > Micro Situation)."""
+        """Format 4-tier narrative context (Macro Whole Story > Meso Story Arc > Micro Situation > Episodic RAG Lore)."""
         selected = rolling_summaries[-limit:] if limit else rolling_summaries
         micro_str = "\n".join([
             f"[{s.folder}] Chapter {s.chapter_num} ({s.title}): {s.synopsis}" if getattr(s, "folder", None) else f"Chapter {s.chapter_num} ({s.title}): {s.synopsis}"
             for s in selected
         ]) if selected else "This is the first chapter."
 
-        if not bible or (not getattr(bible, "whole_story_summary", None) and not getattr(bible, "active_arc", None)):
-            return micro_str
-
         sections = ["### 3. Immediate Preceding Situation (Micro):", micro_str]
 
-        arc = getattr(bible, "active_arc", None)
+        arc = getattr(bible, "active_arc", None) if bible else None
         if arc and (arc.title or arc.synopsis or arc.core_conflict):
             arc_lines = [f"### 2. Active Story Arc (Meso - Arc {arc.arc_num}: '{arc.title or 'Ongoing Arc'}'):"]
             if arc.core_conflict:
@@ -79,9 +77,22 @@ class ContextAwareDrafterAgent:
                 arc_lines.append(f"- Milestones: {', '.join(arc.key_milestones)}")
             sections = ["\n".join(arc_lines)] + sections
 
-        story = getattr(bible, "whole_story_summary", "")
+        story = getattr(bible, "whole_story_summary", "") if bible else ""
         if story:
             sections = [f"### 1. Global Story Progression (Macro):\n{story}"] + sections
+
+        if rag_results:
+            lore_lines = ["### 4. Relevant Historical Lore & Past Canon (Episodic Hybrid RAG):"]
+            for r in rag_results:
+                loc = f"[{r.folder}] " if getattr(r, "folder", None) else ""
+                ch_str = f"Chapter {r.chapter_num}" if getattr(r, "chapter_num", None) else "Lore Entry"
+                t_str = f" ({r.title})" if getattr(r, "title", None) else ""
+                content_snip = getattr(r, "content", str(r)).strip()
+                lore_lines.append(f"- {loc}{ch_str}{t_str}: {content_snip[:350]}")
+            sections.append("\n".join(lore_lines))
+
+        if not bible and not rag_results:
+            return micro_str
 
         return "## HIERARCHICAL NARRATIVE CONTEXT:\n" + "\n\n".join(sections)
 
@@ -287,7 +298,8 @@ class ContextAwareDrafterAgent:
             for g in eval_glossary
         ]) or "No specific glossary terms."
 
-        summaries_str = self.format_summaries(rolling_summaries, limit=3, bible=bible)
+        rag_results = kwargs.get("rag_results")
+        summaries_str = self.format_summaries(rolling_summaries, limit=3, bible=bible, rag_results=rag_results)
 
         custom_rules_str = "\n".join([f"   - {r}" for r in bible.style_guide.custom_rules])
 
