@@ -9,6 +9,7 @@ from nousetsu.models.bible import CharacterProfile, GlossaryItem, NovelBible
 from nousetsu.models.metadata import QualityAudit, TokenUsage
 from nousetsu.prompts.templates import CRITIQUE_SYSTEM_PROMPT
 from nousetsu.skills.registry import SkillRegistry
+from nousetsu.utils.character_filter import filter_characters_for_scene
 from nousetsu.utils.language import detect_language
 from nousetsu.utils.translation_fallback import (
     bisect_text,
@@ -123,7 +124,14 @@ class CritiqueAgent:
         ]
         eval_glossary = relevant_glossary if relevant_glossary else (active_glossary[:15] if active_glossary else [])
 
-        chars_str = "\n".join([f"- {c.name} ({c.original_name}, {c.gender}, voice: {c.voice})" for c in active_characters]) or "None"
+        # Filter character cards to those relevant to this specific scene to prevent prompt bloat
+        eval_characters = filter_characters_for_scene(
+            characters=active_characters,
+            source_text=source_text,
+            target_text=draft_text,
+            max_characters=15
+        )
+        chars_str = "\n".join([f"- {c.name} ({c.original_name}, {c.gender}, voice: {c.voice})" for c in eval_characters]) or "None"
         gloss_str = "\n".join([f"- {g.source} -> {g.target}" for g in eval_glossary]) or "None"
 
         resolved_genre = genre or getattr(bible, "genre", "general")

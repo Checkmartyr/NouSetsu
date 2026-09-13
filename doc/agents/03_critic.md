@@ -112,6 +112,11 @@ If a sensitive passage trips content filters during critique:
 - If depth $< 3$ and lines $\ge 8$, bisects source and draft chunks to audit non-sensitive portions with full scores.
 - Base case: assigns passing default scores (`fidelity = 8.5`, `style = 8.0`, `glossary = 100%`) with an audit warning (`⚠️ Sensitive scene safety block bypassed during critique`), preventing workflow stalls.
 
+### F. Per-Scene Character Roster Filtering
+`Zensor` uses [`filter_characters_for_scene`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/character_filter.py) during line-by-line auditing:
+- Ingests only character profiles present in the audited source slice or draft candidate, plus permanent core roles (`protagonist`, `lead`).
+- Focuses critique attention on the actual actors in the scene, preventing false tone warnings against uninvolved characters.
+
 ---
 
 ## 4. Domain Skills Active for Critic

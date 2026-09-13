@@ -21,6 +21,7 @@ from nousetsu.models.metadata import (
 )
 from nousetsu.prompts.templates import CHRONICLER_SYSTEM_PROMPT
 from nousetsu.skills.registry import SkillRegistry
+from nousetsu.utils.character_filter import filter_characters_for_scene
 from nousetsu.utils.translation_fallback import is_safety_block_exception
 
 
@@ -187,6 +188,12 @@ class ChroniclerAgent:
             subdivisions_count=subdivisions_count
         )
 
+        present_chars = filter_characters_for_scene(
+            characters=active_characters,
+            source_text=source_text,
+            target_text=final_text
+        )
+
         return ChapterMetadata(
             chapter_id=chapter_id,
             chapter_num=chapter_num,
@@ -197,7 +204,7 @@ class ChroniclerAgent:
             checkpoint=checkpoint,
             stats=stats,
             quality_audit=quality_audit,
-            entities_present=[c.name for c in active_characters],
+            entities_present=[c.name for c in present_chars],
             glossary_terms_applied=active_glossary,
             paragraph_alignments=[]
         )

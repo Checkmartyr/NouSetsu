@@ -137,6 +137,12 @@ Commercial AI safety filters frequently trigger HTTP 400 `prohibited_content` bl
 ### D. Sliding Context Chunking
 For chapters exceeding `chunk_threshold_lines` (default: 85 lines), chunks are drafted sequentially. The last 300 words of chunk $N$'s draft are passed as `preceding_context` into chunk $N+1$, ensuring dialogue flow and sentence continuity across chunk boundaries.
 
+### E. Per-Scene Character Roster Filtering
+In long novels with 50+ character cards, passing every profile to every chunk wastes prompt tokens and confuses zero-anaphora resolution. `Wortschmied` uses [`filter_characters_for_scene`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/character_filter.py):
+- **Core Role Retention**: Protagonists and leads (`role in ["protagonist", "main", "lead", "hero", "heroine"]`) are always preserved to safeguard unstated viewpoint actor tracking.
+- **Scene-Level Detection**: Supporting characters are included only if their `original_name`, `name`, or `aliases` appear in the chunk text or preceding sliding context.
+- **Fallback Guard**: If zero characters match, falls back to the top major characters to prevent empty context.
+
 ---
 
 ## 4. Domain Skills Active for Drafter

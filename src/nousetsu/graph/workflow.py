@@ -19,6 +19,7 @@ from nousetsu.models.exceptions import BatchStoppedException
 from nousetsu.models.metadata import PipelineStage, StageStatus, StepTokenUsage, TokenUsage
 from nousetsu.models.state import TranslationState
 from nousetsu.skills.registry import SkillRegistry
+from nousetsu.utils.character_filter import filter_characters_for_scene
 from nousetsu.utils.chunker import LineSemanticChunker
 from nousetsu.utils.genre import detect_genre
 from nousetsu.utils.language import detect_language
@@ -363,7 +364,8 @@ class NovelTranslationWorkflow:
         rag_hits = []
         if self.enable_rag and self.rag_engine:
             try:
-                char_names = " ".join([c.name for c in state.active_characters[:5]])
+                scene_chars = filter_characters_for_scene(state.active_characters, source_text=state.source_text)
+                char_names = " ".join([c.name for c in scene_chars[:5]])
                 first_lines = " ".join([l.strip() for l in state.source_text.splitlines() if l.strip()][:3])
                 query_text = f"{char_names} {first_lines}".strip()[:250]
 
@@ -789,7 +791,8 @@ class NovelTranslationWorkflow:
         chr_rag_hits = []
         if self.enable_rag and self.rag_engine:
             try:
-                char_names = " ".join([c.name for c in state.active_characters[:4]])
+                scene_chars = filter_characters_for_scene(state.active_characters, source_text=state.source_text, target_text=final_text)
+                char_names = " ".join([c.name for c in scene_chars[:4]])
                 first_lines = " ".join([l.strip() for l in final_text.splitlines() if l.strip()][:2])
                 chr_query = f"{char_names} {first_lines}".strip()[:250] if (char_names or first_lines) else f"Chapter {state.chapter_num} story arc events"
                 chr_vec = None

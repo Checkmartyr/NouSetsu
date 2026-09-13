@@ -8,6 +8,7 @@ from nousetsu.models.bible import CharacterProfile, ChapterSummary, GlossaryItem
 from nousetsu.models.metadata import TokenUsage
 from nousetsu.prompts.templates import DRAFTING_SYSTEM_PROMPT
 from nousetsu.skills.registry import SkillRegistry
+from nousetsu.utils.character_filter import filter_characters_for_scene
 from nousetsu.utils.translation_fallback import (
     bisect_text,
     can_subdivide_text,
@@ -282,9 +283,16 @@ class ContextAwareDrafterAgent:
         procedural_graph: Optional[ProceduralGraph] = None,
         **kwargs: Any
     ) -> str:
+        # Filter character cards to those relevant to this specific scene/chunk to prevent prompt bloat
+        eval_characters = filter_characters_for_scene(
+            characters=active_characters,
+            source_text=chunk_text,
+            target_text=preceding_context,
+            max_characters=15
+        )
         chars_str = "\n".join([
             f"- {c.name} (Original: {c.original_name}, Gender: {c.gender}, Role: {c.role}): Voice={c.voice}"
-            for c in active_characters
+            for c in eval_characters
         ]) or "No explicit character cards registered."
 
         relevant_glossary = [
