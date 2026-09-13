@@ -88,6 +88,23 @@ class TokenAnalysisWidget(Widget):
         self.current_summary: Optional[ProjectTokenSummary] = None
         self.selected_folder: str = "ALL"
         self._last_folder_options: Optional[List[str]] = None
+        self._dirty: bool = True
+
+        # Cached widget references
+        self._select_folder: Optional[Select] = None
+        self._filter_stats_summary: Optional[Static] = None
+        self._kpi_tokens_val: Optional[Static] = None
+        self._kpi_tokens_sub: Optional[Static] = None
+        self._kpi_duration_val: Optional[Static] = None
+        self._kpi_duration_sub: Optional[Static] = None
+        self._kpi_avg_val: Optional[Static] = None
+        self._kpi_avg_sub: Optional[Static] = None
+        self._kpi_chapters_val: Optional[Static] = None
+        self._kpi_chapters_sub: Optional[Static] = None
+        self._table_stages: Optional[DataTable] = None
+        self._table_models: Optional[DataTable] = None
+        self._table_folders: Optional[DataTable] = None
+        self._table_chapters: Optional[DataTable] = None
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="filter-strip"):
@@ -140,31 +157,42 @@ class TokenAnalysisWidget(Widget):
 
     def on_mount(self) -> None:
         """Initialize data table schemas and load initial metrics."""
-        table_stages = self.query_one("#table-stages", DataTable)
-        table_stages.cursor_type = "row"
-        table_stages.zebra_stripes = True
-        table_stages.add_columns(
+        self._select_folder = self.query_one("#select_folder", Select)
+        self._filter_stats_summary = self.query_one("#filter_stats_summary", Static)
+        self._kpi_tokens_val = self.query_one("#kpi_tokens_val", Static)
+        self._kpi_tokens_sub = self.query_one("#kpi_tokens_sub", Static)
+        self._kpi_duration_val = self.query_one("#kpi_duration_val", Static)
+        self._kpi_duration_sub = self.query_one("#kpi_duration_sub", Static)
+        self._kpi_avg_val = self.query_one("#kpi_avg_val", Static)
+        self._kpi_avg_sub = self.query_one("#kpi_avg_sub", Static)
+        self._kpi_chapters_val = self.query_one("#kpi_chapters_val", Static)
+        self._kpi_chapters_sub = self.query_one("#kpi_chapters_sub", Static)
+
+        self._table_stages = self.query_one("#table-stages", DataTable)
+        self._table_stages.cursor_type = "row"
+        self._table_stages.zebra_stripes = True
+        self._table_stages.add_columns(
             "Stage", "Calls", "Total Tokens", "Input (Prompt)", "Output (Compl)", "Thought", "Cached", "Duration", "Avg Sec/Call"
         )
 
-        table_models = self.query_one("#table-models", DataTable)
-        table_models.cursor_type = "row"
-        table_models.zebra_stripes = True
-        table_models.add_columns(
+        self._table_models = self.query_one("#table-models", DataTable)
+        self._table_models.cursor_type = "row"
+        self._table_models.zebra_stripes = True
+        self._table_models.add_columns(
             "Model", "Calls", "Total Tokens", "Input (Prompt)", "Output (Compl)", "Thought", "Cached", "Duration", "Avg Sec/Call"
         )
 
-        table_folders = self.query_one("#table-folders", DataTable)
-        table_folders.cursor_type = "row"
-        table_folders.zebra_stripes = True
-        table_folders.add_columns(
+        self._table_folders = self.query_one("#table-folders", DataTable)
+        self._table_folders.cursor_type = "row"
+        self._table_folders.zebra_stripes = True
+        self._table_folders.add_columns(
             "Folder / Volume", "Chapters", "Analyzed", "Total Tokens", "Prompt", "Output", "Thought", "Cached", "Total Runtime", "Avg Tokens/Ch"
         )
 
-        table_chapters = self.query_one("#table-chapters", DataTable)
-        table_chapters.cursor_type = "row"
-        table_chapters.zebra_stripes = True
-        table_chapters.add_columns(
+        self._table_chapters = self.query_one("#table-chapters", DataTable)
+        self._table_chapters.cursor_type = "row"
+        self._table_chapters.zebra_stripes = True
+        self._table_chapters.add_columns(
             "#", "Chapter File", "Status", "Total Tokens", "Prompt", "Output", "Thought", "Duration"
         )
 
@@ -175,6 +203,7 @@ class TokenAnalysisWidget(Widget):
         self.repo = repo
         self.selected_folder = "ALL"
         self._last_folder_options = None
+        self._dirty = True
         self.refresh_metrics()
 
     def on_select_changed(self, event: Select.Changed) -> None:
@@ -183,10 +212,20 @@ class TokenAnalysisWidget(Widget):
             val = str(event.value) if event.value is not None else "ALL"
             if val != self.selected_folder:
                 self.selected_folder = val
-                self.refresh_metrics()
+                self.refresh_metrics(force=True)
 
-    def refresh_metrics(self) -> None:
+    def refresh_metrics(self, force: bool = False) -> None:
         """Compute latest token metrics from repository and populate UI."""
+        if not force and self.is_mounted:
+            try:
+                tabs = self.app.query_one("#main-tabs")
+                if getattr(tabs, "active", None) != "tab-tokens":
+                    self._dirty = True
+                    return
+            except Exception:
+                pass
+
+        self._dirty = False
         try:
             chapters = self.repo.load_all_metadata()
         except Exception:
@@ -197,12 +236,12 @@ class TokenAnalysisWidget(Widget):
 
         # 1. Update Folder Selector Options
         try:
-            select_ctrl = self.query_one("#select_folder", Select)
-            current_options = [("🌐 All Folders (Series)", "ALL")] + [
-                (f"📁 {f}", f) for f in summary.available_folders
-            ]
+            select_ctrl = self._select_folder or self.query_one("#select_folder", Select)
             if self._last_folder_options != summary.available_folders:
                 self._last_folder_options = list(summary.available_folders)
+                current_options = [("🌐 All Folders (Series)", "ALL")] + [
+                    (f"📁 {f}", f) for f in summary.available_folders
+                ]
                 select_ctrl.set_options(current_options)
                 if self.selected_folder in summary.available_folders:
                     select_ctrl.value = self.selected_folder
@@ -211,7 +250,8 @@ class TokenAnalysisWidget(Widget):
                     self.selected_folder = "ALL"
 
             scope_desc = "Entire Series" if self.selected_folder == "ALL" else f"Volume: {self.selected_folder}"
-            self.query_one("#filter_stats_summary", Static).update(
+            filter_stats = self._filter_stats_summary or self.query_one("#filter_stats_summary", Static)
+            filter_stats.update(
                 f"[dim]Viewing:[/] [bold cyan]{scope_desc}[/] ([dim]{summary.total_chapters} chapters[/])"
             )
         except Exception:
@@ -219,25 +259,33 @@ class TokenAnalysisWidget(Widget):
 
         # 2. Update KPI Cards
         try:
-            self.query_one("#kpi_tokens_val", Static).update(f"[bold cyan]{summary.total_tokens:,}[/]")
-            self.query_one("#kpi_tokens_sub", Static).update(
+            tokens_val = self._kpi_tokens_val or self.query_one("#kpi_tokens_val", Static)
+            tokens_val.update(f"[bold cyan]{summary.total_tokens:,}[/]")
+            tokens_sub = self._kpi_tokens_sub or self.query_one("#kpi_tokens_sub", Static)
+            tokens_sub.update(
                 f"In: {summary.prompt_tokens:,} | Out: {summary.completion_tokens:,} | Thought: {summary.thought_tokens:,} | Cached: {summary.cached_tokens:,}"
             )
 
-            self.query_one("#kpi_duration_val", Static).update(f"[bold green]{summary.formatted_duration}[/]")
-            self.query_one("#kpi_duration_sub", Static).update(f"{summary.total_duration_seconds:.1f}s total compute")
+            dur_val = self._kpi_duration_val or self.query_one("#kpi_duration_val", Static)
+            dur_val.update(f"[bold green]{summary.formatted_duration}[/]")
+            dur_sub = self._kpi_duration_sub or self.query_one("#kpi_duration_sub", Static)
+            dur_sub.update(f"{summary.total_duration_seconds:.1f}s total compute")
 
-            self.query_one("#kpi_avg_val", Static).update(f"[bold yellow]{summary.avg_tokens_per_chapter:,.0f}[/]")
-            self.query_one("#kpi_avg_sub", Static).update(f"Avg time: {format_duration(summary.avg_duration_per_chapter)}")
+            avg_val = self._kpi_avg_val or self.query_one("#kpi_avg_val", Static)
+            avg_val.update(f"[bold yellow]{summary.avg_tokens_per_chapter:,.0f}[/]")
+            avg_sub = self._kpi_avg_sub or self.query_one("#kpi_avg_sub", Static)
+            avg_sub.update(f"Avg time: {format_duration(summary.avg_duration_per_chapter)}")
 
-            self.query_one("#kpi_chapters_val", Static).update(f"[bold magenta]{summary.analyzed_chapters}[/] / {summary.total_chapters}")
-            self.query_one("#kpi_chapters_sub", Static).update(f"{summary.analyzed_chapters} with token stats")
+            ch_val = self._kpi_chapters_val or self.query_one("#kpi_chapters_val", Static)
+            ch_val.update(f"[bold magenta]{summary.analyzed_chapters}[/] / {summary.total_chapters}")
+            ch_sub = self._kpi_chapters_sub or self.query_one("#kpi_chapters_sub", Static)
+            ch_sub.update(f"{summary.analyzed_chapters} with token stats")
         except Exception:
             pass
 
         # 3. Populate Stages Table
         try:
-            t_stages = self.query_one("#table-stages", DataTable)
+            t_stages = self._table_stages or self.query_one("#table-stages", DataTable)
             t_stages.clear()
             for sm in summary.stage_metrics:
                 t_stages.add_row(
@@ -256,7 +304,7 @@ class TokenAnalysisWidget(Widget):
 
         # 4. Populate Models Table
         try:
-            t_models = self.query_one("#table-models", DataTable)
+            t_models = self._table_models or self.query_one("#table-models", DataTable)
             t_models.clear()
             for mm in summary.model_metrics:
                 t_models.add_row(
@@ -275,7 +323,7 @@ class TokenAnalysisWidget(Widget):
 
         # 5. Populate Folders Table
         try:
-            t_folders = self.query_one("#table-folders", DataTable)
+            t_folders = self._table_folders or self.query_one("#table-folders", DataTable)
             t_folders.clear()
             for fm in summary.folder_metrics:
                 is_selected = (fm.folder.lower() == self.selected_folder.lower())
@@ -297,7 +345,7 @@ class TokenAnalysisWidget(Widget):
 
         # 6. Populate Chapters Table
         try:
-            t_chapters = self.query_one("#table-chapters", DataTable)
+            t_chapters = self._table_chapters or self.query_one("#table-chapters", DataTable)
             t_chapters.clear()
             for cm in summary.chapter_rankings:
                 status_color = "green" if cm.status == "completed" else ("red" if cm.status == "failed" else "yellow")

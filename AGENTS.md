@@ -281,6 +281,13 @@ NouSetsu tracks end-to-end token consumption and execution latency per pipeline 
 13. **Script-Aware Word Boundary & Scene-Level Character Filtering**:
     - Script-aware regex matching ensures CJK ideographs match without Latin `\b` word boundaries while ASCII terms enforce `\b` to prevent false substring matches.
     - Dynamically filters character rosters to only include active participants per chunk/scene, drastically trimming prompt token bloat.
+14. **High-Performance TUI Subsystem & Memoized Rendering**:
+    - Chapter scanner caches file SHA-256 hashes via `(path, size, mtime)` tuples, speeding up directory re-scans by >100x.
+    - Dual reader widget memoizes rendered source and target markdown to prevent redundant AST re-parsing.
+    - Checkpoint inspector widget deduplicates inspection updates via composite metadata cache keys and cached DOM references.
+    - Real-time progress panel throttles sub-30ms micro-updates (<0.5% delta) to maintain smooth 60 FPS terminal frame rates.
+    - Token analytics widget employs lazy rendering (`_dirty` flag) to avoid rebuilding 4 DataTables when running in the background.
+    - List view mounts items in batch via `ListView.extend` and preserves active chapter selection across directory refreshes.
 
 ---
 
@@ -295,7 +302,7 @@ uv sync
 # Query CLI version
 uv run nousetsu --version
 
-# Run complete test suite (288 tests across 45 modules in ~102s)
+# Run complete test suite (305 tests across 46 modules in ~88s)
 uv run pytest
 
 # Run specific test modules
@@ -307,6 +314,7 @@ uv run pytest tests/test_model_fallback.py
 uv run pytest tests/test_recursive_subdivision.py
 uv run pytest tests/test_translation_fallback.py
 uv run pytest tests/test_tui.py
+uv run pytest tests/test_tui_performance.py
 uv run pytest tests/test_skills.py
 uv run pytest tests/test_review_loop.py
 uv run pytest tests/test_stop.py

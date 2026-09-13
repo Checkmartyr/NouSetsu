@@ -1,4 +1,5 @@
 """Dual-pane reader widget for source and translated text inspection."""
+from typing import Optional
 from textual.app import ComposeResult
 from textual.containers import Horizontal, VerticalScroll
 from textual.widget import Widget
@@ -30,6 +31,13 @@ class DualReaderWidget(Widget):
     }
     """
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._last_source: Optional[str] = None
+        self._last_target: Optional[str] = None
+        self._source_widget: Optional[Static] = None
+        self._target_widget: Optional[Markdown] = None
+
     def compose(self) -> ComposeResult:
         with Horizontal():
             with VerticalScroll(classes="reader-pane"):
@@ -40,10 +48,33 @@ class DualReaderWidget(Widget):
                 yield Label("✨ Agent Translation (Polished Prose)", classes="pane-title")
                 yield Markdown("*Translation preview will appear here.*", id="target_markdown_view")
 
-    def update_content(self, source_text: str, translated_markdown: str) -> None:
-        """Update both panes with chapter content."""
-        source_widget = self.query_one("#source_text_view", Static)
-        target_widget = self.query_one("#target_markdown_view", Markdown)
+    def on_mount(self) -> None:
+        try:
+            self._source_widget = self.query_one("#source_text_view", Static)
+            self._target_widget = self.query_one("#target_markdown_view", Markdown)
+        except Exception:
+            pass
 
-        source_widget.update(source_text or "(Empty source file)")
-        target_widget.update(translated_markdown or "*Translation pending or not yet generated.*")
+    def update_content(self, source_text: str, translated_markdown: str) -> None:
+        """Update both panes with chapter content, avoiding redundant markdown re-parsing."""
+        new_source = source_text or "(Empty source file)"
+        new_target = translated_markdown or "*Translation pending or not yet generated.*"
+
+        if self._source_widget is None:
+            try:
+                self._source_widget = self.query_one("#source_text_view", Static)
+            except Exception:
+                pass
+        if self._target_widget is None:
+            try:
+                self._target_widget = self.query_one("#target_markdown_view", Markdown)
+            except Exception:
+                pass
+
+        if new_source != self._last_source and self._source_widget:
+            self._source_widget.update(new_source)
+            self._last_source = new_source
+
+        if new_target != self._last_target and self._target_widget:
+            self._target_widget.update(new_target)
+            self._last_target = new_target
