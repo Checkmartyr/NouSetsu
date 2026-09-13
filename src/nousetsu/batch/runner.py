@@ -159,7 +159,9 @@ class BatchRunner:
             rag_engine=self.repo.get_rag_engine() if getattr(cfg, "enable_rag", True) else None,
             enable_rag=getattr(cfg, "enable_rag", True),
             rag_top_k=getattr(cfg, "rag_top_k", 2),
-            rag_embedding_model=getattr(cfg, "rag_embedding_model", "text-embedding-004")
+            rag_embedding_model=cfg.get_rag_embedding_model() if hasattr(cfg, "get_rag_embedding_model") else getattr(cfg, "rag_embedding_model", "text-multilingual-embedding-002"),
+            enable_rag_reranker=getattr(cfg, "enable_rag_reranker", True),
+            rag_reranker_model=default_agent_model if is_mock else (cfg.get_rag_reranker_model() if hasattr(cfg, "get_rag_reranker_model") else getattr(cfg, "rag_reranker_model", "gemini-3.5-flash-lite"))
         )
         self.rag_engine = self.workflow.rag_engine
         self.auto_update_bible = auto_update_bible if auto_update_bible is not None else cfg.auto_update_bible

@@ -39,7 +39,9 @@ class ProjectConfig(BaseModel):
     safety_subdivision_max_depth: int = Field(default=4, description="Maximum recursion depth for bisection")
     enable_rag: bool = Field(default=True, description="Enable hybrid search episodic lore retrieval (Tier 4 Memory)")
     rag_top_k: int = Field(default=2, ge=1, le=10, description="Top N historical lore snippets to retrieve per chapter")
-    rag_embedding_model: str = Field(default="text-embedding-004", description="Model name for vector embeddings")
+    rag_embedding_model: Optional[str] = Field(default=None, description="Dense embedding model override (defaults to text-multilingual-embedding-002)")
+    enable_rag_reranker: bool = Field(default=True, description="Enable Cross-Encoder reranking stage after hybrid retrieval")
+    rag_reranker_model: Optional[str] = Field(default=None, description="Model override for Cross-Encoder reranker (defaults to gemini-3.5-flash-lite)")
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     def get_raw_path(self, base_dir: Path) -> Path:
@@ -109,5 +111,21 @@ class ProjectConfig(BaseModel):
     def get_agent_fallback_model(self, role: Optional[str] = None) -> Optional[str]:
         """Return fallback model for agent role or global fallback_model."""
         return self.get_fallback_model()
+
+    def get_rag_embedding_model(self) -> str:
+        """Resolve effective rag_embedding_model: config override -> .env NOVEL_RAG_EMBEDDING_MODEL -> default."""
+        return (
+            self.rag_embedding_model
+            or os.environ.get("NOVEL_RAG_EMBEDDING_MODEL")
+            or "text-multilingual-embedding-002"
+        )
+
+    def get_rag_reranker_model(self) -> str:
+        """Resolve effective rag_reranker_model: config override -> .env NOVEL_RAG_RERANKER_MODEL -> default."""
+        return (
+            self.rag_reranker_model
+            or os.environ.get("NOVEL_RAG_RERANKER_MODEL")
+            or "gemini-3.5-flash-lite"
+        )
 
 

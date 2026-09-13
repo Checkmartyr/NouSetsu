@@ -318,9 +318,11 @@ class HybridSearchEngine:
         limit: int = 2,
         rrf_k: int = 60,
         folder: Optional[str] = None,
-        doc_type: Optional[DocumentType] = None
+        doc_type: Optional[DocumentType] = None,
+        reranker: Optional[Any] = None,
+        enable_rerank: bool = True
     ) -> List[SearchResult]:
-        """Combine sparse and dense rankings using Reciprocal Rank Fusion (RRF)."""
+        """Combine sparse and dense rankings using Reciprocal Rank Fusion (RRF), with optional Cross-Encoder reranking."""
         candidate_k = max(limit * 5, 20)
         sparse_hits = self.search_sparse(query=query, limit=candidate_k, folder=folder, doc_type=doc_type)
         dense_hits = (
@@ -371,4 +373,11 @@ class HybridSearchEngine:
             ))
 
         scored_results.sort(key=lambda x: x.rrf_score, reverse=True)
+
+        # Stage 2: Cross-Encoder Reranking
+        if enable_rerank and reranker is not None and scored_results:
+            candidate_pool = scored_results[:max(limit * 5, 10)]
+            reranked = reranker.rerank(query=query, documents=candidate_pool, top_k=limit)
+            return reranked
+
         return scored_results[:limit]

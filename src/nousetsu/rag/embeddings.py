@@ -29,12 +29,28 @@ def generate_mock_embedding(text: str, dim: int = 64) -> List[float]:
     return vec
 
 
+def resolve_embedding_model_name(name: str) -> str:
+    """Resolve user-friendly model alias to canonical Google model string."""
+    clean = name.strip()
+    if clean.startswith("models/"):
+        return clean
+    alias_map = {
+        "gemini-embedding-2": "models/text-multilingual-embedding-002",
+        "gemini-embedding-002": "models/text-multilingual-embedding-002",
+        "text-multilingual-embedding-002": "models/text-multilingual-embedding-002",
+        "text-embedding-004": "models/text-embedding-004",
+        "gemini-embedding-001": "models/embedding-001",
+        "embedding-001": "models/embedding-001",
+    }
+    return alias_map.get(clean.lower(), f"models/{clean}")
+
+
 class EmbeddingClient:
     """Provides vector embeddings using Google GenAI or offline deterministic mocking."""
 
     def __init__(
         self,
-        model_name: str = "text-embedding-004",
+        model_name: str = "text-multilingual-embedding-002",
         api_key: Optional[str] = None
     ):
         self.raw_model_name = model_name
@@ -54,7 +70,7 @@ class EmbeddingClient:
         if not self.is_mock and resolved_key:
             try:
                 from langchain_google_genai import GoogleGenerativeAIEmbeddings
-                model_str = model_name if model_name.startswith("models/") else f"models/{model_name}"
+                model_str = resolve_embedding_model_name(model_name)
                 self._client = GoogleGenerativeAIEmbeddings(
                     model=model_str,
                     google_api_key=resolved_key

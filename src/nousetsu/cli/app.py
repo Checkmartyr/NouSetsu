@@ -317,21 +317,34 @@ def cmd_lore_search(args: argparse.Namespace) -> None:
     query = args.query
     limit = getattr(args, "limit", 5) or 5
     folder = getattr(args, "folder", None)
-    emb_model = getattr(args, "embedding_model", "text-embedding-004")
+    emb_model = getattr(args, "embedding_model", "text-multilingual-embedding-002")
+    rerank_enabled = getattr(args, "rerank", True)
+    rerank_model = getattr(args, "reranker_model", "gemini-3.5-flash-lite")
 
     emb_client = EmbeddingClient(model_name=emb_model)
     query_vec = emb_client.embed_text(query) if emb_client.is_available else None
 
-    results = engine.hybrid_search(query=query, query_vector=query_vec, limit=limit, folder=folder)
+    from nousetsu.rag.reranker import get_reranker
+    reranker = get_reranker(model_name=rerank_model) if rerank_enabled else None
+
+    results = engine.hybrid_search(
+        query=query,
+        query_vector=query_vec,
+        limit=limit,
+        folder=folder,
+        reranker=reranker,
+        enable_rerank=rerank_enabled
+    )
 
     if not results:
         console.print(f"[yellow]No lore entries matched query: '{query}'[/]")
         return
 
-    table = Table(title=f"📚 Lore Vault Search: '{query}' (Hybrid BM25 + Vector RRF)", box=ROUNDED)
+    table = Table(title=f"📚 Lore Vault: '{query}' (Hybrid FTS5 + Gemini Embedding 2 + Cross-Encoder)", box=ROUNDED)
     table.add_column("Rank", justify="center", style="dim")
     table.add_column("Type", style="cyan")
     table.add_column("Chapter", justify="center", style="bold")
+    table.add_column("CE Score", justify="right", style="bold magenta")
     table.add_column("RRF Score", justify="right", style="green")
     table.add_column("Sparse Rank", justify="right")
     table.add_column("Dense Rank", justify="right")
@@ -340,6 +353,7 @@ def cmd_lore_search(args: argparse.Namespace) -> None:
     for idx, r in enumerate(results, start=1):
         s_rank_str = f"#{r.sparse_rank}" if r.sparse_rank else "[dim]-[/]"
         d_rank_str = f"#{r.dense_rank}" if r.dense_rank else "[dim]-[/]"
+        ce_str = f"{r.rerank_score:.3f}" if r.rerank_score is not None else "[dim]-[/]"
         ch_str = f"Ch.{r.chapter_num}" if r.chapter_num else "-"
         if r.folder:
             ch_str = f"[{r.folder}] {ch_str}"
@@ -350,6 +364,7 @@ def cmd_lore_search(args: argparse.Namespace) -> None:
             str(idx),
             r.doc_type.value,
             ch_str,
+            ce_str,
             f"{r.rrf_score:.4f}",
             s_rank_str,
             d_rank_str,
@@ -454,12 +469,14 @@ def main() -> None:
     p_migrate.add_argument("--dry-run", action="store_true", help="Preview migration without writing to disk")
 
     # lore
-    p_lore = subparsers.add_parser("lore", help="Search the project Lore Vault using Hybrid RAG (FTS5 BM25 + Vector Embeddings)")
+    p_lore = subparsers.add_parser("lore", help="Search the project Lore Vault using Hybrid RAG + Cross-Encoder")
     p_lore.add_argument("query", help="Text search query (e.g. 'Claire magic sword')")
     p_lore.add_argument("--project-dir", "-p", default=None, help="Root folder of novel project")
     p_lore.add_argument("--folder", "-F", default=None, help="Filter by specific volume folder")
     p_lore.add_argument("--limit", "-l", type=int, default=5, help="Number of results to display (default: 5)")
-    p_lore.add_argument("--embedding-model", default="text-embedding-004", help="Embedding model for dense search")
+    p_lore.add_argument("--embedding-model", default="text-multilingual-embedding-002", help="Embedding model for dense search (default: text-multilingual-embedding-002)")
+    p_lore.add_argument("--rerank", action=argparse.BooleanOptionalAction, default=True, help="Enable Cross-Encoder reranking (default: True)")
+    p_lore.add_argument("--reranker-model", default="gemini-3.5-flash-lite", help="Cross-Encoder reranker model (default: gemini-3.5-flash-lite)")
 
     # tui
     p_tui = subparsers.add_parser("tui", help="Launch interactive Textual TUI dashboard")

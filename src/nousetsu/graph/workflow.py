@@ -1,10 +1,13 @@
 """LangGraph translation workflow wiring the multi-agent pipeline."""
+import logging
 import os
 from pathlib import Path
 import threading
 import time
 from typing import Any, Callable, Dict, Optional
 from langgraph.graph import END, StateGraph
+
+logger = logging.getLogger(__name__)
 from nousetsu.agents.chronicler import ChroniclerAgent
 from nousetsu.agents.critic import CritiqueAgent
 from nousetsu.agents.drafter import ContextAwareDrafterAgent
@@ -50,8 +53,11 @@ class NovelTranslationWorkflow:
         rag_engine: Optional[Any] = None,
         enable_rag: bool = True,
         rag_top_k: int = 2,
-        rag_embedding_model: str = "text-embedding-004",
-        embedding_client: Optional[Any] = None
+        rag_embedding_model: str = "text-multilingual-embedding-002",
+        embedding_client: Optional[Any] = None,
+        enable_rag_reranker: bool = True,
+        rag_reranker_model: str = "gemini-3.5-flash-lite",
+        reranker: Optional[Any] = None
     ):
         effective_model = model_name or os.environ.get("NOVEL_MODEL") or os.environ.get("DEFAULT_MODEL") or "gemini-3.1-flash-lite"
         self.model_name = effective_model
@@ -120,12 +126,20 @@ class NovelTranslationWorkflow:
         self.enable_rag = enable_rag
         self.rag_top_k = rag_top_k
         self.rag_embedding_model = rag_embedding_model
+        self.enable_rag_reranker = enable_rag_reranker
         if self.enable_rag and embedding_client is None and self.rag_engine is not None:
             from nousetsu.rag.embeddings import EmbeddingClient
             emb_model = "mock-embedding" if is_mock else rag_embedding_model
             self.embedding_client = EmbeddingClient(model_name=emb_model)
         else:
             self.embedding_client = embedding_client
+
+        if self.enable_rag and self.enable_rag_reranker and reranker is None and self.rag_engine is not None:
+            from nousetsu.rag.reranker import get_reranker
+            rerank_model = "mock-reranker" if is_mock else rag_reranker_model
+            self.reranker = get_reranker(model_name=rerank_model, is_mock=is_mock)
+        else:
+            self.reranker = reranker
 
         self.stage_callback: Optional[Callable[[PipelineStage, str, float], None]] = None
         self.stop_event: Optional[threading.Event] = None
@@ -360,10 +374,12 @@ class NovelTranslationWorkflow:
                 rag_hits = self.rag_engine.hybrid_search(
                     query=query_text,
                     query_vector=query_vec,
-                    limit=self.rag_top_k
+                    limit=self.rag_top_k,
+                    reranker=self.reranker if self.enable_rag_reranker else None,
+                    enable_rerank=self.enable_rag_reranker
                 )
                 if rag_hits:
-                    self._notify(PipelineStage.DRAFTING, f"Retrieved {len(rag_hits)} episodic lore entries via Hybrid RAG...", 32.0)
+                    self._notify(PipelineStage.DRAFTING, f"Retrieved {len(rag_hits)} episodic lore entries via Hybrid RAG + Cross-Encoder...", 32.0)
             except Exception as e:
                 logger.warning(f"RAG retrieval failed: {e}")
                 rag_hits = []

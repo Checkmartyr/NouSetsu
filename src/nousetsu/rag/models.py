@@ -35,12 +35,17 @@ class SearchResult(BaseModel):
     sparse_score: Optional[float] = None
     dense_score: Optional[float] = None
     rrf_score: float = 0.0
+    rerank_score: Optional[float] = None
+    rerank_rank: Optional[int] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
 class RAGConfig(BaseModel):
     """Settings governing hybrid search and context injection."""
     top_k: int = Field(default=2, description="Number of lore snippets to inject into drafting prompt")
-    embedding_model: str = Field(default="text-embedding-004", description="Dense embedding model")
+    embedding_model: str = Field(default="text-multilingual-embedding-002", description="Dense embedding model (Gemini Embedding 2)")
     rrf_k: int = Field(default=60, description="Reciprocal Rank Fusion constant (standard 60)")
+    enable_reranker: bool = Field(default=True, description="Enable Cross-Encoder reranking")
+    reranker_model: str = Field(default="gemini-3.5-flash-lite", description="Model for Cross-Encoder reranker")
+    candidate_pool_size: int = Field(default=10, description="Number of hybrid candidates to feed to Cross-Encoder")
     chunk_size_lines: int = Field(default=20, description="Lines per scene chunk when indexing chapters")
