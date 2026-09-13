@@ -157,3 +157,77 @@ def test_compute_token_summary_stage_and_model_breakdown():
     # Verify rankings: ch_001 (6000) > ch_002 (2500)
     assert summary.chapter_rankings[0].chapter_id == "ch_001"
     assert summary.chapter_rankings[1].chapter_id == "ch_002"
+
+
+def test_compute_token_summary_folder_grouping_and_filtering():
+    """Verify compute_token_summary handles folder grouping, deduplication, and folder filtering."""
+    ch1 = ChapterMetadata(
+        chapter_id="ch_001",
+        chapter_num=1,
+        source_file="Volume_01/001.txt",
+        source_sha256="hash1",
+        output_file="Volume_01_th/001.md",
+        checkpoint=CheckpointData(status=StageStatus.COMPLETED),
+        stats=TranslationStats(total_tokens=1000, prompt_tokens=800, completion_tokens=200, duration_seconds=10.0)
+    )
+    ch2 = ChapterMetadata(
+        chapter_id="ch_002",
+        chapter_num=2,
+        source_file="Volume_01/002.txt",
+        source_sha256="hash2",
+        output_file="Volume_01_th/002.md",
+        checkpoint=CheckpointData(status=StageStatus.COMPLETED),
+        stats=TranslationStats(total_tokens=1500, prompt_tokens=1200, completion_tokens=300, duration_seconds=15.0)
+    )
+    ch3 = ChapterMetadata(
+        chapter_id="ch_003",
+        chapter_num=3,
+        source_file="Volume_02/001.txt",
+        source_sha256="hash3",
+        output_file="Volume_02_th/001.md",
+        checkpoint=CheckpointData(status=StageStatus.COMPLETED),
+        stats=TranslationStats(total_tokens=3000, prompt_tokens=2400, completion_tokens=600, duration_seconds=30.0)
+    )
+
+    # Simulate repository having duplicate composite & stem keys for ch1
+    chapters_dict = {
+        "Volume_01_th/001": ch1,
+        "001": ch1,
+        "Volume_01_th/002": ch2,
+        "Volume_02_th/001": ch3,
+    }
+
+    # 1. Global summary across all folders
+    summary_all = compute_token_summary(chapters_dict)
+    assert summary_all.total_chapters == 3  # Deduplicated from 4 keys to 3
+    assert summary_all.total_tokens == 5500  # 1000 + 1500 + 3000
+    assert summary_all.total_duration_seconds == 55.0
+    assert summary_all.available_folders == ["Volume_01", "Volume_02"]
+
+    # Verify folder metrics
+    assert len(summary_all.folder_metrics) == 2
+    assert summary_all.folder_metrics[0].folder == "Volume_02"
+    assert summary_all.folder_metrics[0].chapter_count == 1
+    assert summary_all.folder_metrics[0].total_tokens == 3000
+
+    assert summary_all.folder_metrics[1].folder == "Volume_01"
+    assert summary_all.folder_metrics[1].chapter_count == 2
+    assert summary_all.folder_metrics[1].total_tokens == 2500
+    assert summary_all.folder_metrics[1].avg_tokens == 1250.0
+
+    # 2. Filtered summary by Volume_01
+    summary_v1 = compute_token_summary(chapters_dict, folder_filter="Volume_01")
+    assert summary_v1.total_chapters == 2
+    assert summary_v1.total_tokens == 2500
+    assert summary_v1.total_duration_seconds == 25.0
+    assert summary_v1.selected_folder == "Volume_01"
+    assert len(summary_v1.chapter_rankings) == 2
+    assert all(c.folder == "Volume_01" for c in summary_v1.chapter_rankings)
+    assert len(summary_v1.folder_metrics) == 2
+
+    # 3. Filtered summary by Volume_02
+    summary_v2 = compute_token_summary(chapters_dict, folder_filter="Volume_02")
+    assert summary_v2.total_chapters == 1
+    assert summary_v2.total_tokens == 3000
+    assert summary_v2.chapter_rankings[0].chapter_id == "ch_003"
+

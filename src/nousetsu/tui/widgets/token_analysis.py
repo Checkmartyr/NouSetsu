@@ -1,22 +1,46 @@
-"""Token analysis widget providing series-wide metrics, stage breakdowns, and model costs."""
-from typing import Optional
+"""Token analysis widget providing series-wide and per-folder metrics, stage breakdowns, and model costs."""
+from typing import List, Optional
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.widget import Widget
-from textual.widgets import DataTable, Label, Static, TabbedContent, TabPane
+from textual.widgets import DataTable, Label, Select, Static, TabbedContent, TabPane
 from nousetsu.analysis.token_metrics import ProjectTokenSummary, compute_token_summary
 from nousetsu.storage.repository import NovelRepository
 from nousetsu.utils.formatting import format_duration
 
 
 class TokenAnalysisWidget(Widget):
-    """Rich interactive dashboard displaying token usage, pipeline stage breakdown, and model stats."""
+    """Rich interactive dashboard displaying token usage, pipeline stage breakdown, and per-folder stats."""
 
     DEFAULT_CSS = """
     TokenAnalysisWidget {
         height: 1fr;
         layout: vertical;
         padding: 0 1;
+    }
+    #filter-strip {
+        height: 3;
+        layout: horizontal;
+        align-vertical: middle;
+        margin-bottom: 1;
+        dock: top;
+        padding: 0 1;
+        background: $surface;
+        border: solid $accent 30%;
+    }
+    #lbl_folder_filter {
+        margin-right: 1;
+        text-style: bold;
+        color: $text;
+        height: 1;
+    }
+    #select_folder {
+        width: 36;
+        height: 3;
+    }
+    #filter_stats_summary {
+        margin-left: 2;
+        color: $text-muted;
     }
     #kpi-strip {
         layout: horizontal;
@@ -62,8 +86,20 @@ class TokenAnalysisWidget(Widget):
         super().__init__(id=id)
         self.repo = repo
         self.current_summary: Optional[ProjectTokenSummary] = None
+        self.selected_folder: str = "ALL"
+        self._last_folder_options: Optional[List[str]] = None
 
     def compose(self) -> ComposeResult:
+        with Horizontal(id="filter-strip"):
+            yield Label("📁 Volume Scope:", id="lbl_folder_filter")
+            yield Select(
+                options=[("🌐 All Folders (Series)", "ALL")],
+                value="ALL",
+                allow_blank=False,
+                id="select_folder"
+            )
+            yield Static("", id="filter_stats_summary")
+
         with Horizontal(id="kpi-strip"):
             with Vertical(classes="kpi-card", id="card_tokens"):
                 yield Static("0", id="kpi_tokens_val", classes="kpi-val")
@@ -94,6 +130,10 @@ class TokenAnalysisWidget(Widget):
                 with Vertical(classes="analysis-table-container"):
                     yield DataTable(id="table-models")
 
+            with TabPane("📁 Folders & Volumes", id="subtab-folders"):
+                with Vertical(classes="analysis-table-container"):
+                    yield DataTable(id="table-folders")
+
             with TabPane("📑 Chapter Rankings", id="subtab-chapters"):
                 with Vertical(classes="analysis-table-container"):
                     yield DataTable(id="table-chapters")
@@ -114,6 +154,13 @@ class TokenAnalysisWidget(Widget):
             "Model", "Calls", "Total Tokens", "Input (Prompt)", "Output (Compl)", "Thought", "Cached", "Duration", "Avg Sec/Call"
         )
 
+        table_folders = self.query_one("#table-folders", DataTable)
+        table_folders.cursor_type = "row"
+        table_folders.zebra_stripes = True
+        table_folders.add_columns(
+            "Folder / Volume", "Chapters", "Analyzed", "Total Tokens", "Prompt", "Output", "Thought", "Cached", "Total Runtime", "Avg Tokens/Ch"
+        )
+
         table_chapters = self.query_one("#table-chapters", DataTable)
         table_chapters.cursor_type = "row"
         table_chapters.zebra_stripes = True
@@ -126,7 +173,17 @@ class TokenAnalysisWidget(Widget):
     def set_repo(self, repo: NovelRepository) -> None:
         """Switch active repository and refresh token analysis."""
         self.repo = repo
+        self.selected_folder = "ALL"
+        self._last_folder_options = None
         self.refresh_metrics()
+
+    def on_select_changed(self, event: Select.Changed) -> None:
+        """Handle volume scope filter change."""
+        if event.select.id == "select_folder":
+            val = str(event.value) if event.value is not None else "ALL"
+            if val != self.selected_folder:
+                self.selected_folder = val
+                self.refresh_metrics()
 
     def refresh_metrics(self) -> None:
         """Compute latest token metrics from repository and populate UI."""
@@ -135,10 +192,32 @@ class TokenAnalysisWidget(Widget):
         except Exception:
             chapters = {}
 
-        summary = compute_token_summary(chapters)
+        summary = compute_token_summary(chapters, folder_filter=self.selected_folder)
         self.current_summary = summary
 
-        # 1. Update KPI Cards
+        # 1. Update Folder Selector Options
+        try:
+            select_ctrl = self.query_one("#select_folder", Select)
+            current_options = [("🌐 All Folders (Series)", "ALL")] + [
+                (f"📁 {f}", f) for f in summary.available_folders
+            ]
+            if self._last_folder_options != summary.available_folders:
+                self._last_folder_options = list(summary.available_folders)
+                select_ctrl.set_options(current_options)
+                if self.selected_folder in summary.available_folders:
+                    select_ctrl.value = self.selected_folder
+                else:
+                    select_ctrl.value = "ALL"
+                    self.selected_folder = "ALL"
+
+            scope_desc = "Entire Series" if self.selected_folder == "ALL" else f"Volume: {self.selected_folder}"
+            self.query_one("#filter_stats_summary", Static).update(
+                f"[dim]Viewing:[/] [bold cyan]{scope_desc}[/] ([dim]{summary.total_chapters} chapters[/])"
+            )
+        except Exception:
+            pass
+
+        # 2. Update KPI Cards
         try:
             self.query_one("#kpi_tokens_val", Static).update(f"[bold cyan]{summary.total_tokens:,}[/]")
             self.query_one("#kpi_tokens_sub", Static).update(
@@ -156,7 +235,7 @@ class TokenAnalysisWidget(Widget):
         except Exception:
             pass
 
-        # 2. Populate Stages Table
+        # 3. Populate Stages Table
         try:
             t_stages = self.query_one("#table-stages", DataTable)
             t_stages.clear()
@@ -175,7 +254,7 @@ class TokenAnalysisWidget(Widget):
         except Exception:
             pass
 
-        # 3. Populate Models Table
+        # 4. Populate Models Table
         try:
             t_models = self.query_one("#table-models", DataTable)
             t_models.clear()
@@ -194,7 +273,29 @@ class TokenAnalysisWidget(Widget):
         except Exception:
             pass
 
-        # 4. Populate Chapters Table
+        # 5. Populate Folders Table
+        try:
+            t_folders = self.query_one("#table-folders", DataTable)
+            t_folders.clear()
+            for fm in summary.folder_metrics:
+                is_selected = (fm.folder.lower() == self.selected_folder.lower())
+                folder_label = f"[bold green]▶ {fm.folder}[/]" if is_selected else f"[bold]{fm.folder}[/]"
+                t_folders.add_row(
+                    folder_label,
+                    str(fm.chapter_count),
+                    str(fm.analyzed_chapters),
+                    f"[cyan]{fm.total_tokens:,}[/]",
+                    f"{fm.input_tokens:,}",
+                    f"{fm.output_tokens:,}",
+                    f"{fm.thought_tokens:,}",
+                    f"{fm.cached_tokens:,}",
+                    fm.formatted_duration,
+                    f"{fm.avg_tokens:,.0f}"
+                )
+        except Exception:
+            pass
+
+        # 6. Populate Chapters Table
         try:
             t_chapters = self.query_one("#table-chapters", DataTable)
             t_chapters.clear()

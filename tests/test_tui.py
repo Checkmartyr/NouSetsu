@@ -362,7 +362,7 @@ def test_bare_cli_launches_tui():
 @pytest.mark.asyncio
 async def test_tui_token_analysis_tab(tmp_path: Path):
     """Verify Token Analysis tab renders properly and can be toggled via hotkey and button."""
-    from textual.widgets import Button, DataTable, TabbedContent
+    from textual.widgets import Button, DataTable, TabbedContent, Select
     from nousetsu.tui.widgets.token_analysis import TokenAnalysisWidget
 
     repo = NovelRepository(tmp_path)
@@ -388,10 +388,15 @@ async def test_tui_token_analysis_tab(tmp_path: Path):
         await pilot.pause()
         assert tabs.active == "tab-tokens"
 
-        # Verify DataTables exist and have columns
+        # Verify Folder selector and DataTables exist and have columns
+        select_folder = token_widget.query_one("#select_folder", Select)
+        assert select_folder is not None
+
+        table_folders = token_widget.query_one("#table-folders", DataTable)
         table_stages = token_widget.query_one("#table-stages", DataTable)
         table_models = token_widget.query_one("#table-models", DataTable)
         table_chapters = token_widget.query_one("#table-chapters", DataTable)
+        assert len(table_folders.columns) == 10
         assert len(table_stages.columns) == 9
         assert len(table_models.columns) == 9
         assert len(table_chapters.columns) == 8
