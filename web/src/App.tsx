@@ -6,7 +6,7 @@ import { fetchActiveProject, fetchSyncState, fetchProjectTraces, switchActivePro
 import { Navbar } from './components/Navbar';
 import { StagePipeline } from './components/StagePipeline';
 import { TraceTimeline } from './components/TraceTimeline';
-import { TraceDetail } from './components/TraceDetail';
+import { TraceDetail, DetailTab } from './components/TraceDetail';
 import { UploadCloud, AlertCircle, Sparkles, CheckCircle2 } from 'lucide-react';
 
 export const App: React.FC = () => {
@@ -25,8 +25,26 @@ export const App: React.FC = () => {
     DEMO_CHAPTER_TRACE.traces[0]?.trace_id || null
   );
   const [selectedStageFilter, setSelectedStageFilter] = useState<string | null>(null);
+  const [activeDetailTab, setActiveDetailTab] = useState<DetailTab>('output');
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Synchronized refs to avoid stale closure during async polling
+  const selectedChapterIdRef = useRef<string | null>(selectedChapterId);
+  const selectedTraceIdRef = useRef<string | null>(selectedTraceId);
+  const selectedStageFilterRef = useRef<string | null>(selectedStageFilter);
+
+  useEffect(() => {
+    selectedChapterIdRef.current = selectedChapterId;
+  }, [selectedChapterId]);
+
+  useEffect(() => {
+    selectedTraceIdRef.current = selectedTraceId;
+  }, [selectedTraceId]);
+
+  useEffect(() => {
+    selectedStageFilterRef.current = selectedStageFilter;
+  }, [selectedStageFilter]);
 
   // TUI Project Synchronization State
   const [activeProject, setActiveProject] = useState<ProjectMeta | null>(null);
@@ -48,24 +66,84 @@ export const App: React.FC = () => {
     setTimeout(() => setSyncToast(null), 4000);
   };
 
-  // If chapter changes, select its first trace
+  // If chapter changes, preserve active stage filter or select first trace
   const handleSelectChapter = (id: string) => {
     setSelectedChapterId(id);
     const target = chapters.find((c) => c.id === id);
     if (target && target.document.traces.length > 0) {
+      if (selectedStageFilter) {
+        const matchingStageTrace = target.document.traces.find((t) => t.stage === selectedStageFilter);
+        if (matchingStageTrace) {
+          setSelectedTraceId(matchingStageTrace.trace_id);
+          return;
+        }
+      }
       setSelectedTraceId(target.document.traces[0].trace_id);
+    } else {
+      setSelectedTraceId(null);
     }
   };
 
-  // Load traces from API for a project
+  // When user clicks a stage in the pipeline progression ribbon
+  const handleSelectStageFilter = (stage: string | null) => {
+    setSelectedStageFilter(stage);
+    if (stage) {
+      const stageTraces = traces.filter((t) => t.stage === stage);
+      if (stageTraces.length > 0) {
+        const currentInStage = stageTraces.some((t) => t.trace_id === selectedTraceId);
+        if (!currentInStage) {
+          setSelectedTraceId(stageTraces[0].trace_id);
+        }
+      }
+    }
+  };
+
+  // Load traces from API for a project with smart state retention
   const loadTracesFromBackend = useCallback(async (projectPath?: string) => {
     setIsSyncing(true);
     try {
       const res = await fetchProjectTraces(projectPath);
       if (res && res.chapters.length > 0) {
         setChapters(res.chapters);
-        setSelectedChapterId(res.chapters[0].id);
-        setSelectedTraceId(res.chapters[0].document.traces[0]?.trace_id || null);
+
+        const currentChapterId = selectedChapterIdRef.current;
+        const currentTraceId = selectedTraceIdRef.current;
+        const currentStageFilter = selectedStageFilterRef.current;
+
+        // 1. Resolve target chapter: retain user's active chapter if it exists!
+        let targetChapter = res.chapters.find((c) => c.id === currentChapterId);
+        if (!targetChapter) {
+          targetChapter = res.chapters[0];
+          setSelectedChapterId(targetChapter.id);
+        }
+
+        // 2. Resolve trace in target chapter: retain user's active trace & stage!
+        const targetTraces = targetChapter.document.traces || [];
+        const traceStillExists = targetTraces.some((t) => t.trace_id === currentTraceId);
+        const currentTraceObj = targetTraces.find((t) => t.trace_id === currentTraceId);
+
+        if (traceStillExists) {
+          // If user had a stage filter active and current trace was from a different stage
+          // (e.g. was waiting for Polishing to finish), prioritize newly completed stage trace!
+          if (currentStageFilter && currentTraceObj && currentTraceObj.stage !== currentStageFilter) {
+            const matchingStageTrace = targetTraces.find((t) => t.stage === currentStageFilter);
+            if (matchingStageTrace) {
+              setSelectedTraceId(matchingStageTrace.trace_id);
+              return;
+            }
+          }
+          // Otherwise, retain current trace without resetting!
+        } else {
+          // Current trace no longer exists (e.g. project switch or new chapter selected)
+          if (currentStageFilter) {
+            const matchingStageTrace = targetTraces.find((t) => t.stage === currentStageFilter);
+            if (matchingStageTrace) {
+              setSelectedTraceId(matchingStageTrace.trace_id);
+              return;
+            }
+          }
+          setSelectedTraceId(targetTraces[0]?.trace_id || null);
+        }
       }
     } catch (err: any) {
       console.warn('Could not load traces from backend:', err);
@@ -300,7 +378,7 @@ export const App: React.FC = () => {
       <StagePipeline
         traces={traces}
         selectedStageFilter={selectedStageFilter}
-        onSelectStageFilter={setSelectedStageFilter}
+        onSelectStageFilter={handleSelectStageFilter}
       />
 
       {/* Main Workspace (Split View) */}
@@ -315,7 +393,12 @@ export const App: React.FC = () => {
 
         {/* Trace Inspector */}
         {currentTrace && currentChapter ? (
-          <TraceDetail trace={currentTrace} chapterDoc={currentChapter.document} />
+          <TraceDetail
+            trace={currentTrace}
+            chapterDoc={currentChapter.document}
+            activeTab={activeDetailTab}
+            onTabChange={setActiveDetailTab}
+          />
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center p-8 text-slate-500 text-sm space-y-3">
             <p>No traces recorded for this chapter yet.</p>

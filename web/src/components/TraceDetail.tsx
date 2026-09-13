@@ -6,15 +6,31 @@ import { DiffViewer } from './DiffViewer';
 import { TokenAnalytics } from './TokenAnalytics';
 import { Terminal, FileText, GitCompare, BarChart3, Code, Clock, Cpu, Calendar } from 'lucide-react';
 
+export type DetailTab = 'prompts' | 'output' | 'diff' | 'analytics' | 'raw';
+
 interface TraceDetailProps {
   trace: AgentPromptTrace;
   chapterDoc: ChapterTraceDocument;
+  activeTab?: DetailTab;
+  onTabChange?: (tab: DetailTab) => void;
 }
 
-export const TraceDetail: React.FC<TraceDetailProps> = ({ trace, chapterDoc }) => {
-  const [activeTab, setActiveTab] = useState<'prompts' | 'output' | 'diff' | 'analytics' | 'raw'>(
-    'output'
-  );
+export const TraceDetail: React.FC<TraceDetailProps> = ({
+  trace,
+  chapterDoc,
+  activeTab: controlledTab,
+  onTabChange,
+}) => {
+  const [internalTab, setInternalTab] = useState<DetailTab>('output');
+  const activeTab = controlledTab !== undefined ? controlledTab : internalTab;
+
+  const handleTabSelect = (tab: DetailTab) => {
+    if (onTabChange) {
+      onTabChange(tab);
+    } else {
+      setInternalTab(tab);
+    }
+  };
 
   const formattedDate = new Date(trace.timestamp).toLocaleTimeString([], {
     hour: '2-digit',
@@ -68,7 +84,7 @@ export const TraceDetail: React.FC<TraceDetailProps> = ({ trace, chapterDoc }) =
         {/* Tab Selection */}
         <div className="flex items-center gap-2 mt-3 pt-2 border-t border-slate-800/80">
           <button
-            onClick={() => setActiveTab('output')}
+            onClick={() => handleTabSelect('output')}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
               activeTab === 'output'
                 ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
@@ -80,7 +96,7 @@ export const TraceDetail: React.FC<TraceDetailProps> = ({ trace, chapterDoc }) =
           </button>
 
           <button
-            onClick={() => setActiveTab('prompts')}
+            onClick={() => handleTabSelect('prompts')}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
               activeTab === 'prompts'
                 ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
@@ -92,7 +108,7 @@ export const TraceDetail: React.FC<TraceDetailProps> = ({ trace, chapterDoc }) =
           </button>
 
           <button
-            onClick={() => setActiveTab('diff')}
+            onClick={() => handleTabSelect('diff')}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
               activeTab === 'diff'
                 ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
@@ -104,7 +120,7 @@ export const TraceDetail: React.FC<TraceDetailProps> = ({ trace, chapterDoc }) =
           </button>
 
           <button
-            onClick={() => setActiveTab('analytics')}
+            onClick={() => handleTabSelect('analytics')}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
               activeTab === 'analytics'
                 ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
@@ -116,7 +132,7 @@ export const TraceDetail: React.FC<TraceDetailProps> = ({ trace, chapterDoc }) =
           </button>
 
           <button
-            onClick={() => setActiveTab('raw')}
+            onClick={() => handleTabSelect('raw')}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ml-auto ${
               activeTab === 'raw'
                 ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
