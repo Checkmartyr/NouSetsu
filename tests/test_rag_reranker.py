@@ -15,10 +15,10 @@ from nousetsu.rag.reranker import (
 
 def test_resolve_embedding_model_name():
     """Verify model aliases for Gemini Embedding 2 resolve to canonical Google model paths."""
-    assert resolve_embedding_model_name("gemini-embedding-2") == "models/text-multilingual-embedding-002"
-    assert resolve_embedding_model_name("gemini-embedding-002") == "models/text-multilingual-embedding-002"
-    assert resolve_embedding_model_name("text-multilingual-embedding-002") == "models/text-multilingual-embedding-002"
-    assert resolve_embedding_model_name("text-embedding-004") == "models/text-embedding-004"
+    assert resolve_embedding_model_name("gemini-embedding-2") == "models/gemini-embedding-2"
+    assert resolve_embedding_model_name("gemini-embedding-002") == "models/gemini-embedding-2"
+    assert resolve_embedding_model_name("text-multilingual-embedding-002") == "models/gemini-embedding-2"
+    assert resolve_embedding_model_name("gemini-embedding-001") == "models/gemini-embedding-001"
     assert resolve_embedding_model_name("models/custom-emb") == "models/custom-emb"
 
 

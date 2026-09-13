@@ -35,12 +35,13 @@ def resolve_embedding_model_name(name: str) -> str:
     if clean.startswith("models/"):
         return clean
     alias_map = {
-        "gemini-embedding-2": "models/text-multilingual-embedding-002",
-        "gemini-embedding-002": "models/text-multilingual-embedding-002",
-        "text-multilingual-embedding-002": "models/text-multilingual-embedding-002",
-        "text-embedding-004": "models/text-embedding-004",
-        "gemini-embedding-001": "models/embedding-001",
-        "embedding-001": "models/embedding-001",
+        "gemini-embedding-2": "models/gemini-embedding-2",
+        "gemini-embedding-002": "models/gemini-embedding-2",
+        "gemini-embedding-2-preview": "models/gemini-embedding-2-preview",
+        "text-multilingual-embedding-002": "models/gemini-embedding-2",
+        "text-embedding-004": "models/gemini-embedding-2",
+        "gemini-embedding-001": "models/gemini-embedding-001",
+        "embedding-001": "models/gemini-embedding-001",
     }
     return alias_map.get(clean.lower(), f"models/{clean}")
 

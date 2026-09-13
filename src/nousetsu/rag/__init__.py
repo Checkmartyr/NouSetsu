@@ -1,6 +1,7 @@
 """Hybrid Search RAG (Tier 4 Episodic & Associative Memory) for NouSetsu."""
 from nousetsu.rag.embeddings import EmbeddingClient, generate_mock_embedding
 from nousetsu.rag.engine import HybridSearchEngine
+from nousetsu.rag.migration import MigrationStats, migrate_project_to_rag
 from nousetsu.rag.models import DocumentType, LoreDocument, RAGConfig, SearchResult
 from nousetsu.rag.reranker import (
     BaseCrossEncoderReranker,
@@ -16,9 +17,11 @@ __all__ = [
     "HybridSearchEngine",
     "LLMCrossEncoderReranker",
     "LoreDocument",
+    "MigrationStats",
     "MockCrossEncoderReranker",
     "RAGConfig",
     "SearchResult",
     "generate_mock_embedding",
     "get_reranker",
+    "migrate_project_to_rag",
 ]

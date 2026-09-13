@@ -375,6 +375,59 @@ def cmd_lore_search(args: argparse.Namespace) -> None:
     console.print(table)
 
 
+def cmd_migrate_rag(args: argparse.Namespace) -> None:
+    from rich.panel import Panel
+    from rich.tree import Tree
+    from nousetsu.rag.embeddings import EmbeddingClient
+    from nousetsu.rag.migration import migrate_project_to_rag
+
+    project_dir = getattr(args, "project_dir", None)
+    repo = NovelRepository(project_dir) if project_dir else NovelRepository()
+    folder_filter = getattr(args, "folder", None)
+    dry_run = getattr(args, "dry_run", False)
+    embed = getattr(args, "embed", True)
+    batch_size = getattr(args, "batch_size", 50) or 50
+
+    inc_summaries = getattr(args, "include_summaries", True)
+    inc_arcs = getattr(args, "include_arcs", True)
+    inc_bible = getattr(args, "include_bible", True)
+    inc_chunks = getattr(args, "include_chunks", True)
+
+    emb_model = getattr(args, "embedding_model", "text-multilingual-embedding-002")
+    embedding_client = EmbeddingClient(model_name=emb_model) if embed else None
+
+    action_label = "[yellow]Dry Run Preview[/]" if dry_run else "[bold green]Migrating Data to RAG (LoreVault)[/]"
+    console.print(f"\n{action_label} for project at [bold]{repo.root_dir}[/]...")
+
+    with console.status("[bold cyan]Scanning and indexing lore into SQLite FTS5 / Vector store...[/]", spinner="dots"):
+        stats = migrate_project_to_rag(
+            repository=repo,
+            embedding_client=embedding_client,
+            include_summaries=inc_summaries,
+            include_arcs=inc_arcs,
+            include_bible=inc_bible,
+            include_chunks=inc_chunks,
+            folder_filter=folder_filter,
+            batch_size=batch_size,
+            embed=embed,
+            dry_run=dry_run
+        )
+
+    tree = Tree(f"📚 [bold magenta]RAG Migration Summary[/] ({stats.duration_seconds}s)")
+    tree.add(f"[cyan]Folders Scanned:[/] {', '.join(stats.folders_scanned) if stats.folders_scanned else 'all'}")
+    tree.add(f"[green]Chapter Summaries:[/] {stats.summaries_indexed}")
+    tree.add(f"[green]Story Arcs:[/] {stats.arcs_indexed}")
+    tree.add(f"[green]Novel Bible Characters:[/] {stats.characters_indexed}")
+    tree.add(f"[green]Glossary Items:[/] {stats.glossary_indexed}")
+    tree.add(f"[green]Translated Scene Chunks:[/] {stats.chunks_indexed}")
+    tree.add(f"[bold yellow]Total Documents Indexed:[/] {stats.total_indexed}")
+    if embed and not dry_run:
+        tree.add(f"[bold magenta]Dense Embeddings Generated:[/] {stats.total_embedded}")
+
+    status_note = "[yellow]Dry run complete — no changes written to database.[/]" if dry_run else f"[bold green]✓ Migration successful! Knowledge store ready at {repo.rag_db_path.name}[/]"
+    console.print(Panel(tree, subtitle=status_note, border_style="green", padding=(1, 2)))
+
+
 def cmd_tui(args: argparse.Namespace) -> None:
     project_dir = getattr(args, "project_dir", None)
     repo = NovelRepository(project_dir) if project_dir else NovelRepository()
@@ -481,6 +534,19 @@ def main() -> None:
     p_lore.add_argument("--rerank", action=argparse.BooleanOptionalAction, default=True, help="Enable Cross-Encoder reranking (default: True)")
     p_lore.add_argument("--reranker-model", default="gemini-3.5-flash-lite", help="Cross-Encoder reranker model (default: gemini-3.5-flash-lite)")
 
+    # migrate-rag
+    p_mrag = subparsers.add_parser("migrate-rag", aliases=["index-rag"], help="Migrate and backfill novel data (.novel summaries, arcs, bible, chunks) into RAG knowledge store")
+    p_mrag.add_argument("--project-dir", "-p", default=None, help="Root folder of novel project")
+    p_mrag.add_argument("--folder", "-F", default=None, help="Restrict migration to a specific volume folder (e.g. Villainess_05)")
+    p_mrag.add_argument("--embed", action=argparse.BooleanOptionalAction, default=True, help="Compute dense vector embeddings with EmbeddingClient (default: True if key available)")
+    p_mrag.add_argument("--embedding-model", default="text-multilingual-embedding-002", help="Dense embedding model override")
+    p_mrag.add_argument("--batch-size", type=int, default=50, help="Batch size for database upserts and embeddings (default: 50)")
+    p_mrag.add_argument("--include-summaries", action=argparse.BooleanOptionalAction, default=True, help="Index chapter summaries (default: True)")
+    p_mrag.add_argument("--include-arcs", action=argparse.BooleanOptionalAction, default=True, help="Index story arcs (default: True)")
+    p_mrag.add_argument("--include-bible", action=argparse.BooleanOptionalAction, default=True, help="Index characters and glossary items (default: True)")
+    p_mrag.add_argument("--include-chunks", action=argparse.BooleanOptionalAction, default=True, help="Index translated scene chunks (default: True)")
+    p_mrag.add_argument("--dry-run", action="store_true", help="Preview document counts without modifying database")
+
     # tui
     p_tui = subparsers.add_parser("tui", help="Launch interactive Textual TUI dashboard")
     p_tui.add_argument("--project-dir", "-p", default=None, help="Root folder of novel project")
@@ -510,6 +576,8 @@ def main() -> None:
         cmd_migrate_summaries(args)
     elif args.command == "lore":
         cmd_lore_search(args)
+    elif args.command in ("migrate-rag", "index-rag"):
+        cmd_migrate_rag(args)
     elif args.command == "tui":
         cmd_tui(args)
     else:
