@@ -494,6 +494,30 @@ class NovelTranslationWorkflow:
         else:
             est_critique = estimate_tokens(state.source_text) + estimate_tokens(text_to_audit) + 500
 
+        crit_rag_hits = []
+        if self.enable_rag and self.rag_engine:
+            if is_initial_draft:
+                try:
+                    char_names = " ".join([c.name for c in state.active_characters[:3]])
+                    query_text = f"{char_names} dialogue style canonical translation".strip() if char_names else f"Chapter {state.chapter_num} terminology canon"
+                    query_vec = None
+                    if self.embedding_client and self.embedding_client.is_available:
+                        query_vec = self.embedding_client.embed_text(query_text)
+                    crit_rag_hits = self.rag_engine.hybrid_search(
+                        query=query_text,
+                        query_vector=query_vec,
+                        limit=2,
+                        reranker=self.reranker if self.enable_rag_reranker else None,
+                        enable_rerank=self.enable_rag_reranker
+                    )
+                    if crit_rag_hits:
+                        self._notify(PipelineStage.CRITIQUE, f"Retrieved {len(crit_rag_hits)} canonical TM references for audit...", 58.0)
+                except Exception as e:
+                    logger.warning(f"RAG retrieval for critique failed: {e}")
+                    crit_rag_hits = state.rag_retrieved_lore[:2] if state.rag_retrieved_lore else []
+            else:
+                crit_rag_hits = state.rag_retrieved_lore[:2] if state.rag_retrieved_lore else []
+
         audit, notes = invoke_with_retry(
             self.critic.evaluate,
             source_text=state.source_text,
@@ -502,6 +526,7 @@ class NovelTranslationWorkflow:
             active_characters=state.active_characters,
             active_glossary=state.active_glossary,
             chunks=critique_chunks,
+            rag_context=crit_rag_hits,
             notify_callback=lambda msg: self._notify(PipelineStage.CRITIQUE, msg, 60.0),
             rate_limiter=self.rate_limiter,
             estimated_tokens=est_critique,

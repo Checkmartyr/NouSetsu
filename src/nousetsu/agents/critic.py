@@ -113,7 +113,8 @@ class CritiqueAgent:
         genre: Optional[str] = None,
         chunk_idx: int = 1,
         total_chunks: int = 1,
-        depth: int = 0
+        depth: int = 0,
+        rag_context: Optional[List[Any]] = None
     ) -> Tuple[QualityAudit, str]:
         # Filter glossary to terms actually present in this chapter to avoid prompt bloat
         relevant_glossary = [
@@ -133,12 +134,23 @@ class CritiqueAgent:
         )
         skills_section = f"\n{skills_text}\n" if skills_text else ""
 
+        rag_section = ""
+        if rag_context:
+            canon_lines = []
+            for hit in rag_context:
+                doc = hit.document if hasattr(hit, "document") else hit
+                content = getattr(doc, "content", str(doc))
+                title = getattr(doc, "title", "Canon Reference")
+                canon_lines.append(f"- [{title}]: {content[:350]}")
+            rag_section = "\nCanonical Series Memory & Prior Translations (via RAG):\n" + "\n".join(canon_lines) + "\n"
+
         sys_msg = CRITIQUE_SYSTEM_PROMPT.format(
             source_lang=bible.source_language,
             target_lang=bible.target_language,
             characters=chars_str,
             glossary=gloss_str,
-            skills_section=skills_section
+            skills_section=skills_section,
+            rag_canon_section=rag_section
         )
 
         chunk_info = f" (Part {chunk_idx} of {total_chunks})" if total_chunks > 1 else ""
@@ -181,7 +193,8 @@ class CritiqueAgent:
                             genre=genre,
                             chunk_idx=chunk_idx,
                             total_chunks=total_chunks,
-                            depth=depth + 1
+                            depth=depth + 1,
+                            rag_context=rag_context
                         )
                         left_usage = self.last_usage
                         audit_right, notes_right = self._evaluate_single(
@@ -193,7 +206,8 @@ class CritiqueAgent:
                             genre=genre,
                             chunk_idx=chunk_idx,
                             total_chunks=total_chunks,
-                            depth=depth + 1
+                            depth=depth + 1,
+                            rag_context=rag_context
                         )
                         self.last_usage = left_usage.add(self.last_usage)
                         combined_fid = round((audit_left.fidelity_score + audit_right.fidelity_score) / 2.0, 1)
@@ -273,6 +287,7 @@ class CritiqueAgent:
         notify_callback: Optional[Any] = None,
         rate_limiter: Optional[Any] = None,
         stop_event: Optional[Any] = None,
+        rag_context: Optional[List[Any]] = None,
         **kwargs: Any
     ) -> Tuple[QualityAudit, str]:
         """Audits translation chunk-by-chunk to prevent single-prompt safety blocks and context saturation."""
@@ -317,7 +332,8 @@ class CritiqueAgent:
                 active_glossary=active_glossary,
                 genre=genre,
                 chunk_idx=chunk_idx,
-                total_chunks=total_chunks
+                total_chunks=total_chunks,
+                rag_context=rag_context
             )
             fidelity_scores.append(chunk_audit.fidelity_score)
             style_scores.append(chunk_audit.style_score)
@@ -388,6 +404,7 @@ class CritiqueAgent:
         notify_callback: Optional[Any] = None,
         rate_limiter: Optional[Any] = None,
         stop_event: Optional[Any] = None,
+        rag_context: Optional[List[Any]] = None,
         **kwargs: Any
     ) -> Tuple[QualityAudit, str]:
         if chunks is None and self.chunker and hasattr(self.chunker, "should_chunk"):
@@ -406,6 +423,7 @@ class CritiqueAgent:
                 notify_callback=notify_callback,
                 rate_limiter=rate_limiter,
                 stop_event=stop_event,
+                rag_context=rag_context,
                 **kwargs
             )
 
@@ -416,7 +434,8 @@ class CritiqueAgent:
             bible=bible,
             active_characters=active_characters,
             active_glossary=active_glossary,
-            genre=genre
+            genre=genre,
+            rag_context=rag_context
         )
 
         # Programmatic check only against glossary terms that actually appeared in the source text

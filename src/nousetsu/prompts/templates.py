@@ -82,6 +82,7 @@ Active Glossary:
 
 Active Characters:
 {characters}
+{rag_canon_section}
 {skills_section}
 Respond strictly in valid JSON format:
 {{
