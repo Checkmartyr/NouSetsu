@@ -284,9 +284,9 @@ class CritiqueAgent:
         critique_notes = ""
 
         try:
-            parsed = json.loads(content_to_parse)
-            audit.fidelity_score = float(parsed.get("fidelity_score", 9.0))
-            audit.style_score = float(parsed.get("style_score", 9.0))
+            parsed = json.loads(content_to_parse, strict=False)
+            audit.fidelity_score = float(parsed.get("fidelity_score", 8.0))
+            audit.style_score = float(parsed.get("style_score", 7.8))
             audit.glossary_compliance_pct = float(parsed.get("glossary_compliance_pct", 100.0))
             audit.warnings = parsed.get("warnings", [])
             audit.passed = (audit.fidelity_score >= 7.5 and audit.style_score >= 7.5)
@@ -296,14 +296,16 @@ class CritiqueAgent:
             m_fid = re.search(r"['\"]?fidelity_score['\"]?\s*[:=]\s*(\d+(?:\.\d+)?)", raw_content, re.IGNORECASE)
             m_sty = re.search(r"['\"]?style_score['\"]?\s*[:=]\s*(\d+(?:\.\d+)?)", raw_content, re.IGNORECASE)
             m_glo = re.search(r"['\"]?glossary_compliance_pct['\"]?\s*[:=]\s*(\d+(?:\.\d+)?)", raw_content, re.IGNORECASE)
-            m_notes = re.search(r"['\"]?critique_notes['\"]?\s*[:=]\s*['\"]([^'\"]+)['\"]", raw_content, re.IGNORECASE)
+            m_notes = re.search(r"['\"]?critique_notes['\"]?\s*[:=]\s*['\"]([\s\S]*?)['\"]\s*(?:,\s*['\"][a-zA-Z_]+['\"]|\s*\})", raw_content, re.IGNORECASE)
+            if not m_notes:
+                m_notes = re.search(r"['\"]?critique_notes['\"]?\s*[:=]\s*['\"]([\s\S]*?)(?:['\"]|\Z)", raw_content, re.IGNORECASE)
 
             if m_fid or m_sty:
                 audit.fidelity_score = float(m_fid.group(1)) if m_fid else 6.0
                 audit.style_score = float(m_sty.group(1)) if m_sty else 6.0
                 audit.glossary_compliance_pct = float(m_glo.group(1)) if m_glo else 100.0
                 audit.passed = (audit.fidelity_score >= 7.5 and audit.style_score >= 7.5)
-                critique_notes = m_notes.group(1) if m_notes else "Review prose for rhythm and consistency."
+                critique_notes = m_notes.group(1).strip() if m_notes else "Review prose for rhythm and consistency."
                 audit.warnings.append("Critique JSON recovered via regex fallback.")
             else:
                 audit.fidelity_score = 6.0

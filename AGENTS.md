@@ -304,10 +304,11 @@ uv sync
 # Query CLI version
 uv run nousetsu --version
 
-# Run complete test suite (312 tests across 47 modules in ~89s)
+# Run complete test suite (314 tests across 48 modules in ~89s)
 uv run pytest
 
 # Run specific test modules
+uv run pytest tests/test_critic_parsing.py
 uv run pytest tests/test_extractor_filtering.py
 uv run pytest tests/test_hierarchy_summary.py
 uv run pytest tests/test_migration.py

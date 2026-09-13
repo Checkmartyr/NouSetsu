@@ -94,7 +94,7 @@ Organize "critique_notes" into:
 2. Line-Level & Phrasing Critiques: Quote specific draft sentences (`"Draft quote" -> issue -> recommended revision`).
 3. Rhythm, Tone & Cadence Directives: Concrete guidance for the polisher on sentence variety, sensory depth, and character voice enhancement.
 
-Respond strictly in valid JSON format:
+Respond strictly in valid JSON format (escape newlines as \\n inside strings):
 {{
   "fidelity_score": 8.0,
   "style_score": 7.8,
@@ -102,7 +102,7 @@ Respond strictly in valid JSON format:
   "warnings": [
     "List of specific errors, ambiguities, or glossary mismatches (empty array if none)"
   ],
-  "critique_notes": "### 1. Executive Assessment:\n[Detailed diagnostic of fidelity, character voices, and prose flow]\n\n### 2. Line-Level & Phrasing Critiques:\n- Line/Excerpt: \"[Exact excerpt from draft]\"\n  * Issue: [Explain exact stiffness, translationese trope, or nuance gap]\n  * Recommendation: [Concrete guidance or proposed wording for Polisher]\n\n### 3. Rhythm, Tone & Cadence Directives:\n- [Specific directives on varying sentence lengths, sharpening dialogue beats, and enhancing sensory resonance in {target_lang}]"
+  "critique_notes": "### 1. Executive Assessment:\\n[Detailed diagnostic of fidelity, character voices, and prose flow]\\n\\n### 2. Line-Level & Phrasing Critiques:\\n- Line/Excerpt: \\\"[Exact excerpt from draft]\\\"\\n  * Issue: [Explain exact stiffness, translationese trope, or nuance gap]\\n  * Recommendation: [Concrete guidance or proposed wording for Polisher]\\n\\n### 3. Rhythm, Tone & Cadence Directives:\\n- [Specific directives on varying sentence lengths, sharpening dialogue beats, and enhancing sensory resonance in {target_lang}]"
 }}
 
 Active Glossary:
