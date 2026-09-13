@@ -130,6 +130,10 @@ Each agent possesses a single cognitive responsibility:
 ### 5. Foundational Utility Layer (`src/nousetsu/utils/`)
 * **`SlidingWindowRateLimiter` (`src/nousetsu/utils/rate_limiter.py`)**: Tracks requests and tokens across a rolling 60-second window, enforcing 32,000 TPM and 60 RPM limits with interruptible sleeps.
 * **`LineSemanticChunker` (`src/nousetsu/utils/chunker.py`)**: Partitions chapters over 85 lines into ~70-line semantic chunks with 3-line boundary overlap, maintaining scene breaks and quote continuity.
+* **`Translation Fallback & Bisection Engine` (`src/nousetsu/utils/translation_fallback.py`)**:
+  * `bisect_text`: Splits text chunks along prioritized boundary hierarchies (paragraph `\n\n`, line `\n`, sentence punctuation, whitespace word boundaries, or character midpoint).
+  * `can_subdivide_text`: Determines if a blocked chunk meets minimum division thresholds (`min_lines >= 8` or `min_chars >= 200`).
+  * `translate_via_google`: Deep-translator integration with ISO language mapping (`ja`, `en`, `th`, `zh-CN`, `ko`) for graceful fallback on commercial safety rejections.
 * **`format_duration` (`src/nousetsu/utils/formatting.py`)**: Human-friendly duration display formatting (`3.9s`, `2m 15s`, `1h 4m`).
 * **`estimate_tokens` (`src/nousetsu/utils/rate_limiter.py`)**: Offline token estimation assigning ~1.7 tokens per CJK character and ~1.3 tokens per Latin word.
 * **`detect_language` (`src/nousetsu/utils/language.py`)**: Zero-dependency Unicode script and stop-word frequency analyzer recognizing Japanese, Chinese, Korean, Thai, Russian, and Latin languages.
@@ -162,6 +166,13 @@ flowchart TD
     CheckStop -- No --> TryCall{"Try Primary Model Invocation"}
     
     TryCall -- Success --> Return["Return Stage Result"]
+    
+    TryCall -- "AI Safety Block (400 prohibited_content)" --> CheckSubdivide{"Can Subdivide?<br/>(lines >= 8 & depth < 4)"}
+    CheckSubdivide -- Yes --> Bisect["bisect_text()<br/>Recurse on Left & Right Halves"]
+    Bisect --> Return
+    CheckSubdivide -- No (Base Case) --> GTFallback["Google Translate Fallback + Polisher<br/>(Record safety_fallbacks_used)"]
+    GTFallback --> Return
+    
     TryCall -- HTTP 429 Quota --> Fallback{"FallbackChatModel configured?"}
     Fallback -- Yes --> TryFallback["Invoke Fallback Model (e.g. gemini-3.5-flash-lite)"]
     TryFallback -- Success --> Return
@@ -177,3 +188,4 @@ flowchart TD
 
 * **Zero Data Loss**: Checkpoints preserve intermediate progress at the chapter level.
 * **Atomic Writes**: YAML and JSON files are written safely to prevent corruption during interruptions.
+* **Dual Resilience Engine**: Combines binary bisection to isolate sensitive scenes with automatic Google Translate fallback so commercial safety blocks never halt batch translation.

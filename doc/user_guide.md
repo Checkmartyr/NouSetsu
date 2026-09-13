@@ -153,27 +153,33 @@ For headless Linux servers, Docker containers, or automated scripts, NouSetsu pr
 # 1. Automatic TUI Dashboard (Default)
 nousetsu
 
-# 2. Project Initialization
+# 2. Check Installed Version
+nousetsu --version
+
+# 3. Project Initialization
 nousetsu init --title "My Novel" --source-lang "Japanese" --target-lang "English" --genre "isekai"
 
-# 3. Headless Batch Translation
+# 4. Headless Batch Translation
 nousetsu batch --input-dir raw_chapters --output-dir translated_chapters --limit 10
 
-# 4. Agent Domain Skills Catalog
+# 5. Targeted Single Chapter Translation
+nousetsu batch -p project/Villainess -F Villainess_05 --chapter 48
+
+# 6. Agent Domain Skills Catalog
 nousetsu skills --agent drafter --genre isekai
 
-# 5. Inspect Procedural Execution Graphs (Rich Tree)
+# 7. Inspect Procedural Execution Graphs (Rich Tree)
 nousetsu graph-info
 nousetsu graph-info --agent drafter
 
-# 6. Inspect 3-Tier Hierarchical Story Memory (Rich Tree)
+# 8. Inspect 3-Tier Hierarchical Story Memory (Rich Tree)
 nousetsu narrative
 nousetsu narrative -p ./my_novel
 
-# 7. Migrate Legacy Summaries to 3-Tier Hierarchy
+# 9. Migrate Legacy Summaries to 3-Tier Hierarchy
 nousetsu migrate-summaries -p ./my_novel
 
-# 8. Explicit TUI Launch with Custom Paths
+# 10. Explicit TUI Launch with Custom Paths
 nousetsu tui --project-dir ./my_novel
 ```
 
@@ -182,13 +188,14 @@ nousetsu tui --project-dir ./my_novel
 | Flag | Shorthand | Default | Description |
 |:---|:---:|:---:|:---|
 | `--project-dir` | `-p` | Current directory | Root folder of the novel project |
-| `--folder` | `-F` | None | Translation volume/folder within project (auto-resolves input and output folders, e.g. `-F Villainess_05`) |
+| `--volume` / `--folder` | `-F` | None | Translation volume/folder within project (e.g. `-F Villainess_05`) |
+| `--chapter` | `-c` | None | Filter and translate a specific chapter by number or name (e.g. `48`, `"ch 48"`, `"048"`, `"chapter 48"`) |
 | `--input-dir` | `-i` | `raw_chapters` | Folder containing raw chapter text files |
 | `--output-dir` | `-o` | `translated_chapters` | Folder where translated markdown files are written |
 | `--source-lang` | | `auto` | Override source language (`Japanese`, `Chinese`, `Korean`, `English`, etc.) |
 | `--target-lang` | | `English` | Override target language (`English`, `Thai`, `Spanish`, etc.) |
 | `--genre` | `-g` | `general` | Novel genre (`xianxia`, `wuxia`, `isekai`, `litrpg`, `romance`, `general`) |
-| `--model` | `-m` | `gemini-3.1-flash-lite` | Primary LLM model name (or set `DEFAULT_MODEL` in `.env`) |
+| `--model` | `-m` | `gemini-3.1-flash-lite` | Primary LLM model name (or set `NOVEL_MODEL` in `.env`) |
 | `--fallback-model` | | `gemini-3.5-flash-lite` | Automatic fallback model used upon HTTP 429 quota exhaustion |
 | `--extractor-model` | | `gemini-3.1-flash-lite` | Model for Stage 1: Entity Extractor (*Schriftdetektiv*) |
 | `--drafter-model` | | `gemini-3.5-flash-lite` | Model for Stage 2: Context-Aware Drafter (*Wortschmied*) |
@@ -421,11 +428,23 @@ style_guide:
   pov: third_person
   honorific_mode: retain   # 'retain' (-san/-sama), 'translate' (Mr./Lord), or 'omit'
 
+whole_story_summary: "Macro premise: Allen departs his home after awakening dragon lineage to uncover ancient artifacts."
+
 summaries:
   - chapter_num: 1
     title: The Departure
     synopsis: Allen leaves his hometown after awakening his dragon lineage.
 ```
+
+### 3-Tier Hierarchical Narrative Memory (Macro > Meso > Micro)
+To prevent narrative drift across long multi-volume series, NouSetsu organizes memory hierarchically:
+1. **Macro Context (`whole_story_summary`)**: Global narrative synthesis capturing overarching conflicts, major world state changes, and character goals. Stored directly in `bible.yaml`.
+2. **Meso Context (`ArcSummary`)**: Story arc boundaries autonomously detected by `Chronist` (*ChroniclerAgent*). Tracks arc titles, core conflicts, and milestone progress. Saved in `.novel/summaries/arcs/arc_XXXX.json`. When completed, arcs are archived into `bible.yaml`.
+3. **Micro Context (`ChapterSummary`)**: Immediate preceding chapter outcomes, cliffhangers, and character state changes partitioned by volume folder (`.novel/summaries/<volume>/chapter_XXXX.json`). Seamlessly backfills context across volume transitions (`Villainess_04` -> `Villainess_05`) with volume badges.
+
+### Inspecting and Migrating Narrative Memory
+* **`nousetsu narrative`**: Renders an interactive 3-tier Rich tree in your terminal displaying Whole Story progression, active and completed story arcs with milestones, and chapter summaries.
+* **`nousetsu migrate-summaries`**: Seamlessly upgrades legacy flat summary novel projects to the 3-tier hierarchical system.
 
 > [!TIP]
 > You can edit the Novel Bible directly in the Textual TUI by pressing `E`. Changes take effect on the next translated chapter!
@@ -457,6 +476,11 @@ summaries:
 7. **Active Chapter Glossary Optimization**:
    - Dynamically filters the Novel Bible glossary to terms actually present in the chapter text before sending prompts to Critic and Polisher.
    - Prevents prompt bloat and eliminates false-positive compliance warnings.
+8. **AI Safety Block Resilience & Recursive Bisection**:
+   - Intense action scenes or romantic intimacy in webnovels can trigger commercial LLM safety filters (e.g. Google AI `prohibited_content` HTTP 400).
+   - **Analytical Task Framing**: Formats excerpts with explicit literary task framing across all five pipeline agents, minimizing false-positive safety triggers.
+   - **Recursive Binary Bisection (`bisect_text`)**: When a safety block occurs, the system bisects the chunk along paragraph, line, or sentence boundaries. Safe sub-chunks are translated by the primary LLM with full literary prose, while only the isolated minimal sensitive sub-block ($\le 8$ lines or depth 4) triggers a seamless **Google Translate fallback** (`deep-translator`) with subsequent literary polishing.
+   - Extractor and Critic similarly bisect blocked chunks so safe text is extracted and audited with full fidelity.
 
 ---
 

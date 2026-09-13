@@ -365,6 +365,20 @@ When a model encounters an HTTP 429 quota exhaustion or `RESOURCE_EXHAUSTED` err
 ### 8.3 Sliding-Window Rate Limiter
 [`SlidingWindowRateLimiter`](file:///D:/Code/novel_translation_Agent/src/utils/rate_limiter.py) enforces a rolling 60-second window across **32,000 TPM** and **60 RPM**. It blocks calls proactively before API requests occur, sleeping in 200–250ms interruptible increments to allow instant response to user cancellation (`X` key or `Ctrl+C`).
 
+### 8.4 AI Safety Block Resilience & Recursive Bisection Engine
+Commercial LLM endpoints employ strict automated content moderation filters that frequently flag East Asian webnovels for visceral combat, dark fantasy tropes, or romantic intimacy with HTTP 400 `prohibited_content` exceptions:
+1. **Task Framing Guard**: In `EntityExtractorAgent`, raw excerpts are prepended with explicit analytical task framing (`f"Extract fictional characters, factions, and world terminology from this novel excerpt:\n{source_text}"`), neutralizing safety classifier false positives.
+2. **Recursive Binary Bisection (`bisect_text`)**:
+   - When `ContextAwareDrafterAgent` catches a safety block exception, it checks `can_subdivide_text(chunk_text, min_lines=8, min_chars=200)`.
+   - If divisible and recursion depth $< 4$, the chunk is bisected along prioritized boundaries (paragraph breaks `\n\n`, line breaks `\n`, sentence punctuation, or word boundaries).
+   - The safe half executes via the primary LLM with full literary prose and voice differentiation, passing its translation tail as sliding context to the second half.
+   - The minimal sensitive sub-block ($\le 8$ lines or depth 4) reaches the base case, invoking **Google Translate fallback** ([`translate_via_google`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/translation_fallback.py)) and subsequent literary polishing by `Feinschliff`.
+3. **Extractor & Critic Bisection**:
+   - `EntityExtractorAgent` bisects blocked chunks to discover character profiles and glossary terms from safe portions, bypassing only the minimal sensitive excerpt.
+   - `CritiqueAgent` bisects source and draft chunks in tandem, calculating real fidelity and style scores on safe sections and logging an audit warning on the bypassed snippet.
+4. **Telemetry & Audit Tracking**:
+   - Checkpoints and metadata track `safety_fallbacks_used` and `subdivisions_count`, displaying warnings in the chapter quality audit without interrupting batch execution.
+
 ---
 
 ## 9. End-to-End Real-World Scenario Walkthrough

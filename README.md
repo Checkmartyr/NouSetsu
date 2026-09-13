@@ -1,284 +1,314 @@
-# 📖 NouSetsu - Novel Translation Agent
+# 📖 NouSetsu (濃説 / 脳説)
 
-> **Agentic Document-Level Cross-Chapter Novel Translation System**  
-> Powered by **LangGraph**, **LangChain**, **Textual**, and **Rich**.
+> **Enterprise-Grade Document-Level Multi-Agent Literary Translation Framework for East Asian Webnovels**  
+> *Powered by LangGraph, LangChain, Textual, and Rich.*
 
 [![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/)
 [![Version: v0.2.0](https://img.shields.io/badge/version-v0.2.0-blue.svg)](https://github.com/Checkmartyr/NouSetsu)
 [![Package Manager: uv](https://img.shields.io/badge/managed%20by-uv-purple.svg)](https://github.com/astral-sh/uv)
 [![Framework: LangGraph](https://img.shields.io/badge/agent-LangGraph-orange.svg)](https://github.com/langchain-ai/langgraph)
 [![UI: Textual](https://img.shields.io/badge/ui-Textual%20%26%20Rich-green.svg)](https://textual.textualize.io/)
+[![Tests: 199 Passed](https://img.shields.io/badge/tests-199%20passed-brightgreen.svg)](https://github.com/Checkmartyr/NouSetsu)
+[![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
 ---
 
-## 🌟 Key Highlights
+## ⚔️ The Challenge: Why Traditional MT & Raw LLMs Fail
 
-* **3-Tier Hierarchical Narrative Memory**: Maintains a persistent 3-tier narrative memory in the **Novel Bible**: Macro (**Whole Story Progression**) > Meso (**Story Arcs** via `ArcSummary` with autonomous boundary/milestone detection) > Micro (**Immediate Situation** via volume-partitioned `ChapterSummary`), eliminating long-term narrative drift and forgotten character goals.
-* **AI Safety Block Resilience & Recursive Bisection**: Dual-resilience safety engine combining recursive binary bisection (`bisect_text`) to isolate sensitive scenes down to <= 8-line snippets with Google Translate fallback (`deep-translator`) when encountering Google AI `prohibited_content` blocks. Features standardized fiction task framing across all five pipeline agents to prevent safety false positives.
-* **Cross-Folder & Multi-Volume Continuous Memory**: Automatically detects volume sequences (`Villainess_04`, `Villainess_05`), partitioning chapter summaries into subfolders while automatically backfilling preceding summaries when entering a new volume. Injects volume badges (`[Villainess_04] Chapter 122`) to eliminate multi-volume numbering confusion.
-* **Zero-Anaphora Resolution & Nickname Discipline**: Context-augmented drafting specifically designed for East Asian languages (Japanese, Chinese, Korean) where subjects, agents, and pronouns are omitted. Enforces strict name vs. nickname register discipline across Drafter, Critic, and Polisher agents to preserve author intent without arbitrary normalization.
-* **Procedural Graph Steering & Offline Self-Evolution (arXiv:2609.09153v1)**: Encodes procedural execution rules into explicit attributed graphs $G = (V, R, E, \Phi)$ carrying `(condition, guidance, pitfalls)`. Uses deterministic code-level localization (< 100 prompt tokens) rather than expensive runtime guidance LLMs, while pruning conversational junk terms in extraction (-300 to -800 output tokens) and switching chunk states (Scene Init vs Boundary Continuity vs Name Discipline) in drafting. Self-evolves offline from critic audit reports with zero inference token cost. Inspectable via `nousetsu graph-info`.
-* **Multi-Stage Agentic Pipeline & Functions**:
-  | Stage | Agent (German Codename) | Primary Function | Plain-English Role & Purpose |
-  |:---:|:---|:---|:---|
-  | **1** | **EntityExtractorAgent**<br>*(Schriftdetektiv)* | `extract(source_text, bible, ...)` | **The Detective**: Scans raw text *before* translation to discover unknown character names, spells, and items with Procedural Graph steering and anti-bloat term pruning. |
-  | **2** | **ContextAwareDrafterAgent**<br>*(Wortschmied)* | `draft(source_text, bible, ...)` | **The Wordsmith**: Writes the initial full translation, restoring omitted pronouns (*Zero-Anaphora*), enforcing nickname fidelity, and building 3-tier narrative context. |
-  | **3** | **CritiqueAgent**<br>*(Zensor)* | `evaluate(source_text, draft_text, ...)` | **The Inspector**: Audits full-length chapters (up to 50k chars) against raw source text for fidelity (0-10), style (0-10), glossary compliance, and nickname disparity. |
-  | **4** | **PolishingAgent**<br>*(Feinschliff)* | `polish(draft_text, critique_notes, ..., source_text)` | **The Stylist**: Rewrites draft prose into natural literary target-language fiction using critique notes and source text reference, preserving affectionate address forms and cadence. |
-  | **5** | **Chronist**<br>*(ChroniclerAgent)* | `chronicle(...)`<br>`assemble_metadata(...)` | **The Memory Keeper**: Autonomously identifies story arc progression, summarizes chapter events, archives completed arcs, and compiles metadata audit records into `.novel/metadata.json`. |
-* **Narrative Inspection & Summary Migration CLI**:
-  - `nousetsu narrative`: Renders an interactive 3-tier Rich tree displaying Whole Story progression, active and completed story arcs with milestones, and chapter summaries.
-  - `nousetsu migrate-summaries`: Seamlessly upgrades legacy flat summary novel projects to the 3-tier hierarchical system.
-* **Decoupled Central `.env` Model Precedence**: LLM model configurations reside in `.env` (`NOVEL_MODEL`, `NOVEL_FALLBACK_MODEL`, `NOVEL_EXTRACTOR_MODEL`, etc.) with a clean 4-tier cascade: CLI flag -> Project Config override -> Central `.env` -> Built-in Safe Fallback (`gemini-3.1-flash-lite`, `gemma-4-26b-a4b-it`).
-* **Gemini Interactions API & REST Fallback**: Seamless native support for the new `/v1beta/interactions` endpoint via Google GenAI SDK and HTTP REST fallback, enabling structured interaction steps and thought streaming.
-* **Granular Per-Task & Per-Step Token Tracking & TUI Dashboard**: Complete token metrics (`input_tokens`, `output_tokens`, `thought_tokens`, `cached_tokens`, `total_tokens`) tracked for every chapter task and pipeline step. Press `M` in the TUI to access the dedicated **Token Analysis Dashboard** with real-time KPI cards and interactive DataTables.
-* **Multi-Agent Per-Role Model Routing & Quota Fallback**: Route each pipeline agent to an optimal model (`extractor_model`, `drafter_model`, `critic_model`, `polisher_model`, `chronicler_model`) with automatic fallback on 429 quota exhaustion (`FallbackChatModel`).
-* **Line-Based Semantic Chunking (Rate-Limit & TPM Guard)**: Intelligently partitions long chapters (>85 lines) into ~70-line chunks along scene breaks (`***`, `---`) and paragraph boundaries, passing 3-line sliding translation context to maintain character voice and eliminate 32k TPM sliding-window freezes.
-* **Active Chapter Glossary Optimization**: Filters glossary terms to only those appearing in the active chapter, eliminating input prompt bloat and false-positive compliance warnings.
-* **Domain Skills System (20 Built-in Skills + Markdown Catalogs)**: Automatically activates targeted literary guidelines (e.g. cultivation hierarchies, adventurer guild ranks, 4-character idiom localization, villainess court etiquette, nickname preservation) based on novel genre and source language.
-* **Programmatic Language Anti-Regression Guards**: Enforces target-language integrity with offline Unicode script detection, immediately rejecting any model reversion back into source language.
-* **Automated Critic-Polish Reflection Loop**: Automatically loops between `Feinschliff` and `Zensor` to refine prose until both fidelity and style meet strict quality thresholds (`>= 8.5/10`) or hit a configurable loop cap (default 3 loops). Includes an automatic **Best-Candidate Regression Guard** that always saves the highest-scoring version.
-* **Proactive Sliding-Window Rate Limiter (32K TPM / 60 RPM)**: Dual quota management across a rolling 60-second window, backed by offline mixed CJK/Latin token estimation and 25s–65s window rollover cooldowns for Google API 429 quota exhaustion.
-* **Automatic Source Language Detection**: Automatically recognizes Japanese Kanji/Kana, Korean Hangul, and Chinese Hanzi during chapter scanning, removing manual setup barriers.
-* **Thread-Safe Graceful Stop & Resumption**: Cleanly pause or cancel batch processing via `X` shortcut / button in TUI or `SIGINT` (Ctrl+C) in CLI, saving mid-chapter checkpoints (`StageStatus.PAUSED`) without losing progress.
-* **Single Project Metadata Checkpoints (`.novel/metadata.json`)**: All chapter checkpoints, error diagnostics, and quality audit metrics are centralized in a single project file, keeping translated folders clean while enabling instant 1-read directory scanning.
-* **Transient Error Resilience & Backoff**: Exponential backoff retry absorbs Google `500 INTERNAL`, `503`, and `429` rate limits automatically with full stack trace diagnostics.
-* **Folder-to-Folder Batch Automation**: Automatically discovers and naturally sorts chapters (`001.txt`, `ch2.txt`, `ch10.txt`), sequentially translates them while passing state, and skips unaltered completed chapters.
-* **Minimalist Reactive Terminal UI (TUI)**: Distraction-free dashboard built with Textual and Rich, featuring an 85%+ height chapter list with minimal status glyphs (`✓`, `●`, `⏸`, `✕`, `·`), a compact 2-row bottom toolbar (`[▶ Trans] [⚡ Batch] [⏹ Stop]`, `[📖 Bible] [📁 Proj] [✨ New] [⚙ Set]`), an 80% reading viewport, a 4-line progress strip with live active chapter progress (`📖 {chapter} [████░░░░] 50%`), a 5-line checkpoint inspector with human-friendly duration formatting, and an in-terminal Novel Bible editor.
-* **Official Pip Package (`nousetsu`)**: Packaged with PyPA standards with console scripts `nousetsu` and `novel` that automatically open the interactive TUI when launched with no arguments.
+Translating Japanese, Chinese, and Korean webnovels and light novels into publication-quality English is notoriously difficult. Sentence-by-sentence machine translation tools (DeepL, Google Translate) and naive single-prompt LLM pipelines suffer from fatal literary flaws:
+
+| Challenge | Traditional MT (Google / DeepL) | Raw Single-Prompt LLM | 📖 NouSetsu Multi-Agent Framework |
+| :--- | :--- | :--- | :--- |
+| **Zero-Anaphora** *(Omitted Pronouns)* | ❌ Guesses blindly; randomly swaps character genders ("he" vs "she"). | ⚠️ Frequently hallucinates subjects or flips narrative point of view. | ✅ **Wortschmied (Drafter)** resolves omitted subjects via dynamic scene context and character profiles. |
+| **Series Memory & Continuity** | ❌ Zero memory across sentences or chapters. | ⚠️ Context window overflow; forgets plot progression after 2 chapters. | ✅ **3-Tier Narrative Memory** (Macro Whole-Story > Meso Arcs > Micro Chapters) persists throughout the series. |
+| **AI Safety Blocks** *(Sensory / Action)* | ❌ Hard failures or redacted snippets. | ❌ Monolithic HTTP 400 rejection halts the entire translation batch. | ✅ **Recursive Binary Bisection Engine** isolates sensitive lines ($\le 8$ lines) with Google Translate fallback. |
+| **Prose Quality & Cadence** | ❌ Rigid word-for-word translationese ("couldn't help but", "as expected of"). | ⚠️ Inconsistent register; characters sound identical. | ✅ **Feinschliff (Polisher)** refines sentence cadence, emotional resonance, and aristocratic court registers. |
+| **Terminology Consistency** | ❌ Spells martial arts ranks and items differently every 3 paragraphs. | ⚠️ Drifts across long batches; forgets canonical spellings. | ✅ **Novel Bible** and **Active Chapter Glossary Filter** strictly enforce terminology without prompt bloat. |
+| **Quality Verification** | ❌ No quality feedback or verification. | ❌ What the model outputs on pass 1 is all you get. | ✅ **Zensor (Critic)** reflection review loop scores fidelity/style ($\ge 8.5/10$) with **Best-Candidate Guard**. |
+| **API Quota & Cost Protection** | ❌ None; user must manage quotas manually. | ❌ Constant HTTP 429 quota exhaustion on long chapters. | ✅ **32K TPM / 60 RPM Sliding Window Limiter** + Automatic Failover + Line-Based Semantic Chunking. |
 
 ---
 
-## 🏛️ Architecture & Workflow
+## 🏛️ The 5-Stage Agent Assembly Line
+
+NouSetsu models the translation workflow as a collaborative literary publishing house. Each stage is assigned a specialized AI agent with a distinct cognitive role:
+
+| Stage | Codename | Agent Class | Production Model | Core Responsibility |
+| :---: | :--- | :--- | :--- | :--- |
+| **1** | **Schriftdetektiv** | [`EntityExtractorAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/extractor.py) | `gemini-3.1-flash-lite` | **The Detective**: Scans raw source text *before* drafting to identify unknown character names, cultivate power realms, and discover terms not yet registered in the Novel Bible. Steered by Procedural Graphs to prune conversational junk vocabulary. |
+| **2** | **Wortschmied** | [`ContextAwareDrafterAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/drafter.py) | `gemini-3.5-flash-lite` | **The Wordsmith**: Produces the initial full translation draft, resolving zero-anaphora (omitted pronouns/subjects), applying distinct dialogue registers, and injecting 3-tier narrative context across chapter and volume boundaries. |
+| **3** | **Zensor** | [`CritiqueAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/critic.py) | `gemma-4-26b-a4b-it` | **The Inspector**: Line-by-line auditor scoring fidelity and style (0–10), detecting skipped sentences (omissions), verifying glossary compliance, auditing nickname disparities, and providing actionable critique notes. |
+| **4** | **Feinschliff** | [`PolishingAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/polisher.py) | `gemini-3.5-flash-lite` | **The Stylist**: Rewrites drafted prose into publication-grade target fiction, purging machine-translation tropes ("couldn't help but", "as expected of"), optimizing prose cadence, and enhancing emotional depth while preserving address forms. |
+| **5** | **Chronist** | [`ChroniclerAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/chronicler.py) | `gemma-4-26b-a4b-it` | **The Memory Keeper**: Autonomously tracks story arc progression, summarizes chapter events, detects character state shifts (injuries, deaths, breakthroughs), and compiles metadata audit records into `.novel/metadata.json`. |
+
+---
+
+## 🌟 Key Architectural Innovations
+
+### 1. 🧠 3-Tier Hierarchical Narrative Memory (Macro > Meso > Micro)
+To eliminate context drift over multi-hundred chapter epics, NouSetsu structures narrative memory into three distinct tiers inside the **Novel Bible**:
+* **Macro Context (`whole_story_summary`)**: Global narrative synthesis capturing long-term character motivations, overarching conflicts, and major world state changes.
+* **Meso Context (`ArcSummary`)**: Autonomous AI detection of story arc boundaries by `Chronist`. Tracks arc titles, core conflicts, and milestones. Serialized to `.novel/summaries/arcs/arc_XXXX.json`. Completed arcs are archived into the Novel Bible and synthesized into the Macro context.
+* **Micro Context (`ChapterSummary`)**: Immediate preceding chapter outcomes, cliffhangers, and character state changes partitioned by volume folder (`.novel/summaries/<volume>/chapter_XXXX.json`). Seamlessly backfills context across volume transitions (`Villainess_04` $\to$ `Villainess_05`) with volume badges.
+
+### 2. 🛡️ Dual-Resilience AI Safety Engine (Recursive Bisection & Fallback)
+Novel translations frequently trigger commercial AI safety classifiers (e.g. Google AI `prohibited_content` HTTP 400) on intense action scenes or romantic intimacy. NouSetsu features a dual-resilience defense:
+* **Analytical Task Framing**: Automatically envelopes novel excerpts in explicit literary analytical framing across all five pipeline agents, eliminating false-positive safety triggers.
+* **Recursive Binary Bisection (`bisect_text`)**: If an LLM safety block occurs, the system bisects the text chunk along natural paragraph, line, or sentence boundaries. Safe halves are translated with full LLM literary prose, while only the isolated minimal sensitive sub-block ($\le 8$ lines) triggers a seamless **Google Translate fallback** (`deep-translator`) with subsequent literary polishing.
+
+### 3. 🎭 Procedural Graph Steering & Self-Evolution (arXiv:2609.09153v1)
+NouSetsu encodes procedural execution rules as explicit attributed graphs $G = (V, R, E, \Phi)$ carrying `(condition, guidance, pitfalls)`:
+* **Zero Runtime Guidance LLM Tokens**: Uses deterministic code-level localization (< 100 prompt tokens) instead of expensive runtime guidance LLMs.
+* **Anti-Bloat Term Pruning**: Prevents the Extractor from generating common conversational vocabulary, saving **300 to 800 output tokens** per chapter.
+* **Offline Self-Evolution**: System refines graph edges from critique audit traces offline with zero live inference token overhead. Inspectable anytime via `nousetsu graph-info`.
+
+### 4. 🔄 LangGraph Reflection Review Loop & Best-Candidate Guard
+* **Automated Reflection Loop**: `Zensor` and `Feinschliff` enter a multi-pass review loop, refining prose until both fidelity and style meet quality thresholds (`>= 8.5/10`) or reach the configured loop limit.
+* **Best-Candidate Regression Guard**: If a subsequent polishing pass scores lower than an earlier candidate, NouSetsu automatically retains the highest-scoring candidate (`best_polished_text` and `best_audit`), preventing quality degradation.
+
+### 5. ⚡ Enterprise Quota Throttling & Per-Role Routing
+* **Sliding-Window Rate Limiter**: Proactively enforces a rolling 60-second window across **32,000 TPM** and **60 RPM** with offline CJK/Latin token estimation.
+* **Per-Role Model Routing & Failover**: Assign specialized models to each agent role (`extractor_model`, `drafter_model`, `critic_model`, `polisher_model`, `chronicler_model`). Any upstream HTTP 429 quota exhaustion triggers instant failover to `fallback_model` (`gemini-3.5-flash-lite`) via `FallbackChatModel` with 25s–65s window rollover cooldowns.
+* **Line-Based Semantic Chunking**: Chapters exceeding 85 lines are intelligently partitioned into ~70-line semantic chunks with 3-line boundary overlap, eliminating 32k TPM window freezes.
+
+### 6. 🖥️ Reactive Terminal User Interface (Textual + Rich)
+* **Distraction-Free Dashboard**: Features an 85%+ height chapter list with clean minimal status glyphs (`✓` done, `●` running, `⏸` paused, `✕` failed, `·` waiting), a compact 2-row toolbar, and an 80% reading viewport with dual original/translated panes.
+* **Real-Time Token & Duration Analytics**: Press `M` to access the dedicated **Token Analysis Dashboard** with live KPI cards and interactive DataTables broken down by pipeline stage, LLM model, and chapter duration.
+
+---
+
+## 🏛️ System Architecture
 
 ```mermaid
 flowchart TD
-    subgraph Input_Discovery ["1. Input Discovery & Memory Sync"]
-        Raw["raw_chapters/*.txt"] --> LangDetect["Auto Language Detection\n(Japanese / Chinese / Korean)"]
-        LangDetect --> Scanner["ChapterScanner\n(natsort + SHA256)"]
-        Bible[(".novel/bible/bible.yaml")] --> MemorySync["Cross-Chapter Memory Sync\n(Characters, Glossary, Summaries)"]
+    subgraph Input_Layer ["1. Input Discovery & Multi-Volume Memory"]
+        Raw["raw_chapters/*.txt"] --> Scanner["ChapterScanner\n(natsort + SHA256)"]
+        Scanner --> Lang["Language Detector\n(JA / ZH / KO / EN / TH)"]
+        Bible[(".novel/bible/bible.yaml")] --> Memory["3-Tier Narrative Memory\n(Macro > Meso Arcs > Micro Chapters)"]
     end
 
-    subgraph Translation_Graph ["2. Agentic Translation Graph (LangGraph)"]
-        Scanner --> Extractor["Stage 1: Schriftdetektiv (EntityExtractorAgent)\nextract() -> Discovers unknown names & items"]
-        Extractor --> Drafter["Stage 2: Wortschmied (ContextAwareDrafterAgent)\ndraft() -> Resolves Zero-Anaphora & voices"]
-        Drafter --> Critic["Stage 3: Zensor (CritiqueAgent)\nevaluate() -> Scores fidelity & style"]
-        Critic --> Polish["Stage 4: Feinschliff (PolishingAgent)\npolish() -> Refines cadence & natural prose"]
+    subgraph Agent_Pipeline ["2. Five-Stage Agent Pipeline (LangGraph)"]
+        Scanner & Memory --> Extractor["Stage 1: Schriftdetektiv (EntityExtractorAgent)\nExtracts characters, terms, cultivation realms"]
+        Extractor --> Drafter["Stage 2: Wortschmied (ContextAwareDrafterAgent)\nResolves zero-anaphora & drafts chapter"]
         
-        Polish --> ReviewCheck{"Quality Check:\nFidelity & Style >= 8.5\nOR Max Loops Reached?"}
-        ReviewCheck -- "Below 8.5 (Needs Refinement)" --> Critic
-        ReviewCheck -- "Passed or Cap Reached\n(Best Candidate Guard)" --> Chronicler["Stage 5: Chronist (ChroniclerAgent)\nchronicle() & assemble_metadata()"]
+        subgraph Review_Loop ["Cyclic Reflection Review Loop"]
+            Drafter --> Critic["Stage 3: Zensor (CritiqueAgent)\nAudits fidelity (0-10), style (0-10), omissions"]
+            Critic --> Polisher["Stage 4: Feinschliff (PolishingAgent)\nRefines cadence & purges translationese"]
+            Polisher --> QualityCheck{"Quality Check:\nFidelity & Style >= 8.5\nOR Max Loops Reached?"}
+            QualityCheck -- "Needs Refinement" --> Critic
+        end
+        
+        QualityCheck -- "Passed / Cap Reached\n(Best Candidate Guard)" --> Chronicler["Stage 5: Chronist (ChroniclerAgent)\nSummarizes events, milestones, and metadata"]
     end
 
-    subgraph Safety_Guards ["3. Enterprise Safety Guards"]
-        RateLimiter["⚡ Sliding-Window Rate Limiter\n(32,000 TPM / 60 RPM + 429 Rollover)"]
-        FallbackGuard["🔄 Automatic Quota Fallback\n(FallbackChatModel catches 429 & switches)"]
-        StopGuard["🛑 Thread-Safe Stop & Cancel\n(X Key / Ctrl+C -> PAUSED Checkpoint)"]
+    subgraph Safety_Resilience ["3. Enterprise Safety & Fallback Engine"]
+        Limiter["Sliding-Window Rate Limiter\n(32,000 TPM / 60 RPM + Rollover Cooldown)"]
+        BisectionEngine["Recursive Binary Bisection (bisect_text)\nIsolates sensitive snippets <= 8 lines"]
+        GTFallback["Google Translate Fallback (deep-translator)\nSeamless literary polish fallback"]
+        FallbackRouter["FallbackChatModel\n(Per-Role Routing & 429 Failover)"]
+        StopSignal["Thread-Safe Stop Guard\n(X key / SIGINT -> PAUSED Checkpoint)"]
     end
 
-    subgraph Output_Verification ["4. Output & Verification"]
-        Chronicler --> OutText["translated_chapters/*.md"]
-        Chronicler --> Meta[".novel/metadata.json\n(Checkpoints & Quality Audit)"]
-        Chronicler --> BibleUpdate["Update Novel Bible\nLore & Rolling Summaries"]
+    subgraph Persistence_Output ["4. Persistence & Presentation"]
+        Chronicler --> OutMarkdown["translated_chapters/*.md"]
+        Chronicler --> MetaJSON[".novel/metadata.json\n(Consolidated Checkpoints & Audits)"]
+        Chronicler --> BibleUpdate[".novel/bible/bible.yaml\n(Lore & Arc Archives)"]
+        MetaJSON --> TUI["Textual Interactive TUI\n(Dual Reader, Token Analytics M, Toolbar)"]
+        MetaJSON --> CLI["Rich CLI Engine\n(Batch, Narrative, Migration, Skills)"]
     end
 
-    subgraph UI_Controls ["5. UI & Controls"]
-        Meta --> TUI["Textual TUI / Rich CLI"]
-        TUI --> User["Interactive Reader / Batch Dashboard"]
-    end
+    Agent_Pipeline <--> Safety_Resilience
 ```
 
 ---
 
 ## 🚀 Quick Start
 
-> [!TIP]
-> 📖 **Looking for the complete manual?** Check out the comprehensive [**NouSetsu User Guide**](./doc/user_guide.md) for step-by-step TUI navigation, headless batch translation, Novel Bible customization, and troubleshooting!
-
-### 1. Prerequisites
-* Python `>= 3.13`
-* Optional: [uv](https://github.com/astral-sh/uv) fast package manager
-
-### 2. Installation
-You can install NouSetsu globally into your Python environment:
+### 1. Installation
+Install NouSetsu directly via `pip` or `uv`:
 
 ```bash
 # Clone the repository
 git clone https://github.com/Checkmartyr/NouSetsu.git
 cd NouSetsu
 
-# Install via pip
-pip install .
+# Install in editable mode with uv (recommended)
+uv pip install -e .
 
-# Or install via uv
-uv pip install .
+# Or install with standard pip
+pip install -e .
 ```
 
-Once installed, simply run `nousetsu` or `novel` directly in your terminal!
+### 2. Configure Environment & API Keys
+Set your Gemini API key (or configure your central `.env` file):
 
-### 3. Configure API Key
-Set your Gemini API key (or OpenAI / Anthropic key):
-```powershell
-# Windows PowerShell
-$env:GEMINI_API_KEY = "your-google-gemini-api-key"
+```bash
+# Central machine-level .env file (recommended)
+cp .env.example .env
+# Edit .env and set GEMINI_API_KEY=your-api-key
 
-# Linux / macOS
-export GEMINI_API_KEY="your-google-gemini-api-key"
+# Or export in your shell
+export GEMINI_API_KEY="your-google-gemini-api-key"        # Linux / macOS
+$env:GEMINI_API_KEY = "your-google-gemini-api-key"       # Windows PowerShell
 ```
-*(Note: If no API key is set, the system automatically runs with a deterministic mock model for testing and offline development).*
 
----
+> [!NOTE]
+> If no API key is supplied, NouSetsu automatically operates with a deterministic offline mock model (`mock-novel-llm`), enabling testing of UI navigation, batch scanning, and checkpoint resumption without consuming API tokens!
 
-## 💻 Usage & CLI Reference
+### 3. Launch
+Launch the interactive Terminal User Interface (TUI) simply by running:
 
-NouSetsu can be run via the installed console commands (`nousetsu` or `novel`) or through `uv run`:
-
-### 🖥️ Automatic Interactive TUI (Default)
-Simply run `nousetsu` (or `novel`) in your terminal with no arguments:
 ```bash
 nousetsu
 ```
-> [!TIP]
-> Executing `nousetsu` without subcommands automatically launches the interactive **Textual TUI dashboard**! If a registered or current project exists, it is loaded immediately; otherwise, the project selector modal opens ready for you to create or pick a novel project.
+*(Or use the shorthand alias `novel`).*
 
-### 1. Initialize a Project
-Create project directories and generate the default **Novel Bible**:
+---
+
+## 💻 Command-Line Interface (CLI) Reference
+
+NouSetsu provides a comprehensive suite of subcommands for headless automation, narrative inspection, and skill management:
+
+### Subcommands Overview
+
+| Command | Description | Example Usage |
+| :--- | :--- | :--- |
+| `nousetsu` | Automatically launches interactive Textual TUI dashboard | `nousetsu` |
+| `nousetsu --version` | Displays current version (`nousetsu 0.2.0`) | `nousetsu -v` |
+| `nousetsu init` | Initializes a new novel project, directory structure, and Novel Bible | `nousetsu init -t "My Novel" -s Japanese -T English` |
+| `nousetsu batch` | Headless folder-to-folder batch translation with natural sorting | `nousetsu batch -p project/Villainess -F Villainess_05` |
+| `nousetsu narrative` | Renders interactive 3-tier narrative memory tree (Macro > Meso > Micro) | `nousetsu narrative -p project/Villainess` |
+| `nousetsu migrate-summaries` | Upgrades legacy flat summaries into 3-tier story arc hierarchies | `nousetsu migrate-summaries -p project/Villainess` |
+| `nousetsu skills` | Lists and filters active domain skills by agent, language, or genre | `nousetsu skills --agent drafter --genre xianxia` |
+| `nousetsu graph-info` | Visualizes procedural execution graphs and name discipline directives | `nousetsu graph-info --agent drafter --verbose` |
+| `nousetsu tui` | Explicitly launches the Textual TUI with path overrides | `nousetsu tui -p project/Villainess` |
+
+### Batch Translation Options (`nousetsu batch`)
+
 ```bash
-nousetsu init --title "Ascendance of a Bookworm" --source-lang "English" --target-lang "Thai"
+nousetsu batch [OPTIONS]
 ```
 
-### 2. Run Automated Folder-to-Folder Batch
-Place raw chapter files (`.txt` or `.md`) inside `raw_chapters/` and run:
-```bash
-nousetsu batch --input-dir raw_chapters --output-dir translated_chapters
+| Option | Flag | Default | Description |
+| :--- | :---: | :---: | :--- |
+| `--project-dir` | `-p` | `.` | Root path to the novel project directory |
+| `--volume` | `-F` | `None` | Target specific volume subfolder (e.g. `Villainess_05`) |
+| `--chapter` | `-c` | `None` | Filter and translate a specific chapter (e.g. `48`, `"ch 48"`, `"048"`) |
+| `--limit` | `-l` | `None` | Maximum number of chapters to process in this run |
+| `--force` | `-f` | `False` | Force re-translation even if chapter is already marked completed |
+| `--source-lang` | `-s` | `English` | Source language (auto-detected if East Asian script is detected) |
+| `--target-lang` | `-T` | `Thai` | Target language for publication-quality output |
+| `--model` | `-m` | `.env` | Primary LLM model override (defaults to `NOVEL_MODEL` in `.env`) |
+| `--fallback-model` | | `.env` | Fallback LLM model override (defaults to `NOVEL_FALLBACK_MODEL`) |
+| `--extractor-model` | | `None` | Dedicated model override for Stage 1 (Schriftdetektiv) |
+| `--drafter-model` | | `None` | Dedicated model override for Stage 2 (Wortschmied) |
+| `--critic-model` | | `None` | Dedicated model override for Stage 3 (Zensor) |
+| `--polisher-model` | | `None` | Dedicated model override for Stage 4 (Feinschliff) |
+| `--chronicler-model`| | `None` | Dedicated model override for Stage 5 (Chronist) |
+| `--max-loops` | | `3` | Maximum review reflection loops (bounds: 1–5) |
+| `--quality-threshold`| | `8.5` | Target quality score (fidelity & style) to trigger early exit |
+| `--max-tpm` | | `32000` | Rate limiter tokens-per-minute quota |
+| `--max-rpm` | | `60` | Rate limiter requests-per-minute quota |
+| `--chunking / --no-chunking` | | `True` | Enable/disable line-based semantic chunking for long chapters |
+| `--chunk-threshold-lines` | | `85` | Line threshold to trigger semantic chunking |
+
+---
+
+## ⌨️ Textual TUI Controls & Shortcuts
+
+The interactive Textual TUI provides complete operational control from inside your terminal:
+
+```text
+┌─ NouSetsu v0.2.0 ───────────────────────────────────────────────┐
+│ 📁 Project: Villainess (Villainess_05)   🌐 English ➔ Thai       │
+├───────────────────────────────┬─────────────────────────────────┤
+│ Chapter List                  │ Dual Reader View                │
+│ ✓ 046_Chapter 46.txt          │ Original Source (Left)          │
+│ ✓ 047_Chapter 47.txt          │ Translated Literary Prose (Right│
+│ ● 048_Chapter 48.txt          │                                 │
+│ · 049_Chapter 49.txt          │                                 │
+├───────────────────────────────┴─────────────────────────────────┤
+│ 📖 Ch.48 [██████████░░░░░░░░░░] 50% Stage: Polishing (Pass 1)   │
+├─────────────────────────────────────────────────────────────────┤
+│ [▶ Trans (T)] [⚡ Batch (B)] [⏹ Stop (X)] [📊 Tokens (M)] [📁 Vol (F)] │
+│ [📖 Bible (E)] [🗂 Proj (P)]  [✨ New (N)] [⚙ Settings (S)] [🚪 Quit (Q)]│
+└─────────────────────────────────────────────────────────────────┘
 ```
-
-**CLI Flags**:
-* `--input-dir`, `-i`: Folder containing raw source chapters (default: `raw_chapters`).
-* `--output-dir`, `-o`: Folder for translated output and metadata (default: `translated_chapters`).
-* `--source-lang`: Source language (default: `English`, or auto-detected).
-* `--target-lang`: Target language (default: `Thai`).
-* `--model`, `-m`: Default LLM model name (default: `gemini-3.1-flash-lite`).
-* `--fallback-model`: Global fallback LLM model name (default: `gemini-3.5-flash-lite`).
-* `--extractor-model`: Model override for Entity Extractor Agent (default: `gemini-3.1-flash-lite`).
-* `--drafter-model`: Model override for Context-Aware Drafter Agent (default: `gemini-3.5-flash-lite`).
-* `--critic-model`: Model override for Critique Agent (default: `gemma-4-26b-a4b-it`).
-* `--polisher-model`: Model override for Prose Polisher Agent (default: `gemini-3.5-flash-lite`).
-* `--chronicler-model`: Model override for Chronicler Agent (default: `gemma-4-26b-a4b-it`).
-* `--limit`, `-l`: Maximum number of chapters to process.
-* `--force`, `-f`: Force re-translation even if chapter is already marked completed.
-* `--max-loops`: Maximum review reflection loops per chapter (default: 3, bounds: 1–5).
-* `--quality-threshold`: Target quality score (fidelity & style) to exit review loop early (default: 8.5).
-* `--max-tpm`: Max tokens per minute rate limit quota (default: 32000).
-* `--max-rpm`: Max requests per minute rate limit quota (default: 60).
-* `--interactions / --no-interactions`: Enable or disable Gemini Interactions API (`/v1beta/interactions`) with REST fallback (default: True).
-* `--chunking / --no-chunking`: Enable or disable line-based semantic chunking for long chapters (default: True).
-* `--chunk-threshold-lines`: Line threshold to trigger chunking (default: 85).
-* `--target-chunk-lines`: Target line count per chunk (default: 70).
-* `--auto-update-bible / --no-auto-update-bible`: Automatically merge new characters and terms into Novel Bible.
-
-### 3. List & Filter Agent Skills
-```bash
-nousetsu skills
-nousetsu skills --agent drafter --genre isekai
-```
-
-### 4. Explicit TUI Launch
-```bash
-nousetsu tui --input-dir raw_chapters --output-dir translated_chapters
-```
-
-#### TUI Minimal Dashboard Toolbar & Keyboard Shortcuts
-The minimal dashboard docks action buttons into a compact 2-row toolbar below the chapter list:
-* **Row 1 (Translation Controls)**: `[▶ Trans (T)]`, `[⚡ Batch (B)]`, `[⏹ Stop (X)]`
-* **Row 2 (Project Management)**: `[📖 Bible (E)]`, `[📁 Proj (P)]`, `[✨ New (N)]`, `[⚙ Set (S)]`
 
 | Key | Action | Description |
-|:---:|:---|:---|
-| `T` | **Translate Selected** | Run agentic translation on currently selected chapter |
-| `B` | **Run All Batch** | Trigger background batch translation across all chapters |
-| `X` | **Stop Translation** | Gracefully halt active translation and save pause checkpoint |
-| `P` | **Projects** | Open Project Selector modal to switch active project |
-| `N` | **New Project** | Open Initialize Project modal with title, languages & folder names |
-| `E` | **Novel Bible** | Open in-terminal editor to inspect/add characters & terms |
-| `S` | **Settings** | Configure model routing, fallback models, rate limits, and chunking |
-| `R` | **Refresh** | Re-scan chapters and reload status badges |
+| :---: | :--- | :--- |
+| `T` | **Translate Selected** | Run agentic pipeline on the currently highlighted chapter |
+| `B` | **Run All Batch** | Start asynchronous batch translation across all pending chapters |
+| `X` | **Stop Translation** | Safely halt active batch and save clean `PAUSED` checkpoint |
+| `M` | **Token Analytics** | Open dedicated Token & Latency dashboard with KPIs and tables |
+| `F` | **Volume Switcher** | Switch active volume subfolder within multi-folder projects |
+| `P` | **Projects** | Open Project Selector modal to switch active novel projects |
+| `N` | **New Project** | Initialize a new novel project with custom title and languages |
+| `E` | **Novel Bible** | Open in-terminal editor to inspect/add characters and terms |
+| `S` | **Settings** | Configure LLM models, rate limits, and chunking parameters |
+| `R` | **Refresh** | Re-scan chapter files and reload status badges |
 | `Q` | **Quit** | Exit the TUI application |
 
 ---
 
-## 📑 Single Project Metadata & Error Checkpoints (`.novel/metadata.json`)
+## 📂 Project Structure & Layout
 
-All chapter translation checkpoints, stage artifacts, fine-grained token usage, and quality audit records are consolidated into a single project metadata file (`.novel/metadata.json`), ensuring translated output directories stay clean and uncluttered:
-
-```json
-{
-  "project_id": "default_project",
-  "version": 1,
-  "updated_at": "2026-09-11T05:30:00Z",
-  "chapters": {
-    "001 - Awakening": {
-      "chapter_id": "chapter_0001",
-      "chapter_num": 1,
-      "source_file": "raw_chapters/001 - Awakening.txt",
-      "source_sha256": "eedc16a0eb6762e6e6dd859709f82586f15905907363ed5506fcfdc068a85d30",
-      "output_file": "translated_chapters/001 - Awakening.md",
-      "model": "gemini-2.5-pro",
-      "checkpoint": {
-        "status": "completed",
-        "last_completed_stage": "chronicling",
-        "retry_count": 0,
-        "last_error": null,
-        "failed_stage": null,
-        "error_logs": []
-      },
-      "stats": {
-        "source_char_count": 166,
-        "target_word_count": 22,
-        "duration_seconds": 0.01,
-        "total_tokens": 1284,
-        "input_tokens": 820,
-        "output_tokens": 364,
-        "thought_tokens": 100,
-        "cached_tokens": 0,
-        "step_usage": [
-          {"stage": "extraction", "step_name": "Extraction", "iteration": 1, "duration_seconds": 0.45, "usage": {"input_tokens": 150, "output_tokens": 50, "thought_tokens": 0, "cached_tokens": 0, "total_tokens": 200}},
-          {"stage": "drafting", "step_name": "Drafting", "iteration": 1, "duration_seconds": 1.20, "usage": {"input_tokens": 220, "output_tokens": 120, "thought_tokens": 0, "cached_tokens": 0, "total_tokens": 340}},
-          {"stage": "critique", "step_name": "Critique (Pass 1)", "iteration": 1, "duration_seconds": 0.85, "usage": {"input_tokens": 200, "output_tokens": 74, "thought_tokens": 50, "cached_tokens": 0, "total_tokens": 324}},
-          {"stage": "polishing", "step_name": "Polishing (Pass 1)", "iteration": 1, "duration_seconds": 1.10, "usage": {"input_tokens": 180, "output_tokens": 80, "thought_tokens": 50, "cached_tokens": 0, "total_tokens": 310}},
-          {"stage": "chronicling", "step_name": "Chronicling", "iteration": 1, "duration_seconds": 0.35, "usage": {"input_tokens": 70, "output_tokens": 40, "thought_tokens": 0, "cached_tokens": 0, "total_tokens": 110}}
-        ]
-      },
-      "quality_audit": {
-        "fidelity_score": 9.5,
-        "style_score": 9.2,
-        "glossary_compliance_pct": 100.0,
-        "warnings": [],
-        "passed": true
-      }
-    }
-  }
-}
+```text
+NouSetsu/
+├── .env                            # Central machine-level model routing & API keys
+├── pyproject.toml                  # Hatchling package build & console scripts
+├── CHANGELOG.md                    # Release history following Keep a Changelog
+├── README.md                       # Repository overview and quickstart
+├── doc/                            # Comprehensive technical documentation hub
+│   ├── README.md                   # Documentation index & quick navigation
+│   ├── user_guide.md               # Complete end-user manual (CLI, TUI, Bible, Skills)
+│   ├── workflow.md                 # LangGraph pipeline and agent stages
+│   ├── agents_deep_dive.md         # In-depth architectural guide for all 5 pipeline agents
+│   ├── architecture.md             # System architecture, layer design, and utilities
+│   ├── novel_bible.md              # 3-tier narrative memory and Novel Bible guide
+│   ├── storage_and_checkpoints.md  # Single metadata, arc storage, and checkpoints
+│   ├── tui_guide.md                # Textual TUI user guide, token analytics, and shortcuts
+│   └── api_reference.md            # Developer API reference
+├── .novel/                         # Project metadata and persistent memory
+│   ├── config.yaml                 # Project configuration (languages, paths, loop caps)
+│   ├── metadata.json               # Consolidated chapter checkpoints & audit stats
+│   ├── bible/
+│   │   └── bible.yaml              # Novel Bible (Characters, glossary, whole story summary)
+│   └── summaries/
+│       ├── arcs/                   # Meso-tier story arc JSON archives (arc_0001.json)
+│       └── <volume>/               # Micro-tier folder-scoped chapter summaries
+├── raw_chapters/                   # Input folder for raw source chapters (*.txt, *.md)
+├── translated_chapters/            # Clean output folder for translated markdown (*.md)
+├── src/nousetsu/                   # Core Python package
+│   ├── agents/                     # Five pipeline agents (extractor, drafter, critic, polisher, chronicler)
+│   ├── batch/                      # Chapter scanner, natural sorter, and batch runner
+│   ├── cli/                        # CLI command dispatch (nousetsu, novel)
+│   ├── graph/                      # LangGraph state machine & procedural graph engine
+│   ├── models/                     # Pydantic schemas (bible, metadata, state, config)
+│   ├── prompts/                    # Translation and critique prompt templates
+│   ├── skills/                     # Domain skills registry, loader, and 20 built-in skills
+│   ├── storage/                    # Repository, project registry, and summary migrator
+│   ├── tui/                        # Textual TUI dashboard, reader, and token analytics
+│   └── utils/                      # Utilities (rate limiter, chunker, language detector, fallback)
+└── tests/                          # Comprehensive pytest test suite (199 tests across 31 modules)
 ```
 
 ---
 
-## 🧪 Verification & Walkthrough Summary
+## 🧪 Verification & Automated Testing
 
-The system is continuously verified through comprehensive unit, integration, UI, and domain skill tests:
+NouSetsu is verified continuously through a hermetic, deterministic test suite:
 
-### 1. Test Suite Execution
 ```bash
-uv run pytest
+# Run entire test suite using uv
+uv run --no-sync pytest
 ```
-Output:
-```
+
+```text
 ============================= test session starts =============================
 platform win32 -- Python 3.13.12, pytest-9.1.1, pluggy-1.6.0
 rootdir: D:\Code\novel_translation_Agent
 configfile: pyproject.toml
-plugins: anyio-4.15.1, langsmith-0.12.4, asyncio-1.4.0
-asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
 collected 199 items
 
 tests\test_checkpoint.py ....                                            [  2%]
@@ -313,89 +343,30 @@ tests\test_token_tracking.py ....                                        [ 85%]
 tests\test_translation_fallback.py ..................                    [ 94%]
 tests\test_tui.py ...........                                            [100%]
 
-============================ 199 passed in 17.98s =============================
+============================ 199 passed in 17.40s =============================
 ```
 
-### 2. End-to-End Batch Validation
-Sample raw chapters processed through `nousetsu batch`:
-* Translation Markdown created (`.md`) without polluting output directories.
-* Checkpoints saved centrally to `.novel/metadata.json`.
-* Memory committed to `.novel/bible/bible.yaml` with updated narrative summaries.
-* Subsequent runs demonstrated instant skip-logic when source files were unchanged:
-  ```
-  Skipped (Done): Ch.2 (002 - Magic Beast.txt) ------------------- 100% 0:00:00
-  ```
-* Textual TUI headless pilot tests confirmed widget mounting, reactive status badges, modal escape dismissal, and dual-pane synchronization.
+* **Hermetic Isolation**: Tests run in isolated temporary directories (`tmp_path`), protecting your real novel projects.
+* **Deterministic Execution**: Zero live LLM calls during tests via `MockNovelLLM`, achieving ultra-fast execution (~17s for 199 tests).
 
 ---
 
-## 📚 Technical Documentation & Deep Dives
+## 📚 Technical Documentation Hub
 
-In-depth technical architecture, developer references, and end-user guides are located in the [**`doc/`**](./doc/README.md) directory:
+For deep architectural analyses, developer guides, and end-user documentation, visit the [`doc/`](file:///D:/Code/novel_translation_Agent/doc/) directory:
 
-| Guide | Link | Focus Area |
-| :--- | :--- | :--- |
-| **End-User Guide** | [**`doc/user_guide.md`**](./doc/user_guide.md) | Complete manual: installation, auto-launch TUI, headless batch, Novel Bible, skills, and safety guards. |
-| **Workflow Pipeline** | [**`doc/workflow.md`**](./doc/workflow.md) | LangGraph stages, state machine, sequence diagrams, and retry backoff. |
-| **Agents Deep Dive** | [**`doc/agents_deep_dive.md`**](./doc/agents_deep_dive.md) | In-depth breakdown of all 5 specialized agents: cognitive roles, prompts, chunking, and safety guards. |
-| **System Architecture** | [**`doc/architecture.md`**](./doc/architecture.md) | Layer design, component boundaries, and clean architecture data flow. |
-| **Novel Bible & Memory** | [**`doc/novel_bible.md`**](./doc/novel_bible.md) | Zero-anaphora pronoun resolution, character voice preservation, and style guides. |
-| **Storage & Checkpoints** | [**`doc/storage_and_checkpoints.md`**](./doc/storage_and_checkpoints.md) | Single metadata document (`.novel/metadata.json`), error logs, and mid-run resumption. |
-| **Terminal UI Guide** | [**`doc/tui_guide.md`**](./doc/tui_guide.md) | Dual Reader, live visualizer, Novel Bible editor, project manager, and keybindings. |
-| **Developer API Reference** | [**`doc/api_reference.md`**](./doc/api_reference.md) | Class signatures, methods, and Pydantic schemas. |
-
----
-
-## 📂 Project Structure
-
-```
-NouSetsu/
-├── doc/                            # Comprehensive technical documentation & user guide
-│   ├── README.md                   # Documentation index
-│   ├── user_guide.md               # End-user manual (TUI, CLI, Novel Bible, Skills)
-│   ├── workflow.md                 # LangGraph pipeline and agent stages
-│   ├── agents_deep_dive.md         # In-depth architectural guide for all 5 pipeline agents
-│   ├── architecture.md             # System architecture and layer design
-│   ├── novel_bible.md              # Zero-anaphora, 3-tier memory, and Novel Bible guide
-│   ├── storage_and_checkpoints.md  # Single metadata, arc storage, and checkpoints
-│   ├── tui_guide.md                # Textual TUI user guide, token analytics, and shortcuts
-│   └── api_reference.md            # Developer API reference
-├── .novel/                         # Project metadata and persistent memory
-│   ├── config.yaml                 # Project configuration (languages, raw/out folders)
-│   ├── metadata.json               # Consolidated chapter checkpoints & audit stats
-│   ├── bible/
-│   │   └── bible.yaml              # Characters, glossary, style guide, whole story summary
-│   └── summaries/
-│       ├── arcs/                   # Story arc JSON archives (arc_0001.json, arc_0002.json)
-│       └── <volume>/               # Folder-scoped episodic chapter summaries (chapter_0001.json)
-├── raw_chapters/                   # Input folder for source chapters
-│   ├── 001 - Awakening.txt
-│   └── 002 - Magic Beast.txt
-├── translated_chapters/            # Clean output folder for translations
-│   ├── 001 - Awakening.md
-│   └── 002 - Magic Beast.md
-├── src/nousetsu/                   # Standard PyPA package layout
-│   ├── agents/                     # LLM agent stages (extractor, drafter, critic, polisher, chronicler)
-│   ├── batch/                      # Folder scanner, natural sorter, batch runner
-│   ├── cli/                        # CLI command dispatch (nousetsu, novel)
-│   ├── graph/                      # LangGraph state graph workflow
-│   ├── models/                     # Pydantic schemas (bible, metadata, state, config)
-│   ├── prompts/                    # Translation and critique prompt templates
-│   ├── skills/                     # Domain skills registry, loader, and models
-│   │   ├── builtin/                # 20 built-in agent domain skills
-│   │   └── catalog/                # Custom markdown skill catalogs (*.md)
-│   ├── storage/                    # File repository, registry, migration, and persistence handlers
-│   ├── tui/                        # Textual TUI app and inspection widgets
-│   │   ├── widgets/                # Reader, Inspector, ProgressPanel, Modals, Token Analytics
-│   │   └── app.py                  # Main Textual App
-│   └── utils/                      # Utilities (language detector, sliding window rate limiter)
-├── tests/                          # Automated pytest suite (199 tests across 31 modules)
-├── main.py                         # Root entry point
-├── pyproject.toml                  # Dependencies, hatchling build config, console scripts
-└── README.md                       # Repository overview and quickstart
-```
+| Document | Focus Area |
+| :--- | :--- |
+| [**User Guide**](file:///D:/Code/novel_translation_Agent/doc/user_guide.md) | Complete end-user manual: TUI navigation, CLI batch, Novel Bible, and custom skills. |
+| [**Workflow Pipeline**](file:///D:/Code/novel_translation_Agent/doc/workflow.md) | LangGraph stages, sequence diagrams, reflection review loop, and state machine. |
+| [**Agents Deep Dive**](file:///D:/Code/novel_translation_Agent/doc/agents_deep_dive.md) | In-depth breakdown of all 5 specialized agents, prompt templates, and cognitive roles. |
+| [**System Architecture**](file:///D:/Code/novel_translation_Agent/doc/architecture.md) | Layer design, component boundaries, and clean architecture data flow. |
+| [**Novel Bible & Memory**](file:///D:/Code/novel_translation_Agent/doc/novel_bible.md) | 3-tier narrative memory, zero-anaphora subject inference, and style guides. |
+| [**Storage & Checkpoints**](file:///D:/Code/novel_translation_Agent/doc/storage_and_checkpoints.md) | Consolidated `.novel/metadata.json`, story arc storage, and paused state resumption. |
+| [**Terminal UI Guide**](file:///D:/Code/novel_translation_Agent/doc/tui_guide.md) | Dual reader, live progress visualizer, Token Analytics dashboard, and keyboard shortcuts. |
+| [**Developer API Reference**](file:///D:/Code/novel_translation_Agent/doc/api_reference.md) | Class signatures, methods, Pydantic schemas, and extension points. |
 
 ---
 
 ## 📄 License
-MIT License. Built for fiction lovers and novel translation communities.
+Distributed under the **MIT License**. Built with passion for fiction lovers, translation communities, and autonomous AI agents.

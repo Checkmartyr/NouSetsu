@@ -121,7 +121,9 @@ sequenceDiagram
   2. `List[GlossaryItem]`: Newly discovered glossary items with source term, target translation, and category.
   3. `List[str]`: Active glossary terms that appear in this specific chapter.
 * **Why It Matters & Token Impact**:
-  Prevents character names from drifting across chapters. The injected procedural pitfalls explicitly forbid extracting everyday conversational verbs, greetings, and common adjectives, trimming **300–800 junk output tokens** per chapter.
+  Prevents character names from drifting across chapters. The injected procedural pitfalls explicitly forbid extracting everyday conversational vocabulary, trimming **300–800 junk output tokens** per chapter.
+* **Safety Block Resilience**:
+  If a source chunk triggers an AI safety block (`prohibited_content`), the Extractor recursively bisects the chunk (`bisect_text`), extracting valid entities from the safe half while skipping only the minimal sensitive sub-snippet.
 
 ---
 
@@ -145,7 +147,7 @@ sequenceDiagram
   ) -> str:
   ```
 * **Plain English Explanation**:
-  Produces the first complete narrative translation of the chapter, resolving East Asian pronoun omission and adhering to character registers and style guide rules.
+  Produces the first complete narrative translation of the chapter, resolving East Asian pronoun omission, adhering to character registers, and seamlessly handling sensitive scenes via recursive subdivision and Google Translate fallback.
 * **Inputs**:
   | Argument | Type | Purpose |
   |:---|:---|:---|
@@ -153,13 +155,14 @@ sequenceDiagram
   | `bible` | `NovelBible` | Language settings, reading level, tense, POV, and honorific mode. |
   | `active_characters`| `List[CharacterProfile]` | Character cards containing canonical target names and voice tone guidelines. |
   | `active_glossary` | `List[GlossaryItem]` | Mandatory term translations that must appear in the text. |
-  | `rolling_summaries`| `List[ChapterSummary]` | Synopses of the past 3 chapters providing immediate plot context. |
+  | `rolling_summaries`| `List[ChapterSummary]` | Synopses of preceding chapters providing immediate plot context with volume badges. |
   | `genre` | `Optional[str]` | Genre override for specialized drafting skills. |
   | `chunks` | `Optional[List[LineChunk]]` | Pre-split semantic chunks if chapter exceeds threshold lines. |
   | `procedural_graph` | `Optional[ProceduralGraph]` | Custom or evolved Procedural Graph for drafting. |
 * **Outputs**:
   `str`: Raw narrative English draft translation.
 * **Key Innovations**:
+  * **AI Safety Recursive Subdivision (`bisect_text`)**: When a chunk triggers a commercial AI safety block (e.g. Google AI `prohibited_content` HTTP 400), the drafter recursively bisects the text. Non-sensitive sub-chunks are translated by the primary LLM with full literary prose quality, while only the isolated minimal sensitive sub-block ($\le 8$ lines or depth 4) triggers **Google Translate fallback** (`deep-translator`) with subsequent literary polishing.
   * **Procedural Graph State Localization**: Dynamically localizes active node at `Scene_Init` for Chunk 1 (scene and POV anchoring) and switches to `Boundary_Continuity` for Chunk > 1 (prohibits repeating context and enforces seamless continuity from the preceding chunk tail).
   * **Line-Based Semantic Chunking**: Chapters exceeding `chunk_threshold_lines` (default: 85 lines) are partitioned into ~70-line semantic chunks with 3-line overlap.
   * **Zero-Anaphora Resolution**: Examines scene presence and speech register particles to insert accurate pronouns without blind guessing.

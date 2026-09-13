@@ -243,6 +243,10 @@ NouSetsu tracks end-to-end token consumption and execution latency per pipeline 
 7. **Hermetic Test Isolation & Mock Propagation**:
    - Test harness isolates `ProjectRegistry` via `NOVEL_REGISTRY_DIR` so tests never read or mutate host project configurations.
    - Models prefixed with `"mock"` or `"test"` automatically propagate across all five pipeline agent roles, eliminating live network calls and achieving a 27x test speedup (<17s for full test suite).
+8. **AI Safety Block Resilience & Recursive Bisection Engine**:
+   - Catches commercial AI safety blocks (`prohibited_content` HTTP 400) on visceral combat or romantic intimacy.
+   - Recursively bisects chunks (`bisect_text`) down to minimal sensitive snippets ($\le 8$ lines or depth 4).
+   - Translates safe portions with the primary LLM in full literary prose, while routing only the minimal sensitive sub-block to Google Translate fallback (`translate_via_google`) and `Feinschliff` polishing.
 
 ---
 
@@ -254,6 +258,9 @@ All commands should be run using `uv`:
 # Install / sync dependencies
 uv sync
 
+# Query CLI version
+uv run nousetsu --version
+
 # Run complete test suite (199 tests across 31 modules in ~18s)
 uv run pytest
 
@@ -263,6 +270,8 @@ uv run pytest tests/test_migration.py
 uv run pytest tests/test_cross_folder_summaries.py
 uv run pytest tests/test_model_env.py
 uv run pytest tests/test_model_fallback.py
+uv run pytest tests/test_recursive_subdivision.py
+uv run pytest tests/test_translation_fallback.py
 uv run pytest tests/test_tui.py
 uv run pytest tests/test_skills.py
 uv run pytest tests/test_review_loop.py
@@ -287,6 +296,9 @@ uv run nousetsu init --title "The Villainess" --genre general --source-lang Engl
 
 # Run folder-to-folder batch translation
 uv run nousetsu batch --limit 5 --genre general
+
+# Target a specific chapter within a volume folder
+uv run nousetsu batch -p project/Villainess -F Villainess_05 --chapter 48
 
 # Inspect registered domain skills
 uv run nousetsu skills
