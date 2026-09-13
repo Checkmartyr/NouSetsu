@@ -1,14 +1,19 @@
-"""Hybrid Search Engine combining SQLite FTS5 (BM25) and Vector Embeddings with Reciprocal Rank Fusion."""
+"""Hybrid Search Engine combining SQLite FTS5 (BM25) and Vector Embeddings via SQLAlchemy 2.0 ORM."""
 import json
 import logging
 import math
 from pathlib import Path
 import re
-import sqlite3
 import struct
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
+from sqlalchemy import create_engine, delete, func, select, text
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
+
+from nousetsu.rag.db_models import Base, LoreDocumentORM
 from nousetsu.rag.models import DocumentType, LoreDocument, SearchResult
 
 logger = logging.getLogger(__name__)
@@ -41,49 +46,32 @@ def _cosine_similarity(v1: List[float], v2: List[float]) -> float:
 
 
 class HybridSearchEngine:
-    """Zero-daemon hybrid search engine backed by SQLite FTS5 and embedded vector blobs."""
+    """Zero-daemon hybrid search engine backed by SQLite FTS5 and SQLAlchemy 2.0 ORM."""
 
     def __init__(self, db_path: Path | str = ":memory:"):
         self.db_path = Path(db_path) if isinstance(db_path, str) and db_path != ":memory:" else db_path
         if isinstance(self.db_path, Path):
             self.db_path.parent.mkdir(parents=True, exist_ok=True)
             self._db_str = str(self.db_path.resolve())
+            self.engine = create_engine(
+                f"sqlite:///{self._db_str}",
+                connect_args={"check_same_thread": False}
+            )
         else:
             self._db_str = ":memory:"
+            self.engine = create_engine(
+                "sqlite:///:memory:",
+                connect_args={"check_same_thread": False},
+                poolclass=StaticPool
+            )
+        self.SessionFactory = sessionmaker(bind=self.engine, expire_on_commit=False)
         self._init_db()
 
-    def _get_connection(self) -> sqlite3.Connection:
-        con = sqlite3.connect(self._db_str)
-        con.row_factory = sqlite3.Row
-        return con
-
     def _init_db(self) -> None:
-        """Create relational, FTS5, and metadata tables if they do not exist."""
-        with self._get_connection() as con:
-            con.execute("""
-                CREATE TABLE IF NOT EXISTS lore_documents (
-                    doc_id TEXT PRIMARY KEY,
-                    doc_type TEXT NOT NULL,
-                    chapter_num INTEGER DEFAULT 0,
-                    folder TEXT,
-                    title TEXT,
-                    content TEXT NOT NULL,
-                    metadata_json TEXT,
-                    embedding BLOB,
-                    created_at REAL
-                )
-            """)
-            con.execute("""
-                CREATE INDEX IF NOT EXISTS idx_lore_chapter 
-                ON lore_documents(chapter_num, folder)
-            """)
-            con.execute("""
-                CREATE INDEX IF NOT EXISTS idx_lore_type 
-                ON lore_documents(doc_type)
-            """)
-
-            # SQLite FTS5 virtual table for BM25 lexical search
-            con.execute("""
+        """Create relational tables via SQLAlchemy metadata and FTS5 virtual table."""
+        Base.metadata.create_all(self.engine)
+        with self.engine.begin() as con:
+            con.execute(text("""
                 CREATE VIRTUAL TABLE IF NOT EXISTS lore_fts USING fts5(
                     doc_id UNINDEXED,
                     content,
@@ -92,8 +80,7 @@ class HybridSearchEngine:
                     doc_type,
                     tokenize = 'unicode61'
                 )
-            """)
-            con.commit()
+            """))
 
     def index_document(self, doc: LoreDocument, embedding: Optional[List[float]] = None) -> None:
         """Index a single document with optional vector embedding."""
@@ -104,104 +91,100 @@ class HybridSearchEngine:
         docs: List[LoreDocument],
         embeddings: Optional[List[Optional[List[float]]]] = None
     ) -> None:
-        """Index a batch of documents atomically."""
+        """Index a batch of documents atomically using SQLAlchemy SQLite upsert and FTS5 synchronization."""
         if not docs:
             return
 
-        with self._get_connection() as con:
+        with self.SessionFactory() as session:
             for idx, doc in enumerate(docs):
                 emb = embeddings[idx] if embeddings and idx < len(embeddings) else None
                 emb_blob = struct.pack(f"{len(emb)}f", *emb) if emb else None
-                meta_str = json.dumps(doc.metadata, ensure_ascii=False)
+                meta_str = json.dumps(doc.metadata, ensure_ascii=False) if doc.metadata else None
 
-                # 1. Upsert document into main table
-                con.execute("""
-                    INSERT INTO lore_documents 
-                    (doc_id, doc_type, chapter_num, folder, title, content, metadata_json, embedding, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(doc_id) DO UPDATE SET
-                        doc_type = excluded.doc_type,
-                        chapter_num = excluded.chapter_num,
-                        folder = excluded.folder,
-                        title = excluded.title,
-                        content = excluded.content,
-                        metadata_json = excluded.metadata_json,
-                        embedding = coalesce(excluded.embedding, lore_documents.embedding),
-                        created_at = excluded.created_at
-                """, (
-                    doc.doc_id,
-                    doc.doc_type.value,
-                    doc.chapter_num,
-                    doc.folder,
-                    doc.title,
-                    doc.content,
-                    meta_str,
-                    emb_blob,
-                    time.time()
-                ))
+                values_dict: Dict[str, Any] = {
+                    "doc_id": doc.doc_id,
+                    "doc_type": doc.doc_type.value,
+                    "chapter_num": doc.chapter_num,
+                    "folder": doc.folder,
+                    "title": doc.title,
+                    "content": doc.content,
+                    "metadata_json": meta_str,
+                    "embedding": emb_blob,
+                    "created_at": time.time()
+                }
 
-                # 2. Update FTS5 virtual index
-                con.execute("DELETE FROM lore_fts WHERE doc_id = ?", (doc.doc_id,))
-                con.execute("""
-                    INSERT INTO lore_fts (doc_id, content, title, folder, doc_type)
-                    VALUES (?, ?, ?, ?, ?)
-                """, (
-                    doc.doc_id,
-                    doc.content,
-                    doc.title or "",
-                    doc.folder or "",
-                    doc.doc_type.value
-                ))
-            con.commit()
+                update_dict: Dict[str, Any] = {
+                    "doc_type": doc.doc_type.value,
+                    "chapter_num": doc.chapter_num,
+                    "folder": doc.folder,
+                    "title": doc.title,
+                    "content": doc.content,
+                    "metadata_json": meta_str,
+                    "created_at": time.time()
+                }
+                if emb_blob is not None:
+                    update_dict["embedding"] = emb_blob
+
+                stmt = (
+                    sqlite_insert(LoreDocumentORM)
+                    .values(**values_dict)
+                    .on_conflict_do_update(
+                        index_elements=[LoreDocumentORM.doc_id],
+                        set_=update_dict
+                    )
+                )
+                session.execute(stmt)
+
+                # Sync SQLite FTS5 index
+                session.execute(
+                    text("DELETE FROM lore_fts WHERE doc_id = :doc_id"),
+                    {"doc_id": doc.doc_id}
+                )
+                session.execute(
+                    text("""
+                        INSERT INTO lore_fts (doc_id, content, title, folder, doc_type)
+                        VALUES (:doc_id, :content, :title, :folder, :doc_type)
+                    """),
+                    {
+                        "doc_id": doc.doc_id,
+                        "content": doc.content,
+                        "title": doc.title or "",
+                        "folder": doc.folder or "",
+                        "doc_type": doc.doc_type.value
+                    }
+                )
+            session.commit()
 
     def delete_document(self, doc_id: str) -> None:
         """Remove a document from both table and FTS index."""
-        with self._get_connection() as con:
-            con.execute("DELETE FROM lore_documents WHERE doc_id = ?", (doc_id,))
-            con.execute("DELETE FROM lore_fts WHERE doc_id = ?", (doc_id,))
-            con.commit()
+        with self.SessionFactory() as session:
+            session.execute(delete(LoreDocumentORM).where(LoreDocumentORM.doc_id == doc_id))
+            session.execute(text("DELETE FROM lore_fts WHERE doc_id = :doc_id"), {"doc_id": doc_id})
+            session.commit()
 
     def delete_chapter(self, chapter_num: int, folder: Optional[str] = None) -> None:
         """Delete all indexed documents belonging to a specific chapter."""
-        with self._get_connection() as con:
+        with self.SessionFactory() as session:
+            stmt = select(LoreDocumentORM.doc_id).where(LoreDocumentORM.chapter_num == chapter_num)
             if folder:
-                rows = con.execute(
-                    "SELECT doc_id FROM lore_documents WHERE chapter_num = ? AND folder = ?",
-                    (chapter_num, folder)
-                ).fetchall()
-            else:
-                rows = con.execute(
-                    "SELECT doc_id FROM lore_documents WHERE chapter_num = ?",
-                    (chapter_num,)
-                ).fetchall()
-            doc_ids = [r["doc_id"] for r in rows]
-            for d_id in doc_ids:
-                con.execute("DELETE FROM lore_documents WHERE doc_id = ?", (d_id,))
-                con.execute("DELETE FROM lore_fts WHERE doc_id = ?", (d_id,))
-            con.commit()
+                stmt = stmt.where(LoreDocumentORM.folder == folder)
+            doc_ids = list(session.scalars(stmt))
+            if doc_ids:
+                session.execute(delete(LoreDocumentORM).where(LoreDocumentORM.doc_id.in_(doc_ids)))
+                for d_id in doc_ids:
+                    session.execute(text("DELETE FROM lore_fts WHERE doc_id = :doc_id"), {"doc_id": d_id})
+            session.commit()
 
     def count_documents(self) -> int:
         """Return total number of indexed documents."""
-        with self._get_connection() as con:
-            row = con.execute("SELECT count(*) as c FROM lore_documents").fetchone()
-            return row["c"] if row else 0
+        with self.SessionFactory() as session:
+            return session.scalar(select(func.count()).select_from(LoreDocumentORM)) or 0
 
     def get_document(self, doc_id: str) -> Optional[LoreDocument]:
         """Fetch a document by its ID."""
-        with self._get_connection() as con:
-            row = con.execute("SELECT * FROM lore_documents WHERE doc_id = ?", (doc_id,)).fetchone()
-            if not row:
-                return None
-            meta = json.loads(row["metadata_json"]) if row["metadata_json"] else {}
-            return LoreDocument(
-                doc_id=row["doc_id"],
-                doc_type=DocumentType(row["doc_type"]),
-                chapter_num=row["chapter_num"],
-                folder=row["folder"],
-                title=row["title"] or "",
-                content=row["content"],
-                metadata=meta
-            )
+        with self.SessionFactory() as session:
+            orm_doc = session.get(LoreDocumentORM, doc_id)
+            return orm_doc.to_domain() if orm_doc else None
 
     def search_sparse(
         self,
@@ -218,29 +201,27 @@ class HybridSearchEngine:
         if not fts_query:
             return []
 
-        with self._get_connection() as con:
-            sql = """
+        with self.SessionFactory() as session:
+            sql_str = """
                 SELECT f.doc_id, bm25(lore_fts) as score, d.doc_type, d.chapter_num,
                        d.folder, d.title, d.content, d.metadata_json
                 FROM lore_fts f
                 JOIN lore_documents d ON f.doc_id = d.doc_id
-                WHERE lore_fts MATCH ?
+                WHERE lore_fts MATCH :query
             """
-            params: List[Any] = [fts_query]
-
+            params: Dict[str, Any] = {"query": fts_query, "limit": limit}
             if folder:
-                sql += " AND d.folder = ?"
-                params.append(folder)
+                sql_str += " AND d.folder = :folder"
+                params["folder"] = folder
             if doc_type:
-                sql += " AND d.doc_type = ?"
-                params.append(doc_type.value)
-
-            sql += " ORDER BY score ASC LIMIT ?"
-            params.append(limit)
+                sql_str += " AND d.doc_type = :doc_type"
+                params["doc_type"] = doc_type.value
+            sql_str += " ORDER BY score ASC LIMIT :limit"
 
             try:
-                rows = con.execute(sql, params).fetchall()
-            except sqlite3.OperationalError as e:
+                result_proxy = session.execute(text(sql_str), params)
+                rows = result_proxy.mappings().all()
+            except Exception as e:
                 logger.warning(f"FTS5 search failed on query '{fts_query}': {e}")
                 return []
 
@@ -256,7 +237,6 @@ class HybridSearchEngine:
                     content=r["content"],
                     metadata=meta
                 )
-                # In FTS5, bm25 is negative; invert for positive score representation
                 score = abs(float(r["score"]))
                 results.append((doc, rank, score))
             return results
@@ -272,43 +252,32 @@ class HybridSearchEngine:
         if not query_vector:
             return []
 
-        with self._get_connection() as con:
-            sql = "SELECT * FROM lore_documents WHERE embedding IS NOT NULL"
-            params: List[Any] = []
+        with self.SessionFactory() as session:
+            stmt = select(LoreDocumentORM).where(LoreDocumentORM.embedding.isnot(None))
             if folder:
-                sql += " AND folder = ?"
-                params.append(folder)
+                stmt = stmt.where(LoreDocumentORM.folder == folder)
             if doc_type:
-                sql += " AND doc_type = ?"
-                params.append(doc_type.value)
+                stmt = stmt.where(LoreDocumentORM.doc_type == doc_type.value)
 
-            rows = con.execute(sql, params).fetchall()
-            scored: List[Tuple[float, sqlite3.Row]] = []
+            orm_docs = session.scalars(stmt).all()
+            scored: List[Tuple[float, LoreDocumentORM]] = []
 
-            for r in rows:
-                blob = r["embedding"]
+            for orm_doc in orm_docs:
+                blob = orm_doc.embedding
+                if not blob:
+                    continue
                 dim = len(blob) // 4
                 vec = list(struct.unpack(f"{dim}f", blob))
                 sim = _cosine_similarity(query_vector, vec)
-                scored.append((sim, r))
+                scored.append((sim, orm_doc))
 
             # Sort descending by cosine similarity
             scored.sort(key=lambda x: x[0], reverse=True)
             top_matches = scored[:limit]
 
             results = []
-            for rank, (sim, r) in enumerate(top_matches, start=1):
-                meta = json.loads(r["metadata_json"]) if r["metadata_json"] else {}
-                doc = LoreDocument(
-                    doc_id=r["doc_id"],
-                    doc_type=DocumentType(r["doc_type"]),
-                    chapter_num=r["chapter_num"],
-                    folder=r["folder"],
-                    title=r["title"] or "",
-                    content=r["content"],
-                    metadata=meta
-                )
-                results.append((doc, rank, sim))
+            for rank, (sim, orm_doc) in enumerate(top_matches, start=1):
+                results.append((orm_doc.to_domain(), rank, sim))
             return results
 
     def hybrid_search(
