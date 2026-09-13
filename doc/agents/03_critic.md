@@ -65,9 +65,12 @@ def evaluate(
     rate_limiter: Optional[Any] = None,
     stop_event: Optional[Any] = None,
     rag_context: Optional[List[Any]] = None,
+    prompt_tracker: Optional[Any] = None,
+    iteration: int = 1,
     **kwargs: Any
 ) -> Tuple[QualityAudit, str]
 ```
+- **Attributes**: `self.prompt_tracker: Optional[Any] = None` stores the active tracker instance injected by `NovelTranslationWorkflow`.
 - **Returns**: A 2-tuple containing:
   1. `QualityAudit`: `fidelity_score`, `style_score`, `glossary_compliance_pct`, `warnings`, and `passed`.
   2. `critique_notes`: Concrete, line-level feedback instructing the polisher what to rectify.
@@ -97,8 +100,8 @@ On Pass 1, `Zensor` receives up to $k=2$ historical translation memory snippets 
 
 ### C. Programmatic Glossary Verification
 In addition to LLM scoring, `Zensor` performs hard programmatic string checks:
-1. Filters active glossary terms to those whose `source` term actually appears in the chapter's raw source text.
-2. Checks whether the canonical `target` translation appears in `draft_text`.
+1. Filters active glossary terms to those whose `source` term actually appears in the chapter's raw source text via [`filter_glossary_for_scene`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/glossary_filter.py).
+2. Verifies whether the canonical `target` translation appears in `draft_text` via script-aware [`is_term_present`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/glossary_filter.py) (matching CJK substrings and enforcing Latin word boundaries `\bterm\b`).
 3. If missing, adds an explicit warning and deducts from `glossary_compliance_pct`.
 
 ### D. Target Language Regression Guard

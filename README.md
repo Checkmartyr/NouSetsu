@@ -322,7 +322,7 @@ NouSetsu/
 │   ├── storage/                    # Repository, project registry, and summary migrator
 │   ├── tui/                        # Textual TUI dashboard, reader, and token analytics
 │   └── utils/                      # Utilities (rate limiter, chunker, diff patcher, language detector)
-└── tests/                          # Comprehensive pytest test suite (288 tests across 38 modules)
+└── tests/                          # Comprehensive pytest test suite (288 tests across 45 modules)
 ```
 
 ---
@@ -393,7 +393,7 @@ tests\test_web_server.py ........                                        [100%]
 ```
 
 * **Hermetic Isolation**: Tests run in isolated temporary directories (`tmp_path`), protecting your real novel projects.
-* **Deterministic Execution**: Zero live LLM calls during tests via `MockNovelLLM`, achieving ultra-fast execution (~17s for 199 tests).
+* **Deterministic Execution**: Zero live LLM calls during tests via `MockNovelLLM`, achieving fast execution (~102s for 288 tests across 45 modules).
 
 ---
 

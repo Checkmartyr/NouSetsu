@@ -30,7 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `filter_characters_for_scene` dynamically filters character profiles to those active in the scene, preserving core protagonist roles while eliminating prompt bloat.
   - `filter_glossary_for_text` with script-aware word boundary detection (CJK ideographs vs Latin `\b` boundaries).
 - **Test Suite Expansion**:
-  - Expanded test coverage to 288 tests across 38 modules.
+  - Expanded test coverage to 288 tests across 45 modules.
 
 ## [0.2.0] - 2026-09-13
 
@@ -78,5 +78,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Automatic CJK source language detection (Japanese, Chinese, Korean).
 - Console scripts `nousetsu` and `novel`.
 
+[0.3.0]: https://github.com/Checkmartyr/NouSetsu/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Checkmartyr/NouSetsu/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Checkmartyr/NouSetsu/releases/tag/v0.1.0

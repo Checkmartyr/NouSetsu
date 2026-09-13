@@ -138,8 +138,9 @@ Registered via [`src/nousetsu/skills/builtin/extractor.py`](file:///D:/Code/nove
 `EntityExtractorAgent` is tested deterministically using `MockNovelLLM`:
 ```python
 agent = EntityExtractorAgent(model_name="mock-model")
-chars, terms = agent.extract(source_text="...", bible=bible)
+chars, terms, active_terms = agent.extract(source_text="...", bible=bible)
 assert isinstance(chars, list)
 assert isinstance(terms, list)
+assert isinstance(active_terms, list)
 ```
 No live API keys or network calls are required during automated testing.

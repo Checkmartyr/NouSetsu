@@ -8,7 +8,7 @@
 
 ```
 ┌─ NouSetsu ──────────────────────────────────────────────────────────── [12:00:00] ─┐
-│ 📚 Chapters (85%+ Height)         │ 📖 Dual Reader Pane (80% Viewport)             │
+│ 📚 Chapters (85%+ Height)         │ [📖 Reader]  [📊 Token Analysis (M)]           │
 │                                   │ ┌────────────────────────┬───────────────────┐ │
 │  ✓ Ch.001 - Awakening             │ │ 🇺🇸 English Source      │ 🇹🇭 Thai Polished  │ │
 │  ● Ch.002 - Magic Beast           │ │ The boy stepped out.   │ เด็กหนุ่มก้าวเดิน..│ │
@@ -20,8 +20,9 @@
 │  · Ch.008 - Shadow Guild          │ 📊 Inspector: Fidelity: 9.5 | Style: 9.2       │
 │                                   │ Tokens: 1,284 in 3.9s | Status: COMPLETED      │
 ├───────────────────────────────────┴────────────────────────────────────────────────┤
-│ [▶ Translate (T)]   [⚡ Batch All (B)]   [⏹ Stop (X)]       [📖 Bible (E)]          │
-│ [📁 Projects (P)]   [✨ New (N)]          [⚙ Settings (S)]   [✖ Quit (Q)]           │
+│ [▶ Trans (T)]     [⚡ Batch (B)]     [⏹ Stop (X)]        [📖 Bible (E)]            │
+│ [📁 Proj (P)]      [✨ New (N)]       [⚙ Set (S)]                                  │
+│ [📂 Folder (F)]    [📊 Tokens (M)]                                                 │
 └────────────────────────────────────────────────────────────────────────────────────┘
 ```
 

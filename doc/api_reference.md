@@ -251,26 +251,41 @@ class LineSemanticChunker:
         """Partitions raw text into LineChunk objects with boundary overlap."""
 ```
 
-### `DiffPatcher` (`src/nousetsu/utils/diff_patcher.py`)
-Unified diff parser and search-and-replace patch engine for token-frugal prose polishing.
+### `DiffPatcher` Engine (`src/nousetsu/utils/diff_patcher.py`)
+SEARCH/REPLACE diff block parser and targeted patch engine for token-frugal prose polishing.
 
 ```python
-def is_patch_format(text: str) -> bool:
-    """Checks whether the response contains search/replace or unified diff markers."""
+SEARCH_REPLACE_PATTERN = re.compile(
+    r"<<<<<<<\s*SEARCH\s*\r?\n(.*?)\r?\n=======\s*\r?\n(.*?)\r?\n>>>>>>>",
+    re.DOTALL
+)
 
-def apply_search_replace_patches(original_text: str, patch_text: str) -> Tuple[str, int, int]:
+def is_patch_format(text: str) -> bool:
+    """Check if the given text contains at least one SEARCH/REPLACE block or NO_CHANGES_NEEDED signal."""
+
+def apply_search_replace_patches(
+    original_text: str,
+    patch_text: str
+) -> Tuple[str, int, int]:
     """
-    Applies search/replace blocks or unified diffs directly to the original draft.
-    Returns: (patched_text, applied_count, failed_count)
+    Apply <<<<<<< SEARCH ... ======= ... >>>>>>> diff blocks to original_text.
+    Returns: Tuple of (modified_text, applied_count, failed_count).
     """
 ```
 
-### `PromptTracker` (`src/nousetsu/utils/prompt_tracker.py`)
-Forensic logging engine capturing exact stage prompts, responses, and token usages into `.novel/traces/chapter_XXXX.json`.
+### `PromptTracker` (`src/nousetsu/analysis/tracker.py`)
+Forensic logging engine capturing exact stage prompts, responses, and token usages into streaming `.novel/traces/chapter_XXXX.jsonl` and consolidated `.novel/traces/chapter_XXXX.json`.
 
 ```python
 class PromptTracker:
-    def __init__(self, chapter_id: str, traces_dir: Path)
+    def __init__(
+        self,
+        traces_dir: Path | str,
+        chapter_id: str,
+        chapter_num: int,
+        folder: Optional[str] = None,
+        enabled: bool = True
+    ): ...
 
     def record(
         self,
@@ -279,19 +294,38 @@ class PromptTracker:
         system_prompt: str,
         user_prompt: str,
         raw_output: str,
-        parsed_output: Optional[Any] = None,
-        model: str = "gemini-3.5-flash-lite",
+        model: str,
         token_usage: Optional[TokenUsage] = None,
         duration_seconds: float = 0.0,
+        iteration: int = 1,
         chunk_index: int = 1,
         total_chunks: int = 1,
-        iteration: int = 1,
         depth: int = 0,
+        parsed_output: Optional[Any] = None,
+        status: str = "success",
+        error_message: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None
-    ) -> StageTrace: ...
+    ) -> AgentPromptTrace: ...
 
-    def finalize(self) -> ChapterTrace:
-        """Serializes and saves the final ChapterTrace document to disk."""
+    def record_error(
+        self,
+        stage: PipelineStage,
+        agent: str,
+        system_prompt: str,
+        user_prompt: str,
+        model: str,
+        err: Exception | str,
+        duration_seconds: float = 0.0,
+        iteration: int = 1,
+        chunk_index: int = 1,
+        total_chunks: int = 1,
+        depth: int = 0,
+        status: str = "error",
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> AgentPromptTrace: ...
+
+    def finalize(self) -> ChapterTraceDocument:
+        """Aggregate all recorded traces and persist consolidated ChapterTraceDocument (.json) to disk."""
 ```
 
 ### Script-Aware Word Boundaries & Scene Filtering (`src/nousetsu/utils/`)
@@ -345,25 +379,46 @@ def detect_language(text: str, default: str = "Japanese") -> str:
 
 ## 🏛️ Hybrid Search RAG Knowledge Store (`src/nousetsu/rag/`)
 
-### `RAGEngine` (`src/nousetsu/rag/engine.py`)
-Local SQLite database engine managed by SQLAlchemy 2.0 ORM combining FTS5 BM25 and dense Gemini Embedding 2 search via Reciprocal Rank Fusion ($k=60$).
+### `HybridSearchEngine` (`src/nousetsu/rag/engine.py`)
+Zero-daemon local SQLite database engine managed by SQLAlchemy 2.0 ORM combining FTS5 BM25 lexical search and dense Gemini Embedding 2 vector search via Reciprocal Rank Fusion ($k=60$) with optional Cross-Encoder reranking.
 
 ```python
-class RAGEngine:
-    def __init__(self, db_path: Path | str, embedding_client: Optional[EmbeddingClient] = None)
+class HybridSearchEngine:
+    def __init__(self, db_path: Path | str = ":memory:"): ...
+
+    def index_documents(self, documents: List[LoreDocument]) -> None:
+        """Batch upsert lore documents and sync SQLite FTS5 virtual table."""
+
+    def search_sparse(
+        self,
+        query: str,
+        limit: int = 10,
+        folder: Optional[str] = None,
+        doc_type: Optional[DocumentType] = None
+    ) -> List[Tuple[LoreDocument, int, float]]:
+        """Perform lexical BM25 search using SQLite FTS5."""
+
+    def search_dense(
+        self,
+        query_vector: List[float],
+        limit: int = 10,
+        folder: Optional[str] = None,
+        doc_type: Optional[DocumentType] = None
+    ) -> List[Tuple[LoreDocument, int, float]]:
+        """Perform dense vector search using cosine similarity."""
 
     def hybrid_search(
         self,
         query: str,
         query_vector: Optional[List[float]] = None,
         limit: int = 2,
-        reranker: Optional[LLMCrossEncoderReranker] = None,
+        rrf_k: int = 60,
+        folder: Optional[str] = None,
+        doc_type: Optional[DocumentType] = None,
+        reranker: Optional[Any] = None,
         enable_rerank: bool = True
-    ) -> List[RAGSearchResult]:
-        """Executes reciprocal rank fusion over FTS5 BM25 and vector cosine similarity."""
-
-    def index_document(self, doc: LoreDocument) -> None:
-        """Inserts or updates a document in SQLite and the FTS5 virtual table."""
+    ) -> List[SearchResult]:
+        """Combine sparse and dense rankings using Reciprocal Rank Fusion (RRF), with optional Cross-Encoder reranking."""
 ```
 
 ---
@@ -416,13 +471,13 @@ Coordinates the multi-agent LangGraph execution and reflection review cycle.
 class NovelTranslationWorkflow:
     def __init__(
         self,
-        model_name: str = "gemini-3.1-flash-lite",
-        fallback_model: Optional[str] = "gemini-3.5-flash-lite",
-        extractor_model: Optional[str] = "gemini-3.1-flash-lite",
-        drafter_model: Optional[str] = "gemini-3.5-flash-lite",
-        critic_model: Optional[str] = "gemma-4-26b-a4b-it",
-        polisher_model: Optional[str] = "gemini-3.5-flash-lite",
-        chronicler_model: Optional[str] = "gemma-4-26b-a4b-it",
+        model_name: Optional[str] = None,
+        fallback_model: Optional[str] = None,
+        extractor_model: Optional[str] = None,
+        drafter_model: Optional[str] = None,
+        critic_model: Optional[str] = None,
+        polisher_model: Optional[str] = None,
+        chronicler_model: Optional[str] = None,
         rate_limiter: Optional[SlidingWindowRateLimiter] = None,
         max_review_loops: int = 3,
         quality_threshold: float = 8.5,
@@ -580,21 +635,25 @@ class BatchRunner:
     def __init__(
         self,
         repository: NovelRepository,
-        model_name: str = "gemini-3.1-flash-lite",
-        fallback_model: Optional[str] = "gemini-3.5-flash-lite",
-        extractor_model: Optional[str] = "gemini-3.1-flash-lite",
-        drafter_model: Optional[str] = "gemini-3.5-flash-lite",
-        critic_model: Optional[str] = "gemma-4-26b-a4b-it",
-        polisher_model: Optional[str] = "gemini-3.5-flash-lite",
-        chronicler_model: Optional[str] = "gemma-4-26b-a4b-it",
+        model_name: Optional[str] = None,
+        fallback_model: Optional[str] = None,
+        extractor_model: Optional[str] = None,
+        drafter_model: Optional[str] = None,
+        critic_model: Optional[str] = None,
+        polisher_model: Optional[str] = None,
+        chronicler_model: Optional[str] = None,
         auto_update_bible: Optional[bool] = None,
         max_tpm: Optional[int] = None,
         max_rpm: Optional[int] = None,
         max_review_loops: Optional[int] = None,
         quality_threshold: Optional[float] = None,
+        genre: Optional[str] = None,
+        enable_chunking: Optional[bool] = None,
         chunk_threshold_lines: Optional[int] = None,
         target_chunk_lines: Optional[int] = None,
         chunk_overlap_lines: Optional[int] = None,
+        enable_rag: Optional[bool] = None,
+        enable_rag_reranker: Optional[bool] = None,
         console: Optional[Console] = None
     )
 
@@ -692,10 +751,14 @@ def migrate_novel_summaries(
 * **`TranslationState` (`src/nousetsu/models/state.py`)**: The LangGraph state schema.
   * Fields: `chapter_id`, `chapter_num`, `source_text`, `draft_text`, `critique_notes`, `quality_audit`, `polished_text`, `review_iteration`, `max_review_loops`, `quality_threshold`, `best_polished_text`, `best_audit`, `metadata`.
 * **`ProjectConfig` (`src/nousetsu/models/config.py`)**: Project configuration settings.
-  * Fields: `project_id`, `title`, `source_language`, `target_language`, `raw_dir`, `output_dir`, `model_name`, `fallback_model`, `extractor_model`, `drafter_model`, `critic_model`, `polisher_model`, `chronicler_model`, `auto_update_bible`, `max_tpm`, `max_rpm`, `max_review_loops`, `quality_threshold`, `chunk_threshold_lines`, `target_chunk_lines`, `chunk_overlap_lines`.
+  * Fields: `project_id`, `title`, `source_language`, `target_language`, `raw_dir`, `output_dir`, `model_name`, `fallback_model`, `extractor_model`, `drafter_model`, `critic_model`, `polisher_model`, `chronicler_model`, `use_interactions_api`, `auto_update_bible`, `max_tpm`, `max_rpm`, `max_review_loops`, `quality_threshold`, `genre`, `enable_chunking`, `chunk_threshold_lines`, `target_chunk_lines`, `chunk_overlap_lines`, `cross_folder_summaries`, `safety_recursive_subdivision`, `safety_subdivision_min_lines`, `safety_subdivision_max_depth`, `enable_rag`, `rag_top_k`, `rag_embedding_model`, `enable_rag_reranker`, `rag_reranker_model`, `filter_scene_characters`, `max_scene_characters`, `enable_patch_polishing`, `created_at`.
+* **`AgentPromptTrace` (`src/nousetsu/models/trace.py`)**: Granular per-step prompt tracking trace.
+  * Fields: `trace_id`, `chapter_id`, `chapter_num`, `folder`, `stage`, `agent`, `model`, `iteration`, `chunk_index`, `total_chunks`, `depth`, `system_prompt`, `user_prompt`, `raw_output`, `parsed_output`, `token_usage`, `duration_seconds`, `status`, `error_message`, `metadata`, `timestamp`.
+* **`ChapterTraceDocument` (`src/nousetsu/models/trace.py`)**: Consolidated trace archive for a full chapter run.
+  * Fields: `chapter_id`, `chapter_num`, `folder`, `traces`, `total_token_usage`, `total_duration_seconds`, `stage_counts`, `completed_at`.
 * **`ArcSummary` (`src/nousetsu/models/bible.py`)**: Meso-tier story arc representation.
-  * Fields: `arc_id`, `arc_title`, `start_chapter`, `end_chapter`, `milestones`, `climax`, `status` (`"active"` or `"completed"`), `created_at`.
-* **`NovelBible` (`src/nousetsu/models/bible.py`)**: Root memory document holding `whole_story_summary`, `active_arc`, `characters`, `glossary`, `summaries`, and `style_guide`.
+  * Fields: `arc_id`, `arc_num`, `title`, `synopsis`, `core_conflict`, `status` (`"active"` or `"completed"`), `start_chapter`, `end_chapter`, `folder`, `key_milestones`.
+* **`NovelBible` (`src/nousetsu/models/bible.py`)**: Root memory document holding `whole_story_summary`, `active_arc`, `archived_arcs`, `characters`, `glossary`, `summaries`, and `style_guide`.
   * Methods: `get_hierarchical_context()`, `get_rolling_context()`, `format_for_drafter()`.
 * **`ChapterMetadata` (`src/nousetsu/models/metadata.py`)**: Chapter metadata record with paired `CheckpointData`, `QualityAudit`, and `TranslationStats` (including cumulative tokens, `duration_seconds`, and granular `step_usage`).
 * **`CheckpointData` (`src/nousetsu/models/metadata.py`)**: Stage tracking with `status` (`PENDING`, `IN_PROGRESS`, `PAUSED`, `COMPLETED`, `FAILED`), `stage_artifacts`, and `error_logs`.

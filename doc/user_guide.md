@@ -126,12 +126,17 @@ If you have an active novel project, it loads immediately. If you are in a new o
 | `B` | **Run All Batch** | Batches through all untranslated or resumed chapters in order. |
 | `X` | **Stop Translation** | Safely pauses the active translation, saves a `PAUSED` checkpoint, and halts. |
 | `E` | **Novel Bible** | Opens the in-terminal editor to inspect/add characters, relationships, and glossary terms. |
-| `P` | **Projects** | Opens the Project Selector modal to switch between novel projects. |
+| `M` | **Tokens** | Toggles the dedicated Token & Duration Analytics dashboard. |
+| `W` | **Web Traces** | Launches or opens the local Vite + React 19 Web Trace Visualizer in browser. |
 | `F` | **Folder** | Opens the Folder Selector modal to switch between translation volumes/folders (e.g. Volume 4 vs Volume 5). |
+| `P` | **Projects** | Opens the Project Selector modal to switch between novel projects. |
 | `N` | **New Project** | Opens the Project Creator modal to configure novel title, languages, and genre. |
 | `S` | **Settings** | Opens the Settings modal to tune TPM/RPM rate limits, review loop caps, and model choices. |
-| `M` | **Tokens** | Toggles the dedicated Token & Duration Analytics dashboard. |
+| `R` | **Refresh** | Re-scans the raw chapters directory and refreshes chapter list status. |
 | `Q` | **Quit** | Exits the application cleanly. |
+| `Esc` | **Close Modal** | Dismisses any open dialog modal and returns to the main reader view. |
+| `↑` / `↓` | **Navigate** | Moves selection up and down the chapter list. |
+| `Tab` | **Cycle Focus** | Cycles focus between sidebar controls and reader panes. |
 
 ### Step-by-Step Workflow in TUI
 
@@ -167,13 +172,13 @@ nousetsu batch -p project/Villainess -F Villainess_05 --chapter 48
 
 # 6. Web Trace Visualizer (React 19 + Vite)
 nousetsu web
-nousetsu web --port 8765 --no-browser
+nousetsu web --port 5173
 
 # 7. Inspect Forensic Prompt Traces
 nousetsu traces -p ./my_novel --chapter 1
 
 # 8. Query and Manage Hybrid RAG Knowledge Store
-nousetsu lore --query "Azure Thunder Blade"
+nousetsu lore "Azure Thunder Blade"
 nousetsu migrate-rag -p ./my_novel
 
 # 9. Agent Domain Skills Catalog
@@ -249,17 +254,15 @@ nousetsu skills --agent drafter --genre wuxia
 | Agent | Skill Name | Genre / Language Scope | Description |
 |:---|:---|:---:|:---|
 | **Extractor** | `entity_disambiguation` | All genres / All languages | Distinguishes family names, given names, and honorific suffixes. |
-| **Extractor** | `cultivation_hierarchies` | Xianxia, Wuxia, LitRPG / CJK | Discovers martial/magic realms and meridians. |
-| **Extractor** | `relationship_mapping` | All genres / All languages | Maps master-disciple, senpai-kouhai, and clan hierarchies. |
+| **Extractor** | `cultivation_realm_extractor` | Xianxia, Wuxia, LitRPG / CJK | Discovers martial/magic realms, meridians, and cultivation tiers. |
+| **Extractor** | `relationship_mapper` | All genres / All languages | Maps master-disciple, senpai-kouhai, and clan hierarchies. |
 | **Drafter** | `zero_anaphora_resolution` | Japanese, Chinese, Korean | Reconstructs omitted subjects and pronouns from context. |
 | **Drafter** | `name_address_fidelity` | All genres / All languages | Enforces strict dialogue address registers; preserves nicknames without arbitrary full-name substitution. |
 | **Drafter** | `character_voice_differentiation` | All genres / All languages | Enforces distinct dialogue registers for each character. |
 | **Drafter** | `idiom_localization` | Chinese, Japanese, Korean | Localizes 4-character idioms (Chengyu/Yojijukugo) naturally. |
-| **Drafter** | `isekai_fantasy_tropes` | Isekai, Fantasy / All languages | Formats adventurer guild ranks, quest boards, and stat windows. |
-| **Drafter** | `wuxia_martial_arts` | Wuxia, Xianxia / All languages | Formats qi flow, stances, and martial arts combat exchanges. |
-| **Drafter** | `litrpg_system_interface` | LitRPG, GameLit / All languages | Formats status screens, inventory logs, and system notifications. |
+| **Drafter** | `litrpg_system_framing` | LitRPG, GameLit / All languages | Formats status screens, inventory logs, and system notifications. |
 | **Critic** | `omission_detector` | All genres / All languages | Audits for skipped sentences or condensed descriptions. |
-| **Critic** | `glossary_auditor` | All genres / All languages | Enforces exact canonical terms from Novel Bible. |
+| **Critic** | `glossary_enforcer` | All genres / All languages | Enforces exact canonical terms from Novel Bible. |
 | **Critic** | `hallucination_guard` | All genres / All languages | Flags fabricated plot events or unnatural additions. |
 | **Critic** | `nickname_disparity_auditor` | All genres / All languages | Flags unprovoked name/nickname swaps and register mismatches. |
 | **Critic** | `tone_consistency_auditor` | All genres / All languages | Audits narrative register against established tone. |
@@ -269,10 +272,17 @@ nousetsu skills --agent drafter --genre wuxia
 | **Polisher** | `address_form_preservation` | All genres / All languages | Strictly forbids normalizing intimate pet names and emotional address forms. |
 | **Polisher** | `show_dont_tell` | All genres / All languages | Converts flat emotional labels into physical actions. |
 | **Polisher** | `dialogue_flow` | All genres / All languages | Ensures spoken dialogue sounds natural and fluid. |
-| **Polisher** | `otome_court_etiquette` | Romance, Otome, Drama / All | Refines aristocratic court banter and villainess poise. |
 | **Chronicler** | `lore_world_state_tracker` | All genres / All languages | Tracks realm breakthroughs, inventory acquisitions, sect territory changes, and power systems. |
 | **Chronicler** | `character_status_tracker` | All genres / All languages | Records physical injuries, psychological trauma, secrets revealed, and relationship milestones. |
 | **Chronicler** | `continuity_auditor` | All genres / All languages | Verifies timeline consistency and cross-checks chapter outcomes against previous summaries. |
+
+### Catalog Markdown Skills (`src/nousetsu/skills/catalog/`)
+
+| Agent | Skill Name | Genre / Language Scope | Description |
+|:---|:---|:---:|:---|
+| **Drafter** | `isekai_fantasy_tropes` | Isekai, Fantasy / All languages | Formats adventurer guild ranks, quest boards, and stat windows. |
+| **Drafter** | `wuxia_martial_arts` | Wuxia, Xianxia / All languages | Formats qi flow, stances, and martial arts combat exchanges. |
+| **Polisher** | `otome_court_etiquette` | Romance, Otome, Drama / All | Refines aristocratic court banter and villainess poise. |
 
 ### Adding Custom Markdown Skills
 You can add custom skills simply by dropping a markdown file with YAML frontmatter into `src/nousetsu/skills/catalog/` or your project folder:

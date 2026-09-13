@@ -10,7 +10,7 @@ This document details the software architecture, design patterns, and layer sepa
 graph TD
     subgraph Presentation_Layer ["Presentation Layer (UI / Web / CLI)"]
         TUI["Textual TUI Application<br/>(DualReader, ProgressPanel, Token Analytics M, Web Traces W, Volume F, Stop X)"]
-        WEB["Vite + React 19 Web Visualizer<br/>(nousetsu web, port 8765, Prompt Inspector, Timeline)"]
+        WEB["Vite + React 19 Web Visualizer<br/>(nousetsu web, port 5173, Prompt Inspector, Timeline)"]
         CLI["Rich CLI Commands<br/>(init, batch, tui, narrative, migrate-summaries, graph-info, skills, traces, web, lore, migrate-rag)"]
     end
 
@@ -23,8 +23,8 @@ graph TD
         Workflow["NovelTranslationWorkflow<br/>(StateGraph, Review Reflection Loop, stage callbacks)"]
         State["TranslationState<br/>(source, draft, critique, polish, 3-tier Bible memory, best candidate)"]
         PG["ProceduralGraph & Refiner<br/>(G=(V,R,E,Phi), deterministic localization, Name_Discipline, offline self-evolution)"]
-        DiffPatcher["DiffPatcher<br/>(Unified diff parser, fuzzy chunk matching, fallback to full text)"]
-        Tracker["PromptTracker<br/>(StageTrace, ChapterTrace, forensic prompt & response logging)"]
+        DiffPatcher["DiffPatcher Engine<br/>(SEARCH/REPLACE diff blocks, fuzzy line matching, fallback to full text)"]
+        Tracker["PromptTracker<br/>(AgentPromptTrace, ChapterTraceDocument, forensic prompt & response logging)"]
     end
 
     subgraph Agent_Layer ["Specialized Agent Layer (German Designations)"]
@@ -37,19 +37,19 @@ graph TD
     end
 
     subgraph RAG_Engine ["Hybrid Search RAG Knowledge Store"]
-        RAG["RAGEngine<br/>(Reciprocal Rank Fusion k=60)"]
+        RAG["HybridSearchEngine<br/>(Reciprocal Rank Fusion k=60)"]
         FTS["SQLite FTS5 BM25<br/>(Lexical sparse search)"]
         Embed["Gemini Embedding 2<br/>(3072-dim dense cosine similarity)"]
         Rerank["LLMCrossEncoderReranker<br/>(Joint LLM relevance scoring)"]
     end
 
-    subgraph Utility_Layer ["Foundational Utilities (src/nousetsu/utils/)"]
+    subgraph Utility_Layer ["Foundational Utilities (src/nousetsu/utils/ & analysis/)"]
         RateLimiter["SlidingWindowRateLimiter<br/>(32K TPM / 60 RPM, rolling window, 429 backoff)"]
         Chunker["LineSemanticChunker<br/>(85-line threshold, 70 target, 3 overlap)"]
         TokenEstimator["estimate_tokens<br/>(offline CJK 1.7 / Latin 1.3 weights)"]
         LangDetector["detect_language<br/>(Unicode script & lexical analysis)"]
         Formatter["format_duration<br/>(human-friendly step duration display)"]
-        TokenMetrics["TokenTracker<br/>(prompt, completion, thought, cached tokens)"]
+        TokenMetrics["Token Analytics<br/>(compute_token_summary, StageMetric, ModelMetric)"]
         Filtering["Boundary & Scene Filtering<br/>(filter_glossary_for_text, filter_characters_for_scene)"]
     end
 
@@ -66,8 +66,8 @@ graph TD
         M_Meta["ChapterMetadata, CheckpointData, ErrorLogEntry, ArcSummary"]
         M_Config["ProjectConfig, StyleGuideConfig"]
         M_PG["ProceduralNode, ProceduralEdge, DiagnosticTrace"]
-        M_Trace["StageTrace, ChapterTrace, TokenUsageRecord"]
-        M_RAG["LoreDocumentORM, RAGSearchResult"]
+        M_Trace["AgentPromptTrace, ChapterTraceDocument"]
+        M_RAG["LoreDocumentORM, LoreDocument, SearchResult, RAGConfig"]
     end
 
     %% Dependencies
@@ -124,7 +124,7 @@ graph TD
 
 ### 1. Presentation Layer (`src/nousetsu/tui/`, `src/nousetsu/cli/`, `web/`)
 * **Textual TUI (`src/nousetsu/tui/app.py`)**: An asynchronous terminal application powered by `textual`. Renders side-by-side original and translated chapter views, reactive status badges (`[DONE]`, `[FAILED]`, `[RESUME]`, `[PAUSED]`, `[WAIT]`), a live 5-stage progress visualizer with chapter name display, dedicated **Stop Translation (`X`)** controls, volume folder switcher modal (`F`), Token Analysis modal (`M`), **Web Traces hotkey (`W`)**, and tabs for editing the Novel Bible, inspecting 3-tier summaries, and switching projects.
-* **React 19 + Vite Web Visualizer (`web/`, `src/nousetsu/cli/web_server.py`)**: A modern, standalone web application served locally on port 8765 (`nousetsu web`). Displays interactive chapter prompt timelines, diff views between draft and polished text, per-stage token breakdowns (including thought tokens), and full audit trace inspection.
+* **React 19 + Vite Web Visualizer (`web/`, `src/nousetsu/cli/web_server.py`)**: A modern, standalone web application served locally on port 5173 (`nousetsu web`). Displays interactive chapter prompt timelines, diff views between draft and polished text, per-stage token breakdowns (including thought tokens), and full audit trace inspection.
 * **Rich CLI (`src/nousetsu/cli/app.py`)**: Command-line entry points for headless execution:
   * `nousetsu batch`: Batch chapter translation with limit, genre, volume routing, `--rag`, and `--rerank` flags.
   * `nousetsu web`: Launches the local Vite/React trace visualizer server and opens it in the browser.
@@ -155,22 +155,22 @@ Each agent possesses a single cognitive responsibility:
 * **Stage 1: `EntityExtractorAgent` (*Schriftdetektiv*)**: Discovers unknown character names, spells, items, and titles before drafting. Steered by `Scan_Candidates` procedural graph directives with anti-bloat term pruning. Records forensic traces via `PromptTracker`.
 * **Stage 2: `ContextAwareDrafterAgent` (*Wortschmied*)**: First-pass translation with zero-anaphora subject inference, character voice registers, nickname discipline, and 3-tier hierarchical narrative injection (Macro whole-story + Meso arc + Micro rolling chapters with volume badges). Inbound episodic RAG retrieves relevant past events ($k=2$). Uses script-aware word boundary filtering for active glossary and per-scene character roster filtering. Localizes procedural state to `Scene_Init` for chunk 1 and `Boundary_Continuity` for subsequent chunks. Integrates `LineSemanticChunker` for long chapters.
 * **Stage 3: `CritiqueAgent` (*Zensor*)**: Line-by-line fidelity and stylistic auditing, generating scores and remediation notes. Inbound Translation Memory (TM) RAG retrieves canonical phrasing ($k=2$). Audits nickname disparity and skipped lines.
-* **Stage 4: `PolishingAgent` (*Feinschliff*)**: High-cadence prose refinement, address form preservation, and translationese elimination across semantic chunks. Features optional **Diff / Patch Polishing Engine** (`DiffPatcher`) for token-efficient unified diff editing and an explicit **Chapter Title Preservation Guard** preventing heading loss or hallucination.
+* **Stage 4: `PolishingAgent` (*Feinschliff*)**: High-cadence prose refinement, address form preservation, and translationese elimination across semantic chunks. Features optional **Diff / Patch Polishing Engine** (`DiffPatcher`) for token-efficient search/replace diff editing and an explicit **Chapter Title Preservation Guard** preventing heading loss or hallucination.
 * **Stage 5: `ChroniclerAgent` (*Chronist*)**: Generates episodic chapter summaries, reads inbound lore ($k=3$), evaluates arc progression and milestone climaxes, updates macro `whole_story_summary`, archives completed story arcs into `.novel/summaries/arcs/`, and automatically indexes chapter summaries and 20-line scene chunks into the Hybrid RAG database.
 * **Per-Role Model Routing & `FallbackChatModel` (`src/nousetsu/agents/llm.py`)**: Resolves specialized models per stage (`extractor_model`, `drafter_model`, `critic_model`, `polisher_model`, `chronicler_model`), stripping thought tokens and automatically failing over to `fallback_model` when encountering HTTP 429 quota exhaustion.
 
 ### 5. Hybrid Search RAG Knowledge Store (`src/nousetsu/rag/`)
-* **`RAGEngine` (`src/nousetsu/rag/engine.py`)**: Unified hybrid search orchestration combining lexical BM25 and dense semantic search.
+* **`HybridSearchEngine` (`src/nousetsu/rag/engine.py`)**: Unified hybrid search orchestration combining lexical BM25 and dense semantic search.
 * **SQLite FTS5 Full-Text Search**: Native SQLite virtual table (`lore_fts`) providing zero-daemon, lightning-fast BM25 keyword matching across entity names, titles, and dialogue.
 * **Gemini Embedding 2**: Computes 3072-dimensional vector representations (`models/gemini-embedding-2`) with cosine similarity.
 * **Reciprocal Rank Fusion (RRF, $k=60$)**: Merges lexical and semantic candidate rankings without requiring ad-hoc manual score scaling.
 * **`LLMCrossEncoderReranker` (`src/nousetsu/rag/reranker.py`)**: Evaluates fused candidates with a joint LLM cross-encoder for precise context relevance.
 
-### 6. Foundational Utility Layer (`src/nousetsu/utils/`)
+### 6. Foundational Utility & Analytics Layer (`src/nousetsu/utils/` & `src/nousetsu/analysis/`)
 * **`SlidingWindowRateLimiter` (`src/nousetsu/utils/rate_limiter.py`)**: Tracks requests and tokens across a rolling 60-second window, enforcing 32,000 TPM and 60 RPM limits with interruptible sleeps.
 * **`LineSemanticChunker` (`src/nousetsu/utils/chunker.py`)**: Partitions chapters over 85 lines into ~70-line semantic chunks with 3-line boundary overlap, maintaining scene breaks and quote continuity.
-* **`DiffPatcher` (`src/nousetsu/utils/diff_patcher.py`)**: Parses LLM unified diff blocks (`@@ -start,len +start,len @@`), performs fuzzy chunk matching against draft text, and safely falls back to full-text replacement upon parse failure.
-* **`PromptTracker` (`src/nousetsu/utils/prompt_tracker.py`)**: Captures exact input prompts, raw responses, model names, and token breakdowns per agent stage, serializing structured `ChapterTrace` files to `.novel/traces/`.
+* **`DiffPatcher` Engine (`src/nousetsu/utils/diff_patcher.py`)**: Parses LLM `<<<<<<< SEARCH ... ======= ... >>>>>>>` blocks and `NO_CHANGES_NEEDED` signals, performs fuzzy line matching against draft text, and safely falls back to full-text replacement upon parse failure.
+* **`PromptTracker` (`src/nousetsu/analysis/tracker.py`)**: Captures exact input prompts, raw responses, model names, and token breakdowns per agent stage, streaming JSONL records and serializing consolidated `ChapterTraceDocument` files to `.novel/traces/`.
 * **Script-Aware Boundary & Scene Filtering (`src/nousetsu/utils/glossary_filter.py`, `src/nousetsu/utils/character_filter.py`)**:
   * `filter_glossary_for_text` / `filter_glossary_for_scene`: Distinguishes CJK vs non-CJK terms, enforcing regex word boundaries (`\b`) on Latin text to prevent substring false positives.
   * `filter_characters_for_scene`: Dynamically narrows active character roster in Drafter/Critic to characters mentioned in the current scene chunk.
@@ -181,7 +181,7 @@ Each agent possesses a single cognitive responsibility:
 * **`format_duration` (`src/nousetsu/utils/formatting.py`)**: Human-friendly duration display formatting (`3.9s`, `2m 15s`, `1h 4m`).
 * **`estimate_tokens` (`src/nousetsu/utils/rate_limiter.py`)**: Offline token estimation assigning ~1.7 tokens per CJK character and ~1.3 tokens per Latin word.
 * **`detect_language` (`src/nousetsu/utils/language.py`)**: Zero-dependency Unicode script and stop-word frequency analyzer recognizing Japanese, Chinese, Korean, Thai, Russian, and Latin languages.
-* **`TokenTracker` (`src/nousetsu/utils/token_metrics.py`)**: Tracks prompt, completion, thought, and cached tokens across every pipeline step.
+* **`compute_token_summary` & Analytics (`src/nousetsu/analysis/token_metrics.py`)**: Computes project-wide and folder-scoped token analytics (`StageMetric`, `ModelMetric`, `ChapterMetric`, `ProjectTokenSummary`) across prompt, completion, thought, and cached tokens.
 
 ### 7. Persistence & Storage Layer (`src/nousetsu/storage/`)
 * **`NovelRepository`**: Manages all file system persistence for a project:
@@ -196,7 +196,7 @@ Each agent possesses a single cognitive responsibility:
 * **`SummaryMigrationEngine` (`src/nousetsu/storage/migration.py`)**: Automatically detects and migrates legacy flat summaries into the 3-tier hierarchy (`whole_story_summary` -> `ArcSummary` -> partitioned volume summaries).
 
 ### 8. Domain Model Layer (`src/nousetsu/models/`)
-* Strongly typed Pydantic V2 models defining contracts across the entire system (`TranslationState`, `NovelBible`, `ChapterMetadata`, `ArcSummary`, `ProjectConfig`, `StageTrace`, `ChapterTrace`).
+* Strongly typed Pydantic V2 models defining contracts across the entire system (`TranslationState`, `NovelBible`, `ChapterMetadata`, `ArcSummary`, `ProjectConfig`, `AgentPromptTrace`, `ChapterTraceDocument`, `LoreDocument`, `SearchResult`).
 
 ---
 

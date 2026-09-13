@@ -15,7 +15,7 @@ sequenceDiagram
     participant Scanner as "ChapterScanner"
     participant Workflow as "NovelTranslationWorkflow"
     participant Tracker as "PromptTracker"
-    participant RAG as "RAGEngine (lore.db)"
+    participant RAG as "HybridSearchEngine (lore.db)"
     participant Extractor as "Stage 1: Schriftdetektiv (Extractor)"
     participant Drafter as "Stage 2: Wortschmied (Drafter)"
     participant Critic as "Stage 3: Zensor (Critic)"
@@ -80,7 +80,7 @@ sequenceDiagram
             Workflow->>RAG: "hybrid_search(prior_lore_query, k=3)"
             RAG-->>Workflow: "chr_rag_hits (prior lore context)"
         end
-        Workflow->>Chronicler: "chronicle(chapter_num, best_polished_text, rag_context)"
+        Workflow->>Chronicler: "chronicle(chapter_num, chapter_title, best_polished_text, rag_context)"
         Chronicler->>Tracker: "record(stage=CHRONICLING, prompt, response, tokens)"
         Chronicler-->>Workflow: "new_chapter_summary (synopsis, events, state changes)"
         opt Hybrid RAG Enabled

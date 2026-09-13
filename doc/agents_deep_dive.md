@@ -80,10 +80,10 @@ Before prompting the LLM, the extractor constructs an active context payload:
    - 魔導具 -> magic tool (item)
    - 蒼雷剣 -> Azure Thunder Blade (item)
    ```
-3. **Domain Skills Injection**: Queries [`SkillRegistry`](file:///D:/Code/novel_translation_Agent/src/skills/registry.py) for active extraction skills matching the novel's source language and genre:
+3. **Domain Skills Injection**: Queries [`SkillRegistry`](file:///D:/Code/novel_translation_Agent/src/nousetsu/skills/registry.py) for active extraction skills matching the novel's source language and genre:
    - `entity_disambiguation`: Directives for separating family names from given names and parsing honorific suffixes (`-sama`, `-san`, `-dono`, `xiong`, `shidi`).
-   - `cultivation_hierarchies`: Directives for detecting martial realms (Qi Condensation, Foundation Establishment, Golden Core) and spiritual treasures.
-   - `relationship_mapping`: Directives for identifying master-disciple, sibling, and clan dynamics.
+   - `cultivation_realm_extractor`: Directives for detecting martial realms (Qi Condensation, Foundation Establishment, Golden Core) and spiritual treasures.
+   - `relationship_mapper`: Directives for identifying master-disciple, sibling, and clan dynamics.
 
 ### 2.3 System Prompt & Execution
 The agent invokes the model with [`EXTRACTION_SYSTEM_PROMPT`](file:///D:/Code/novel_translation_Agent/src/nousetsu/prompts/templates.py#L3-L39):
@@ -165,7 +165,7 @@ Only terms physically present in the chapter are injected into the prompt, reduc
 
 ### 3.4 Line-Based Semantic Chunking Architecture (`draft_chunked`)
 When a chapter exceeds `chunk_threshold_lines` (default: 85 lines), translating it in a single prompt risks context truncation or 32,000 TPM rate-limit delays.
-[`LineSemanticChunker`](file:///D:/Code/novel_translation_Agent/src/utils/chunker.py) divides the text into ~70-line chunks snapping to paragraph breaks and scene transitions (`***`, `---`, `◆◆◆`) without cutting inside dialogue quotes (`「...」`, `"..."`).
+[`LineSemanticChunker`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/chunker.py) divides the text into ~70-line chunks snapping to paragraph breaks and scene transitions (`***`, `---`, `◆◆◆`) without cutting inside dialogue quotes (`「...」`, `"..."`).
 
 `draft_chunked` processes chunks sequentially using a **Sliding Context Window**:
 ```mermaid
@@ -210,7 +210,7 @@ To preserve boundary continuity and eliminate pronoun hallucination with minimal
 * **Pass 2+ Re-Audit**: Audits the refined prose produced by `Feinschliff` directly against the raw source text. Verifies whether previous critique notes were resolved and checks for any newly introduced drift.
 
 ### 4.3 Evaluation Metrics & Scoring Rubric
-The agent produces a structured [`QualityAudit`](file:///D:/Code/novel_translation_Agent/src/models/metadata.py) record:
+The agent produces a structured [`QualityAudit`](file:///D:/Code/novel_translation_Agent/src/nousetsu/models/metadata.py) record:
 * **Fidelity Score (`0.0 - 10.0`)**: Semantic equivalence, missing descriptions, dropped sentence clauses, or hallucinated details.
 * **Style Score (`0.0 - 10.0`)**: Sentence rhythm, natural English dialogue registers, absence of machine-translation tropes.
 * **Glossary Compliance Percentage (`0.0% - 100.0%`)**: Programmatic verification of canonical glossary terms.
@@ -221,9 +221,15 @@ The agent produces a structured [`QualityAudit`](file:///D:/Code/novel_translati
 #### A. Programmatic Glossary Verification
 In addition to LLM self-reporting, `Zensor` executes deterministic programmatic verification:
 ```python
+# Programmatic check only against glossary terms present in source text
+source_present_terms = filter_glossary_for_scene(
+    glossary=active_glossary,
+    source_text=source_text,
+    fallback_on_empty=False
+)
 missing_terms = []
 for item in source_present_terms:
-    if item.target.lower() not in draft_text.lower():
+    if not is_term_present(item.target, draft_text):
         missing_terms.append(f"Glossary term '{item.target}' (source: '{item.source}') missing in draft")
 if missing_terms:
     audit.warnings.extend(missing_terms)
@@ -231,7 +237,7 @@ if missing_terms:
 ```
 
 #### B. Critical Language Regression Guard
-If an LLM hallucinates or loops back into translating target English into source Japanese, `Zensor` executes zero-dependency script analysis via [`detect_language`](file:///D:/Code/novel_translation_Agent/src/utils/language.py):
+If an LLM hallucinates or loops back into translating target English into source Japanese, `Zensor` executes zero-dependency script analysis via [`detect_language`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/language.py):
 ```python
 if bible.target_language.lower() != bible.source_language.lower():
     detected_lang = detect_language(draft_text)
@@ -319,7 +325,7 @@ When translating long series (often hundreds of chapters), early chapters are lo
    - **Relationship Shifts**: Formed pact with shadow wolf, betrayed by second prince.
 
 ### 6.3 Metadata Consolidation (`assemble_metadata`)
-`Chronist` compiles all forensic audit metrics, checkpoint data, duration tracking, and token usage into a consolidated [`ChapterMetadata`](file:///D:/Code/novel_translation_Agent/src/models/metadata.py) record:
+`Chronist` compiles all forensic audit metrics, checkpoint data, duration tracking, and token usage into a consolidated [`ChapterMetadata`](file:///D:/Code/novel_translation_Agent/src/nousetsu/models/metadata.py) record:
 * **Token Dimensions**: Tracks `prompt_tokens`, `completion_tokens`, `thought_tokens`, `cached_tokens`, and `total_tokens`.
 * **Execution Duration**: Computes total wall-clock time (`duration_seconds`) and granular per-step durations (`step_usage`).
 * **Stage Artifacts**: Saves final polished text, raw draft, critique notes, and active characters.
@@ -329,7 +335,7 @@ When translating long series (often hundreds of chapters), early chapters are lo
 
 ## 7. The Reflection Review Loop & Quality Gating
 
-Inside [`src/nousetsu/graph/workflow.py`](file:///D:/Code/novel_translation_Agent/src/graph/workflow.py), LangGraph manages the cyclic reflection exchange between `Zensor` and `Feinschliff`:
+Inside [`src/nousetsu/graph/workflow.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/graph/workflow.py), LangGraph manages the cyclic reflection exchange between `Zensor` and `Feinschliff`:
 
 ```mermaid
 flowchart TD
@@ -373,10 +379,10 @@ Rather than using a single model for all tasks, each agent can be assigned an op
 * **Critique & Chronicling**: High-parameter analytical reasoning (`gemma-4-26b-a4b-it`).
 
 ### 8.2 Automatic Failover via `FallbackChatModel`
-When a model encounters an HTTP 429 quota exhaustion or `RESOURCE_EXHAUSTED` error, [`FallbackChatModel`](file:///D:/Code/novel_translation_Agent/src/agents/llm.py) automatically catches the error and retries execution using the configured `fallback_model` (e.g. `gemini-3.5-flash-lite`), ensuring zero batch interruption.
+When a model encounters an HTTP 429 quota exhaustion or `RESOURCE_EXHAUSTED` error, [`FallbackChatModel`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/llm.py) automatically catches the error and retries execution using the configured `fallback_model` (e.g. `gemini-3.5-flash-lite`), ensuring zero batch interruption.
 
 ### 8.3 Sliding-Window Rate Limiter
-[`SlidingWindowRateLimiter`](file:///D:/Code/novel_translation_Agent/src/utils/rate_limiter.py) enforces a rolling 60-second window across **32,000 TPM** and **60 RPM**. It blocks calls proactively before API requests occur, sleeping in 200–250ms interruptible increments to allow instant response to user cancellation (`X` key or `Ctrl+C`).
+[`SlidingWindowRateLimiter`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/rate_limiter.py) enforces a rolling 60-second window across **32,000 TPM** and **60 RPM**. It blocks calls proactively before API requests occur, sleeping in 200–250ms interruptible increments to allow instant response to user cancellation (`X` key or `Ctrl+C`).
 
 ### 8.4 AI Safety Block Resilience & Recursive Bisection Engine
 Commercial LLM endpoints employ strict automated content moderation filters that frequently flag East Asian webnovels for visceral combat, dark fantasy tropes, or romantic intimacy with HTTP 400 `prohibited_content` exceptions:

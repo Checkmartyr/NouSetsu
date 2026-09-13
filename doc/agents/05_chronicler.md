@@ -55,9 +55,11 @@ def chronicle(
     source_lang: Optional[str] = None,
     bible: Optional[NovelBible] = None,
     rag_context: Optional[List[Any]] = None,
+    prompt_tracker: Optional[Any] = None,
     **kwargs: Any
 ) -> ChapterSummary
 ```
+- **Attributes**: `self.prompt_tracker: Optional[Any] = None` stores the active tracker instance injected by `NovelTranslationWorkflow`.
 - **Returns**: Validated `ChapterSummary` model with synopsis, key plot events, character status changes, and optional arc/story updates.
 
 ### `assemble_metadata()`
@@ -115,6 +117,7 @@ To guarantee consistency across multi-hundred chapter novels, `Chronist` partiti
 - `prompt_tokens`, `completion_tokens`, `thought_tokens` (Gemini reasoning), and `cached_tokens`.
 - Duration in seconds tracked per step.
 - Safety metrics: counts of `safety_fallbacks_used` and `subdivisions_count`.
+- Forensic trace linkage: records `trace_file` path (pointing to `.novel/traces/chapter_XXXX.json`) and `prompt_trace_count`.
 - Serializes complete `StageArtifacts` into `CheckpointData`, allowing paused or failed jobs to resume without re-translating completed stages.
 
 ---

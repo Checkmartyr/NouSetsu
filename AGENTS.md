@@ -48,7 +48,7 @@ graph TD
         INTERACTIONS["Gemini Interactions API<br>(/v1beta/interactions)"]
         CHUNKER["LineSemanticChunker<br>(85-line Threshold)"]
         PATCH["DiffPatcher Engine<br>(src/nousetsu/utils/diff_patcher.py)"]
-        TOKEN_METRICS["Token & Duration Metrics<br>(src/nousetsu/utils/token_metrics.py)"]
+        TOKEN_METRICS["Token & Duration Metrics<br>(src/nousetsu/analysis/token_metrics.py)"]
         TRACKER["PromptTracker & Traces<br>(src/nousetsu/analysis/tracker.py)"]
         RAG_STORE["Hybrid RAG & Cross-Encoder<br>(src/nousetsu/rag/)"]
         CHAR_FILTER["Scene Character & Glossary Filter<br>(character_filter.py, glossary_filter.py)"]
@@ -242,7 +242,7 @@ NouSetsu tracks end-to-end token consumption and execution latency per pipeline 
    - Enforces a 60-second sliding window for 32,000 TPM and 60 RPM.
    - Rejects or delays calls exceeding capacity, calculating precise backoff sleep intervals until the window clears.
 2. **Offline Token Estimator**:
-   - Accurately counts CJK ideographs, Hangul syllables, Kana characters (1.3x token ratio) and Latin words (1.4x word-to-token ratio) in `<1ms`.
+   - Accurately counts CJK ideographs, Hangul syllables, Kana characters (~1.7 tokens per character) and Latin words (~1.3 tokens per word) in `<1ms`.
 3. **Gemini Interactions API Integration** ([`src/nousetsu/agents/interactions.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/interactions.py)):
    - Direct integration with Google's `/v1beta/interactions` endpoint for Gemini 3/2.5 models.
    - Captures granular `thought_tokens` and native interaction session tracking.
@@ -295,7 +295,7 @@ uv sync
 # Query CLI version
 uv run nousetsu --version
 
-# Run complete test suite (288 tests across 38 modules in ~106s)
+# Run complete test suite (288 tests across 45 modules in ~102s)
 uv run pytest
 
 # Run specific test modules

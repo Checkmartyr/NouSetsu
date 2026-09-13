@@ -65,9 +65,12 @@ def draft(
     stop_event: Optional[Any] = None,
     procedural_graph: Optional[ProceduralGraph] = None,
     polisher: Optional[Any] = None,
+    rag_results: Optional[List[Any]] = None,
+    prompt_tracker: Optional[Any] = None,
     **kwargs: Any
 ) -> str
 ```
+- **Attributes**: `self.prompt_tracker: Optional[Any] = None` stores the active tracker instance injected by `NovelTranslationWorkflow`.
 - **Returns**: Complete drafted chapter text in publication-grade English.
 - **Delegation**: If `chunks` has more than 1 chunk, delegates automatically to `draft_chunked()`.
 
@@ -143,10 +146,16 @@ In long novels with 50+ character cards, passing every profile to every chunk wa
 - **Scene-Level Detection**: Supporting characters are included only if their `original_name`, `name`, or `aliases` appear in the chunk text or preceding sliding context.
 - **Fallback Guard**: If zero characters match, falls back to the top major characters to prevent empty context.
 
+### F. Per-Scene Script-Aware Glossary Filtering
+`Wortschmied` applies [`filter_glossary_for_scene`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/glossary_filter.py) across each chunk:
+- Matches CJK ideographs via substring inclusion while enforcing regex word boundaries (`\b`) for Latin terms to eliminate false positive matches.
+- Injects only terms relevant to the current scene chunk into `active_glossary`, drastically reducing prompt overhead.
+
 ---
 
 ## 4. Domain Skills Active for Drafter
 
+### Built-in Skills
 Registered via [`src/nousetsu/skills/builtin/drafter.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/skills/builtin/drafter.py):
 
 | Skill Name | Title | Priority | Mission |
@@ -156,6 +165,13 @@ Registered via [`src/nousetsu/skills/builtin/drafter.py`](file:///D:/Code/novel_
 | `character_voice_differentiation` | Distinct Character Voice Differentiation | 100 | Enforces individualized speech registers (aristocrats vs. mercenaries vs. kuudere). |
 | `idiom_localization` | Cultural Idiom & Metaphor Localization | 95 | Translates four-character idioms (chengyu/yojijukugo) into vivid English prose rather than literal calques. |
 | `litrpg_system_framing` | LitRPG & System Notification Formatting | 90 | Standardizes status windows, skill alerts, and level-up prompts into clean, uniform markdown callouts. |
+
+### Catalog Markdown Skills (`src/nousetsu/skills/catalog/`)
+
+| Skill Name | Title | Scope | Mission |
+|:---|:---|:---:|:---|
+| `isekai_fantasy_tropes` | Isekai & Fantasy Tropes | Isekai, Fantasy | Formats adventurer guild ranks, quest boards, and stat windows. |
+| `wuxia_martial_arts` | Wuxia & Xianxia Combat Framing | Wuxia, Xianxia | Formats qi flow, stances, internal energy, and martial arts combat exchanges. |
 
 ---
 

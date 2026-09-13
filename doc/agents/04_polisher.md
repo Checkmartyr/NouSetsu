@@ -59,9 +59,11 @@ def polish(
     notify_callback: Optional[Any] = None,
     rate_limiter: Optional[Any] = None,
     stop_event: Optional[Any] = None,
+    prompt_tracker: Optional[Any] = None,
     **kwargs: Any
 ) -> str
 ```
+- **Attributes**: `self.prompt_tracker: Optional[Any] = None` stores the active tracker instance injected by `NovelTranslationWorkflow`.
 - **Returns**: High-polish literary English prose text.
 - **Delegation**: If `draft_chunks` has more than 1 chunk, delegates automatically to `polish_chunked()`.
 
@@ -123,7 +125,7 @@ To prevent stylistic polishing from stripping chapter headings (e.g. `บทท�
 
 ### G. Diff / Patch Polishing Engine (`DiffPatcher`)
 For minor critique corrections or multi-pass review loops, rewriting the entire chapter word-for-word wastes token quota and risks introducing new translation errors:
-- **Unified Diff Format**: `Feinschliff` supports outputting search/replace blocks or unified diff patches (`<<<<<<< SEARCH ... ======= ... >>>>>>> REPLACE` or `@@ -start,len +start,len @@`).
+- **SEARCH/REPLACE Diff Format**: When polishing in patch mode, `Feinschliff` outputs targeted search/replace blocks (`<<<<<<< SEARCH\n[draft text]\n=======\n[polished text]\n>>>>>>>`) or `NO_CHANGES_NEEDED`.
 - **Parsing & Application**: `apply_search_replace_patches()` in [`src/nousetsu/utils/diff_patcher.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/diff_patcher.py) applies targeted edits directly to `draft_text`.
 - **Zero-Loss Fallback**: If patch formatting is absent or fails to apply, the agent gracefully treats the response as full-text prose, ensuring zero corruption.
 - **Token Efficiency**: Reduces completion token consumption on Pass 2+ by up to **60–80%**, since untouched prose paragraphs are not re-emitted by the LLM.
@@ -132,6 +134,7 @@ For minor critique corrections or multi-pass review loops, rewriting the entire 
 
 ## 4. Domain Skills Active for Polisher
 
+### Built-in Skills
 Registered via [`src/nousetsu/skills/builtin/polisher.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/skills/builtin/polisher.py):
 
 | Skill Name | Title | Priority | Mission |
@@ -142,6 +145,12 @@ Registered via [`src/nousetsu/skills/builtin/polisher.py`](file:///D:/Code/novel
 | `address_form_preservation` | Address Form & Nickname Preservation | 95 | Preserves exact dialogue address choices (formal names vs. nicknames) during stylistic polishing. |
 | `show_dont_tell` | Show-Don't-Tell Emotional Depth Enhancer | 90 | Transforms flat emotional assertions into physical character behaviors and atmospheric cues. |
 | `dialogue_flow` | Natural Spoken Dialogue Cadence | 85 | Enhances natural conversational cadence and verbal sparring without diluting regional dialects. |
+
+### Catalog Markdown Skills (`src/nousetsu/skills/catalog/`)
+
+| Skill Name | Title | Scope | Mission |
+|:---|:---|:---:|:---|
+| `otome_court_etiquette` | Aristocratic Court Banter & Poise | Romance, Otome, Drama | Refines aristocratic court dialogue, sharp subtextual sparring, and villainess poise. |
 
 ---
 
