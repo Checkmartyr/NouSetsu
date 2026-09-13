@@ -111,6 +111,7 @@ Your task is to refine and polish the drafted chapter into publication-grade {ta
 3. Enhance prose cadence, sensory descriptions, and emotional resonance in {target_lang}.
 4. Maintain strict terminology from the Active Glossary.
 5. Do NOT alter plot events, character actions, or add fabricated story elements.
+6. PRESERVE CHAPTER HEADINGS: If the draft translation begins with a chapter title, number, or heading (e.g. "Chapter X", "บทที่ X", "第X章", or "# Title"), you MUST preserve and include it at the very top of the polished text. Never drop the chapter title.
 
 ## SOURCE REFERENCE DIRECTIVES:
 - If provided with the Original Source Text, use it ONLY to clarify ambiguous phrasing, verify nuances, or check character emotions.

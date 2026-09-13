@@ -4,6 +4,20 @@ from nousetsu.skills.models import AgentSkill
 
 POLISHER_SKILLS: List[AgentSkill] = [
     AgentSkill(
+        name="chapter_header_preservation",
+        agent="polisher",
+        title="Chapter Header & Title Preservation",
+        description="Ensures chapter titles, numbers, and structural headings from the draft are strictly retained at the top of the polished output.",
+        content="""### Chapter Header & Title Preservation Directives:
+- If the draft translation begins with a chapter heading or title (e.g., "บทที่ X - ...", "Chapter X: ...", "第X章 ...", or "# Title"), you MUST preserve and include this chapter title at the very beginning of the polished output.
+- Refine the chapter title if needed for publication-grade eloquence, but NEVER delete or omit the chapter number and title.
+- Do NOT begin the polished text directly with narrative body prose if a chapter header exists in the draft.""",
+        languages=["all"],
+        genres=["all"],
+        priority=115,
+        source="builtin"
+    ),
+    AgentSkill(
         name="translationese_filter",
         agent="polisher",
         title="Anti-Translationese & Stiff Phrasing Filter",

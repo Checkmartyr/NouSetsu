@@ -1,5 +1,6 @@
 """Literary prose polisher and style editor agent."""
 import logging
+import re
 from typing import Any, Callable, List, Optional
 from langchain_core.messages import HumanMessage, SystemMessage
 from nousetsu.agents.llm import extract_text_from_message, extract_usage_from_message, get_llm
@@ -12,6 +13,18 @@ from nousetsu.utils.language import detect_language
 from nousetsu.utils.translation_fallback import is_safety_block_exception
 
 logger = logging.getLogger(__name__)
+
+CHAPTER_HEADER_PATTERNS = [
+    r"^(?:#+\s*)?(?:\*\*)?(?:\d+[\s_.-]+)?(?:Chapter|Chapitre|Capítulo|Kapitel|Hoofdstuk|Глава)\s+\d+",
+    r"^(?:#+\s*)?(?:\*\*)?(?:\d+[\s_.-]+)?บทที่\s*\d+",
+    r"^(?:#+\s*)?(?:\*\*)?(?:\d+[\s_.-]+)?第\s*[\d一二三四五六七八九十百千]+\s*[章回节話话]",
+    r"^(?:#+\s*)?(?:\*\*)?(?:\d+[\s_.-]+)?제\s*\d+\s*장",
+    r"^(?:#+\s*)?(?:\*\*)?(?:\d+[\s_.-]+)?Episode\s+\d+",
+    r"^(?:#+\s*)?(?:\*\*)?(?:\d+[\s_.-]+)?Ep\.\s*\d+",
+    r"^#+\s+.+",
+]
+CHAPTER_HEADER_RE = re.compile("|".join(CHAPTER_HEADER_PATTERNS), re.IGNORECASE)
+
 
 
 class PolishingAgent:
@@ -35,6 +48,58 @@ class PolishingAgent:
             return self.llm.last_model_used
         return self.model_name
 
+    @staticmethod
+    def _extract_draft_chapter_header(draft_text: str) -> Optional[str]:
+        """Extracts leading chapter heading or title block from draft text if present."""
+        if not draft_text:
+            return None
+        lines = draft_text.splitlines()
+        non_empty_indices = [i for i, l in enumerate(lines[:8]) if l.strip()]
+        if not non_empty_indices:
+            return None
+
+        first_idx = non_empty_indices[0]
+        first_line = lines[first_idx].strip()
+
+        if CHAPTER_HEADER_RE.search(first_line):
+            return first_line
+
+        # Check if first non-empty line is a page/raw number (e.g. "70") and second is chapter header
+        if re.match(r"^\d+$", first_line) and len(non_empty_indices) > 1:
+            second_idx = non_empty_indices[1]
+            second_line = lines[second_idx].strip()
+            if CHAPTER_HEADER_RE.search(second_line):
+                return f"{first_line}\n{second_line}"
+
+        return None
+
+    @staticmethod
+    def _has_chapter_header(text: str) -> bool:
+        """Checks if text already contains a chapter header in its opening lines."""
+        if not text:
+            return False
+        lines = [l.strip() for l in text.splitlines()[:8] if l.strip()]
+        for line in lines[:3]:
+            if CHAPTER_HEADER_RE.search(line):
+                return True
+        return False
+
+    @classmethod
+    def _ensure_chapter_title_preserved(cls, draft_text: str, polished_text: str) -> str:
+        """Ensures that chapter title and headings present in the draft are not omitted in polished prose."""
+        if not draft_text or not polished_text:
+            return polished_text
+
+        header_block = cls._extract_draft_chapter_header(draft_text)
+        if not header_block:
+            return polished_text
+
+        if cls._has_chapter_header(polished_text):
+            return polished_text
+
+        logger.info(f"Restoring omitted chapter header in polished text: {header_block!r}")
+        return f"{header_block}\n\n{polished_text.lstrip()}"
+
     def polish(
         self,
         draft_text: str,
@@ -50,7 +115,7 @@ class PolishingAgent:
         **kwargs: Any
     ) -> str:
         if draft_chunks and len(draft_chunks) > 1:
-            return self.polish_chunked(
+            raw_polished = self.polish_chunked(
                 draft_chunks=draft_chunks,
                 critique_notes=critique_notes,
                 active_glossary=active_glossary,
@@ -62,6 +127,7 @@ class PolishingAgent:
                 stop_event=stop_event,
                 **kwargs
             )
+            return self._ensure_chapter_title_preserved(draft_text=draft_text, polished_text=raw_polished)
 
         # Filter glossary to terms actually present in this chapter to avoid prompt bloat
         eval_glossary = filter_glossary_for_scene(
@@ -129,7 +195,7 @@ class PolishingAgent:
                             lines = text.splitlines()
                             if len(lines) >= 2 and lines[0].startswith("```") and lines[-1].startswith("```"):
                                 text = "\n".join(lines[1:-1]).strip()
-                        return text
+                        return self._ensure_chapter_title_preserved(draft_text=draft_text, polished_text=text)
                     except Exception:
                         pass
                 logger.warning("⚠️ Polisher blocked by safety filter - retaining draft text.")
@@ -150,7 +216,7 @@ class PolishingAgent:
                 # Reverted to source language! Fall back to draft_text to preserve target language translation
                 return draft_text
 
-        return text
+        return self._ensure_chapter_title_preserved(draft_text=draft_text, polished_text=text)
 
     def polish_chunked(
         self,
@@ -313,6 +379,8 @@ class PolishingAgent:
                             lines = text.splitlines()
                             if len(lines) >= 2 and lines[0].startswith("```") and lines[-1].startswith("```"):
                                 text = "\n".join(lines[1:-1]).strip()
+                        if chunk_idx == 1:
+                            text = self._ensure_chapter_title_preserved(draft_text=chunk_draft, polished_text=text)
                         return text
                     except Exception as retry_err:
                         if not is_safety_block_exception(retry_err):
@@ -331,5 +399,8 @@ class PolishingAgent:
             detected_polished = detect_language(text)
             if detected_polished and detected_polished.lower() == bible.source_language.lower():
                 return chunk_draft
+
+        if chunk_idx == 1:
+            text = self._ensure_chapter_title_preserved(draft_text=chunk_draft, polished_text=text)
 
         return text

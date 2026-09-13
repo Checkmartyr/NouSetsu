@@ -115,6 +115,12 @@ If Google AI safety filters trip on a sensitive scene during polishing:
 - First retry: Automatically strips the raw source text reference and retries polishing using only the already-drafted target text.
 - Fallback: If still blocked, logs a warning and safely returns the unmodified `draft_text`, allowing the pipeline to proceed without data loss.
 
+### F. Chapter Title & Header Preservation Guard
+To prevent stylistic polishing from stripping chapter headings (e.g. `บทที่ 11 - อวดดอกไม้` or `70\nChapter 11...`):
+- **Domain Skill**: The `chapter_header_preservation` skill (priority 115) directs the model to strictly retain chapter titles.
+- **System Prompt**: Rule 6 in `POLISHING_SYSTEM_PROMPT` mandates preserving chapter headings at the top of the output.
+- **Programmatic Guard**: `_ensure_chapter_title_preserved()` scans the draft head using multi-lingual regex patterns (`Chapter X`, `บทที่ X`, `第X章`, `제X장`, `# Title`, and leading page numbers). If the LLM omits the header, it automatically prepends the chapter header block from the draft.
+
 ---
 
 ## 4. Domain Skills Active for Polisher
@@ -123,6 +129,7 @@ Registered via [`src/nousetsu/skills/builtin/polisher.py`](file:///D:/Code/novel
 
 | Skill Name | Title | Priority | Mission |
 |:---|:---|:---:|:---|
+| `chapter_header_preservation` | Chapter Header & Title Preservation | 115 | Ensures chapter titles, numbers, and structural headings from the draft are strictly retained at the top of the polished output. |
 | `translationese_filter` | Anti-Translationese & Stiff Phrasing Filter | 110 | Eliminates repetitive machine-translation cliches, awkward passives, and unnatural syntax. |
 | `prose_cadence_enhancer` | Literary Cadence & Rhythmic Sentence Variation | 100 | Crafts dynamic sentence variety, lyrical pacing, and immersive sensory descriptions. |
 | `address_form_preservation` | Address Form & Nickname Preservation | 95 | Preserves exact dialogue address choices (formal names vs. nicknames) during stylistic polishing. |
