@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-09-13
+
+### Added
+- **Hybrid Search RAG Knowledge Store & Cross-Encoder Reranking**:
+  - SQLite FTS5 BM25 lexical keyword search and Gemini Embedding 2 (`models/gemini-embedding-2`, 3072 dimensions) dense semantic vector search managed via **SQLAlchemy 2.0 ORM** (`.novel/rag/lore.db`).
+  - Reciprocal Rank Fusion (RRF, $k=60$) candidate fusion and LLM Cross-Encoder Reranker (`LLMCrossEncoderReranker`).
+  - Canonical Translation Memory (TM) retrieval to `Zensor` (CritiqueAgent) on Pass 1.
+  - Inbound lore retrieval to `Chronist` (ChroniclerAgent) and `Wortschmied` (DrafterAgent).
+  - Outbound auto-indexing of chapter summaries and 20-line scene chunks upon chapter completion.
+  - New CLI commands `nousetsu lore` and `nousetsu migrate-rag` (alias `index-rag`).
+- **Forensic Prompt Tracking & Web Visualizer**:
+  - `PromptTracker` engine capturing full system prompts, user inputs, raw outputs, token telemetry, and latencies across every agent stage, serialized into `.novel/traces/`.
+  - Vite + React 19 + TypeScript web trace visualizer (`web/`, `nousetsu web`, `src/nousetsu/cli/web_server.py`) with stage timelines, token estimators, unified diff viewers, and raw JSON inspectors.
+  - Real-time active project sync between Textual TUI and Web Visualizer via the `W` hotkey.
+- **Diff / Patch Polishing Engine & Token Optimization**:
+  - `DiffPatcher` (`src/nousetsu/utils/diff_patcher.py`) and `PATCH_POLISHING_SYSTEM_PROMPT` generating targeted `<<<<<<< SEARCH ... ======= ... >>>>>>>` block replacements or `NO_CHANGES_NEEDED` rather than re-streaming whole chapters.
+  - `enable_patch_polishing` flag in `ProjectConfig` wired through `BatchRunner`.
+  - KV Context Caching prefix stabilization (`GEMINI_KV_CACHE_STABLE_PREFIX`) maximizing Gemini prompt cache hits.
+- **Chapter Title Preservation Guard**:
+  - Added built-in `chapter_header_preservation` domain skill to `PolishingAgent` (priority 115).
+  - Added programmatic regex guard (`_ensure_chapter_title_preserved`) across Asian and Western chapter headings.
+- **Scene-Level Character & Glossary Filtering**:
+  - `filter_characters_for_scene` dynamically filters character profiles to those active in the scene, preserving core protagonist roles while eliminating prompt bloat.
+  - `filter_glossary_for_text` with script-aware word boundary detection (CJK ideographs vs Latin `\b` boundaries).
+- **Test Suite Expansion**:
+  - Expanded test coverage to 288 tests across 38 modules.
+
 ## [0.2.0] - 2026-09-13
 
 ### Added

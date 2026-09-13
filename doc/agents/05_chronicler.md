@@ -83,7 +83,11 @@ def assemble_metadata(
     status: StageStatus = StageStatus.COMPLETED,
     step_usage: Optional[List[StepTokenUsage]] = None,
     safety_fallbacks_used: int = 0,
-    subdivisions_count: int = 0
+    subdivisions_count: int = 0,
+    extracted_characters: Optional[List[CharacterProfile]] = None,
+    extracted_terms: Optional[List[GlossaryItem]] = None,
+    trace_file: Optional[str] = None,
+    prompt_trace_count: int = 0
 ) -> ChapterMetadata
 ```
 - **Returns**: Unified `ChapterMetadata` object persisted to `.novel/metadata.json`.

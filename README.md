@@ -8,7 +8,7 @@
 [![Package Manager: uv](https://img.shields.io/badge/managed%20by-uv-purple.svg)](https://github.com/astral-sh/uv)
 [![Framework: LangGraph](https://img.shields.io/badge/agent-LangGraph-orange.svg)](https://github.com/langchain-ai/langgraph)
 [![UI: Textual](https://img.shields.io/badge/ui-Textual%20%26%20Rich-green.svg)](https://textual.textualize.io/)
-[![Tests: 238 Passed](https://img.shields.io/badge/tests-238%20passed-brightgreen.svg)](https://github.com/Checkmartyr/NouSetsu)
+[![Tests: 288 Passed](https://img.shields.io/badge/tests-288%20passed-brightgreen.svg)](https://github.com/Checkmartyr/NouSetsu)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
 ---
@@ -41,7 +41,7 @@ NouSetsu models the translation workflow as a collaborative literary publishing 
 | **4** | **Feinschliff** | [`PolishingAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/polisher.py) | `gemini-3.5-flash-lite` | **The Stylist**: Rewrites drafted prose into publication-grade target fiction, purging machine-translation tropes ("couldn't help but", "as expected of"), optimizing prose cadence, and enhancing emotional depth while preserving address forms. |
 | **5** | **Chronist** | [`ChroniclerAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/chronicler.py) | `gemma-4-26b-a4b-it` | **The Memory Keeper**: Autonomously tracks story arc progression, summarizes chapter events, detects character state shifts (injuries, deaths, breakthroughs), and compiles metadata audit records into `.novel/metadata.json`. |
 
-> 📘 *For the exhaustive technical breakdown of every agent file and method signature, see the [Agent Architecture Deep Dive](docs/architecture/agents_deep_dive.md).*
+> 📘 *For the exhaustive technical breakdown of every agent file and method signature, see the [Agent Architecture Deep Dive](doc/agents_deep_dive.md).*
 
 ---
 
@@ -82,6 +82,12 @@ NouSetsu encodes procedural execution rules as explicit attributed graphs $G = (
 * **High-Precision Cross-Encoder**: Combines sparse and dense candidates via Reciprocal Rank Fusion (RRF, $k=60$) and reranks them with an LLM Cross-Encoder (`LLMCrossEncoderReranker`).
 * **Bi-Directional Pipeline Integration**: Injects episodic lore into `Wortschmied` (Drafter) and canonical TM references into `Zensor` (Critic), while `Chronist` (Chronicler) cross-references prior lore and automatically embeds/indexes completed summaries and scene chunks.
 
+### 8. 📊 Prompt Tracking, Web Trace Visualizer & Diff/Patch Optimization
+* **Forensic Prompt Tracking**: [`PromptTracker`](file:///D:/Code/novel_translation_Agent/src/nousetsu/analysis/tracker.py) automatically records full system prompts, user inputs, raw completions, and duration/token telemetry for every pipeline step into `.novel/traces/`.
+* **Interactive Web Visualizer**: Fast Vite + React 19 + TypeScript trace inspector (`nousetsu web`) featuring stage execution timelines, token estimators, unified diff viewers, and raw JSON inspectors, synced in real-time with the active TUI project (`W` hotkey).
+* **Diff / Patch Polishing Engine**: Generates targeted search/replace block patches (`PATCH_POLISHING_SYSTEM_PROMPT`) via [`DiffPatcher`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/diff_patcher.py) rather than re-generating whole chapters from scratch, dramatically reducing polisher token consumption.
+* **KV Context Caching Prefix Stabilization**: Reordered prompt templates ensure invariant system prompts and glossaries reside in stable prefixes (`GEMINI_KV_CACHE_STABLE_PREFIX`), maximizing Gemini prompt cache utilization.
+
 ---
 
 ## 🏛️ System Architecture
@@ -92,36 +98,41 @@ flowchart TD
         Raw["raw_chapters/*.txt"] --> Scanner["ChapterScanner\n(natsort + SHA256)"]
         Scanner --> Lang["Language Detector\n(JA / ZH / KO / EN / TH)"]
         Bible[(".novel/bible/bible.yaml")] --> Memory["3-Tier Narrative Memory\n(Macro > Meso Arcs > Micro Chapters)"]
+        RAGStore[(".novel/rag/lore.db\nSQLite FTS5 + Gemini Embedding 2")] <--> Memory
     end
 
     subgraph Agent_Pipeline ["2. Five-Stage Agent Pipeline (LangGraph)"]
         Scanner & Memory --> Extractor["Stage 1: Schriftdetektiv (EntityExtractorAgent)\nExtracts characters, terms, cultivation realms"]
-        Extractor --> Drafter["Stage 2: Wortschmied (ContextAwareDrafterAgent)\nResolves zero-anaphora & drafts chapter"]
+        Extractor --> Drafter["Stage 2: Wortschmied (ContextAwareDrafterAgent)\nResolves zero-anaphora, voice & episodic lore RAG"]
         
         subgraph Review_Loop ["Cyclic Reflection Review Loop"]
-            Drafter --> Critic["Stage 3: Zensor (CritiqueAgent)\nAudits fidelity (0-10), style (0-10), omissions"]
-            Critic --> Polisher["Stage 4: Feinschliff (PolishingAgent)\nRefines cadence & purges translationese"]
+            Drafter --> Critic["Stage 3: Zensor (CritiqueAgent)\nAudits fidelity (0-10), style (0-10), TM RAG"]
+            Critic --> Polisher["Stage 4: Feinschliff (PolishingAgent)\nDiff/Patch engine, title guard & cadence polish"]
             Polisher --> QualityCheck{"Quality Check:\nFidelity & Style >= 8.5\nOR Max Loops Reached?"}
             QualityCheck -- "Needs Refinement" --> Critic
         end
         
-        QualityCheck -- "Passed / Cap Reached\n(Best Candidate Guard)" --> Chronicler["Stage 5: Chronist (ChroniclerAgent)\nSummarizes events, milestones, and metadata"]
+        QualityCheck -- "Passed / Cap Reached\n(Best Candidate Guard)" --> Chronicler["Stage 5: Chronist (ChroniclerAgent)\n3-tier summaries, milestones & RAG auto-indexing"]
     end
 
-    subgraph Safety_Resilience ["3. Enterprise Safety & Fallback Engine"]
+    subgraph Safety_Resilience ["3. Safety, Telemetry & Fallback Engine"]
         Limiter["Sliding-Window Rate Limiter\n(32,000 TPM / 60 RPM + Rollover Cooldown)"]
         BisectionEngine["Recursive Binary Bisection (bisect_text)\nIsolates sensitive snippets <= 8 lines"]
         GTFallback["Google Translate Fallback (deep-translator)\nSeamless literary polish fallback"]
         FallbackRouter["FallbackChatModel\n(Per-Role Routing & 429 Failover)"]
         StopSignal["Thread-Safe Stop Guard\n(X key / SIGINT -> PAUSED Checkpoint)"]
+        Tracker["PromptTracker Engine\n(Records Prompts, Outputs, Tokens to .novel/traces/)"]
     end
 
     subgraph Persistence_Output ["4. Persistence & Presentation"]
         Chronicler --> OutMarkdown["translated_chapters/*.md"]
         Chronicler --> MetaJSON[".novel/metadata.json\n(Consolidated Checkpoints & Audits)"]
         Chronicler --> BibleUpdate[".novel/bible/bible.yaml\n(Lore & Arc Archives)"]
-        MetaJSON --> TUI["Textual Interactive TUI\n(Dual Reader, Token Analytics M, Toolbar)"]
-        MetaJSON --> CLI["Rich CLI Engine\n(Batch, Narrative, Migration, Skills)"]
+        Chronicler --> RAGUpdate[".novel/rag/lore.db\n(Auto-indexes Summaries & Scene Chunks)"]
+        Tracker --> TraceJSON[".novel/traces/chapter_*.json\n(Full Agent Prompt Traces)"]
+        MetaJSON --> TUI["Textual Interactive TUI\n(Dual Reader, Token Analytics M, Web W)"]
+        MetaJSON --> CLI["Rich CLI Engine\n(Batch, Traces, Lore, Narrative, Skills)"]
+        TraceJSON --> WebUI["Vite + React 19 Trace Visualizer\n(nousetsu web / http://localhost:5173)"]
     end
 
     Agent_Pipeline <--> Safety_Resilience
@@ -188,6 +199,10 @@ NouSetsu provides a comprehensive suite of subcommands for headless automation, 
 | `nousetsu migrate-summaries` | Upgrades legacy flat summaries into 3-tier story arc hierarchies | `nousetsu migrate-summaries -p project/Villainess` |
 | `nousetsu skills` | Lists and filters active domain skills by agent, language, or genre | `nousetsu skills --agent drafter --genre xianxia` |
 | `nousetsu graph-info` | Visualizes procedural execution graphs and name discipline directives | `nousetsu graph-info --agent drafter --verbose` |
+| `nousetsu traces` | Inspects, analyzes, and exports agent prompt and output traces | `nousetsu traces -c 48 --show-prompts` |
+| `nousetsu web` | Launches the interactive Vite + React 19 Trace Visualizer web app | `nousetsu web --port 5173` |
+| `nousetsu lore` | Searches project Lore Vault using Hybrid RAG + Cross-Encoder | `nousetsu lore "magic sword"` |
+| `nousetsu migrate-rag` | Backfills novel summaries, arcs, and chunks into RAG store | `nousetsu migrate-rag --embed` |
 | `nousetsu tui` | Explicitly launches the Textual TUI with path overrides | `nousetsu tui -p project/Villainess` |
 
 ### Batch Translation Options (`nousetsu batch`)
@@ -218,6 +233,8 @@ nousetsu batch [OPTIONS]
 | `--max-rpm` | | `60` | Rate limiter requests-per-minute quota |
 | `--chunking / --no-chunking` | | `True` | Enable/disable line-based semantic chunking for long chapters |
 | `--chunk-threshold-lines` | | `85` | Line threshold to trigger semantic chunking |
+| `--rag / --no-rag` | | `True` | Enable/disable hybrid search episodic lore retrieval |
+| `--rerank / --no-rerank` | | `True` | Enable/disable Stage 2 Cross-Encoder reranking for RAG |
 
 ---
 
@@ -238,7 +255,7 @@ The interactive Textual TUI provides complete operational control from inside yo
 │ 📖 Ch.48 [██████████░░░░░░░░░░] 50% Stage: Polishing (Pass 1)   │
 ├─────────────────────────────────────────────────────────────────┤
 │ [▶ Trans (T)] [⚡ Batch (B)] [⏹ Stop (X)] [📊 Tokens (M)] [📁 Vol (F)] │
-│ [📖 Bible (E)] [🗂 Proj (P)]  [✨ New (N)] [⚙ Settings (S)] [🚪 Quit (Q)]│
+│ [📖 Bible (E)] [🗂 Proj (P)]  [✨ New (N)] [⚙ Settings (S)] [🌐 Web (W)] │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -248,6 +265,7 @@ The interactive Textual TUI provides complete operational control from inside yo
 | `B` | **Run All Batch** | Start asynchronous batch translation across all pending chapters |
 | `X` | **Stop Translation** | Safely halt active batch and save clean `PAUSED` checkpoint |
 | `M` | **Token Analytics** | Open dedicated Token & Latency dashboard with KPIs and tables |
+| `W` | **Web Traces** | Launch interactive Trace Visualizer web app in your browser |
 | `F` | **Volume Switcher** | Switch active volume subfolder within multi-folder projects |
 | `P` | **Projects** | Open Project Selector modal to switch active novel projects |
 | `N` | **New Project** | Initialize a new novel project with custom title and languages |
@@ -266,6 +284,9 @@ NouSetsu/
 ├── pyproject.toml                  # Hatchling package build & console scripts
 ├── CHANGELOG.md                    # Release history following Keep a Changelog
 ├── README.md                       # Repository overview and quickstart
+├── web/                            # React 19 + TypeScript + Vite trace visualizer
+│   ├── src/                        # Visualizer components (timeline, diff viewer, token KPIs)
+│   └── dist/                       # Built static bundle served by embedded web server
 ├── doc/                            # Comprehensive technical documentation hub
 │   ├── README.md                   # Documentation index & quick navigation
 │   ├── user_guide.md               # Complete end-user manual (CLI, TUI, Bible, Skills)
@@ -279,6 +300,8 @@ NouSetsu/
 ├── .novel/                         # Project metadata and persistent memory
 │   ├── config.yaml                 # Project configuration (languages, paths, loop caps)
 │   ├── metadata.json               # Consolidated chapter checkpoints & audit stats
+│   ├── traces/                     # Chapter and stage LLM prompt & output traces
+│   ├── rag/                        # SQLite lore database (lore.db) with FTS5 virtual table
 │   ├── bible/
 │   │   └── bible.yaml              # Novel Bible (Characters, glossary, whole story summary)
 │   └── summaries/
@@ -288,16 +311,18 @@ NouSetsu/
 ├── translated_chapters/            # Clean output folder for translated markdown (*.md)
 ├── src/nousetsu/                   # Core Python package
 │   ├── agents/                     # Five pipeline agents (extractor, drafter, critic, polisher, chronicler)
+│   ├── analysis/                   # PromptTracker and token telemetry collection
 │   ├── batch/                      # Chapter scanner, natural sorter, and batch runner
-│   ├── cli/                        # CLI command dispatch (nousetsu, novel)
+│   ├── cli/                        # CLI command dispatch (nousetsu, novel, web server)
 │   ├── graph/                      # LangGraph state machine & procedural graph engine
-│   ├── models/                     # Pydantic schemas (bible, metadata, state, config)
+│   ├── models/                     # Pydantic schemas (bible, metadata, state, trace, config)
 │   ├── prompts/                    # Translation and critique prompt templates
-│   ├── skills/                     # Domain skills registry, loader, and 20 built-in skills
+│   ├── rag/                        # SQLite hybrid search engine, SQLAlchemy ORM, and reranker
+│   ├── skills/                     # Domain skills registry, loader, and 22 built-in skills
 │   ├── storage/                    # Repository, project registry, and summary migrator
 │   ├── tui/                        # Textual TUI dashboard, reader, and token analytics
-│   └── utils/                      # Utilities (rate limiter, chunker, language detector, fallback)
-└── tests/                          # Comprehensive pytest test suite (199 tests across 31 modules)
+│   └── utils/                      # Utilities (rate limiter, chunker, diff patcher, language detector)
+└── tests/                          # Comprehensive pytest test suite (288 tests across 38 modules)
 ```
 
 ---
@@ -316,41 +341,55 @@ uv run --no-sync pytest
 platform win32 -- Python 3.13.12, pytest-9.1.1, pluggy-1.6.0
 rootdir: D:\Code\novel_translation_Agent
 configfile: pyproject.toml
-collected 199 items
+collected 288 items
 
-tests\test_checkpoint.py ....                                            [  2%]
-tests\test_chunker.py ......                                             [  5%]
-tests\test_cross_folder_summaries.py ........                            [  9%]
-tests\test_drafter_chunking.py .                                         [  9%]
-tests\test_formatting.py .....                                           [ 12%]
-tests\test_glossary_filter.py ..                                         [ 13%]
-tests\test_hierarchy_summary.py .....                                    [ 15%]
-tests\test_interactions.py ......                                        [ 18%]
-tests\test_language.py ...........                                       [ 24%]
-tests\test_migration.py ...                                              [ 25%]
-tests\test_model_env.py .....                                            [ 28%]
-tests\test_model_fallback.py ........                                    [ 32%]
-tests\test_models.py ...                                                 [ 33%]
-tests\test_multi_folder.py ....                                          [ 35%]
-tests\test_polisher_language.py .......                                  [ 39%]
-tests\test_procedural_graph.py .....                                     [ 41%]
+tests\test_character_filter.py ...........                               [  3%]
+tests\test_checkpoint.py .....                                           [  5%]
+tests\test_chronicler_rag.py ...                                         [  6%]
+tests\test_chunker.py ......                                             [  8%]
+tests\test_critic_rag.py ...                                             [  9%]
+tests\test_cross_folder_summaries.py ........                            [ 12%]
+tests\test_diff_patcher.py ......                                        [ 14%]
+tests\test_drafter_chunking.py .                                         [ 14%]
+tests\test_formatting.py .....                                           [ 16%]
+tests\test_glossary_filter.py ......                                     [ 18%]
+tests\test_hierarchy_summary.py .....                                    [ 20%]
+tests\test_interactions.py ......                                        [ 22%]
+tests\test_language.py ...........                                       [ 26%]
+tests\test_migration.py ...                                              [ 27%]
+tests\test_model_env.py .....                                            [ 29%]
+tests\test_model_fallback.py ........                                    [ 31%]
+tests\test_models.py ...                                                 [ 32%]
+tests\test_multi_folder.py ....                                          [ 34%]
+tests\test_patch_polishing.py ...                                        [ 35%]
+tests\test_polisher_language.py .......                                  [ 37%]
+tests\test_polisher_title.py ........                                    [ 40%]
+tests\test_procedural_graph.py .....                                     [ 42%]
 tests\test_projects.py ....                                              [ 43%]
-tests\test_rate_limiter.py ........                                      [ 47%]
-tests\test_recursive_subdivision.py ......................               [ 58%]
-tests\test_retry.py ....                                                 [ 60%]
-tests\test_review_loop.py ......                                         [ 63%]
-tests\test_runner.py .....                                               [ 66%]
-tests\test_safety_blocks.py ............                                 [ 72%]
-tests\test_scanner.py ..                                                 [ 73%]
-tests\test_skills.py ............                                        [ 79%]
-tests\test_step_duration.py ...                                          [ 80%]
-tests\test_stop.py ..                                                    [ 81%]
-tests\test_token_metrics.py ...                                          [ 83%]
-tests\test_token_tracking.py ....                                        [ 85%]
-tests\test_translation_fallback.py ..................                    [ 94%]
-tests\test_tui.py ...........                                            [100%]
+tests\test_prompt_caching_prefix.py .....                                [ 45%]
+tests\test_prompt_tracker.py ....                                        [ 46%]
+tests\test_rag_engine.py .......                                         [ 49%]
+tests\test_rag_integration.py ...                                        [ 50%]
+tests\test_rag_migration.py .....                                        [ 52%]
+tests\test_rag_reranker.py ......                                        [ 54%]
+tests\test_rate_limiter.py ........                                      [ 56%]
+tests\test_recursive_subdivision.py ......................               [ 64%]
+tests\test_remediation_fixes.py .........                                [ 67%]
+tests\test_retry.py ....                                                 [ 69%]
+tests\test_review_loop.py ......                                         [ 71%]
+tests\test_runner.py .......                                             [ 73%]
+tests\test_safety_blocks.py ............                                 [ 77%]
+tests\test_scanner.py ..                                                 [ 78%]
+tests\test_skills.py ............                                        [ 82%]
+tests\test_step_duration.py ...                                          [ 83%]
+tests\test_stop.py ..                                                    [ 84%]
+tests\test_token_metrics.py ....                                         [ 85%]
+tests\test_token_tracking.py ....                                        [ 87%]
+tests\test_translation_fallback.py ..................                    [ 93%]
+tests\test_tui.py ...........                                            [ 97%]
+tests\test_web_server.py ........                                        [100%]
 
-============================ 199 passed in 17.40s =============================
+============================ 288 passed in 106.44s ============================
 ```
 
 * **Hermetic Isolation**: Tests run in isolated temporary directories (`tmp_path`), protecting your real novel projects.

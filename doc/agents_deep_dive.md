@@ -278,6 +278,19 @@ Raw translation drafts—even when accurate—frequently sound like translated t
 ### 5.4 Chunked Polishing (`polish_chunked`)
 For chapters exceeding 85 lines, `Feinschliff` polishes each chunk sequentially (`_polish_single_chunk`). It passes forward the trailing sentences of the previously polished chunk to prevent tone mismatches, abrupt stylistic shifts, or duplicate opening phrases across chunk borders.
 
+### 5.5 Programmatic Chapter Title Preservation Guard
+During creative prose polishing, LLMs occasionally omit structural chapter headings or volume prefixes (e.g. `บทที่ 11 - อวดดอกไม้` or `70\nChapter 11: The Awakening`):
+* **Domain Skill Enforcement**: `chapter_header_preservation` (priority 115) directs the model to retain leading chapter headers.
+* **Regex Header Extraction**: `_extract_draft_chapter_header()` parses the draft opening lines for multi-lingual chapter markers.
+* **Deterministic Restoration**: `_ensure_chapter_title_preserved()` verifies whether the heading is present in the output; if omitted, it programmatically prepends the draft's header block, ensuring 100% heading fidelity.
+
+### 5.6 Diff / Patch Polishing Engine (`DiffPatcher`)
+When editing existing drafts or performing second-pass review loops, regenerating whole chapters introduces unnecessary latency and token costs:
+* **Unified Diff Mode**: Feinschliff can generate concise search-and-replace blocks (`apply_search_replace_patches()`).
+* **Fuzzy Line Matching**: Locates and edits only the specific sentences targeted by the critic.
+* **Resilient Fallback**: Automatically reverts to full-text generation if patch application fails or produces zero changes.
+* **Efficiency**: Cuts completion token consumption by **60–80%** during reflection iterations.
+
 ---
 
 ## 6. Stage 5: Chronist (`ChroniclerAgent`)
@@ -378,6 +391,27 @@ Commercial LLM endpoints employ strict automated content moderation filters that
    - `CritiqueAgent` bisects source and draft chunks in tandem, calculating real fidelity and style scores on safe sections and logging an audit warning on the bypassed snippet.
 4. **Telemetry & Audit Tracking**:
    - Checkpoints and metadata track `safety_fallbacks_used` and `subdivisions_count`, displaying warnings in the chapter quality audit without interrupting batch execution.
+
+### 8.5 Hybrid Search RAG Knowledge Store & Cross-Encoder Reranker
+Operates zero-daemon local SQLite persistence (`.novel/rag/lore.db`) managed via **SQLAlchemy 2.0 ORM** (`LoreDocumentORM`):
+* **FTS5 Lexical Search**: Instant BM25 candidate lookup across character names, items, and dialogue.
+* **Gemini Embedding 2**: Computes 3072-dimensional vector representations with cosine similarity.
+* **Reciprocal Rank Fusion (RRF, $k=60$)**: Synthesizes sparse and dense candidate ranks.
+* **LLM Cross-Encoder Reranking**: Evaluates fused candidates for situational relevance.
+* **Pipeline Integration**: Inbound for `Wortschmied` ($k=2$), `Zensor` ($k=2$), and `Chronist` ($k=3$), with automated post-chapter indexing of chapter summaries and 20-line scene chunks.
+
+### 8.6 Forensic Prompt Tracking (`PromptTracker`) & Web Visualizer
+Provides complete transparency into LLM reasoning:
+* **Stage Tracing**: Captures exact system prompts, user content, raw model responses, and duration per agent step into `.novel/traces/chapter_XXXX.json`.
+* **React 19 + Vite Web Visualizer**: Launch with `nousetsu web` or press `W` in the TUI to view interactive prompt timelines, diff views, and token usage cards.
+
+### 8.7 Script-Aware Boundary Filtering & Scene Character Rostering
+* **Word Boundary Precision**: Distinguishes CJK ideographs from Latin alphabets, applying regex word boundaries (`\b`) to non-CJK text to prevent substring false matches.
+* **Per-Scene Rostering**: Filters active character cards down to characters active in the current ~70-line scene chunk, eliminating prompt noise and zero-anaphora misattributions.
+
+### 8.8 KV Context Caching Prefix Stabilization
+* Reorders high-entropy dynamic elements (such as sliding draft context or chapter numbers) to the tail of the prompt.
+* Preserves a static, unchanging system prompt prefix (`GEMINI_KV_CACHE_STABLE_PREFIX`) to maximize upstream Gemini context cache hit rates and lower inference costs.
 
 ---
 

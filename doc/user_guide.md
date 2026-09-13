@@ -165,21 +165,32 @@ nousetsu batch --input-dir raw_chapters --output-dir translated_chapters --limit
 # 5. Targeted Single Chapter Translation
 nousetsu batch -p project/Villainess -F Villainess_05 --chapter 48
 
-# 6. Agent Domain Skills Catalog
+# 6. Web Trace Visualizer (React 19 + Vite)
+nousetsu web
+nousetsu web --port 8765 --no-browser
+
+# 7. Inspect Forensic Prompt Traces
+nousetsu traces -p ./my_novel --chapter 1
+
+# 8. Query and Manage Hybrid RAG Knowledge Store
+nousetsu lore --query "Azure Thunder Blade"
+nousetsu migrate-rag -p ./my_novel
+
+# 9. Agent Domain Skills Catalog
 nousetsu skills --agent drafter --genre isekai
 
-# 7. Inspect Procedural Execution Graphs (Rich Tree)
+# 10. Inspect Procedural Execution Graphs (Rich Tree)
 nousetsu graph-info
 nousetsu graph-info --agent drafter
 
-# 8. Inspect 3-Tier Hierarchical Story Memory (Rich Tree)
+# 11. Inspect 3-Tier Hierarchical Story Memory (Rich Tree)
 nousetsu narrative
 nousetsu narrative -p ./my_novel
 
-# 9. Migrate Legacy Summaries to 3-Tier Hierarchy
+# 12. Migrate Legacy Summaries to 3-Tier Hierarchy
 nousetsu migrate-summaries -p ./my_novel
 
-# 10. Explicit TUI Launch with Custom Paths
+# 13. Explicit TUI Launch with Custom Paths
 nousetsu tui --project-dir ./my_novel
 ```
 
@@ -208,6 +219,8 @@ nousetsu tui --project-dir ./my_novel
 | `--quality-threshold` | | `8.5` | Target quality score (fidelity & style) to exit review loop early |
 | `--max-tpm` | | `32000` | Sliding-window Tokens Per Minute rate limit quota |
 | `--max-rpm` | | `60` | Sliding-window Requests Per Minute rate limit quota |
+| `--rag / --no-rag` | | True | Enable or disable Hybrid Search RAG (SQLite FTS5 + Gemini Embedding 2) |
+| `--rerank / --no-rerank` | | True | Enable or disable LLM Cross-Encoder reranking of RAG candidates |
 | `--interactions / --no-interactions` | | True | Enable or disable Gemini Interactions API (`/v1beta/interactions`) with fallback |
 | `--chunking / --no-chunking` | | True | Enable or disable line-based semantic chunking for long chapters |
 | `--chunk-threshold-lines` | | `85` | Minimum non-empty lines to trigger chunked translation |
@@ -231,7 +244,7 @@ nousetsu skills
 nousetsu skills --agent drafter --genre wuxia
 ```
 
-### Built-in Skills (20 Total)
+### Built-in Skills (22 Total)
 
 | Agent | Skill Name | Genre / Language Scope | Description |
 |:---|:---|:---:|:---|
@@ -250,12 +263,16 @@ nousetsu skills --agent drafter --genre wuxia
 | **Critic** | `hallucination_guard` | All genres / All languages | Flags fabricated plot events or unnatural additions. |
 | **Critic** | `nickname_disparity_auditor` | All genres / All languages | Flags unprovoked name/nickname swaps and register mismatches. |
 | **Critic** | `tone_consistency_auditor` | All genres / All languages | Audits narrative register against established tone. |
+| **Polisher** | `chapter_header_preservation` | All genres / All languages | Ensures chapter titles, numbers, and structural headings from the draft are strictly retained at the top of the polished output. |
 | **Polisher** | `translationese_filter` | All genres / All languages | Purges clunky passive voice and repetitive translation tropes. |
 | **Polisher** | `prose_cadence_enhancer` | All genres / All languages | Crafts dynamic sentence rhythm and sensory prose. |
 | **Polisher** | `address_form_preservation` | All genres / All languages | Strictly forbids normalizing intimate pet names and emotional address forms. |
 | **Polisher** | `show_dont_tell` | All genres / All languages | Converts flat emotional labels into physical actions. |
 | **Polisher** | `dialogue_flow` | All genres / All languages | Ensures spoken dialogue sounds natural and fluid. |
 | **Polisher** | `otome_court_etiquette` | Romance, Otome, Drama / All | Refines aristocratic court banter and villainess poise. |
+| **Chronicler** | `lore_world_state_tracker` | All genres / All languages | Tracks realm breakthroughs, inventory acquisitions, sect territory changes, and power systems. |
+| **Chronicler** | `character_status_tracker` | All genres / All languages | Records physical injuries, psychological trauma, secrets revealed, and relationship milestones. |
+| **Chronicler** | `continuity_auditor` | All genres / All languages | Verifies timeline consistency and cross-checks chapter outcomes against previous summaries. |
 
 ### Adding Custom Markdown Skills
 You can add custom skills simply by dropping a markdown file with YAML frontmatter into `src/nousetsu/skills/catalog/` or your project folder:

@@ -34,10 +34,12 @@ def __init__(
     self,
     model_name: str = "gemini-3.1-flash-lite",
     fallback_model: Optional[str] = None,
+    procedural_graph: Optional[ProceduralGraph] = None,
     chunker: Optional[Any] = None,
     enable_recursive_subdivision: bool = True,
     subdivision_min_lines: int = 8,
     subdivision_max_depth: int = 3,
+    prompt_tracker: Optional[Any] = None,
 )
 ```
 
@@ -48,14 +50,16 @@ def extract(
     self,
     source_text: str,
     bible: NovelBible,
+    genre: Optional[str] = None,
+    procedural_graph: Optional[ProceduralGraph] = None,
     chunks: Optional[List[Any]] = None,
     notify_callback: Optional[Any] = None,
     rate_limiter: Optional[Any] = None,
     stop_event: Optional[Any] = None,
     **kwargs: Any
-) -> Tuple[List[CharacterProfile], List[GlossaryItem]]
+) -> Tuple[List[CharacterProfile], List[GlossaryItem], List[str]]
 ```
-- **Returns**: A 2-tuple containing newly discovered `List[CharacterProfile]` and `List[GlossaryItem]`.
+- **Returns**: A 3-tuple containing newly discovered `List[CharacterProfile]`, newly discovered `List[GlossaryItem]`, and `List[str]` of active glossary terms in this chapter.
 
 ### `extract_chunked()`
 Splits long chapters across `LineSemanticChunker` slices to prevent context saturation and rate limit spikes:
@@ -64,11 +68,13 @@ def extract_chunked(
     self,
     chunks: List[Any],
     bible: NovelBible,
+    genre: Optional[str] = None,
+    procedural_graph: Optional[ProceduralGraph] = None,
     notify_callback: Optional[Any] = None,
     rate_limiter: Optional[Any] = None,
     stop_event: Optional[Any] = None,
     **kwargs: Any
-) -> Tuple[List[CharacterProfile], List[GlossaryItem]]
+) -> Tuple[List[CharacterProfile], List[GlossaryItem], List[str]]
 ```
 
 ---
