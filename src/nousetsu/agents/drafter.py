@@ -9,6 +9,7 @@ from nousetsu.models.metadata import TokenUsage
 from nousetsu.prompts.templates import DRAFTING_SYSTEM_PROMPT
 from nousetsu.skills.registry import SkillRegistry
 from nousetsu.utils.character_filter import filter_characters_for_scene
+from nousetsu.utils.glossary_filter import filter_glossary_for_scene
 from nousetsu.utils.translation_fallback import (
     bisect_text,
     can_subdivide_text,
@@ -295,11 +296,12 @@ class ContextAwareDrafterAgent:
             for c in eval_characters
         ]) or "No explicit character cards registered."
 
-        relevant_glossary = [
-            item for item in active_glossary
-            if item.source.lower() in chunk_text.lower()
-        ]
-        eval_glossary = relevant_glossary if relevant_glossary else (active_glossary[:15] if active_glossary else [])
+        eval_glossary = filter_glossary_for_scene(
+            glossary=active_glossary,
+            source_text=chunk_text,
+            fallback_on_empty=True,
+            max_fallback=15
+        )
 
         gloss_str = "\n".join([
             f"- '{g.source}' MUST be translated as '{g.target}' ({g.category})"

@@ -10,6 +10,7 @@ from nousetsu.models.metadata import QualityAudit, TokenUsage
 from nousetsu.prompts.templates import CRITIQUE_SYSTEM_PROMPT
 from nousetsu.skills.registry import SkillRegistry
 from nousetsu.utils.character_filter import filter_characters_for_scene
+from nousetsu.utils.glossary_filter import filter_glossary_for_scene, is_term_present
 from nousetsu.utils.language import detect_language
 from nousetsu.utils.translation_fallback import (
     bisect_text,
@@ -118,11 +119,13 @@ class CritiqueAgent:
         rag_context: Optional[List[Any]] = None
     ) -> Tuple[QualityAudit, str]:
         # Filter glossary to terms actually present in this chapter to avoid prompt bloat
-        relevant_glossary = [
-            item for item in active_glossary
-            if item.source.lower() in source_text.lower() or item.target.lower() in draft_text.lower()
-        ]
-        eval_glossary = relevant_glossary if relevant_glossary else (active_glossary[:15] if active_glossary else [])
+        eval_glossary = filter_glossary_for_scene(
+            glossary=active_glossary,
+            source_text=source_text,
+            target_text=draft_text,
+            fallback_on_empty=True,
+            max_fallback=15
+        )
 
         # Filter character cards to those relevant to this specific scene to prevent prompt bloat
         eval_characters = filter_characters_for_scene(
@@ -370,10 +373,14 @@ class CritiqueAgent:
         critique_notes = " ".join(notes_list) if notes_list else "Preserve meaning and enhance natural rhythm."
 
         # Programmatic check only against glossary terms that actually appeared in the source text
-        source_present_terms = [item for item in active_glossary if item.source.lower() in source_text.lower()]
+        source_present_terms = filter_glossary_for_scene(
+            glossary=active_glossary,
+            source_text=source_text,
+            fallback_on_empty=False
+        )
         missing_terms = []
         for item in source_present_terms:
-            if item.target.lower() not in draft_text.lower():
+            if not is_term_present(item.target, draft_text):
                 missing_terms.append(f"Glossary term '{item.target}' (source: '{item.source}') missing in draft")
         if missing_terms:
             audit.warnings.extend(missing_terms)
@@ -447,10 +454,14 @@ class CritiqueAgent:
         )
 
         # Programmatic check only against glossary terms that actually appeared in the source text
-        source_present_terms = [item for item in active_glossary if item.source.lower() in source_text.lower()]
+        source_present_terms = filter_glossary_for_scene(
+            glossary=active_glossary,
+            source_text=source_text,
+            fallback_on_empty=False
+        )
         missing_terms = []
         for item in source_present_terms:
-            if item.target.lower() not in draft_text.lower():
+            if not is_term_present(item.target, draft_text):
                 missing_terms.append(f"Glossary term '{item.target}' (source: '{item.source}') missing in draft")
         if missing_terms:
             audit.warnings.extend(missing_terms)

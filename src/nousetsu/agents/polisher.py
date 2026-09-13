@@ -7,6 +7,7 @@ from nousetsu.models.bible import GlossaryItem, NovelBible
 from nousetsu.models.metadata import TokenUsage
 from nousetsu.prompts.templates import POLISHING_SYSTEM_PROMPT
 from nousetsu.skills.registry import SkillRegistry
+from nousetsu.utils.glossary_filter import filter_glossary_for_scene
 from nousetsu.utils.language import detect_language
 from nousetsu.utils.translation_fallback import is_safety_block_exception
 
@@ -63,11 +64,13 @@ class PolishingAgent:
             )
 
         # Filter glossary to terms actually present in this chapter to avoid prompt bloat
-        relevant_glossary = [
-            item for item in active_glossary
-            if (source_text and item.source.lower() in source_text.lower()) or item.target.lower() in draft_text.lower()
-        ]
-        eval_glossary = relevant_glossary if relevant_glossary else (active_glossary[:15] if active_glossary else [])
+        eval_glossary = filter_glossary_for_scene(
+            glossary=active_glossary,
+            source_text=source_text,
+            target_text=draft_text,
+            fallback_on_empty=True,
+            max_fallback=15
+        )
         gloss_str = "\n".join([f"- {g.source} -> {g.target}" for g in eval_glossary]) or "None"
 
         resolved_genre = genre or getattr(bible, "genre", "general")
