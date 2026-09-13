@@ -147,10 +147,10 @@ class AgentSkill(BaseModel):
     source: str                # "builtin" or "file:<filename>"
 ```
 
-### Built-in Skills Catalog (22 Skills)
+### Built-in Skills Catalog (23 Skills)
 - **Extractor (`Schriftdetektiv`)**: `entity_disambiguation`, `cultivation_realm_extractor`, `relationship_mapper`.
 - **Drafter (`Wortschmied`)**: `zero_anaphora_resolution`, `name_address_fidelity`, `character_voice_differentiation`, `idiom_localization`, `litrpg_system_framing`.
-- **Critic (`Zensor`)**: `omission_detector`, `glossary_enforcer`, `hallucination_guard`, `nickname_disparity_auditor`, `tone_consistency_auditor`.
+- **Critic (`Zensor`)**: `omission_detector`, `glossary_enforcer`, `hallucination_guard`, `nickname_disparity_auditor`, `tone_consistency_auditor`, `prose_cadence_auditor`.
 - **Polisher (`Feinschliff`)**: `chapter_header_preservation`, `translationese_filter`, `prose_cadence_enhancer`, `address_form_preservation`, `show_dont_tell`, `dialogue_flow`.
 - **Chronicler (`Chronist`)**: `lore_world_state_tracker`, `character_status_tracker`, `continuity_auditor`.
 
@@ -304,7 +304,7 @@ uv sync
 # Query CLI version
 uv run nousetsu --version
 
-# Run complete test suite (311 tests across 47 modules in ~90s)
+# Run complete test suite (312 tests across 47 modules in ~89s)
 uv run pytest
 
 # Run specific test modules

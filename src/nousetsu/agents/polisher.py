@@ -358,6 +358,11 @@ class PolishingAgent:
                     notify_callback=notify_callback
                 )
 
+            chunk_kwargs = dict(kwargs)
+            if "prompt_tracker" not in chunk_kwargs and hasattr(self, "prompt_tracker"):
+                chunk_kwargs["prompt_tracker"] = self.prompt_tracker
+            chunk_kwargs.setdefault("iteration", 1)
+
             chunk_polished = self._polish_single_chunk(
                 chunk_draft=chunk_content,
                 preceding_context=prev_polished_tail,
@@ -368,8 +373,7 @@ class PolishingAgent:
                 source_text=chunk_source,
                 chunk_idx=chunk_idx,
                 total_chunks=total_chunks,
-                prompt_tracker=kwargs.get("prompt_tracker") or getattr(self, "prompt_tracker", None),
-                iteration=kwargs.get("iteration", 1)
+                **chunk_kwargs
             )
             polished_parts.append(chunk_polished)
             total_usage = total_usage.add(self.last_usage)

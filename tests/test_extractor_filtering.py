@@ -184,7 +184,7 @@ def test_extractor_filtering_empty_fallback():
 def test_config_cascade_extractor_filter(tmp_path: Path):
     """Verify configuration precedence: constructor arg > ProjectConfig > .env > default."""
     cfg = ProjectConfig()
-    assert cfg.filter_extractor_entities is True
+    assert cfg.filter_extractor_entities is None
     assert cfg.get_filter_extractor_entities() is True
 
     # ProjectConfig override

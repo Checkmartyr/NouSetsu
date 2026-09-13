@@ -74,4 +74,19 @@ CRITIC_SKILLS: List[AgentSkill] = [
         priority=85,
         source="builtin"
     ),
+    AgentSkill(
+        name="prose_cadence_auditor",
+        agent="critic",
+        title="Prose Cadence & Translationese Auditor",
+        description="Audits sentence rhythm, syntactical monotony, and flags stiff translationese phrasing with concrete quotes.",
+        content="""### Prose Cadence & Translationese Audit Directives:
+- Actively hunt for repetitive translationese crutches (e.g., "could not help but", "as expected of", "it was none other than", excessive passive constructions).
+- Flag monotonous sentence lengths and subject-verb-object structures that make narration feel robotic.
+- Demand vibrant active verbs, sensory descriptors, and idiomatic flow in the target language.
+- Quote every offending sentence in the critique notes with a concrete direction for the polisher.""",
+        languages=["all"],
+        genres=["all"],
+        priority=88,
+        source="builtin"
+    ),
 ]

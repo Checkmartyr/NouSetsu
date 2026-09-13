@@ -80,3 +80,65 @@ def test_polisher_full_text_fallback_when_not_patch():
     )
 
     assert result == full_rewrite
+
+
+def test_polisher_chunked_propagates_use_patch():
+    """Verify that chunked polishing properly propagates use_patch to chunk prompts and applies search/replace."""
+    from nousetsu.utils.chunker import LineChunk
+
+    polisher = PolishingAgent(model_name="mock-model")
+    bible = NovelBible(source_language="English", target_language="Thai")
+
+    chunks = [
+        LineChunk(
+            chunk_index=1,
+            total_chunks=2,
+            start_line=1,
+            end_line=2,
+            content="# บทที่ 1: การเดินทาง\nท้องฟ้าแจ่มใส",
+            source_content="Chapter 1: The Journey\nThe sky was clear."
+        ),
+        LineChunk(
+            chunk_index=2,
+            total_chunks=2,
+            start_line=3,
+            end_line=4,
+            content="แอลเลนออกเดินทางสู่ป่าใหญ่",
+            source_content="Allen departed into the great forest."
+        )
+    ]
+
+    captured_prompts = []
+
+    def mock_invoke(messages):
+        sys_prompt = messages[0].content
+        captured_prompts.append(sys_prompt)
+        user_prompt = messages[1].content
+        if "ท้องฟ้าแจ่มใส" in user_prompt:
+            return AIMessage(content="<<<<<<< SEARCH\nท้องฟ้าแจ่มใส\n=======\nผืนนภาปลอดโปร่งแจ่มกระจ่าง\n>>>>>>>")
+        else:
+            return AIMessage(content="NO_CHANGES_NEEDED")
+
+    mock_llm = MagicMock()
+    mock_llm.invoke = MagicMock(side_effect=mock_invoke)
+    mock_llm.last_model_used = "mock-model"
+    polisher.llm = mock_llm
+
+    result = polisher.polish(
+        draft_text="# บทที่ 1: การเดินทาง\nท้องฟ้าแจ่มใส\n\nแอลเลนออกเดินทางสู่ป่าใหญ่",
+        critique_notes="Enhance atmospheric descriptions.",
+        active_glossary=[],
+        bible=bible,
+        draft_chunks=chunks,
+        use_patch=True
+    )
+
+    # Both chunks must have received PATCH_POLISHING_SYSTEM_PROMPT
+    assert len(captured_prompts) == 2
+    assert "SEARCH/REPLACE" in captured_prompts[0]
+    assert "SEARCH/REPLACE" in captured_prompts[1]
+
+    # First chunk patch was applied, second chunk retained
+    assert "ผืนนภาปลอดโปร่งแจ่มกระจ่าง" in result
+    assert "แอลเลนออกเดินทางสู่ป่าใหญ่" in result
+    assert "# บทที่ 1: การเดินทาง" in result
