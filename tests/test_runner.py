@@ -217,3 +217,38 @@ def test_cli_chapter_filter_argument():
             assert mock_cmd.call_args[0][0].chapter == "048"
 
 
+def test_batch_runner_rag_flag_propagation(tmp_path: Path):
+    repo = NovelRepository(tmp_path)
+    repo.initialize_project("Test RAG Flags", "Japanese", "English")
+
+    # 1. Default inherits enabled RAG and Reranker
+    runner_default = BatchRunner(repo, model_name="mock-model")
+    assert runner_default.workflow.enable_rag is True
+    assert runner_default.workflow.enable_rag_reranker is True
+
+    # 2. Explicit enable_rag=False disables RAG in workflow
+    runner_no_rag = BatchRunner(repo, model_name="mock-model", enable_rag=False)
+    assert runner_no_rag.workflow.enable_rag is False
+    assert runner_no_rag.workflow.rag_engine is None
+
+    # 3. Explicit enable_rag_reranker=False disables reranker in workflow
+    runner_no_rerank = BatchRunner(repo, model_name="mock-model", enable_rag=True, enable_rag_reranker=False)
+    assert runner_no_rerank.workflow.enable_rag is True
+    assert runner_no_rerank.workflow.enable_rag_reranker is False
+
+
+def test_cli_batch_rag_and_rerank_arguments():
+    from unittest.mock import patch
+    import sys
+    from nousetsu.cli.app import main
+
+    test_args = ["nousetsu", "batch", "-p", "dummy", "--no-rag", "--no-rerank"]
+    with patch.object(sys, "argv", test_args):
+        with patch("nousetsu.cli.app.cmd_batch") as mock_cmd:
+            main()
+            mock_cmd.assert_called_once()
+            parsed_args = mock_cmd.call_args[0][0]
+            assert parsed_args.rag is False
+            assert parsed_args.rerank is False
+
+

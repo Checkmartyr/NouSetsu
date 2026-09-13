@@ -40,6 +40,8 @@ class BatchRunner:
         chunk_threshold_lines: Optional[int] = None,
         target_chunk_lines: Optional[int] = None,
         chunk_overlap_lines: Optional[int] = None,
+        enable_rag: Optional[bool] = None,
+        enable_rag_reranker: Optional[bool] = None,
         console: Optional[Console] = None
     ):
         self.repo = repository
@@ -137,6 +139,9 @@ class BatchRunner:
         resolved_target_lines = target_chunk_lines or getattr(cfg, "target_chunk_lines", 70)
         resolved_overlap_lines = chunk_overlap_lines or getattr(cfg, "chunk_overlap_lines", 3)
 
+        resolved_rag = enable_rag if enable_rag is not None else getattr(cfg, "enable_rag", True)
+        resolved_reranker = enable_rag_reranker if enable_rag_reranker is not None else getattr(cfg, "enable_rag_reranker", True)
+
         self.rate_limiter = SlidingWindowRateLimiter(max_tpm=resolved_tpm, max_rpm=resolved_rpm)
         self.workflow = NovelTranslationWorkflow(
             model_name=resolved_model,
@@ -156,11 +161,11 @@ class BatchRunner:
             safety_recursive_subdivision=getattr(cfg, "safety_recursive_subdivision", True),
             safety_subdivision_min_lines=getattr(cfg, "safety_subdivision_min_lines", 8),
             safety_subdivision_max_depth=getattr(cfg, "safety_subdivision_max_depth", 4),
-            rag_engine=self.repo.get_rag_engine() if getattr(cfg, "enable_rag", True) else None,
-            enable_rag=getattr(cfg, "enable_rag", True),
+            rag_engine=self.repo.get_rag_engine() if resolved_rag else None,
+            enable_rag=resolved_rag,
             rag_top_k=getattr(cfg, "rag_top_k", 2),
             rag_embedding_model=cfg.get_rag_embedding_model() if hasattr(cfg, "get_rag_embedding_model") else getattr(cfg, "rag_embedding_model", "text-multilingual-embedding-002"),
-            enable_rag_reranker=getattr(cfg, "enable_rag_reranker", True),
+            enable_rag_reranker=resolved_reranker,
             rag_reranker_model=default_agent_model if is_mock else (cfg.get_rag_reranker_model() if hasattr(cfg, "get_rag_reranker_model") else getattr(cfg, "rag_reranker_model", "gemini-3.5-flash-lite"))
         )
         self.rag_engine = self.workflow.rag_engine
