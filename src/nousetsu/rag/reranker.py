@@ -7,7 +7,6 @@ import re
 from typing import Any, Dict, List, Optional
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from nousetsu.agents.llm import extract_text_from_message, get_llm
 from nousetsu.rag.models import SearchResult
 
 logger = logging.getLogger(__name__)
@@ -72,6 +71,7 @@ class LLMCrossEncoderReranker(BaseCrossEncoderReranker):
         model_name: str = "gemini-3.5-flash-lite",
         fallback_model: Optional[str] = None
     ):
+        from nousetsu.agents.llm import get_llm
         self.model_name = model_name
         self.fallback_model = fallback_model
         self.llm = get_llm(model_name=model_name, fallback_model=fallback_model, temperature=0.1)
@@ -84,6 +84,7 @@ class LLMCrossEncoderReranker(BaseCrossEncoderReranker):
     ) -> List[SearchResult]:
         if not documents:
             return []
+        from nousetsu.agents.llm import extract_text_from_message
 
         # Prepare candidate roster for joint cross-scoring
         candidates_text = []

@@ -761,6 +761,28 @@ class NovelTranslationWorkflow:
 
         final_audit = state.best_audit or state.quality_audit
 
+        chr_rag_hits = []
+        if self.enable_rag and self.rag_engine:
+            try:
+                char_names = " ".join([c.name for c in state.active_characters[:4]])
+                first_lines = " ".join([l.strip() for l in final_text.splitlines() if l.strip()][:2])
+                chr_query = f"{char_names} {first_lines}".strip()[:250] if (char_names or first_lines) else f"Chapter {state.chapter_num} story arc events"
+                chr_vec = None
+                if self.embedding_client and self.embedding_client.is_available:
+                    chr_vec = self.embedding_client.embed_text(chr_query)
+                chr_rag_hits = self.rag_engine.hybrid_search(
+                    query=chr_query,
+                    query_vector=chr_vec,
+                    limit=3,
+                    reranker=self.reranker if self.enable_rag_reranker else None,
+                    enable_rerank=self.enable_rag_reranker
+                )
+                if chr_rag_hits:
+                    self._notify(PipelineStage.CHRONICLING, f"Retrieved {len(chr_rag_hits)} prior lore entries for chronicler continuity...", 96.0)
+            except Exception as e:
+                logger.warning(f"RAG retrieval for chronicler failed: {e}")
+                chr_rag_hits = []
+
         est_chronicle = min(estimate_tokens(final_text), 4000) + 400
         summary = invoke_with_retry(
             self.chronicler.chronicle,
@@ -769,6 +791,8 @@ class NovelTranslationWorkflow:
             translated_text=final_text,
             genre=state.genre,
             source_lang=state.novel_bible.source_language,
+            bible=state.novel_bible,
+            rag_context=chr_rag_hits,
             notify_callback=lambda msg: self._notify(PipelineStage.CHRONICLING, msg, 95.0),
             rate_limiter=self.rate_limiter,
             estimated_tokens=est_chronicle,

@@ -135,6 +135,7 @@ Analyze the final translated chapter and produce:
 
 Chapter Number: {chapter_num}
 Chapter Title: {chapter_title}
+{rag_context_section}
 {skills_section}
 Respond strictly in valid JSON format:
 {{

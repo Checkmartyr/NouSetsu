@@ -48,6 +48,7 @@ class ChroniclerAgent:
         genre: Optional[str] = None,
         source_lang: Optional[str] = None,
         bible: Optional[NovelBible] = None,
+        rag_context: Optional[List[Any]] = None,
         **kwargs: Any
     ) -> ChapterSummary:
         skills_text = SkillRegistry.get_instance().build_prompt_section(
@@ -57,10 +58,21 @@ class ChroniclerAgent:
         )
         skills_section = f"\n{skills_text}\n" if skills_text else ""
 
+        rag_section = ""
+        if rag_context:
+            formatted_lore = []
+            for hit in rag_context:
+                doc = hit.document if hasattr(hit, "document") else hit
+                content = getattr(doc, "content", str(doc))
+                title = getattr(doc, "title", "Prior Lore")
+                formatted_lore.append(f"[{title}]: {content[:400]}")
+            rag_section = "\nPrior Series Lore & Character Memory (via RAG):\n" + "\n".join(formatted_lore) + "\n"
+
         sys_msg = CHRONICLER_SYSTEM_PROMPT.format(
             chapter_num=chapter_num,
             chapter_title=chapter_title or f"Chapter {chapter_num}",
-            skills_section=skills_section
+            skills_section=skills_section,
+            rag_context_section=rag_section
         )
 
         try:
