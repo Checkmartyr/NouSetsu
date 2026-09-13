@@ -11,6 +11,7 @@ from nousetsu.models.trace import PipelineStage
 from nousetsu.prompts.templates import DRAFTING_SYSTEM_PROMPT
 from nousetsu.skills.registry import SkillRegistry
 from nousetsu.utils.character_filter import filter_characters_for_scene
+from nousetsu.utils.formatting import clamp_sentence_boundary
 from nousetsu.utils.glossary_filter import filter_glossary_for_scene
 from nousetsu.utils.translation_fallback import (
     bisect_text,
@@ -93,7 +94,7 @@ class ContextAwareDrafterAgent:
                 ch_str = f"Chapter {r.chapter_num}" if getattr(r, "chapter_num", None) else "Lore Entry"
                 t_str = f" ({r.title})" if getattr(r, "title", None) else ""
                 content_snip = getattr(r, "content", str(r)).strip()
-                lore_lines.append(f"- {loc}{ch_str}{t_str}: {content_snip[:350]}")
+                lore_lines.append(f"- {loc}{ch_str}{t_str}: {clamp_sentence_boundary(content_snip, 350)}")
             sections.append("\n".join(lore_lines))
 
         if not bible and not rag_results:
@@ -375,6 +376,22 @@ class ContextAwareDrafterAgent:
             self.last_usage = self.last_usage.add(usage)
             raw_text = extract_text_from_message(response.content)
             if tracker:
+                trace_meta: dict[str, Any] = {"preceding_context_len": len(preceding_context)}
+                if rag_results:
+                    trace_meta["rag_hits"] = [
+                        {
+                            "doc_id": getattr(r, "doc_id", ""),
+                            "title": getattr(r, "title", ""),
+                            "folder": getattr(r, "folder", None),
+                            "chapter_num": getattr(r, "chapter_num", None),
+                            "doc_type": getattr(r, "doc_type", "").value if hasattr(getattr(r, "doc_type", None), "value") else str(getattr(r, "doc_type", "")),
+                            "sparse_score": getattr(r, "sparse_score", None),
+                            "dense_score": getattr(r, "dense_score", None),
+                            "rrf_score": getattr(r, "rrf_score", None),
+                            "rerank_score": getattr(r, "rerank_score", None),
+                        }
+                        for r in rag_results
+                    ]
                 tracker.record(
                     stage=PipelineStage.DRAFTING,
                     agent="drafter",
@@ -388,7 +405,7 @@ class ContextAwareDrafterAgent:
                     chunk_index=chunk_idx,
                     total_chunks=total_chunks,
                     depth=depth,
-                    metadata={"preceding_context_len": len(preceding_context)}
+                    metadata=trace_meta
                 )
             return raw_text
         except Exception as e:

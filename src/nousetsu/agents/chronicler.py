@@ -23,6 +23,7 @@ from nousetsu.models.metadata import (
 from nousetsu.prompts.templates import CHRONICLER_SYSTEM_PROMPT
 from nousetsu.skills.registry import SkillRegistry
 from nousetsu.utils.character_filter import filter_characters_for_scene
+from nousetsu.utils.formatting import clamp_sentence_boundary
 from nousetsu.utils.glossary_filter import filter_glossary_for_scene
 from nousetsu.utils.translation_fallback import is_safety_block_exception
 
@@ -69,7 +70,7 @@ class ChroniclerAgent:
                 doc = hit.document if hasattr(hit, "document") else hit
                 content = getattr(doc, "content", str(doc))
                 title = getattr(doc, "title", "Prior Lore")
-                formatted_lore.append(f"[{title}]: {content[:400]}")
+                formatted_lore.append(f"[{title}]: {clamp_sentence_boundary(content, 350)}")
             rag_section = "\nPrior Series Lore & Character Memory (via RAG):\n" + "\n".join(formatted_lore) + "\n"
 
         sys_msg = CHRONICLER_SYSTEM_PROMPT.format(
@@ -142,6 +143,22 @@ class ChroniclerAgent:
             )
 
         if tracker:
+            trace_meta: dict[str, Any] = {}
+            if rag_context:
+                trace_meta["rag_hits"] = [
+                    {
+                        "doc_id": getattr(hit, "doc_id", getattr(getattr(hit, "document", None), "doc_id", "")),
+                        "title": getattr(hit, "title", getattr(getattr(hit, "document", None), "title", "")),
+                        "folder": getattr(hit, "folder", getattr(getattr(hit, "document", None), "folder", None)),
+                        "chapter_num": getattr(hit, "chapter_num", getattr(getattr(hit, "document", None), "chapter_num", None)),
+                        "doc_type": (getattr(hit, "doc_type", "").value if hasattr(getattr(hit, "doc_type", None), "value") else str(getattr(hit, "doc_type", ""))),
+                        "sparse_score": getattr(hit, "sparse_score", None),
+                        "dense_score": getattr(hit, "dense_score", None),
+                        "rrf_score": getattr(hit, "rrf_score", None),
+                        "rerank_score": getattr(hit, "rerank_score", None),
+                    }
+                    for hit in rag_context
+                ]
             tracker.record(
                 stage=PipelineStage.CHRONICLING,
                 agent="chronicler",
@@ -155,7 +172,8 @@ class ChroniclerAgent:
                 },
                 model=getattr(self, "last_model_used", self.model_name),
                 token_usage=self.last_usage,
-                duration_seconds=duration
+                duration_seconds=duration,
+                metadata=trace_meta
             )
 
         return summary

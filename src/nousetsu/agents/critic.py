@@ -12,6 +12,7 @@ from nousetsu.models.trace import PipelineStage
 from nousetsu.prompts.templates import CRITIQUE_SYSTEM_PROMPT
 from nousetsu.skills.registry import SkillRegistry
 from nousetsu.utils.character_filter import filter_characters_for_scene
+from nousetsu.utils.formatting import clamp_sentence_boundary
 from nousetsu.utils.glossary_filter import filter_glossary_for_scene, is_term_present
 from nousetsu.utils.language import detect_language
 from nousetsu.utils.translation_fallback import (
@@ -157,7 +158,7 @@ class CritiqueAgent:
                 doc = hit.document if hasattr(hit, "document") else hit
                 content = getattr(doc, "content", str(doc))
                 title = getattr(doc, "title", "Canon Reference")
-                canon_lines.append(f"- [{title}]: {content[:350]}")
+                canon_lines.append(f"- [{title}]: {clamp_sentence_boundary(content, 350)}")
             rag_section = "\nCanonical Series Memory & Prior Translations (via RAG):\n" + "\n".join(canon_lines) + "\n"
 
         sys_msg = CRITIQUE_SYSTEM_PROMPT.format(
@@ -313,6 +314,22 @@ class CritiqueAgent:
                 critique_notes = "Critique response malformed. Review prose for rhythm, zero-pronoun clarity, and verify proper nouns."
 
         if tracker:
+            trace_meta: dict[str, Any] = {}
+            if rag_context:
+                trace_meta["rag_hits"] = [
+                    {
+                        "doc_id": getattr(hit, "doc_id", getattr(getattr(hit, "document", None), "doc_id", "")),
+                        "title": getattr(hit, "title", getattr(getattr(hit, "document", None), "title", "")),
+                        "folder": getattr(hit, "folder", getattr(getattr(hit, "document", None), "folder", None)),
+                        "chapter_num": getattr(hit, "chapter_num", getattr(getattr(hit, "document", None), "chapter_num", None)),
+                        "doc_type": (getattr(hit, "doc_type", "").value if hasattr(getattr(hit, "doc_type", None), "value") else str(getattr(hit, "doc_type", ""))),
+                        "sparse_score": getattr(hit, "sparse_score", None),
+                        "dense_score": getattr(hit, "dense_score", None),
+                        "rrf_score": getattr(hit, "rrf_score", None),
+                        "rerank_score": getattr(hit, "rerank_score", None),
+                    }
+                    for hit in rag_context
+                ]
             tracker.record(
                 stage=PipelineStage.CRITIQUE,
                 agent="critic",
@@ -333,7 +350,8 @@ class CritiqueAgent:
                 chunk_index=chunk_idx,
                 total_chunks=total_chunks,
                 depth=depth,
-                iteration=iteration
+                iteration=iteration,
+                metadata=trace_meta
             )
 
         return audit, critique_notes

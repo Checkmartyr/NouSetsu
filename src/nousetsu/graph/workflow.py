@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 import threading
 import time
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 from langgraph.graph import END, StateGraph
 
 logger = logging.getLogger(__name__)
@@ -19,6 +19,7 @@ from nousetsu.models.bible import ChapterSummary, NovelBible
 from nousetsu.models.exceptions import BatchStoppedException
 from nousetsu.models.metadata import PipelineStage, StageStatus, StepTokenUsage, TokenUsage
 from nousetsu.models.state import TranslationState
+from nousetsu.rag.models import DocumentType
 from nousetsu.skills.registry import SkillRegistry
 from nousetsu.utils.character_filter import filter_characters_for_scene
 from nousetsu.utils.chunker import LineSemanticChunker
@@ -321,6 +322,21 @@ class NovelTranslationWorkflow:
             "subdivisions_count": total_subdivisions
         }
 
+    def _get_allowed_folders(self, bible: NovelBible, current_folder: Optional[str]) -> Optional[List[str]]:
+        """Return list of historical and current volume folders up to current_folder in chronological order."""
+        if not current_folder:
+            return None
+        if hasattr(bible, "get_all_folders"):
+            order = bible.get_all_folders()
+            if order:
+                if current_folder not in order:
+                    from natsort import natsorted
+                    order = natsorted(list(set(order) | {current_folder}))
+                if current_folder in order:
+                    idx = order.index(current_folder)
+                    return order[:idx + 1]
+        return [current_folder]
+
     def _draft_step(self, state: TranslationState) -> Dict[str, Any]:
         self._check_stop(state, PipelineStage.DRAFTING)
         self.current_stage = PipelineStage.DRAFTING
@@ -373,10 +389,13 @@ class NovelTranslationWorkflow:
         rag_hits = []
         if self.enable_rag and self.rag_engine:
             try:
+                allowed_folders = self._get_allowed_folders(state.novel_bible, current_folder)
                 scene_chars = filter_characters_for_scene(state.active_characters, source_text=state.source_text)
                 char_names = " ".join([c.name for c in scene_chars[:5]])
+                extracted_term_keywords = " ".join([t.source for t in state.extracted_terms[:5] if t.source])
                 first_lines = " ".join([l.strip() for l in state.source_text.splitlines() if l.strip()][:3])
-                query_text = f"{char_names} {first_lines}".strip()[:250]
+                query_parts = [p for p in [char_names, extracted_term_keywords, first_lines] if p]
+                query_text = " ".join(query_parts).strip()[:250]
 
                 query_vec = None
                 if self.embedding_client and self.embedding_client.is_available:
@@ -386,6 +405,10 @@ class NovelTranslationWorkflow:
                     query=query_text,
                     query_vector=query_vec,
                     limit=self.rag_top_k,
+                    current_folder=current_folder,
+                    allowed_folders=allowed_folders,
+                    max_chapter_num=state.chapter_num,
+                    excluded_doc_types=[DocumentType.CHARACTER, DocumentType.GLOSSARY],
                     reranker=self.reranker if self.enable_rag_reranker else None,
                     enable_rerank=self.enable_rag_reranker
                 )
@@ -510,8 +533,12 @@ class NovelTranslationWorkflow:
         if self.enable_rag and self.rag_engine:
             if is_initial_draft:
                 try:
+                    current_folder = Path(state.source_file).parent.name if state.source_file else None
+                    allowed_folders = self._get_allowed_folders(state.novel_bible, current_folder)
                     char_names = " ".join([c.name for c in state.active_characters[:3]])
-                    query_text = f"{char_names} dialogue style canonical translation".strip() if char_names else f"Chapter {state.chapter_num} terminology canon"
+                    extracted_term_keywords = " ".join([t.source for t in state.extracted_terms[:3] if t.source])
+                    query_parts = [p for p in [char_names, extracted_term_keywords, "dialogue style canonical translation"] if p]
+                    query_text = " ".join(query_parts).strip()[:250] if char_names else f"Chapter {state.chapter_num} terminology canon"
                     query_vec = None
                     if self.embedding_client and self.embedding_client.is_available:
                         query_vec = self.embedding_client.embed_text(query_text)
@@ -519,6 +546,9 @@ class NovelTranslationWorkflow:
                         query=query_text,
                         query_vector=query_vec,
                         limit=2,
+                        current_folder=current_folder,
+                        allowed_folders=allowed_folders,
+                        max_chapter_num=state.chapter_num,
                         reranker=self.reranker if self.enable_rag_reranker else None,
                         enable_rerank=self.enable_rag_reranker
                     )
@@ -812,6 +842,8 @@ class NovelTranslationWorkflow:
         chr_rag_hits = []
         if self.enable_rag and self.rag_engine:
             try:
+                current_folder = Path(state.source_file).parent.name if state.source_file else None
+                allowed_folders = self._get_allowed_folders(state.novel_bible, current_folder)
                 scene_chars = filter_characters_for_scene(state.active_characters, source_text=state.source_text, target_text=final_text)
                 char_names = " ".join([c.name for c in scene_chars[:4]])
                 first_lines = " ".join([l.strip() for l in final_text.splitlines() if l.strip()][:2])
@@ -823,6 +855,9 @@ class NovelTranslationWorkflow:
                     query=chr_query,
                     query_vector=chr_vec,
                     limit=3,
+                    current_folder=current_folder,
+                    allowed_folders=allowed_folders,
+                    max_chapter_num=state.chapter_num,
                     reranker=self.reranker if self.enable_rag_reranker else None,
                     enable_rerank=self.enable_rag_reranker
                 )

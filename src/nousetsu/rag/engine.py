@@ -8,7 +8,7 @@ import struct
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import create_engine, delete, func, select, text
+from sqlalchemy import and_, create_engine, delete, func, or_, select, text
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -191,9 +191,13 @@ class HybridSearchEngine:
         query: str,
         limit: int = 10,
         folder: Optional[str] = None,
-        doc_type: Optional[DocumentType] = None
+        doc_type: Optional[DocumentType] = None,
+        current_folder: Optional[str] = None,
+        allowed_folders: Optional[List[str]] = None,
+        max_chapter_num: Optional[int] = None,
+        excluded_doc_types: Optional[List[DocumentType]] = None
     ) -> List[Tuple[LoreDocument, int, float]]:
-        """Perform lexical BM25 search using SQLite FTS5."""
+        """Perform lexical BM25 search using SQLite FTS5 with temporal and type filtering."""
         if not query or not query.strip():
             return []
 
@@ -210,12 +214,66 @@ class HybridSearchEngine:
                 WHERE lore_fts MATCH :query
             """
             params: Dict[str, Any] = {"query": fts_query, "limit": limit}
+
             if folder:
                 sql_str += " AND d.folder = :folder"
                 params["folder"] = folder
+            else:
+                prior_folders = [f for f in allowed_folders if f != current_folder] if (allowed_folders and current_folder) else []
+                chap_clause = "(d.chapter_num = 0 OR d.chapter_num IS NULL OR d.chapter_num < :max_chapter_num)"
+                curr_folder_clause = "((d.folder = :current_folder OR d.folder IS NULL OR d.folder = ''))" if current_folder else "((d.folder IS NULL OR d.folder = ''))"
+
+                if current_folder:
+                    params["current_folder"] = current_folder
+                if max_chapter_num is not None:
+                    params["max_chapter_num"] = max_chapter_num
+
+                if allowed_folders and current_folder:
+                    if prior_folders:
+                        pf_placeholders = [f":pf_{i}" for i in range(len(prior_folders))]
+                        for i, pf in enumerate(prior_folders):
+                            params[f"pf_{i}"] = pf
+                        pf_in = f"d.folder IN ({', '.join(pf_placeholders)})"
+                        if max_chapter_num is not None:
+                            sql_str += f" AND ({pf_in} OR ({curr_folder_clause} AND {chap_clause}))"
+                        else:
+                            all_f_placeholders = [f":af_{i}" for i in range(len(allowed_folders))]
+                            for i, af in enumerate(allowed_folders):
+                                params[f"af_{i}"] = af
+                            sql_str += f" AND (d.folder IN ({', '.join(all_f_placeholders)}) OR d.folder IS NULL OR d.folder = '')"
+                    else:
+                        if max_chapter_num is not None:
+                            sql_str += f" AND ({curr_folder_clause} AND {chap_clause})"
+                        else:
+                            sql_str += f" AND {curr_folder_clause}"
+                elif allowed_folders and not current_folder:
+                    all_f_placeholders = [f":af_{i}" for i in range(len(allowed_folders))]
+                    for i, af in enumerate(allowed_folders):
+                        params[f"af_{i}"] = af
+                    af_clause = f"(d.folder IN ({', '.join(all_f_placeholders)}) OR d.folder IS NULL OR d.folder = '')"
+                    if max_chapter_num is not None:
+                        sql_str += f" AND ({af_clause} AND {chap_clause})"
+                    else:
+                        sql_str += f" AND {af_clause}"
+                elif current_folder:
+                    if max_chapter_num is not None:
+                        sql_str += f" AND ({curr_folder_clause} AND {chap_clause})"
+                    else:
+                        sql_str += f" AND {curr_folder_clause}"
+                elif max_chapter_num is not None:
+                    sql_str += f" AND {chap_clause}"
+
             if doc_type:
                 sql_str += " AND d.doc_type = :doc_type"
-                params["doc_type"] = doc_type.value
+                params["doc_type"] = doc_type.value if isinstance(doc_type, DocumentType) else str(doc_type)
+
+            if excluded_doc_types:
+                ex_vals = [dt.value if isinstance(dt, DocumentType) else str(dt) for dt in excluded_doc_types]
+                ex_placeholders = [f":ex_dt_{i}" for i in range(len(ex_vals))]
+                for i, ev in enumerate(ex_vals):
+                    params[f"ex_dt_{i}"] = ev
+                sql_str += f" AND d.doc_type NOT IN ({', '.join(ex_placeholders)})"
+
             sql_str += " ORDER BY score ASC LIMIT :limit"
 
             try:
@@ -246,9 +304,13 @@ class HybridSearchEngine:
         query_vector: List[float],
         limit: int = 10,
         folder: Optional[str] = None,
-        doc_type: Optional[DocumentType] = None
+        doc_type: Optional[DocumentType] = None,
+        current_folder: Optional[str] = None,
+        allowed_folders: Optional[List[str]] = None,
+        max_chapter_num: Optional[int] = None,
+        excluded_doc_types: Optional[List[DocumentType]] = None
     ) -> List[Tuple[LoreDocument, int, float]]:
-        """Perform dense vector search computing cosine similarity against stored embeddings."""
+        """Perform dense vector search computing cosine similarity against stored embeddings with temporal and type filtering."""
         if not query_vector:
             return []
 
@@ -256,8 +318,66 @@ class HybridSearchEngine:
             stmt = select(LoreDocumentORM).where(LoreDocumentORM.embedding.isnot(None))
             if folder:
                 stmt = stmt.where(LoreDocumentORM.folder == folder)
+            else:
+                prior_folders = [f for f in allowed_folders if f != current_folder] if (allowed_folders and current_folder) else []
+                chapter_cond = or_(
+                    LoreDocumentORM.chapter_num == 0,
+                    LoreDocumentORM.chapter_num.is_(None),
+                    LoreDocumentORM.chapter_num < max_chapter_num
+                ) if max_chapter_num is not None else None
+
+                current_or_null_folder = or_(
+                    LoreDocumentORM.folder == current_folder,
+                    LoreDocumentORM.folder.is_(None),
+                    LoreDocumentORM.folder == ""
+                ) if current_folder else or_(
+                    LoreDocumentORM.folder.is_(None),
+                    LoreDocumentORM.folder == ""
+                )
+
+                if allowed_folders and current_folder:
+                    if prior_folders:
+                        if max_chapter_num is not None:
+                            stmt = stmt.where(or_(
+                                LoreDocumentORM.folder.in_(prior_folders),
+                                and_(current_or_null_folder, chapter_cond)
+                            ))
+                        else:
+                            stmt = stmt.where(or_(
+                                LoreDocumentORM.folder.in_(allowed_folders),
+                                LoreDocumentORM.folder.is_(None),
+                                LoreDocumentORM.folder == ""
+                            ))
+                    else:
+                        if max_chapter_num is not None:
+                            stmt = stmt.where(and_(current_or_null_folder, chapter_cond))
+                        else:
+                            stmt = stmt.where(current_or_null_folder)
+                elif allowed_folders and not current_folder:
+                    folder_in_allowed = or_(
+                        LoreDocumentORM.folder.in_(allowed_folders),
+                        LoreDocumentORM.folder.is_(None),
+                        LoreDocumentORM.folder == ""
+                    )
+                    if max_chapter_num is not None:
+                        stmt = stmt.where(and_(folder_in_allowed, chapter_cond))
+                    else:
+                        stmt = stmt.where(folder_in_allowed)
+                elif current_folder:
+                    if max_chapter_num is not None:
+                        stmt = stmt.where(and_(current_or_null_folder, chapter_cond))
+                    else:
+                        stmt = stmt.where(current_or_null_folder)
+                elif max_chapter_num is not None:
+                    stmt = stmt.where(chapter_cond)
+
             if doc_type:
-                stmt = stmt.where(LoreDocumentORM.doc_type == doc_type.value)
+                dt_val = doc_type.value if isinstance(doc_type, DocumentType) else str(doc_type)
+                stmt = stmt.where(LoreDocumentORM.doc_type == dt_val)
+
+            if excluded_doc_types:
+                ex_vals = [dt.value if isinstance(dt, DocumentType) else str(dt) for dt in excluded_doc_types]
+                stmt = stmt.where(LoreDocumentORM.doc_type.not_in(ex_vals))
 
             orm_docs = session.scalars(stmt).all()
             scored: List[Tuple[float, LoreDocumentORM]] = []
@@ -288,14 +408,36 @@ class HybridSearchEngine:
         rrf_k: int = 60,
         folder: Optional[str] = None,
         doc_type: Optional[DocumentType] = None,
+        current_folder: Optional[str] = None,
+        allowed_folders: Optional[List[str]] = None,
+        max_chapter_num: Optional[int] = None,
+        excluded_doc_types: Optional[List[DocumentType]] = None,
         reranker: Optional[Any] = None,
         enable_rerank: bool = True
     ) -> List[SearchResult]:
-        """Combine sparse and dense rankings using Reciprocal Rank Fusion (RRF), with optional Cross-Encoder reranking."""
+        """Combine sparse and dense rankings using Reciprocal Rank Fusion (RRF), with optional Cross-Encoder reranking and temporal/type filtering."""
         candidate_k = max(limit * 5, 20)
-        sparse_hits = self.search_sparse(query=query, limit=candidate_k, folder=folder, doc_type=doc_type)
+        sparse_hits = self.search_sparse(
+            query=query,
+            limit=candidate_k,
+            folder=folder,
+            doc_type=doc_type,
+            current_folder=current_folder,
+            allowed_folders=allowed_folders,
+            max_chapter_num=max_chapter_num,
+            excluded_doc_types=excluded_doc_types
+        )
         dense_hits = (
-            self.search_dense(query_vector=query_vector, limit=candidate_k, folder=folder, doc_type=doc_type)
+            self.search_dense(
+                query_vector=query_vector,
+                limit=candidate_k,
+                folder=folder,
+                doc_type=doc_type,
+                current_folder=current_folder,
+                allowed_folders=allowed_folders,
+                max_chapter_num=max_chapter_num,
+                excluded_doc_types=excluded_doc_types
+            )
             if query_vector else []
         )
 
@@ -350,3 +492,4 @@ class HybridSearchEngine:
             return reranked
 
         return scored_results[:limit]
+
