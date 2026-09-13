@@ -137,6 +137,7 @@ export const TraceTimeline: React.FC<TraceTimelineProps> = ({
 
             const inputTokens = trace.token_usage?.input_tokens || 0;
             const outputTokens = trace.token_usage?.output_tokens || 0;
+            const cachedTokens = trace.token_usage?.cached_tokens || 0;
 
             return (
               <div
@@ -206,6 +207,11 @@ export const TraceTimeline: React.FC<TraceTimelineProps> = ({
                     <Cpu className="w-3 h-3 text-slate-500" />
                     <span>
                       {inputTokens.toLocaleString()} in / {outputTokens.toLocaleString()} out
+                      {cachedTokens > 0 && (
+                        <span className="text-cyan-400 font-semibold ml-1">
+                          · ⚡{cachedTokens.toLocaleString()}
+                        </span>
+                      )}
                     </span>
                   </div>
                   <div className="flex items-center gap-1">

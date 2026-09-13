@@ -77,6 +77,11 @@ export const TraceDetail: React.FC<TraceDetailProps> = ({
             <div className="flex items-center gap-1">
               <Cpu className="w-3.5 h-3.5 text-slate-500" />
               <span>{(trace.token_usage?.total_tokens || 0).toLocaleString()} tok</span>
+              {trace.token_usage?.cached_tokens > 0 && (
+                <span className="text-cyan-400 text-[10px] font-semibold bg-cyan-950/80 border border-cyan-800/60 px-1.5 py-0.5 rounded ml-1">
+                  ⚡ {trace.token_usage.cached_tokens.toLocaleString()} cached
+                </span>
+              )}
             </div>
           </div>
         </div>
