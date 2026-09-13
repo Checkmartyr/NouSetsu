@@ -3,12 +3,43 @@ import hashlib
 import json
 import os
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+import time
+from typing import Any, Dict, List, Optional, Tuple
 import yaml
 from nousetsu.models.bible import ArcSummary, ChapterSummary, CharacterProfile, GlossaryItem, NovelBible, StyleGuide
 from nousetsu.models.config import ProjectConfig
 from nousetsu.models.metadata import ChapterMetadata, CheckpointData, PipelineStage, ProjectMetadataDocument, StageStatus
 from nousetsu.utils.language import detect_language_from_dir
+
+
+def atomic_write_file(file_path: Path, content: str, encoding: str = "utf-8") -> None:
+    """Atomically write text content using a temporary file and atomic rename."""
+    path = Path(file_path).resolve()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_name(f"{path.name}.tmp_{os.getpid()}_{time.time_ns()}")
+    try:
+        with open(tmp_path, "w", encoding=encoding) as f:
+            f.write(content)
+        os.replace(tmp_path, path)
+    except Exception:
+        if tmp_path.exists():
+            try:
+                tmp_path.unlink()
+            except Exception:
+                pass
+        raise
+
+
+def atomic_write_json(file_path: Path, data: Any, indent: int = 2) -> None:
+    """Atomically dump data as JSON."""
+    content = json.dumps(data, indent=indent, ensure_ascii=False)
+    atomic_write_file(file_path, content, encoding="utf-8")
+
+
+def atomic_write_yaml(file_path: Path, data: Any) -> None:
+    """Atomically dump data as YAML."""
+    content = yaml.safe_dump(data, allow_unicode=True, sort_keys=False)
+    atomic_write_file(file_path, content, encoding="utf-8")
 
 
 class ProjectRegistry:
@@ -39,9 +70,7 @@ class ProjectRegistry:
         return {"last_active": None, "projects": []}
 
     def _save_raw(self, data: dict) -> None:
-        self.storage_dir.mkdir(parents=True, exist_ok=True)
-        with open(self.storage_file, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
+        atomic_write_json(self.storage_file, data, indent=2)
 
     def _load_data(self) -> List[str]:
         raw = self._load_raw()
@@ -171,9 +200,7 @@ class NovelRepository:
 
     def save_config(self, config: ProjectConfig) -> None:
         """Save project configuration to .novel/config.yaml."""
-        self.novel_dir.mkdir(parents=True, exist_ok=True)
-        with open(self.config_file_path(), "w", encoding="utf-8") as f:
-            yaml.safe_dump(config.model_dump(), f, allow_unicode=True, sort_keys=False)
+        atomic_write_yaml(self.config_file_path(), config.model_dump())
 
     def initialize_project(
         self,
@@ -414,8 +441,7 @@ class NovelRepository:
         self.summaries_dir.mkdir(parents=True, exist_ok=True)
 
         data = bible.model_dump(exclude={"summaries"})
-        with open(self.bible_file_path(), "w", encoding="utf-8") as f:
-            yaml.safe_dump(data, f, allow_unicode=True, sort_keys=False)
+        atomic_write_yaml(self.bible_file_path(), data)
 
         # Save summaries as individual JSON records for fast rolling context
         for summary in bible.summaries:
@@ -425,8 +451,7 @@ class NovelRepository:
                 s_file = target_dir / f"chapter_{summary.chapter_num:04d}.json"
             else:
                 s_file = self.summaries_dir / f"chapter_{summary.chapter_num:04d}.json"
-            with open(s_file, "w", encoding="utf-8") as f:
-                json.dump(summary.model_dump(), f, indent=2, ensure_ascii=False)
+            atomic_write_json(s_file, summary.model_dump(), indent=2)
 
         # Save active and archived arcs as individual JSON records
         all_arcs = bible.get_all_arcs()
@@ -434,8 +459,7 @@ class NovelRepository:
             self.arcs_dir.mkdir(parents=True, exist_ok=True)
             for arc in all_arcs:
                 arc_file = self.arcs_dir / f"arc_{arc.arc_num:04d}.json"
-                with open(arc_file, "w", encoding="utf-8") as af:
-                    json.dump(arc.model_dump(), af, indent=2, ensure_ascii=False)
+                atomic_write_json(arc_file, arc.model_dump(), indent=2)
 
     def update_bible_memory(
         self,
@@ -613,10 +637,7 @@ class NovelRepository:
 
     def save_project_metadata_doc(self, doc: ProjectMetadataDocument) -> None:
         """Save the project-level metadata document to .novel/metadata.json."""
-        self.novel_dir.mkdir(parents=True, exist_ok=True)
-        path = self.project_metadata_file_path()
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(doc.model_dump(), f, indent=2, ensure_ascii=False)
+        atomic_write_json(self.project_metadata_file_path(), doc.model_dump(), indent=2)
 
     def load_all_metadata(self) -> Dict[str, ChapterMetadata]:
         """Return all chapter metadata for this project in a single fast read."""
@@ -626,7 +647,8 @@ class NovelRepository:
     def load_metadata(self, output_file: Path) -> Optional[ChapterMetadata]:
         """Load chapter metadata by composite folder/stem or stem from single project metadata file."""
         stem = output_file.stem
-        folder_prefix = f"{output_file.parent.name}/{stem}"
+        parent_name = output_file.parent.name if (output_file.parent and output_file.parent.name and output_file.parent.name not in [".", ""]) else "root"
+        folder_prefix = f"{parent_name}/{stem}"
         doc = self.load_project_metadata_doc()
 
         # 1. Composite key takes highest precedence for multi-folder isolation
@@ -660,7 +682,8 @@ class NovelRepository:
     def save_metadata(self, metadata: ChapterMetadata, output_file: Path) -> Path:
         """Save chapter metadata into the single project metadata file with composite and stem keys."""
         stem = output_file.stem
-        folder_prefix = f"{output_file.parent.name}/{stem}"
+        parent_name = output_file.parent.name if (output_file.parent and output_file.parent.name and output_file.parent.name not in [".", ""]) else "root"
+        folder_prefix = f"{parent_name}/{stem}"
         doc = self.load_project_metadata_doc()
         doc.chapters[folder_prefix] = metadata
         doc.chapters[stem] = metadata

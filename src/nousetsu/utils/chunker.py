@@ -156,11 +156,15 @@ class LineSemanticChunker:
         best_idx = preferred_idx
 
         quote_depth = 0
+        in_dq = False
         for i in range(min_idx):
-            quote_depth += self._quote_delta(lines[i])
+            d, in_dq = self._quote_delta(lines[i], in_dq)
+            quote_depth = max(0, quote_depth + d)
 
         for idx in range(min_idx, max_idx + 1):
-            quote_depth += self._quote_delta(lines[idx - 1]) if idx > min_idx else 0
+            if idx > min_idx:
+                d, in_dq = self._quote_delta(lines[idx - 1], in_dq)
+                quote_depth = max(0, quote_depth + d)
             
             line = lines[idx - 1] if idx - 1 < len(lines) else ""
             next_line = lines[idx] if idx < len(lines) else ""
@@ -170,7 +174,7 @@ class LineSemanticChunker:
             score = -dist * 1.5
 
             # Penalty for being inside open quote
-            if quote_depth > 0:
+            if quote_depth > 0 or in_dq:
                 score -= 50.0
 
             # Priority 1: Scene break line
@@ -189,18 +193,19 @@ class LineSemanticChunker:
 
         return best_idx
 
-    def _quote_delta(self, line: str) -> int:
-        """Returns the net change in quote nesting for a line."""
+    def _quote_delta(self, line: str, in_double_quote: bool = False) -> tuple[int, bool]:
+        """Returns the net change in quote nesting for a line and the updated double-quote state."""
         delta = 0
+        in_dq = in_double_quote
         for char in line:
             if char in self.OPEN_QUOTES:
                 delta += 1
             elif char in self.CLOSE_QUOTES:
                 delta = max(0, delta - 1)
             elif char == '"':
-                # Toggle for western double quote
-                delta = 1 if delta == 0 else 0
-        return delta
+                in_dq = not in_dq
+        dq_delta = (1 if in_dq else 0) - (1 if in_double_quote else 0)
+        return delta + dq_delta, in_dq
 
 
 def extract_tail_lines(text: str, line_count: int = 3) -> str:

@@ -161,6 +161,7 @@ class NovelAgentApp(App):
         self.runner = BatchRunner(self.repo, model_name=self.model_name)
         self.current_tasks: List[ChapterTask] = []
         self.selected_task: Optional[ChapterTask] = None
+        self.is_translating: bool = False
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -320,6 +321,7 @@ class NovelAgentApp(App):
         self.push_screen(SettingsModal(self.repo, self))
 
     def _set_translating_ui(self, is_translating: bool) -> None:
+        self.is_translating = is_translating
         try:
             btn_stop = self.query_one("#btn_stop", Button)
             btn_batch = self.query_one("#btn_batch", Button)
@@ -381,6 +383,9 @@ class NovelAgentApp(App):
 
     @work(thread=True)
     def action_translate_selected(self) -> None:
+        if self.is_translating:
+            self.notify("⚠️ Translation already in progress!", severity="warning")
+            return
         if not self.selected_task:
             self.notify("No chapter selected to translate!", severity="warning")
             return
@@ -417,6 +422,9 @@ class NovelAgentApp(App):
 
     @work(thread=True)
     def action_run_batch(self) -> None:
+        if self.is_translating:
+            self.notify("⚠️ Translation already in progress!", severity="warning")
+            return
         self.app.call_from_thread(self._set_translating_ui, True)
         self.notify("Starting batch translation...", severity="information")
         progress_panel = self.query_one("#progress_panel", ProgressPanel)

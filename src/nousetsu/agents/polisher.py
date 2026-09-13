@@ -168,10 +168,12 @@ class PolishingAgent:
         polished_parts = []
         prev_polished_tail = ""
         total_usage = TokenUsage()
+        raw_src_lines = source_text.splitlines(keepends=True) if source_text else None
 
         for chunk in draft_chunks:
             if stop_event and stop_event.is_set():
-                break
+                from nousetsu.models.exceptions import BatchStoppedException
+                raise BatchStoppedException("Polishing cancelled by user request.")
 
             chunk_idx = getattr(chunk, "chunk_index", 1)
             total_chunks = getattr(chunk, "total_chunks", len(draft_chunks))
@@ -186,9 +188,8 @@ class PolishingAgent:
 
             chunk_content = getattr(chunk, "content", str(chunk))
             chunk_source = getattr(chunk, "source_content", None)
-            if not chunk_source and source_text:
+            if not chunk_source and raw_src_lines:
                 # Sliced source lines per chunk instead of leaking the full unchunked source text
-                raw_src_lines = source_text.splitlines(keepends=True)
                 src_start = max(0, int((chunk_idx - 1) / total_chunks * len(raw_src_lines)) - 2)
                 src_end = min(len(raw_src_lines), int(chunk_idx / total_chunks * len(raw_src_lines)) + 2)
                 chunk_source = "".join(raw_src_lines[src_start:src_end])

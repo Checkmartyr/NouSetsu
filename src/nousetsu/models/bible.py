@@ -75,8 +75,9 @@ class NovelBible(BaseModel):
         return None
 
     def find_term(self, source_term: str) -> Optional[GlossaryItem]:
+        target = source_term.strip().lower()
         for item in self.glossary:
-            if item.source == source_term:
+            if item.source.strip().lower() == target:
                 return item
         return None
 

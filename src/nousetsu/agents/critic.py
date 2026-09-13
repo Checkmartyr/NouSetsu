@@ -238,8 +238,26 @@ class CritiqueAgent:
             audit.passed = (audit.fidelity_score >= 7.5 and audit.style_score >= 7.5)
             critique_notes = str(parsed.get("critique_notes", ""))
         except Exception:
-            audit.warnings.append("Critique JSON could not be parsed; default scores assigned.")
-            critique_notes = "Review prose for rhythm and verify all proper nouns."
+            # Attempt regex recovery of scores from raw text
+            m_fid = re.search(r"['\"]?fidelity_score['\"]?\s*[:=]\s*(\d+(?:\.\d+)?)", raw_content, re.IGNORECASE)
+            m_sty = re.search(r"['\"]?style_score['\"]?\s*[:=]\s*(\d+(?:\.\d+)?)", raw_content, re.IGNORECASE)
+            m_glo = re.search(r"['\"]?glossary_compliance_pct['\"]?\s*[:=]\s*(\d+(?:\.\d+)?)", raw_content, re.IGNORECASE)
+            m_notes = re.search(r"['\"]?critique_notes['\"]?\s*[:=]\s*['\"]([^'\"]+)['\"]", raw_content, re.IGNORECASE)
+
+            if m_fid or m_sty:
+                audit.fidelity_score = float(m_fid.group(1)) if m_fid else 6.0
+                audit.style_score = float(m_sty.group(1)) if m_sty else 6.0
+                audit.glossary_compliance_pct = float(m_glo.group(1)) if m_glo else 100.0
+                audit.passed = (audit.fidelity_score >= 7.5 and audit.style_score >= 7.5)
+                critique_notes = m_notes.group(1) if m_notes else "Review prose for rhythm and consistency."
+                audit.warnings.append("Critique JSON recovered via regex fallback.")
+            else:
+                audit.fidelity_score = 6.0
+                audit.style_score = 6.0
+                audit.glossary_compliance_pct = 100.0
+                audit.passed = False
+                audit.warnings.append("Critique JSON could not be parsed; conservative failing scores assigned.")
+                critique_notes = "Critique response malformed. Review prose for rhythm, zero-pronoun clarity, and verify proper nouns."
 
         return audit, critique_notes
 
@@ -258,6 +276,7 @@ class CritiqueAgent:
         **kwargs: Any
     ) -> Tuple[QualityAudit, str]:
         """Audits translation chunk-by-chunk to prevent single-prompt safety blocks and context saturation."""
+        from nousetsu.models.exceptions import BatchStoppedException
         from nousetsu.utils.rate_limiter import estimate_tokens
 
         fidelity_scores: List[float] = []
@@ -269,7 +288,7 @@ class CritiqueAgent:
 
         for chunk in chunks:
             if stop_event and stop_event.is_set():
-                break
+                raise BatchStoppedException("Critique evaluation cancelled by user request.")
 
             chunk_idx = getattr(chunk, "chunk_index", 1)
             total_chunks = getattr(chunk, "total_chunks", len(chunks))

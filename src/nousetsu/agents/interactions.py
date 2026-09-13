@@ -32,6 +32,7 @@ class GeminiInteractionsClient:
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or ""
         self._genai_client = None
+        self._http_client = None
 
         if self.api_key:
             try:
@@ -39,6 +40,26 @@ class GeminiInteractionsClient:
                 self._genai_client = google.genai.Client(api_key=self.api_key)
             except Exception as e:
                 logger.debug(f"Failed to initialize google.genai.Client: {e}")
+
+    def _get_http_client(self, timeout: float = 180.0):
+        if self._http_client is None or getattr(self._http_client, "is_closed", False):
+            import httpx
+            self._http_client = httpx.Client(
+                timeout=timeout,
+                limits=httpx.Limits(max_keepalive_connections=5, max_connections=10)
+            )
+        return self._http_client
+
+    def close(self) -> None:
+        if self._http_client is not None and not getattr(self._http_client, "is_closed", False):
+            try:
+                self._http_client.close()
+            except Exception:
+                pass
+            self._http_client = None
+
+    def __del__(self) -> None:
+        self.close()
 
     def create(
         self,
@@ -125,29 +146,29 @@ class GeminiInteractionsClient:
         if generation_config:
             payload["generation_config"] = generation_config
 
-        with httpx.Client(timeout=timeout) as client:
-            resp = client.post(url, headers=headers, json=payload)
-            if resp.status_code >= 400:
-                err_body = ""
-                try:
-                    err_json = resp.json()
-                    err_msg = err_json.get("error", {}).get("message", "")
-                    err_code = err_json.get("error", {}).get("code", "")
-                    if err_code or err_msg:
-                        err_body = f"[{err_code}] {err_msg}".strip()
-                except Exception:
-                    err_body = resp.text
-                try:
-                    resp.raise_for_status()
-                except httpx.HTTPStatusError as exc:
-                    if err_body:
-                        raise httpx.HTTPStatusError(
-                            f"{exc}: {err_body}",
-                            request=exc.request,
-                            response=exc.response
-                        ) from exc
-                    raise
-            data = resp.json()
+        client = self._get_http_client(timeout=timeout)
+        resp = client.post(url, headers=headers, json=payload)
+        if resp.status_code >= 400:
+            err_body = ""
+            try:
+                err_json = resp.json()
+                err_msg = err_json.get("error", {}).get("message", "")
+                err_code = err_json.get("error", {}).get("code", "")
+                if err_code or err_msg:
+                    err_body = f"[{err_code}] {err_msg}".strip()
+            except Exception:
+                err_body = resp.text
+            try:
+                resp.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                if err_body:
+                    raise httpx.HTTPStatusError(
+                        f"{exc}: {err_body}",
+                        request=exc.request,
+                        response=exc.response
+                    ) from exc
+                raise
+        data = resp.json()
 
         inter_id = data.get("id", "")
         inter_model = data.get("model", model)

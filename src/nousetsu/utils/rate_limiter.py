@@ -110,6 +110,10 @@ class SlidingWindowRateLimiter:
                         if freed >= tokens_needed_to_free:
                             tpm_wait = max(0.0, (ts + self.window_seconds) - now + 0.1)
                             break
+                    if tpm_wait <= 0.0 and self.token_records:
+                        # Even freeing all active records is not enough; wait for newest record to expire
+                        newest_ts = max(ts for ts, _ in self.token_records)
+                        tpm_wait = max(0.0, (newest_ts + self.window_seconds) - now + 0.1)
 
                 needed_wait = max(rpm_wait, tpm_wait)
 

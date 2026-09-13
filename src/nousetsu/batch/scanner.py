@@ -33,12 +33,23 @@ class ChapterScanner:
     def extract_chapter_num(self, path: Path, default_idx: int) -> int:
         """Extract numeric chapter index from filename using regex or fallback to sequential index."""
         name = path.stem
-        match = re.search(r"(?:chapter|ch|ep|第)?\s*(\d+)", name, re.IGNORECASE)
+        # 1. Match explicit chapter prefixes first
+        match = re.search(r"(?:chapter|ch|ep|第)[\s_\.]*(\d+)", name, re.IGNORECASE)
         if match:
             try:
                 return int(match.group(1))
             except ValueError:
                 pass
+
+        # 2. Strip volume indicators so volume numbers aren't mistaken for chapter numbers
+        cleaned = re.sub(r"(?:vol|volume|v)[\s_\.]*\d+", "", name, flags=re.IGNORECASE)
+        m = re.search(r"(\d+)", cleaned)
+        if m:
+            try:
+                return int(m.group(1))
+            except ValueError:
+                pass
+
         return default_idx
 
     def scan_directory(self, input_dir: Path, output_dir: Path) -> List[ChapterTask]:

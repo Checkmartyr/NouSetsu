@@ -319,6 +319,9 @@ class FallbackChatModel(BaseChatModel):
             self.last_model_used = self.primary_model_name
             return res
         except Exception as err:
+            from nousetsu.models.exceptions import BatchStoppedException
+            if isinstance(err, BatchStoppedException):
+                raise
             logger.warning(
                 f"⚠️ Primary model '{self.primary_model_name}' failed ({type(err).__name__}: {err}). "
                 f"Falling back to model '{self.fallback_model_name}'."

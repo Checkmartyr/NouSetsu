@@ -230,7 +230,8 @@ class EntityExtractorAgent:
 
         for chunk in chunks:
             if stop_event and stop_event.is_set():
-                break
+                from nousetsu.models.exceptions import BatchStoppedException
+                raise BatchStoppedException("Entity extraction cancelled by user request.")
 
             chunk_idx = getattr(chunk, "chunk_index", 1)
             total_chunks = getattr(chunk, "total_chunks", len(chunks))
