@@ -295,6 +295,7 @@ NouSetsu/
 │   ├── architecture.md             # System architecture, layer design, and utilities
 │   ├── novel_bible.md              # 3-tier narrative memory and Novel Bible guide
 │   ├── storage_and_checkpoints.md  # Single metadata, arc storage, and checkpoints
+│   ├── hybrid_rag.md               # Hybrid Search RAG architecture, FTS5, embeddings, & Cross-Encoder
 │   ├── tui_guide.md                # Textual TUI user guide, token analytics, and shortcuts
 │   └── api_reference.md            # Developer API reference
 ├── .novel/                         # Project metadata and persistent memory

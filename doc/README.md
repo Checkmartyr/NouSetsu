@@ -15,6 +15,7 @@ Welcome to the **NouSetsu** (濃説 / 脳説) technical documentation. This dire
 | **System Architecture** | [**`architecture.md`**](./architecture.md) | Layered architecture, component responsibilities, utilities (`rate_limiter`, `chunker`, `formatting`), FallbackChatModel failover, procedural graphs, summary migration, Hybrid RAG SQLite FTS5 engine, PromptTracker, Web Visualizer, and thread-safe cancellation. |
 | **Novel Bible & Memory** | [**`novel_bible.md`**](./novel_bible.md) | 3-tier hierarchical narrative memory (Macro premise > Meso arcs > Micro rolling chapters), cross-volume memory backfill, script-aware word boundary glossary filtering, per-scene character roster filtering, nickname discipline, automatic language detection, character registers, and style guide. |
 | **Storage & Checkpoints** | [**`storage_and_checkpoints.md`**](./storage_and_checkpoints.md) | Single project metadata document (`.novel/metadata.json`), story arc summaries (`.novel/summaries/arcs/`), prompt trace archive (`.novel/traces/`), Hybrid RAG database (`.novel/rag/lore.db`), summary migration engine, step duration tracking, paused checkpoint state machine (`PAUSED`), and SHA-256 integrity. |
+| **Hybrid Search RAG** | [**`hybrid_rag.md`**](./hybrid_rag.md) | In-depth architecture & workflow guide for LoreVault: SQLite FTS5 (BM25), Gemini Embedding 2 (3072-dim), Reciprocal Rank Fusion ($k=60$), LLM Cross-Encoder reranking, and bi-directional pipeline integration. |
 | **Terminal UI (TUI) Guide** | [**`tui_guide.md`**](./tui_guide.md) | Minimal Textual interface, bottom 2-row toolbar, active chapter progress label, Dual Reader inspection, Token Analytics dashboard (`M`), Web Traces hotkey (`W`), Volume Switcher modal (`F`), Stop button (`X`), and Bible editor. |
 | **Developer API Reference** | [**`api_reference.md`**](./api_reference.md) | Python API reference for agents, FallbackChatModel, LineSemanticChunker, workflow graph, rate limiter, ArcSummary, NovelBible hierarchy methods, summary migration, DiffPatcher, PromptTracker, HybridSearchEngine, and Pydantic models. |
 
@@ -32,6 +33,7 @@ Welcome to the **NouSetsu** (濃説 / 脳説) technical documentation. This dire
 * Master the prompt engineering, chunking flow, and safety guards of all 5 agents: [**Agents Deep Dive**](./agents_deep_dive.md).
 * Understand the decoupled modular architecture, rate limiting, and LangGraph wiring: [**System Architecture**](./architecture.md).
 * Explore the checkpointing schema, 3-tier arc storage, prompt traces, and error logging: [**Storage & Checkpoints**](./storage_and_checkpoints.md).
+* Deep dive into the two-stage retrieval, FTS5 BM25, Gemini embeddings, and Cross-Encoder reranking: [**Hybrid Search RAG**](./hybrid_rag.md).
 * Review classes, methods, rate limiters, migration engine, and agent contracts: [**API Reference**](./api_reference.md).
 
 ---
