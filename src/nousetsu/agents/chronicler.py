@@ -1,6 +1,7 @@
 """Chronicler agent for narrative continuity, summary generation, and metadata compilation."""
 import json
 import logging
+import os
 import re
 import time
 from typing import Any, List, Optional
@@ -32,10 +33,42 @@ from nousetsu.utils.translation_fallback import is_safety_block_exception
 class ChroniclerAgent:
     """Updates narrative memory, generates chapter summaries, and compiles metadata audit records."""
 
-    def __init__(self, model_name: str = "gemma-4-26b-a4b-it", fallback_model: Optional[str] = None):
+    def __init__(
+        self,
+        model_name: str = "gemma-4-26b-a4b-it",
+        fallback_model: Optional[str] = None,
+        thinking_level: Optional[str] = None,
+        thinking_budget: Optional[int] = None,
+    ):
         self.model_name = model_name
         self.fallback_model = fallback_model
-        self.llm = get_llm(model_name=model_name, fallback_model=fallback_model, temperature=0.2)
+
+        chronicler_thinking_level = (
+            thinking_level
+            or os.environ.get("NOVEL_CHRONICLER_THINKING_LEVEL")
+            or os.environ.get("NOVEL_THINKING_LEVEL")
+        )
+        chronicler_thinking_budget = None
+        if thinking_budget is not None:
+            chronicler_thinking_budget = thinking_budget
+        elif os.environ.get("NOVEL_CHRONICLER_THINKING_BUDGET"):
+            try:
+                chronicler_thinking_budget = int(os.environ["NOVEL_CHRONICLER_THINKING_BUDGET"])
+            except ValueError:
+                pass
+        elif os.environ.get("NOVEL_THINKING_BUDGET"):
+            try:
+                chronicler_thinking_budget = int(os.environ["NOVEL_THINKING_BUDGET"])
+            except ValueError:
+                pass
+
+        self.llm = get_llm(
+            model_name=model_name,
+            fallback_model=fallback_model,
+            temperature=0.2,
+            thinking_level=chronicler_thinking_level,
+            thinking_budget=chronicler_thinking_budget,
+        )
         self.last_usage: TokenUsage = TokenUsage()
         self.safety_fallbacks_used: int = 0
         self.prompt_tracker: Optional[Any] = None

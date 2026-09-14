@@ -246,6 +246,9 @@ class GeminiInteractionsChatModel(BaseChatModel):
     api_key: Optional[str] = None
     timeout: float = 180.0
     client: Optional[GeminiInteractionsClient] = None
+    thinking_level: Optional[str] = None
+    thinking_budget: Optional[int] = None
+    include_thoughts: bool = True
 
     def __init__(self, **kwargs: Any):
         super().__init__(**kwargs)
@@ -287,12 +290,39 @@ class GeminiInteractionsChatModel(BaseChatModel):
             input_data = user_inputs
 
         gen_config: Dict[str, Any] = {}
+        if self.temperature is not None:
+            gen_config["temperature"] = self.temperature
         if stop:
             gen_config["stop_sequences"] = stop
 
-        # If hybrid reasoning model, set moderate thinking level
-        if any(h in self.model_name for h in ["2.5-pro", "2.5-flash", "3.", "reasoning"]):
-            gen_config["thinking_level"] = "low"
+        # Configure thinking parameters properly under thinking_config
+        resolved_level = self.thinking_level or os.environ.get("NOVEL_THINKING_LEVEL")
+        if not resolved_level and any(h in self.model_name for h in ["2.5-pro", "2.5-flash", "3.", "reasoning"]):
+            resolved_level = "medium"
+
+        resolved_budget = self.thinking_budget
+        if resolved_budget is None and os.environ.get("NOVEL_THINKING_BUDGET"):
+            try:
+                resolved_budget = int(os.environ["NOVEL_THINKING_BUDGET"])
+            except ValueError:
+                pass
+
+        thinking_dict: Dict[str, Any] = {}
+        if resolved_level and str(resolved_level).lower() in ("0", "none", "off", "disabled"):
+            gen_config["thinking_level"] = "minimal"
+            thinking_dict["thinking_budget"] = 0
+        else:
+            if resolved_level:
+                lvl_str = str(resolved_level).lower()
+                gen_config["thinking_level"] = lvl_str
+                thinking_dict["thinking_level"] = lvl_str.upper()
+            if resolved_budget is not None:
+                thinking_dict["thinking_budget"] = resolved_budget
+            if self.include_thoughts or thinking_dict:
+                thinking_dict["include_thoughts"] = True
+
+        if thinking_dict:
+            gen_config["thinking_config"] = thinking_dict
 
         assert self.client is not None, "GeminiInteractionsClient is not initialized"
         result = self.client.create(

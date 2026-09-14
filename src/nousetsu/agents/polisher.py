@@ -1,5 +1,6 @@
 """Literary prose polisher and style editor agent."""
 import logging
+import os
 import re
 import time
 from typing import Any, Callable, List, Optional
@@ -37,11 +38,39 @@ class PolishingAgent:
         self,
         model_name: str = "gemini-3.5-flash-lite",
         fallback_model: Optional[str] = None,
-        temperature: Optional[float] = None
+        temperature: Optional[float] = None,
+        thinking_level: Optional[str] = None,
+        thinking_budget: Optional[int] = None,
     ):
         self.model_name = model_name
         self.fallback_model = fallback_model
-        self.llm = get_llm(model_name=model_name, fallback_model=fallback_model, temperature=temperature)
+
+        polisher_thinking_level = (
+            thinking_level
+            or os.environ.get("NOVEL_POLISHER_THINKING_LEVEL")
+            or os.environ.get("NOVEL_THINKING_LEVEL")
+        )
+        polisher_thinking_budget = None
+        if thinking_budget is not None:
+            polisher_thinking_budget = thinking_budget
+        elif os.environ.get("NOVEL_POLISHER_THINKING_BUDGET"):
+            try:
+                polisher_thinking_budget = int(os.environ["NOVEL_POLISHER_THINKING_BUDGET"])
+            except ValueError:
+                pass
+        elif os.environ.get("NOVEL_THINKING_BUDGET"):
+            try:
+                polisher_thinking_budget = int(os.environ["NOVEL_THINKING_BUDGET"])
+            except ValueError:
+                pass
+
+        self.llm = get_llm(
+            model_name=model_name,
+            fallback_model=fallback_model,
+            temperature=temperature,
+            thinking_level=polisher_thinking_level,
+            thinking_budget=polisher_thinking_budget,
+        )
         self.last_usage: TokenUsage = TokenUsage()
         self.safety_fallbacks_used: int = 0
         self.prompt_tracker: Optional[Any] = None

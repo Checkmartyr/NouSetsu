@@ -124,3 +124,94 @@ def test_get_llm_opt_out_interactions(monkeypatch):
     llm = get_llm(model_name="gemini-2.5-pro")
     # When opted out of interactions, returns ChatGoogleGenerativeAI or fallback
     assert not isinstance(llm, GeminiInteractionsChatModel)
+
+
+def test_gemini_interactions_thinking_config_generation():
+    mock_client = MagicMock(spec=GeminiInteractionsClient)
+    mock_result = InteractionResult(
+        id="v1_test_think",
+        model="gemini-3.5-flash-lite",
+        output_text="Result text",
+        usage=TokenUsage(input_tokens=10, output_tokens=10, thought_tokens=50, total_tokens=70)
+    )
+    mock_client.create.return_value = mock_result
+
+    # 1. Test default reasoning model gets medium thinking_level inside thinking_config
+    chat_model = GeminiInteractionsChatModel(
+        model_name="gemini-3.5-flash-lite",
+        temperature=0.3,
+        client=mock_client
+    )
+    chat_model.invoke([HumanMessage(content="Hello")])
+    call_kwargs = mock_client.create.call_args.kwargs
+    gen_cfg = call_kwargs["generation_config"]
+    assert gen_cfg["temperature"] == 0.3
+    assert "thinking_config" in gen_cfg
+    assert gen_cfg["thinking_config"]["thinking_level"] == "MEDIUM"
+    assert gen_cfg["thinking_config"]["include_thoughts"] is True
+
+    # 2. Test explicit thinking_level and thinking_budget
+    chat_model2 = GeminiInteractionsChatModel(
+        model_name="gemini-3.5-flash-lite",
+        thinking_level="high",
+        thinking_budget=2048,
+        client=mock_client
+    )
+    chat_model2.invoke([HumanMessage(content="Hello")])
+    gen_cfg2 = mock_client.create.call_args.kwargs["generation_config"]
+    assert gen_cfg2["thinking_config"]["thinking_level"] == "HIGH"
+    assert gen_cfg2["thinking_config"]["thinking_budget"] == 2048
+
+    # 3. Test disabling thinking
+    chat_model3 = GeminiInteractionsChatModel(
+        model_name="gemini-3.5-flash-lite",
+        thinking_level="off",
+        client=mock_client
+    )
+    chat_model3.invoke([HumanMessage(content="Hello")])
+    gen_cfg3 = mock_client.create.call_args.kwargs["generation_config"]
+    assert gen_cfg3["thinking_config"]["thinking_budget"] == 0
+
+
+def test_extract_usage_with_token_details():
+    msg = AIMessage(
+        content="Testing details",
+        usage_metadata={
+            "input_tokens": 100,
+            "output_tokens": 50,
+            "total_tokens": 150,
+            "output_token_details": {"reasoning": 35},
+            "input_token_details": {"cache_read": 20},
+        }
+    )
+    usage = extract_usage_from_message(msg)
+    assert usage.input_tokens == 100
+    assert usage.output_tokens == 50
+    assert usage.thought_tokens == 35
+    assert usage.cached_tokens == 20
+    assert usage.total_tokens == 150
+
+
+def test_critic_agent_thinking_defaults(monkeypatch):
+    from nousetsu.agents.critic import CritiqueAgent
+
+    created_llms = []
+    def fake_get_llm(**kwargs):
+        created_llms.append(kwargs)
+        mock_llm = MagicMock()
+        mock_llm.last_model_used = kwargs.get("model_name")
+        return mock_llm
+
+    monkeypatch.setattr("nousetsu.agents.critic.get_llm", fake_get_llm)
+    monkeypatch.delenv("NOVEL_CRITIC_THINKING_LEVEL", raising=False)
+    monkeypatch.delenv("NOVEL_THINKING_LEVEL", raising=False)
+
+    # Default should be "medium"
+    _ = CritiqueAgent(model_name="gemini-3.5-flash-lite")
+    assert created_llms[-1]["thinking_level"] == "medium"
+
+    # Environment override
+    monkeypatch.setenv("NOVEL_CRITIC_THINKING_LEVEL", "high")
+    _ = CritiqueAgent(model_name="gemini-3.5-flash-lite")
+    assert created_llms[-1]["thinking_level"] == "high"
+

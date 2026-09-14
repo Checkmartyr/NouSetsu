@@ -1,5 +1,6 @@
 """Context-aware novelistic translation drafter agent."""
 import logging
+import os
 import time
 from typing import Any, Callable, List, Optional
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -36,10 +37,38 @@ class ContextAwareDrafterAgent:
         enable_recursive_subdivision: bool = True,
         subdivision_min_lines: int = 8,
         subdivision_max_depth: int = 4,
+        thinking_level: Optional[str] = None,
+        thinking_budget: Optional[int] = None,
     ):
         self.model_name = model_name
         self.fallback_model = fallback_model
-        self.llm = get_llm(model_name=model_name, fallback_model=fallback_model, temperature=temperature)
+
+        drafter_thinking_level = (
+            thinking_level
+            or os.environ.get("NOVEL_DRAFTER_THINKING_LEVEL")
+            or os.environ.get("NOVEL_THINKING_LEVEL")
+        )
+        drafter_thinking_budget = None
+        if thinking_budget is not None:
+            drafter_thinking_budget = thinking_budget
+        elif os.environ.get("NOVEL_DRAFTER_THINKING_BUDGET"):
+            try:
+                drafter_thinking_budget = int(os.environ["NOVEL_DRAFTER_THINKING_BUDGET"])
+            except ValueError:
+                pass
+        elif os.environ.get("NOVEL_THINKING_BUDGET"):
+            try:
+                drafter_thinking_budget = int(os.environ["NOVEL_THINKING_BUDGET"])
+            except ValueError:
+                pass
+
+        self.llm = get_llm(
+            model_name=model_name,
+            fallback_model=fallback_model,
+            temperature=temperature,
+            thinking_level=drafter_thinking_level,
+            thinking_budget=drafter_thinking_budget,
+        )
         self.last_usage: TokenUsage = TokenUsage()
         self.procedural_graph = procedural_graph or get_default_drafter_graph()
         self.polisher = polisher

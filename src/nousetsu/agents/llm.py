@@ -16,12 +16,26 @@ def extract_usage_from_message(msg: Any) -> TokenUsage:
     # Case 1: Standard LangChain usage_metadata
     if hasattr(msg, "usage_metadata") and isinstance(msg.usage_metadata, dict) and msg.usage_metadata:
         um = msg.usage_metadata
+        out_details = um.get("output_token_details", {}) or {}
+        in_details = um.get("input_token_details", {}) or {}
+        thought_toks = (
+            um.get("thought_tokens")
+            or out_details.get("reasoning")
+            or out_details.get("thought_tokens")
+            or 0
+        )
+        cached_toks = (
+            um.get("cached_tokens")
+            or in_details.get("cache_read")
+            or in_details.get("cached_tokens")
+            or 0
+        )
         return TokenUsage(
             input_tokens=int(um.get("input_tokens", 0) or 0),
             output_tokens=int(um.get("output_tokens", 0) or 0),
             total_tokens=int(um.get("total_tokens", 0) or 0),
-            thought_tokens=int(um.get("thought_tokens", 0) or 0),
-            cached_tokens=int(um.get("cached_tokens", 0) or 0),
+            thought_tokens=int(thought_toks or 0),
+            cached_tokens=int(cached_toks or 0),
         )
 
     # Case 2: Response metadata from Gemini Interactions or LangChain
@@ -449,7 +463,9 @@ def _resolve_temperature(temp: Optional[float] = None) -> float:
 def _create_single_llm(
     model_name: str = "gemini-3.1-flash-lite",
     temperature: Optional[float] = None,
-    use_interactions: Optional[bool] = None
+    use_interactions: Optional[bool] = None,
+    thinking_level: Optional[str] = None,
+    thinking_budget: Optional[int] = None,
 ) -> BaseChatModel:
     """Instantiate a single LLM instance."""
     resolved_temp = _resolve_temperature(temperature)
@@ -472,20 +488,27 @@ def _create_single_llm(
                 return GeminiInteractionsChatModel(
                     model_name=model_name,
                     temperature=resolved_temp,
-                    api_key=api_key
+                    api_key=api_key,
+                    thinking_level=thinking_level,
+                    thinking_budget=thinking_budget,
                 )
             except Exception:
                 pass
 
         try:
             from langchain_google_genai import ChatGoogleGenerativeAI
-            return ChatGoogleGenerativeAI(
-                model=model_name,
-                google_api_key=api_key,
-                temperature=resolved_temp,
-                max_retries=5,
-                timeout=180
-            )
+            genai_kwargs: dict[str, Any] = {
+                "model": model_name,
+                "google_api_key": api_key,
+                "temperature": resolved_temp,
+                "max_retries": 5,
+                "timeout": 180,
+            }
+            if thinking_budget is not None:
+                genai_kwargs["thinking_budget"] = thinking_budget
+            if thinking_level is not None:
+                genai_kwargs["thinking_config"] = {"thinking_level": thinking_level.upper()}
+            return ChatGoogleGenerativeAI(**genai_kwargs)
         except Exception:
             pass
 
@@ -506,14 +529,18 @@ def get_llm(
     temperature: Optional[float] = None,
     use_interactions: Optional[bool] = None,
     fallback_model: Optional[str] = None,
-    on_fallback: Optional[Callable[[str, Exception], None]] = None
+    on_fallback: Optional[Callable[[str, Exception], None]] = None,
+    thinking_level: Optional[str] = None,
+    thinking_budget: Optional[int] = None,
 ) -> BaseChatModel:
     """Factory to instantiate appropriate LLM, optionally wrapped with automatic fallback support."""
     resolved_temp = _resolve_temperature(temperature)
     primary_llm = _create_single_llm(
         model_name=model_name,
         temperature=resolved_temp,
-        use_interactions=use_interactions
+        use_interactions=use_interactions,
+        thinking_level=thinking_level,
+        thinking_budget=thinking_budget,
     )
 
     clean_fallback = (fallback_model or "").strip()
@@ -521,7 +548,9 @@ def get_llm(
         fallback_llm = _create_single_llm(
             model_name=clean_fallback,
             temperature=resolved_temp,
-            use_interactions=use_interactions
+            use_interactions=use_interactions,
+            thinking_level=thinking_level,
+            thinking_budget=thinking_budget,
         )
         return FallbackChatModel(
             primary=primary_llm,

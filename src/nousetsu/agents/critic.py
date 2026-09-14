@@ -1,6 +1,7 @@
 """Fidelity, tone, and terminology critique agent."""
 import json
 import logging
+import os
 import re
 import time
 from typing import Any, List, Optional, Tuple
@@ -36,10 +37,39 @@ class CritiqueAgent:
         enable_recursive_subdivision: bool = True,
         subdivision_min_lines: int = 8,
         subdivision_max_depth: int = 3,
+        thinking_level: Optional[str] = None,
+        thinking_budget: Optional[int] = None,
     ):
         self.model_name = model_name
         self.fallback_model = fallback_model
-        self.llm = get_llm(model_name=model_name, fallback_model=fallback_model, temperature=0.1)
+
+        critic_thinking_level = (
+            thinking_level
+            or os.environ.get("NOVEL_CRITIC_THINKING_LEVEL")
+            or os.environ.get("NOVEL_THINKING_LEVEL")
+            or "medium"
+        )
+        critic_thinking_budget = None
+        if thinking_budget is not None:
+            critic_thinking_budget = thinking_budget
+        elif os.environ.get("NOVEL_CRITIC_THINKING_BUDGET"):
+            try:
+                critic_thinking_budget = int(os.environ["NOVEL_CRITIC_THINKING_BUDGET"])
+            except ValueError:
+                pass
+        elif os.environ.get("NOVEL_THINKING_BUDGET"):
+            try:
+                critic_thinking_budget = int(os.environ["NOVEL_THINKING_BUDGET"])
+            except ValueError:
+                pass
+
+        self.llm = get_llm(
+            model_name=model_name,
+            fallback_model=fallback_model,
+            temperature=0.1,
+            thinking_level=critic_thinking_level,
+            thinking_budget=critic_thinking_budget,
+        )
         self.last_usage: TokenUsage = TokenUsage()
         self.chunker = chunker
         self.safety_fallbacks_used: int = 0
