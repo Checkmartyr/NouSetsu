@@ -104,3 +104,27 @@ def test_no_changes_needed():
     assert applied == 0
     assert failed == 0
     assert result == original
+
+
+def test_multi_paragraph_with_blank_lines_and_trailing_whitespace():
+    original = (
+        "Paragraph one with trailing space. \n\n"
+        "Paragraph two with another trailing space. \n\n"
+        "Paragraph three unchanged.\n"
+    )
+    patch = (
+        "<<<<<<< SEARCH\n"
+        "Paragraph one with trailing space.\n\n"
+        "Paragraph two with another trailing space.\n"
+        "=======\n"
+        "Polished paragraph one.\n\n"
+        "Polished paragraph two.\n"
+        ">>>>>>>"
+    )
+    result, applied, failed = apply_search_replace_patches(original, patch)
+    assert applied == 1
+    assert failed == 0
+    assert "Polished paragraph one." in result
+    assert "Polished paragraph two." in result
+    assert "Paragraph three unchanged." in result
+

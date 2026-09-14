@@ -594,7 +594,20 @@ class NovelTranslationWorkflow:
             if any("LANGUAGE REGRESSION" in str(w) for w in audit.warnings):
                 is_source_lang = True
 
-        if not is_source_lang:
+        from nousetsu.utils.diff_patcher import is_patch_format
+        is_corrupt_audit = False
+        if (
+            is_patch_format(text_to_audit)
+            or "<<<<<<<" in text_to_audit
+            or ">>>>>>>" in text_to_audit
+            or (len(state.draft_text) > 300 and len(text_to_audit) < len(state.draft_text) * 0.4)
+        ):
+            is_corrupt_audit = True
+            logger.error("Critique audited corrupted or patch-leaking text! Rejecting from best candidate selection.")
+            if "CRITICAL ERROR: Audited text contains diff patch markers or severe truncation." not in audit.warnings:
+                audit.warnings.append("CRITICAL ERROR: Audited text contains diff patch markers or severe truncation.")
+
+        if not is_source_lang and not is_corrupt_audit:
             if is_initial_draft:
                 best_audit = audit
                 best_text = state.best_polished_text or ""
@@ -773,6 +786,20 @@ class NovelTranslationWorkflow:
             use_patch=can_use_patch
         )
 
+        # Severe Truncation & Diff Marker Leak Guard:
+        from nousetsu.utils.diff_patcher import is_patch_format
+        if (
+            is_patch_format(polished)
+            or "<<<<<<<" in polished
+            or ">>>>>>>" in polished
+            or (len(base_text) > 300 and len(polished) < len(base_text) * 0.4)
+        ):
+            logger.error(
+                f"Polisher output failed sanity checks (patch markers or severe truncation: "
+                f"{len(polished)} vs {len(base_text)} chars). Reverting to base draft text."
+            )
+            polished = base_text
+
         # Language regression guard on polished output:
         # If output reverted to source language while target is distinct, retain target language draft
         if state.novel_bible.target_language.lower() != state.novel_bible.source_language.lower():
@@ -833,6 +860,18 @@ class NovelTranslationWorkflow:
         self._notify(PipelineStage.CHRONICLING, f"Updating narrative lore, summaries, and checkpoint{skills_suffix}...", 95.0)
 
         final_text = state.best_polished_text or state.polished_text or state.draft_text
+
+        # Absolute guard against corrupted or patch-leaking final text
+        from nousetsu.utils.diff_patcher import is_patch_format
+        if (
+            is_patch_format(final_text)
+            or "<<<<<<<" in final_text
+            or ">>>>>>>" in final_text
+            or (len(state.draft_text) > 300 and len(final_text) < len(state.draft_text) * 0.4)
+        ):
+            logger.error("Final text contains diff patch markers or severe truncation! Forcing fallback to draft text.")
+            final_text = state.draft_text
+
         # Ensure final_text is not in source language if draft_text is in target language
         if (
             state.novel_bible.target_language.lower() != state.novel_bible.source_language.lower()

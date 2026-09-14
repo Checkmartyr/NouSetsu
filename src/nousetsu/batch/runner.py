@@ -217,9 +217,19 @@ class BatchRunner:
             raw_filter = str(chapter_filter).strip()
             if raw_filter:
                 filter_str = raw_filter.lower()
-                # Check if filter specifies a chapter number, e.g. "48", "048", "ch 48", "ch.48", "chapter 48", "第48話", "ep 48"
+                # Check if filter specifies a chapter range (e.g. "5-58", "ch 5 to 58", "5..58")
+                range_match = re.search(r"^(?:chapter|ch|ep|第)?\.?\s*(\d+)\s*(?:-|to|\.\.)\s*(\d+)(?:話|章)?$", filter_str, re.IGNORECASE)
+                plus_match = re.search(r"^(?:chapter|ch|ep|第)?\.?\s*(\d+)\s*(?:\+|>=)$", filter_str, re.IGNORECASE)
                 num_match = re.search(r"^(?:chapter|ch|ep|第)?\.?\s*(\d+)(?:話|章)?$", filter_str, re.IGNORECASE)
-                if num_match:
+
+                if range_match:
+                    start_num = int(range_match.group(1))
+                    end_num = int(range_match.group(2))
+                    tasks = [t for t in tasks if start_num <= t.chapter_num <= end_num]
+                elif plus_match:
+                    start_num = int(plus_match.group(1))
+                    tasks = [t for t in tasks if t.chapter_num >= start_num]
+                elif num_match:
                     target_num = int(num_match.group(1))
                     exact = [t for t in tasks if t.chapter_num == target_num]
                     if exact:

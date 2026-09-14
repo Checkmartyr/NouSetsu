@@ -22,6 +22,85 @@ def is_patch_format(text: str) -> bool:
     return "NO_CHANGES_NEEDED" in text or bool(SEARCH_REPLACE_PATTERN.search(text))
 
 
+def _find_matching_span(
+    orig_lines: list[str],
+    search_lines: list[str]
+) -> tuple[int, int]:
+    """Find start and end line indices [start, end) in orig_lines corresponding to search_lines."""
+    s_lines = list(search_lines)
+    while s_lines and not s_lines[0].strip():
+        s_lines.pop(0)
+    while s_lines and not s_lines[-1].strip():
+        s_lines.pop()
+
+    if not s_lines:
+        return -1, -1
+
+    s_len = len(s_lines)
+
+    # 1. Line-by-line whitespace-normalized match (preserves internal blank lines)
+    norm_search_rstrip = [l.rstrip() for l in s_lines]
+    for i in range(len(orig_lines) - s_len + 1):
+        if [orig_lines[i + j].rstrip() for j in range(s_len)] == norm_search_rstrip:
+            return i, i + s_len
+
+    # 2. Match with strip() on each line
+    norm_search_stripped = [l.strip() for l in s_lines]
+    for i in range(len(orig_lines) - s_len + 1):
+        if [orig_lines[i + j].strip() for j in range(s_len)] == norm_search_stripped:
+            return i, i + s_len
+
+    # 3. Flexible blank-line matching (novel paragraphs may have 1 vs 2 blank lines)
+    search_non_empty = [l.strip() for l in s_lines if l.strip()]
+    if search_non_empty:
+        target_len = len(search_non_empty)
+        for i in range(len(orig_lines)):
+            if orig_lines[i].strip() == search_non_empty[0]:
+                curr_idx = 1
+                j = i + 1
+                matched = True
+                while curr_idx < target_len and j < len(orig_lines):
+                    if orig_lines[j].strip():
+                        if orig_lines[j].strip() == search_non_empty[curr_idx]:
+                            curr_idx += 1
+                        else:
+                            matched = False
+                            break
+                    j += 1
+                if matched and curr_idx == target_len:
+                    return i, j
+
+    # 4. Fuzzy sequence matching via SequenceMatcher for slight LLM punctuation or whitespace drift
+    if search_non_empty and len(orig_lines) > 0:
+        import difflib
+        search_concat = " ".join(search_non_empty)
+        if len(search_concat) >= 30:
+            target_len = len(search_non_empty)
+            best_ratio = 0.0
+            best_span = (-1, -1)
+            for i in range(len(orig_lines)):
+                if not orig_lines[i].strip():
+                    continue
+                j = i
+                count = 0
+                while j < len(orig_lines) and count < target_len:
+                    if orig_lines[j].strip():
+                        count += 1
+                    j += 1
+                if count == target_len:
+                    cand_lines = [orig_lines[k].strip() for k in range(i, j) if orig_lines[k].strip()]
+                    cand_concat = " ".join(cand_lines)
+                    ratio = difflib.SequenceMatcher(None, search_concat, cand_concat).ratio()
+                    if ratio > best_ratio:
+                        best_ratio = ratio
+                        best_span = (i, j)
+            if best_ratio >= 0.88 and best_span[0] >= 0:
+                logger.debug(f"Matched patch search block fuzzily with ratio {best_ratio:.2f}")
+                return best_span
+
+    return -1, -1
+
+
 def apply_search_replace_patches(
     original_text: str,
     patch_text: str
@@ -66,30 +145,20 @@ def apply_search_replace_patches(
             applied += 1
             continue
 
-        # 3. Line-by-line whitespace-tolerant match
-        search_lines = [line.strip() for line in search_block.splitlines() if line.strip()]
-        if not search_lines:
-            failed += 1
-            continue
-
+        # 3. Line-based multi-tier matching
         orig_lines = current_text.splitlines()
-        found_idx = -1
-        search_len = len(search_lines)
+        search_lines = search_block.splitlines()
+        start_idx, end_idx = _find_matching_span(orig_lines, search_lines)
 
-        for i in range(len(orig_lines) - search_len + 1):
-            window = [orig_lines[i + j].strip() for j in range(search_len)]
-            if window == search_lines:
-                found_idx = i
-                break
-
-        if found_idx >= 0:
-            before_lines = orig_lines[:found_idx]
-            after_lines = orig_lines[found_idx + search_len:]
+        if start_idx >= 0 and end_idx >= start_idx:
+            before_lines = orig_lines[:start_idx]
+            after_lines = orig_lines[end_idx:]
             replacement_lines = replace_block.splitlines()
             current_text = "\n".join(before_lines + replacement_lines + after_lines)
             applied += 1
         else:
-            logger.debug(f"Failed to find search block in text: {search_block[:80]!r}...")
+            logger.warning(f"Failed to find search block in text: {search_block[:80]!r}...")
             failed += 1
 
     return current_text, applied, failed
+

@@ -123,6 +123,11 @@ class PolishingAgent:
         if not draft_text or not polished_text:
             return polished_text
 
+        # If polished_text is corrupt or contains patch markers, reject it immediately
+        if is_patch_format(polished_text) or "<<<<<<<" in polished_text or ">>>>>>>" in polished_text:
+            logger.error("Diff patch markers detected in _ensure_chapter_title_preserved! Reverting to draft text.")
+            return draft_text
+
         header_block = cls._extract_draft_chapter_header(draft_text)
         if not header_block:
             return polished_text
@@ -254,9 +259,15 @@ class PolishingAgent:
                         if "NO_CHANGES_NEEDED" in text:
                             text = draft_text
                         elif is_patch_format(text):
-                            patched_text, applied, _ = apply_search_replace_patches(draft_text, text)
+                            patched_text, applied, failed = apply_search_replace_patches(draft_text, text)
                             if applied > 0:
                                 text = patched_text
+                            else:
+                                logger.warning(f"Failed to apply any patch edits in retry ({failed} failed); falling back to draft text.")
+                                text = draft_text
+                        if is_patch_format(text) or "<<<<<<<" in text or ">>>>>>>" in text:
+                            logger.error("Diff patch markers detected in retry polished text; reverting to draft text.")
+                            text = draft_text
                         if tracker:
                             tracker.record(
                                 stage=PipelineStage.POLISHING,
@@ -307,6 +318,14 @@ class PolishingAgent:
             if applied > 0:
                 logger.info(f"Applied {applied} targeted patch edits to draft text (failed: {failed})")
                 text = patched_text
+            else:
+                logger.warning(f"Failed to apply any patch edits from polisher ({failed} failed); falling back to draft text.")
+                text = draft_text
+
+        # Absolute safety guard against diff marker leaks
+        if is_patch_format(text) or "<<<<<<<" in text or ">>>>>>>" in text:
+            logger.error("Unparsed diff patch markers detected in polished output! Forcing fallback to draft text.")
+            text = draft_text
 
         if tracker:
             tracker.record(
@@ -529,11 +548,20 @@ class PolishingAgent:
                             if len(lines) >= 2 and lines[0].startswith("```") and lines[-1].startswith("```"):
                                 text = "\n".join(lines[1:-1]).strip()
                         if is_patch_format(text):
-                            patched_chunk, applied, _ = apply_search_replace_patches(chunk_draft, text)
+                            patched_chunk, applied, failed = apply_search_replace_patches(chunk_draft, text)
                             if applied > 0:
                                 text = patched_chunk
                             elif "NO_CHANGES_NEEDED" in text:
                                 text = chunk_draft
+                            else:
+                                logger.warning(f"Failed to apply patch edits to chunk {chunk_idx} in retry ({failed} failed); retaining chunk draft.")
+                                text = chunk_draft
+                        elif "NO_CHANGES_NEEDED" in text:
+                            text = chunk_draft
+
+                        if is_patch_format(text) or "<<<<<<<" in text or ">>>>>>>" in text:
+                            logger.error(f"Unparsed diff patch markers detected in retry chunk {chunk_idx}! Reverting to chunk draft.")
+                            text = chunk_draft
                         if tracker:
                             tracker.record(
                                 stage=PipelineStage.POLISHING,
@@ -588,6 +616,14 @@ class PolishingAgent:
             if applied > 0:
                 logger.info(f"Applied {applied} patch edits to chunk {chunk_idx} (failed: {failed})")
                 text = patched_chunk
+            else:
+                logger.warning(f"Failed to apply patch edits to chunk {chunk_idx} ({failed} failed); retaining chunk draft.")
+                text = chunk_draft
+
+        # Absolute safety guard against diff marker leaks
+        if is_patch_format(text) or "<<<<<<<" in text or ">>>>>>>" in text:
+            logger.error(f"Unparsed diff patch markers detected in polished chunk {chunk_idx}! Forcing fallback to chunk draft.")
+            text = chunk_draft
 
         if tracker:
             tracker.record(
