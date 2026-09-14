@@ -4,7 +4,8 @@ import { PromptViewer } from './PromptViewer';
 import { OutputViewer } from './OutputViewer';
 import { DiffViewer } from './DiffViewer';
 import { TokenAnalytics } from './TokenAnalytics';
-import { Terminal, FileText, GitCompare, BarChart3, Code, Clock, Cpu, Calendar } from 'lucide-react';
+import { Terminal, FileText, GitCompare, BarChart3, Code, Clock, Cpu, Calendar, Coins } from 'lucide-react';
+import { calculateCost } from '../utils/pricing';
 
 export type DetailTab = 'prompts' | 'output' | 'diff' | 'analytics' | 'raw';
 
@@ -82,6 +83,10 @@ export const TraceDetail: React.FC<TraceDetailProps> = ({
                   ⚡ {trace.token_usage.cached_tokens.toLocaleString()} cached
                 </span>
               )}
+            </div>
+            <div className="flex items-center gap-1 font-mono text-[11px] text-amber-300 bg-amber-950/50 border border-amber-800/50 px-2 py-0.5 rounded">
+              <Coins className="w-3 h-3 text-amber-400" />
+              <span>{calculateCost(trace.token_usage || {}, trace.model || 'unknown').formattedTotal}</span>
             </div>
           </div>
         </div>

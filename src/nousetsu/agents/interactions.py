@@ -87,7 +87,7 @@ class GeminiInteractionsClient:
                 interaction = self._genai_client.interactions.create(**kwargs)
                 return self._parse_sdk_interaction(interaction, model)
             except Exception as sdk_err:
-                logger.debug(f"SDK interactions.create failed ({sdk_err}); attempting REST fallback...")
+                logger.warning(f"SDK interactions.create failed ({type(sdk_err).__name__}: {sdk_err}); attempting REST fallback...")
 
         # Fallback: direct HTTP POST to /v1beta/interactions
         return self._rest_create_interaction(
@@ -144,7 +144,27 @@ class GeminiInteractionsClient:
         if system_instruction:
             payload["system_instruction"] = system_instruction
         if generation_config:
-            payload["generation_config"] = generation_config
+            # Strictly whitelist valid parameters for /v1beta/interactions REST endpoint
+            # Strip invalid/nested parameters like 'thinking_config' or 'thinking_budget' that trigger HTTP 400
+            allowed_keys = {
+                "temperature",
+                "thinking_level",
+                "stop_sequences",
+                "max_output_tokens",
+                "top_p",
+                "top_k",
+                "candidate_count",
+                "presence_penalty",
+                "frequency_penalty",
+                "response_mime_type",
+                "response_schema",
+            }
+            clean_gen_config = {
+                k: v for k, v in generation_config.items()
+                if k in allowed_keys and v is not None
+            }
+            if clean_gen_config:
+                payload["generation_config"] = clean_gen_config
 
         client = self._get_http_client(timeout=timeout)
         resp = client.post(url, headers=headers, json=payload)
@@ -295,34 +315,20 @@ class GeminiInteractionsChatModel(BaseChatModel):
         if stop:
             gen_config["stop_sequences"] = stop
 
-        # Configure thinking parameters properly under thinking_config
+        # Configure thinking parameters directly in generation_config
+        # Google Interactions API (/v1beta/interactions) strictly uses generation_config["thinking_level"]
         resolved_level = self.thinking_level or os.environ.get("NOVEL_THINKING_LEVEL")
         if not resolved_level and any(h in self.model_name for h in ["2.5-pro", "2.5-flash", "3.", "reasoning"]):
             resolved_level = "medium"
 
-        resolved_budget = self.thinking_budget
-        if resolved_budget is None and os.environ.get("NOVEL_THINKING_BUDGET"):
-            try:
-                resolved_budget = int(os.environ["NOVEL_THINKING_BUDGET"])
-            except ValueError:
-                pass
-
-        thinking_dict: Dict[str, Any] = {}
-        if resolved_level and str(resolved_level).lower() in ("0", "none", "off", "disabled"):
-            gen_config["thinking_level"] = "minimal"
-            thinking_dict["thinking_budget"] = 0
-        else:
-            if resolved_level:
-                lvl_str = str(resolved_level).lower()
+        if resolved_level:
+            lvl_str = str(resolved_level).lower()
+            if lvl_str in ("0", "none", "off", "disabled"):
+                gen_config["thinking_level"] = "minimal"
+            elif lvl_str in ("minimal", "low", "medium", "high"):
                 gen_config["thinking_level"] = lvl_str
-                thinking_dict["thinking_level"] = lvl_str.upper()
-            if resolved_budget is not None:
-                thinking_dict["thinking_budget"] = resolved_budget
-            if self.include_thoughts or thinking_dict:
-                thinking_dict["include_thoughts"] = True
-
-        if thinking_dict:
-            gen_config["thinking_config"] = thinking_dict
+            else:
+                gen_config["thinking_level"] = "medium"
 
         assert self.client is not None, "GeminiInteractionsClient is not initialized"
         result = self.client.create(

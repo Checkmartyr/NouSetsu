@@ -56,7 +56,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     <header className="bg-slate-900/90 backdrop-blur border-b border-slate-800 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 gap-4">
-          
+
           {/* Logo & Mascot */}
           <div className="flex items-center gap-3 shrink-0">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-pink-500 flex items-center justify-center shadow-lg shadow-indigo-500/20 text-xl">
@@ -69,13 +69,13 @@ export const Navbar: React.FC<NavbarProps> = ({
                   Visualizer
                 </span>
               </div>
-              <p className="text-xs text-slate-400 font-medium">(=^･ω･^=) Multi-Agent Prompt & Output Traces</p>
+              <p className="text-xs text-slate-400 font-medium">Multi-Agent Prompt & Output Traces</p>
             </div>
           </div>
 
           {/* Center Column: Project Selector + Chapter Selector */}
           <div className="flex items-center gap-3 flex-1 max-w-2xl">
-            
+
             {/* TUI Project Selector Dropdown (when connected to API) */}
             {activeProject && projects.length > 0 ? (
               <div className="flex items-center gap-1.5 shrink-0 max-w-[210px]">

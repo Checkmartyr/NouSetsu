@@ -136,7 +136,7 @@ def test_gemini_interactions_thinking_config_generation():
     )
     mock_client.create.return_value = mock_result
 
-    # 1. Test default reasoning model gets medium thinking_level inside thinking_config
+    # 1. Test default reasoning model gets medium thinking_level in generation_config
     chat_model = GeminiInteractionsChatModel(
         model_name="gemini-3.5-flash-lite",
         temperature=0.3,
@@ -146,23 +146,20 @@ def test_gemini_interactions_thinking_config_generation():
     call_kwargs = mock_client.create.call_args.kwargs
     gen_cfg = call_kwargs["generation_config"]
     assert gen_cfg["temperature"] == 0.3
-    assert "thinking_config" in gen_cfg
-    assert gen_cfg["thinking_config"]["thinking_level"] == "MEDIUM"
-    assert gen_cfg["thinking_config"]["include_thoughts"] is True
+    assert gen_cfg["thinking_level"] == "medium"
+    assert "thinking_config" not in gen_cfg
 
-    # 2. Test explicit thinking_level and thinking_budget
+    # 2. Test explicit thinking_level
     chat_model2 = GeminiInteractionsChatModel(
         model_name="gemini-3.5-flash-lite",
         thinking_level="high",
-        thinking_budget=2048,
         client=mock_client
     )
     chat_model2.invoke([HumanMessage(content="Hello")])
     gen_cfg2 = mock_client.create.call_args.kwargs["generation_config"]
-    assert gen_cfg2["thinking_config"]["thinking_level"] == "HIGH"
-    assert gen_cfg2["thinking_config"]["thinking_budget"] == 2048
+    assert gen_cfg2["thinking_level"] == "high"
 
-    # 3. Test disabling thinking
+    # 3. Test disabling thinking maps to 'minimal'
     chat_model3 = GeminiInteractionsChatModel(
         model_name="gemini-3.5-flash-lite",
         thinking_level="off",
@@ -170,7 +167,7 @@ def test_gemini_interactions_thinking_config_generation():
     )
     chat_model3.invoke([HumanMessage(content="Hello")])
     gen_cfg3 = mock_client.create.call_args.kwargs["generation_config"]
-    assert gen_cfg3["thinking_config"]["thinking_budget"] == 0
+    assert gen_cfg3["thinking_level"] == "minimal"
 
 
 def test_extract_usage_with_token_details():
@@ -214,4 +211,42 @@ def test_critic_agent_thinking_defaults(monkeypatch):
     monkeypatch.setenv("NOVEL_CRITIC_THINKING_LEVEL", "high")
     _ = CritiqueAgent(model_name="gemini-3.5-flash-lite")
     assert created_llms[-1]["thinking_level"] == "high"
+
+
+def test_rest_create_interaction_sanitizes_generation_config():
+    client = GeminiInteractionsClient(api_key="test-key")
+    mock_http = MagicMock()
+    mock_http.is_closed = False
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "id": "v1_rest_test",
+        "model": "gemini-3.5-flash-lite",
+        "steps": [{"type": "model_output", "content": [{"type": "text", "text": "OK"}]}],
+        "usage": {"total_tokens": 10}
+    }
+    mock_http.post.return_value = mock_resp
+    client._http_client = mock_http
+
+    # Pass messy generation_config with invalid keys like thinking_config and thinking_budget
+    res = client._rest_create_interaction(
+        model="gemini-3.5-flash-lite",
+        input_data="Hello",
+        generation_config={
+            "temperature": 0.7,
+            "thinking_level": "medium",
+            "thinking_config": {"thinking_level": "MEDIUM"},
+            "thinking_budget": 1024,
+            "invalid_extra_param": True
+        }
+    )
+
+    assert res.output_text == "OK"
+    posted_payload = mock_http.post.call_args.kwargs["json"]
+    gen_cfg = posted_payload["generation_config"]
+    assert gen_cfg["temperature"] == 0.7
+    assert gen_cfg["thinking_level"] == "medium"
+    assert "thinking_config" not in gen_cfg
+    assert "thinking_budget" not in gen_cfg
+    assert "invalid_extra_param" not in gen_cfg
 
