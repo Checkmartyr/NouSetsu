@@ -1,6 +1,6 @@
 # 📖 NouSetsu (濃説 / 脳説)
 
-> **Enterprise-Grade Document-Level Multi-Agent Literary Translation Framework for East Asian Webnovels**  
+> **Novel Document-Level Multi-Agent Literary Translation Framework for East Asian Webnovels**  
 > *Powered by LangGraph, LangChain, Textual, and Rich.*
 
 [![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/)
