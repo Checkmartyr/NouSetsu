@@ -4,11 +4,11 @@
 > *Powered by LangGraph, LangChain, Textual, and Rich.*
 
 [![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/)
-[![Version: v0.2.0](https://img.shields.io/badge/version-v0.2.0-blue.svg)](https://github.com/Checkmartyr/NouSetsu)
+[![Version: v0.3.0](https://img.shields.io/badge/version-v0.3.0-blue.svg)](https://github.com/Checkmartyr/NouSetsu)
 [![Package Manager: uv](https://img.shields.io/badge/managed%20by-uv-purple.svg)](https://github.com/astral-sh/uv)
 [![Framework: LangGraph](https://img.shields.io/badge/agent-LangGraph-orange.svg)](https://github.com/langchain-ai/langgraph)
 [![UI: Textual](https://img.shields.io/badge/ui-Textual%20%26%20Rich-green.svg)](https://textual.textualize.io/)
-[![Tests: 288 Passed](https://img.shields.io/badge/tests-288%20passed-brightgreen.svg)](https://github.com/Checkmartyr/NouSetsu)
+[![Tests: 325 Passed](https://img.shields.io/badge/tests-325%20passed-brightgreen.svg)](https://github.com/Checkmartyr/NouSetsu)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
 ---
@@ -192,7 +192,7 @@ NouSetsu provides a comprehensive suite of subcommands for headless automation, 
 | Command | Description | Example Usage |
 | :--- | :--- | :--- |
 | `nousetsu` | Automatically launches interactive Textual TUI dashboard | `nousetsu` |
-| `nousetsu --version` | Displays current version (`nousetsu 0.2.0`) | `nousetsu -v` |
+| `nousetsu --version` | Displays current version (`nousetsu 0.3.0`) | `nousetsu -v` |
 | `nousetsu init` | Initializes a new novel project, directory structure, and Novel Bible | `nousetsu init -t "My Novel" -s Japanese -T English` |
 | `nousetsu batch` | Headless folder-to-folder batch translation with natural sorting | `nousetsu batch -p project/Villainess -F Villainess_05` |
 | `nousetsu narrative` | Renders interactive 3-tier narrative memory tree (Macro > Meso > Micro) | `nousetsu narrative -p project/Villainess` |
@@ -215,7 +215,7 @@ nousetsu batch [OPTIONS]
 | :--- | :---: | :---: | :--- |
 | `--project-dir` | `-p` | `.` | Root path to the novel project directory |
 | `--volume` | `-F` | `None` | Target specific volume subfolder (e.g. `Villainess_05`) |
-| `--chapter` | `-c` | `None` | Filter and translate a specific chapter (e.g. `48`, `"ch 48"`, `"048"`) |
+| `--chapter` | `-c` | `None` | Filter and translate a specific chapter or range (e.g. `48`, `"5-58"`, `"5+"`, `"ch 48"`) |
 | `--limit` | `-l` | `None` | Maximum number of chapters to process in this run |
 | `--force` | `-f` | `False` | Force re-translation even if chapter is already marked completed |
 | `--source-lang` | `-s` | `English` | Source language (auto-detected if East Asian script is detected) |
@@ -243,7 +243,7 @@ nousetsu batch [OPTIONS]
 The interactive Textual TUI provides complete operational control from inside your terminal:
 
 ```text
-┌─ NouSetsu v0.2.0 ───────────────────────────────────────────────┐
+┌─ NouSetsu v0.3.0 ───────────────────────────────────────────────┐
 │ 📁 Project: Villainess (Villainess_05)   🌐 English ➔ Thai       │
 ├───────────────────────────────┬─────────────────────────────────┤
 │ Chapter List                  │ Dual Reader View                │
