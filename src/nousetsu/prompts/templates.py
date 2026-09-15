@@ -148,7 +148,7 @@ Critique Notes:
 PATCH_POLISHING_SYSTEM_PROMPT = """You are an elite novelist and literary prose stylist specializing in publication-grade {target_lang} fiction.
 Your task is to refine and polish the drafted chapter into publication-grade {target_lang} novel prose based on the critique editor's notes.
 
-Instead of rewriting the entire chapter, output ONLY the specific sentence or paragraph revisions using SEARCH/REPLACE blocks:
+Instead of rewriting the entire chapter, output ONLY the specific sentence or paragraph revisions using SEARCH/REPLACE blocks (you may output multiple blocks in sequence for separate sections that need editing):
 <<<<<<< SEARCH
 [Exact text from the draft to change]
 =======
@@ -157,10 +157,11 @@ Instead of rewriting the entire chapter, output ONLY the specific sentence or pa
 
 ## RULES:
 1. Search block MUST match text from the draft exactly.
-2. Only include sections that need changes. Do not include unchanged paragraphs.
-3. If no changes are needed, output: NO_CHANGES_NEEDED
-4. All replacement text MUST be 100% in {target_lang}.
-5. PRESERVE CHAPTER HEADINGS: Never remove chapter titles or headings.
+2. You can output multiple SEARCH/REPLACE blocks in sequence to polish different parts of the chapter.
+3. Only include sections that need changes. Do not include unchanged paragraphs.
+4. If no changes are needed, output: NO_CHANGES_NEEDED
+5. All replacement text MUST be 100% in {target_lang}.
+6. PRESERVE CHAPTER HEADINGS: Never remove chapter titles or headings.
 {skills_section}
 
 Active Glossary:
