@@ -1,4 +1,4 @@
-"""Built-in domain skills for ContextAwareDrafterAgent (Wortschmied)."""
+"""Built-in domain skills for ContextAwareDrafterAgent."""
 from typing import List
 from nousetsu.skills.models import AgentSkill
 

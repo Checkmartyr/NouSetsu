@@ -27,12 +27,12 @@ graph TD
         Tracker["PromptTracker<br/>(AgentPromptTrace, ChapterTraceDocument, forensic prompt & response logging)"]
     end
 
-    subgraph Agent_Layer ["Specialized Agent Layer (German Designations)"]
-        Extractor["Stage 1: Schriftdetektiv<br/>(EntityExtractorAgent + Scan_Candidates PG)"]
-        Drafter["Stage 2: Wortschmied<br/>(ContextAwareDrafterAgent + Chunk-Aware PG + RAG k=2)"]
-        Critic["Stage 3: Zensor<br/>(CritiqueAgent + Nickname Auditor + TM RAG k=2)"]
-        Polisher["Stage 4: Feinschliff<br/>(PolishingAgent + Cadence Engine + Diff/Patch + Title Guard)"]
-        Chronicler["Stage 5: Chronist<br/>(ChroniclerAgent + 3-Tier Hierarchy + RAG Indexer k=3)"]
+    subgraph Agent_Layer ["Specialized Agent Layer"]
+        Extractor["Stage 1: Entity Extractor<br/>(EntityExtractorAgent + Scan_Candidates PG)"]
+        Drafter["Stage 2: Context-Aware Drafter<br/>(ContextAwareDrafterAgent + Chunk-Aware PG + RAG k=2)"]
+        Critic["Stage 3: Critique Agent<br/>(CritiqueAgent + Nickname Auditor + TM RAG k=2)"]
+        Polisher["Stage 4: Polishing Agent<br/>(PolishingAgent + Cadence Engine + Diff/Patch + Title Guard)"]
+        Chronicler["Stage 5: Chronicler Agent<br/>(ChroniclerAgent + 3-Tier Hierarchy + RAG Indexer k=3)"]
         LLM["LLM Client & FallbackChatModel<br/>(Per-Role Model Routing, 429 Automatic Failover)"]
     end
 
@@ -141,7 +141,7 @@ graph TD
 * **`BatchRunner`**: Sequentially translates chapters, passes updated Novel Bible state forward, manages resumption checkpoints, manages thread-safe `stop()` and `reset_stop()` signals, coordinates rate limits, and synchronizes chapter completions with the RAG knowledge store.
 
 ### 3. Agentic Workflow & Procedural Graph Layer (`src/nousetsu/graph/`)
-* **`NovelTranslationWorkflow`**: Compiles a LangGraph `StateGraph` featuring an automated **Reflection Review Loop** between `Feinschliff` and `Zensor`:
+* **`NovelTranslationWorkflow`**: Compiles a LangGraph `StateGraph` featuring an automated **Reflection Review Loop** between `PolishingAgent` and `CritiqueAgent`:
   * Evaluates fidelity and style quality thresholds (`>= 8.5/10`).
   * Employs an automated **Best-Candidate Regression Guard** to retain the highest-scoring candidate if subsequent passes degrade.
   * Emits fine-grained progress notifications (`stage_callback`) to update the TUI and CLI in real time.
@@ -152,11 +152,11 @@ graph TD
 
 ### 4. Specialized Agent Layer (`src/nousetsu/agents/`)
 Each agent possesses a single cognitive responsibility:
-* **Stage 1: `EntityExtractorAgent` (*Schriftdetektiv*)**: Discovers unknown character names, spells, items, and titles before drafting. Steered by `Scan_Candidates` procedural graph directives with anti-bloat term pruning. Records forensic traces via `PromptTracker`.
-* **Stage 2: `ContextAwareDrafterAgent` (*Wortschmied*)**: First-pass translation with zero-anaphora subject inference, character voice registers, nickname discipline, and 3-tier hierarchical narrative injection (Macro whole-story + Meso arc + Micro rolling chapters with volume badges). Inbound episodic RAG retrieves relevant past events ($k=2$). Uses script-aware word boundary filtering for active glossary and per-scene character roster filtering. Localizes procedural state to `Scene_Init` for chunk 1 and `Boundary_Continuity` for subsequent chunks. Integrates `LineSemanticChunker` for long chapters.
-* **Stage 3: `CritiqueAgent` (*Zensor*)**: Line-by-line fidelity and stylistic auditing, generating scores and remediation notes. Inbound Translation Memory (TM) RAG retrieves canonical phrasing ($k=2$). Audits nickname disparity and skipped lines.
-* **Stage 4: `PolishingAgent` (*Feinschliff*)**: High-cadence prose refinement, address form preservation, and translationese elimination across semantic chunks. Features optional **Diff / Patch Polishing Engine** (`DiffPatcher`) for token-efficient search/replace diff editing and an explicit **Chapter Title Preservation Guard** preventing heading loss or hallucination.
-* **Stage 5: `ChroniclerAgent` (*Chronist*)**: Generates episodic chapter summaries, reads inbound lore ($k=3$), evaluates arc progression and milestone climaxes, updates macro `whole_story_summary`, archives completed story arcs into `.novel/summaries/arcs/`, and automatically indexes chapter summaries and 20-line scene chunks into the Hybrid RAG database.
+* **Stage 1: `EntityExtractorAgent`**: Discovers unknown character names, spells, items, and titles before drafting. Steered by `Scan_Candidates` procedural graph directives with anti-bloat term pruning. Records forensic traces via `PromptTracker`.
+* **Stage 2: `ContextAwareDrafterAgent`**: First-pass translation with zero-anaphora subject inference, character voice registers, nickname discipline, and 3-tier hierarchical narrative injection (Macro whole-story + Meso arc + Micro rolling chapters with volume badges). Inbound episodic RAG retrieves relevant past events ($k=2$). Uses script-aware word boundary filtering for active glossary and per-scene character roster filtering. Localizes procedural state to `Scene_Init` for chunk 1 and `Boundary_Continuity` for subsequent chunks. Integrates `LineSemanticChunker` for long chapters.
+* **Stage 3: `CritiqueAgent`**: Line-by-line fidelity and stylistic auditing, generating scores and remediation notes. Inbound Translation Memory (TM) RAG retrieves canonical phrasing ($k=2$). Audits nickname disparity and skipped lines.
+* **Stage 4: `PolishingAgent`**: High-cadence prose refinement, address form preservation, and translationese elimination across semantic chunks. Features optional **Diff / Patch Polishing Engine** (`DiffPatcher`) for token-efficient search/replace diff editing and an explicit **Chapter Title Preservation Guard** preventing heading loss or hallucination.
+* **Stage 5: `ChroniclerAgent`**: Generates episodic chapter summaries, reads inbound lore ($k=3$), evaluates arc progression and milestone climaxes, updates macro `whole_story_summary`, archives completed story arcs into `.novel/summaries/arcs/`, and automatically indexes chapter summaries and 20-line scene chunks into the Hybrid RAG database.
 * **Per-Role Model Routing & `FallbackChatModel` (`src/nousetsu/agents/llm.py`)**: Resolves specialized models per stage (`extractor_model`, `drafter_model`, `critic_model`, `polisher_model`, `chronicler_model`), stripping thought tokens and automatically failing over to `fallback_model` when encountering HTTP 429 quota exhaustion.
 
 ### 5. Hybrid Search RAG Knowledge Store (`src/nousetsu/rag/`)

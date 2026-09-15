@@ -34,11 +34,11 @@ graph TD
     end
 
     subgraph "Five Pipeline Agents"
-        A1["1. Schriftdetektiv<br>(EntityExtractorAgent)"]
-        A2["2. Wortschmied<br>(ContextAwareDrafterAgent)"]
-        A3["3. Zensor<br>(CritiqueAgent)"]
-        A4["4. Feinschliff<br>(PolishingAgent)"]
-        A5["5. Chronist<br>(ChroniclerAgent)"]
+        A1["1. Entity Extractor<br>(EntityExtractorAgent)"]
+        A2["2. Context-Aware Drafter<br>(ContextAwareDrafterAgent)"]
+        A3["3. Critique Agent<br>(CritiqueAgent)"]
+        A4["4. Polishing Agent<br>(PolishingAgent)"]
+        A5["5. Chronicler Agent<br>(ChroniclerAgent)"]
     end
 
     subgraph "Domain Skills, Metrics & Utility Engine"
@@ -85,17 +85,17 @@ graph TD
 
 ---
 
-## 3. The Five Pipeline Agents (German Designations)
+## 3. The Five Pipeline Agents
 
-Each agent in the pipeline is given an official German designation reflecting its precise literary role:
+Each agent in the pipeline is given a dedicated role reflecting its precise literary function:
 
-| Stage | German Codename | Agent Class | Production Model | Source File | Core Responsibility | RAG Role |
+| Stage | Agent Role | Agent Class | Production Model | Source File | Core Responsibility | RAG Role |
 |:---:|:---|:---|:---|:---|:---|:---:|
-| **1** | **Schriftdetektiv** | [`EntityExtractorAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/extractor.py) | `gemini-3.1-flash-lite` | `src/nousetsu/agents/extractor.py` | **The Detective**: Analyzes raw chapter text *before* translation to identify unknown character names, cultivate power realms, and discover terms not yet registered in the Novel Bible. | Feeds Bible Terms |
-| **2** | **Wortschmied** | [`ContextAwareDrafterAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/drafter.py) | `gemini-3.5-flash-lite` | `src/nousetsu/agents/drafter.py` | **The Wordsmith**: Produces the initial full translation draft, resolving zero-anaphora (omitted pronouns/subjects), applying distinct dialogue registers, and strictly using active glossary terms. | Inbound ($k=2$) |
-| **3** | **Zensor** | [`CritiqueAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/critic.py) | `gemma-4-26b-a4b-it` | `src/nousetsu/agents/critic.py` | **The Inspector**: Line-by-line auditor scoring fidelity and style (0–10), detecting skipped sentences (omissions), verifying glossary compliance, and writing actionable critique notes. | Inbound TM ($k=2$) |
-| **4** | **Feinschliff** | [`PolishingAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/polisher.py) | `gemini-3.5-flash-lite` | `src/nousetsu/agents/polisher.py` | **The Stylist**: Rewrites drafted prose into publication-grade English with Diff/Patch optimization, title preservation, cadence refinement, and emotional depth. | Indirect via Notes |
-| **5** | **Chronist** | [`ChroniclerAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/chronicler.py) | `gemma-4-26b-a4b-it` | `src/nousetsu/agents/chronicler.py` | **The Memory Keeper**: Summarizes chapter events for rolling context, tracks character status shifts (injuries, deaths, breakthroughs), and compiles metadata audit records into `.novel/metadata.json`. | Bi-directional (Read $k=3$ / Write) |
+| **1** | **Entity Extractor** | [`EntityExtractorAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/extractor.py) | `gemini-3.1-flash-lite` | `src/nousetsu/agents/extractor.py` | **The Detective**: Analyzes raw chapter text *before* translation to identify unknown character names, cultivate power realms, and discover terms not yet registered in the Novel Bible. | Feeds Bible Terms |
+| **2** | **Context-Aware Drafter** | [`ContextAwareDrafterAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/drafter.py) | `gemini-3.5-flash-lite` | `src/nousetsu/agents/drafter.py` | **The Wordsmith**: Produces the initial full translation draft, resolving zero-anaphora (omitted pronouns/subjects), applying distinct dialogue registers, and strictly using active glossary terms. | Inbound ($k=2$) |
+| **3** | **Critique Agent** | [`CritiqueAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/critic.py) | `gemma-4-26b-a4b-it` | `src/nousetsu/agents/critic.py` | **The Inspector**: Line-by-line auditor scoring fidelity and style (0–10), detecting skipped sentences (omissions), verifying glossary compliance, and writing actionable critique notes. | Inbound TM ($k=2$) |
+| **4** | **Polishing Agent** | [`PolishingAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/polisher.py) | `gemini-3.5-flash-lite` | `src/nousetsu/agents/polisher.py` | **The Stylist**: Rewrites drafted prose into publication-grade English with Diff/Patch optimization, title preservation, cadence refinement, and emotional depth. | Indirect via Notes |
+| **5** | **Chronicler Agent** | [`ChroniclerAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/chronicler.py) | `gemma-4-26b-a4b-it` | `src/nousetsu/agents/chronicler.py` | **The Memory Keeper**: Summarizes chapter events for rolling context, tracks character status shifts (injuries, deaths, breakthroughs), and compiles metadata audit records into `.novel/metadata.json`. | Bi-directional (Read $k=3$ / Write) |
 
 > [!NOTE]
 > Global fallback across all agent stages is anchored by `gemini-3.5-flash-lite`, activated automatically via `FallbackChatModel` when encountering HTTP 429 quota exhaustion or API exceptions.
@@ -121,8 +121,8 @@ stateDiagram-v2
 ```
 
 ### Key Review Rules
-1. **Pass 1 Transition**: The raw draft is audited by `Zensor`, which issues critique notes. `Feinschliff` polishes the text into the first candidate.
-2. **Pass 2+ Re-Audit**: `Zensor` inspects the polished text directly against the raw source text.
+1. **Pass 1 Transition**: The raw draft is audited by `CritiqueAgent`, which issues critique notes. `PolishingAgent` polishes the text into the first candidate.
+2. **Pass 2+ Re-Audit**: `CritiqueAgent` inspects the polished text directly against the raw source text.
 3. **Quality Threshold Exit**: Both `fidelity_score >= 8.5` and `style_score >= 8.5` must be satisfied to trigger early exit.
 4. **Best-Candidate Regression Guard**: If subsequent review passes score lower than an earlier pass, the system automatically retains the highest-scoring candidate (`best_polished_text` and `best_audit`).
 
@@ -148,11 +148,11 @@ class AgentSkill(BaseModel):
 ```
 
 ### Built-in Skills Catalog (23 Skills)
-- **Extractor (`Schriftdetektiv`)**: `entity_disambiguation`, `cultivation_realm_extractor`, `relationship_mapper`.
-- **Drafter (`Wortschmied`)**: `zero_anaphora_resolution`, `name_address_fidelity`, `character_voice_differentiation`, `idiom_localization`, `litrpg_system_framing`.
-- **Critic (`Zensor`)**: `omission_detector`, `glossary_enforcer`, `hallucination_guard`, `nickname_disparity_auditor`, `tone_consistency_auditor`, `prose_cadence_auditor`.
-- **Polisher (`Feinschliff`)**: `chapter_header_preservation`, `translationese_filter`, `prose_cadence_enhancer`, `address_form_preservation`, `show_dont_tell`, `dialogue_flow`.
-- **Chronicler (`Chronist`)**: `lore_world_state_tracker`, `character_status_tracker`, `continuity_auditor`.
+- **Extractor (`EntityExtractorAgent`)**: `entity_disambiguation`, `cultivation_realm_extractor`, `relationship_mapper`.
+- **Drafter (`ContextAwareDrafterAgent`)**: `zero_anaphora_resolution`, `name_address_fidelity`, `character_voice_differentiation`, `idiom_localization`, `litrpg_system_framing`.
+- **Critic (`CritiqueAgent`)**: `omission_detector`, `glossary_enforcer`, `hallucination_guard`, `nickname_disparity_auditor`, `tone_consistency_auditor`, `prose_cadence_auditor`.
+- **Polisher (`PolishingAgent`)**: `chapter_header_preservation`, `translationese_filter`, `prose_cadence_enhancer`, `address_form_preservation`, `show_dont_tell`, `dialogue_flow`.
+- **Chronicler (`ChroniclerAgent`)**: `lore_world_state_tracker`, `character_status_tracker`, `continuity_auditor`.
 
 ### Custom Markdown Skill Files ([`src/nousetsu/skills/catalog/`](file:///D:/Code/novel_translation_Agent/src/nousetsu/skills/catalog/))
 Custom skills can be added simply by creating a `.md` file with YAML frontmatter in `src/nousetsu/skills/catalog/`:
@@ -206,13 +206,13 @@ Active skills are dynamically filtered based on:
 ### 3-Tier Hierarchical Narrative Memory (Macro > Meso > Micro)
 To prevent narrative context drift over lengthy multi-hundred chapter novels, NouSetsu organizes memory into three distinct tiers:
 1. **Macro Context (`whole_story_summary`)**: An overarching narrative synthesis of the entire novel so far, capturing long-term character goals, world state changes, and major power shifts.
-2. **Meso Context (`ArcSummary`)**: Autonomous AI detection of story arc boundaries via `Chronist` (ChroniclerAgent). Tracks arc title, core conflict, milestones achieved, and active vs. completed status. Serialized into `.novel/summaries/arcs/arc_XXXX.json`. Upon story climax resolution (`arc_completed=true`), the arc is archived into `NovelBible.archived_arcs` and synthesized into the Macro summary.
+2. **Meso Context (`ArcSummary`)**: Autonomous AI detection of story arc boundaries via `ChroniclerAgent`. Tracks arc title, core conflict, milestones achieved, and active vs. completed status. Serialized into `.novel/summaries/arcs/arc_XXXX.json`. Upon story climax resolution (`arc_completed=true`), the arc is archived into `NovelBible.archived_arcs` and synthesized into the Macro summary.
 3. **Micro Context (`ChapterSummary`)**: Immediate preceding chapter outcomes, cliffhangers, and character state changes (injuries, deaths, relationship shifts) scoped by volume folder.
 
 ### Multi-Folder & Cross-Volume Narrative Memory
 For projects structured with multiple chapter folders (e.g. `Villainess_04`, `Villainess_05`):
 - Chapter summaries are partitioned by folder (`.novel/summaries/<folder>/chapter_XXXX.json`) preventing collision.
-- `get_rolling_context()` automatically backfills narrative summaries from preceding volumes when beginning a new folder/volume, providing unbroken rolling context to `Wortschmied` (Drafter) across volume boundaries.
+- `get_rolling_context()` automatically backfills narrative summaries from preceding volumes when beginning a new folder/volume, providing unbroken rolling context to the Context-Aware Drafter across volume boundaries.
 - Context prompt entries display folder badges (e.g. `[Villainess_04] Chapter 122`) to disambiguate volume boundaries for LLM generation.
 
 ### 4-Tier Model Precedence Cascade
@@ -262,25 +262,25 @@ NouSetsu tracks end-to-end token consumption and execution latency per pipeline 
 8. **AI Safety Block Resilience & Recursive Bisection Engine**:
    - Catches commercial AI safety blocks (`prohibited_content` HTTP 400) on visceral combat or romantic intimacy.
    - Recursively bisects chunks (`bisect_text`) down to minimal sensitive snippets ($\le 8$ lines or depth 4).
-   - Translates safe portions with the primary LLM in full literary prose, while routing only the minimal sensitive sub-block to Google Translate fallback (`translate_via_google`) and `Feinschliff` polishing.
+   - Translates safe portions with the primary LLM in full literary prose, while routing only the minimal sensitive sub-block to Google Translate fallback (`translate_via_google`) and PolishingAgent polishing.
 9. **Hybrid Search RAG Knowledge Store & Cross-Encoder Reranking**:
    - Backed by zero-daemon local SQLite database (`.novel/rag/lore.db`) managed via **SQLAlchemy 2.0 ORM** (`LoreDocumentORM`).
    - Sparse lexical search powered by native SQLite **FTS5** virtual table (`lore_fts`) with BM25 ranking.
    - Dense semantic vector search using **Gemini Embedding 2** (`models/gemini-embedding-2`, 3072 dimensions) with cosine similarity.
    - Ranked candidates combined via **Reciprocal Rank Fusion (RRF, $k=60$)** and evaluated by a joint LLM **Cross-Encoder Reranker** (`LLMCrossEncoderReranker`).
-   - Fully bi-directional across pipeline agents: `Wortschmied` (episodic lore), `Zensor` (canonical TM), and `Chronist` (preceding state retrieval + auto-indexing of summaries and scene chunks).
+   - Fully bi-directional across pipeline agents: `ContextAwareDrafterAgent` (episodic lore), `CritiqueAgent` (canonical TM), and `ChroniclerAgent` (preceding state retrieval + auto-indexing of summaries and scene chunks).
 10. **KV Context Caching Prefix Stabilization**:
     - Reorders prompt templates to anchor invariant instructions, markdown format rules, and active glossaries in the opening system prompt (`GEMINI_KV_CACHE_STABLE_PREFIX`).
     - Dynamic chapter-varying text is pushed to the tail of the prompt, maximizing Gemini KV context cache hits and drastically lowering token costs.
 11. **Diff / Patch Polishing Engine & Title Preservation**:
-    - In reflection review loops, `Feinschliff` leverages [`DiffPatcher`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/diff_patcher.py) and `PATCH_POLISHING_SYSTEM_PROMPT` to generate targeted search/replace patches rather than rewriting full chapters, slashing polisher token consumption.
+    - In reflection review loops, `PolishingAgent` leverages [`DiffPatcher`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/diff_patcher.py) and `PATCH_POLISHING_SYSTEM_PROMPT` to generate targeted search/replace patches rather than rewriting full chapters, slashing polisher token consumption.
     - Automatic title preservation skill (`chapter_header_preservation`) and regex fallback guard (`_ensure_chapter_title_preserved`) prevent polisher title drop.
 12. **Forensic Prompt Tracking & Web Visualizer**:
     - [`PromptTracker`](file:///D:/Code/novel_translation_Agent/src/nousetsu/analysis/tracker.py) records system prompts, user inputs, raw outputs, and duration/token telemetry for every stage into `.novel/traces/`.
     - Integrated with Vite + React 19 + TypeScript web trace visualizer (`nousetsu web`) with real-time TUI sync via `W` hotkey.
 13. **Script-Aware Word Boundary & Scene-Level Entity/Glossary Filtering**:
     - Script-aware regex matching ensures CJK ideographs match without Latin `\b` word boundaries while ASCII terms enforce `\b` to prevent false substring matches.
-    - Dynamically filters character rosters and known glossary items per scene chunk across `Wortschmied` (Drafter), `Zensor` (Critic), and `Schriftdetektiv` (`EntityExtractorAgent`).
+    - Dynamically filters character rosters and known glossary items per scene chunk across `ContextAwareDrafterAgent` (Drafter), `CritiqueAgent` (Critic), and `EntityExtractorAgent` (Extractor).
     - Extractor filtering utilizes `max_characters=0` (preserving all matching scene characters without the 15-character dialogue cap) and `fallback_on_empty=False` (preventing synthetic dummy terms from entering extraction context).
     - Fully configurable via the 4-tier cascade: CLI flag (`--filter-extractor` / `--no-filter-extractor`), `ProjectConfig.filter_extractor_entities`, environment variable `NOVEL_FILTER_EXTRACTOR_ENTITIES`, or built-in default (`True`).
 14. **High-Performance TUI Subsystem & Memoized Rendering**:
@@ -291,7 +291,7 @@ NouSetsu tracks end-to-end token consumption and execution latency per pipeline 
     - Token analytics widget employs lazy rendering (`_dirty` flag) to avoid rebuilding 4 DataTables when running in the background.
     - List view mounts items in batch via `ListView.extend` and preserves active chapter selection across directory refreshes.
 15. **Native LangChain Structured Output & Typed Pydantic Schemas**:
-    - Migrates `Schriftdetektiv` (`EntityExtractorAgent`), `Zensor` (`CritiqueAgent`), and `Chronist` (`ChroniclerAgent`) from brittle regex / JSON parsing to native LangChain structured outputs backed by strongly typed Pydantic models (`ExtractorResult`, `CritiqueResult`, `ChroniclerResult`).
+    - Migrates `EntityExtractorAgent`, `CritiqueAgent`, and `ChroniclerAgent` from brittle regex / JSON parsing to native LangChain structured outputs backed by strongly typed Pydantic models (`ExtractorResult`, `CritiqueResult`, `ChroniclerResult`).
     - Unified `invoke_structured` utility transparently orchestrates provider schema constraints (`response_json_schema`), `FallbackChatModel` secondary failover on 429 quota exhaustion, `MockNovelLLM` zero-network testing, and emergency regex parsing recovery.
     - Preserves `include_raw=True` for full token usage (`usage_metadata`, `thought_tokens`) and forensic trace logging via `PromptTracker`.
 
@@ -430,34 +430,34 @@ For the complete in-depth architectural handbook with flowcharts, method contrac
 
 ### Summary of Agent Files & Contracts
 
-#### 1. Schriftdetektiv — Pre-Translation Entity Detective
+#### 1. Entity Extractor — Pre-Translation Entity Detective
 - **Document**: [`doc/agents/01_entity_extractor.md`](file:///D:/Code/novel_translation_Agent/doc/agents/01_entity_extractor.md)
 - **Source File**: [`src/nousetsu/agents/extractor.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/extractor.py)
 - **Class**: `EntityExtractorAgent` | **Model**: `gemini-3.1-flash-lite` (Fallback: `gemini-3.5-flash-lite`)
 - **Signature**: `extract(source_text, bible, chunks=None, ...) -> Tuple[List[CharacterProfile], List[GlossaryItem]]`
 - **Core Role**: Discovers unregistered character names, realms, and terminology prior to drafting. Wraps source in analytical task framing to bypass safety blocks. Prunes conversational noise via Procedural Graphs. Logs prompt traces to `PromptTracker`.
 
-#### 2. Wortschmied — Context-Aware Literary Drafter
+#### 2. Context-Aware Drafter — Literary Drafter
 - **Document**: [`doc/agents/02_drafter.md`](file:///D:/Code/novel_translation_Agent/doc/agents/02_drafter.md)
 - **Source File**: [`src/nousetsu/agents/drafter.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/drafter.py)
 - **Class**: `ContextAwareDrafterAgent` | **Model**: `gemini-3.5-flash-lite`
 - **Signature**: `draft(source_text, bible, active_characters, active_glossary, rolling_summaries, genre, chunks=None, rag_results=None, ...) -> str`
 - **Core Role**: Produces initial publication-quality prose draft. Resolves zero-anaphora (omitted subjects/pronouns). Integrates episodic lore ($k=2$) from RAG. Features recursive binary bisection (`bisect_text`) with Google Translate fallback on sensitive scenes. Uses per-scene character filtering and stabilized KV cache prefixes.
 
-#### 3. Zensor — Line-by-Line Quality Auditor
+#### 3. Critique Agent — Line-by-Line Quality Auditor
 - **Document**: [`doc/agents/03_critic.md`](file:///D:/Code/novel_translation_Agent/doc/agents/03_critic.md)
 - **Class**: `CritiqueAgent` | **Model**: `gemma-4-26b-a4b-it` (Fallback: `gemini-3.5-flash-lite`)
 - **Signature**: `evaluate(source_text, draft_text, bible, active_characters, active_glossary, genre, chunks=None, rag_context=None, ...) -> Tuple[QualityAudit, str]`
 - **Core Role**: Scores fidelity (0–10) and style (0–10). Detects omissions, glossary non-compliance, and register flattening. Integrates canonical Translation Memory (TM) snippets ($k=2$) from RAG on Pass 1. Enforces language regression fail-safe and logs prompt traces.
 
-#### 4. Feinschliff — Publication Prose Stylist
+#### 4. Polishing Agent — Publication Prose Stylist
 - **Document**: [`doc/agents/04_polisher.md`](file:///D:/Code/novel_translation_Agent/doc/agents/04_polisher.md)
 - **Source File**: [`src/nousetsu/agents/polisher.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/polisher.py)
 - **Class**: `PolishingAgent` | **Model**: `gemini-3.5-flash-lite`
 - **Signature**: `polish(draft_text, critique_notes, active_glossary, bible, source_text=None, genre=None, chunks=None, ...) -> str`
 - **Core Role**: Rewrites drafted prose based on critique notes. Purges machine-translation tropes ("couldn't help but", "as expected of"). Features Diff/Patch block replacement mode (`DiffPatcher`), chapter title preservation guard, and language regression guard.
 
-#### 5. Chronist — Narrative Memory & Lore Keeper
+#### 5. Chronicler Agent — Narrative Memory & Lore Keeper
 - **Document**: [`doc/agents/05_chronicler.md`](file:///D:/Code/novel_translation_Agent/doc/agents/05_chronicler.md)
 - **Source File**: [`src/nousetsu/agents/chronicler.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/chronicler.py)
 - **Class**: `ChroniclerAgent` | **Model**: `gemma-4-26b-a4b-it` (Fallback: `gemini-3.5-flash-lite`)

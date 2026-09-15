@@ -173,7 +173,7 @@ graph TD
     
     Macro --> Meso
     Meso --> Micro
-    Micro --> Drafter["Wortschmied (Drafter System Prompt < 500 tokens)"]
+    Micro --> Drafter["Drafter (ContextAwareDrafterAgent System Prompt < 500 tokens)"]
 ```
 
 ### 1. Macro Context (`whole_story_summary`)
@@ -186,7 +186,7 @@ graph TD
   ```
 
 ### 2. Meso Context: Story Arcs (`ArcSummary`)
-* **Autonomous AI Boundary Detection**: `Chronist` (ChroniclerAgent) monitors narrative tension, character breakthroughs, and climax events.
+* **Autonomous AI Boundary Detection**: `ChroniclerAgent` monitors narrative tension, character breakthroughs, and climax events.
 * **Fields**:
   * `arc_id`: Unique identifier (e.g. `arc_0001`).
   * `arc_num`: Sequential arc index.
@@ -221,13 +221,13 @@ In East Asian webnovels, characters alternate between formal names, titles, and 
 * Erroneously invent nicknames in formal third-person narration where none exist.
 
 ### The 3-Agent Enforcement Protocol
-1. **Drafter (`Wortschmied`)**:
+1. **Drafter (`ContextAwareDrafterAgent`)**:
    - Activated via skill `name_address_fidelity` and Procedural Graph node `Name_Discipline`.
    - Directs the LLM: *"When dialogue uses an affectionate nickname, preserve the exact nickname. When dialogue uses the formal name, do NOT substitute a nickname."*
-2. **Critic (`Zensor`)**:
+2. **Critic (`CritiqueAgent`)**:
    - Activated via skill `nickname_disparity_auditor`.
    - Audits dialogue line-by-line against raw source text, flagging unprovoked name/nickname swaps.
-3. **Polisher (`Feinschliff`)**:
+3. **Polisher (`PolishingAgent`)**:
    - Activated via skill `address_form_preservation`.
    - Forbids smoothing or modernizing intimate address forms into generic English equivalents.
 

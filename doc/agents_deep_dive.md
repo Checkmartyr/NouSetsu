@@ -8,13 +8,13 @@
 ## 📑 Table of Contents
 
 1. [Executive Summary & Pipeline Architecture](#1-executive-summary--pipeline-architecture)
-2. [Stage 1: Schriftdetektiv (EntityExtractorAgent)](#2-stage-1-schriftdetektiv-entityextractoragent)
+2. [Stage 1: Entity Extractor (EntityExtractorAgent)](#2-stage-1-entity-extractor-entityextractoragent)
    - [2.5 Procedural Graph Steering & Anti-Bloat Pitfalls (arXiv:2609.09153v1)](#25-procedural-graph-steering--anti-bloat-pitfalls-arxiv260909153v1)
-3. [Stage 2: Wortschmied (ContextAwareDrafterAgent)](#3-stage-2-wortschmied-contextawaredrafteragent)
+3. [Stage 2: Context-Aware Drafter (ContextAwareDrafterAgent)](#3-stage-2-context-aware-drafter-contextawaredrafteragent)
    - [3.5 Procedural Graph Directives & Offline Evolution (arXiv:2609.09153v1)](#35-procedural-graph-directives--offline-evolution-arxiv260909153v1)
-4. [Stage 3: Zensor (CritiqueAgent)](#4-stage-3-zensor-critiqueagent)
-5. [Stage 4: Feinschliff (PolishingAgent)](#5-stage-4-feinschliff-polishingagent)
-6. [Stage 5: Chronist (ChroniclerAgent)](#6-stage-5-chronist-chronicleragent)
+4. [Stage 3: Critique Agent (CritiqueAgent)](#4-stage-3-critique-agent-critiqueagent)
+5. [Stage 4: Polishing Agent (PolishingAgent)](#5-stage-4-polishing-agent-polishingagent)
+6. [Stage 5: Chronicler Agent (ChroniclerAgent)](#6-stage-5-chronicler-agent-chronicleragent)
 7. [The Reflection Review Loop & Quality Gating](#7-the-reflection-review-loop--quality-gating)
 8. [Cross-Cutting Infrastructure: Routing, Rate Limiting & Fallback](#8-cross-cutting-infrastructure-routing-rate-limiting--fallback)
 9. [End-to-End Real-World Scenario Walkthrough](#9-end-to-end-real-world-scenario-walkthrough)
@@ -33,22 +33,22 @@ Traditional machine translation (MT) models attempt to perform translation in a 
 
 ```mermaid
 flowchart TD
-    Raw["Raw Source Chapter (.txt / .md)"] --> A1["Stage 1: Schriftdetektiv<br/>(EntityExtractorAgent)"]
+    Raw["Raw Source Chapter (.txt / .md)"] --> A1["Stage 1: Entity Extractor<br/>(EntityExtractorAgent)"]
     Bible[("Novel Bible<br/>(bible.yaml)")] <--> A1
     
-    A1 -->|"Active Characters & Terms"| A2["Stage 2: Wortschmied<br/>(ContextAwareDrafterAgent)"]
+    A1 -->|"Active Characters & Terms"| A2["Stage 2: Context-Aware Drafter<br/>(ContextAwareDrafterAgent)"]
     Bible -->|"Style Guide & Memory"| A2
     Summaries[("Rolling Summaries<br/>(Past 3 Chapters)")] --> A2
     
-    A2 -->|"Raw Translation Draft"| A3["Stage 3: Zensor<br/>(CritiqueAgent)"]
+    A2 -->|"Raw Translation Draft"| A3["Stage 3: Critique Agent<br/>(CritiqueAgent)"]
     Raw -->|"Original Ground Truth"| A3
     
     subgraph Reflection_Loop ["LangGraph Reflection Review Loop (Max 3 Loops)"]
-        A3 -->|"Critique Notes & Scores"| A4["Stage 4: Feinschliff<br/>(PolishingAgent)"]
+        A3 -->|"Critique Notes & Scores"| A4["Stage 4: Polishing Agent<br/>(PolishingAgent)"]
         A4 -->|"Polished Prose Candidate"| A3
     end
     
-    A3 -->|"Fidelity & Style >= 8.5<br/>(Best Candidate Guard)"| A5["Stage 5: Chronist<br/>(ChroniclerAgent)"]
+    A3 -->|"Fidelity & Style >= 8.5<br/>(Best Candidate Guard)"| A5["Stage 5: Chronicler Agent<br/>(ChroniclerAgent)"]
     A5 -->|"Episodic Synopsis & Lore"| Bible
     A5 -->|"Consolidated Metadata"| Meta[(".novel/metadata.json")]
     A5 -->|"Final Output"| Out["Translated Chapter (.md)"]
@@ -56,9 +56,9 @@ flowchart TD
 
 ---
 
-## 2. Stage 1: Schriftdetektiv (`EntityExtractorAgent`)
+## 2. Stage 1: Entity Extractor (`EntityExtractorAgent`)
 
-* **German Designation**: *Schriftdetektiv* (The Detective / Script Investigator)
+* **Agent Role**: **Entity Extractor** (The Detective / Script Investigator)
 * **Source Module**: [`src/nousetsu/agents/extractor.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/extractor.py)
 * **Default Model**: `gemini-3.1-flash-lite` (Configurable via `extractor_model`)
 * **Default Temperature**: `0.1` (Deterministic, low hallucination)
@@ -66,7 +66,7 @@ flowchart TD
 ### 2.1 Core Cognitive Purpose
 In webnovels, authors introduce new side characters, magical spells, sects, and artifacts without formal introduction. If drafting begins immediately, the translator engine will guess pronunciations or transliterations arbitrarily, corrupting series continuity.
 
-`Schriftdetektiv` operates **ahead of translation**. It inspects raw source chapter text, cross-references all known entities in the **Novel Bible**, isolates newly introduced proper nouns, and creates canonical target-language proposals.
+`EntityExtractorAgent` operates **ahead of translation**. It inspects raw source chapter text, cross-references all known entities in the **Novel Bible**, isolates newly introduced proper nouns, and creates canonical target-language proposals.
 
 ### 2.2 Context Ingestion & Assembly
 Before prompting the LLM, the extractor constructs an active context payload:
@@ -113,34 +113,34 @@ The agent invokes the model with [`EXTRACTION_SYSTEM_PROMPT`](file:///D:/Code/no
 ```
 
 ### 2.4 Parsing Resilience & Error Recovery
-LLMs occasionally wrap JSON in markdown formatting (````json ... ````) or include leading/trailing remarks. `Schriftdetektiv` executes a multi-layer parser:
+LLMs occasionally wrap JSON in markdown formatting (````json ... ````) or include leading/trailing remarks. `EntityExtractorAgent` executes a multi-layer parser:
 1. Strips internal reasoning thought tokens (`extract_text_from_message`).
 2. Applies regex fence extraction: `re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", raw_content)`.
 3. Validates each object using Pydantic V2 (`CharacterProfile.model_validate` and `GlossaryItem.model_validate`).
 4. If JSON parsing completely fails, falls back gracefully to empty lists without crashing the workflow.
 
 ### 2.5 Procedural Graph Steering & Anti-Bloat Pitfalls (arXiv:2609.09153v1)
-`Schriftdetektiv` uses a lightweight, deterministic [`ProceduralGraph`](file:///D:/Code/novel_translation_Agent/src/nousetsu/graph/procedural.py) to guide entity extraction without runtime guidance LLM overhead:
+`EntityExtractorAgent` uses a lightweight, deterministic [`ProceduralGraph`](file:///D:/Code/novel_translation_Agent/src/nousetsu/graph/procedural.py) to guide entity extraction without runtime guidance LLM overhead:
 - **Active Node**: `Scan_Candidates` -> `Filter_Known` -> `Deduce_Profiles` -> `Prune_Trivial_Terms`.
 - **Injected Directives (< 80 tokens)**: Directs the model to check honorific suffixes (`-san`, `-sama`) before guessing character gender, and strictly bans extracting conversational verbs, everyday adjectives, greetings, or generic titles as new terms.
 - **Token Efficiency**: Prevents dumping dozens of trivial words into JSON output, saving 300–800 output tokens per chapter.
 
 ---
 
-## 3. Stage 2: Wortschmied (`ContextAwareDrafterAgent`)
+## 3. Stage 2: Context-Aware Drafter (`ContextAwareDrafterAgent`)
 
-* **German Designation**: *Wortschmied* (The Wordsmith)
+* **Agent Role**: **Context-Aware Drafter** (The Wordsmith)
 * **Source Module**: [`src/nousetsu/agents/drafter.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/drafter.py)
 * **Default Model**: `gemini-3.5-flash-lite` (Configurable via `drafter_model`)
 * **Default Temperature**: `0.3` (Creative narrative flexibility while retaining prompt adherence)
 
 ### 3.1 Core Cognitive Purpose
-`Wortschmied` produces the complete initial translation draft. Its primary mission is solving the **Zero-Anaphora Dilemma** and establishing distinct character voices while strictly following the Novel Bible's style guide.
+The `ContextAwareDrafterAgent` produces the complete initial translation draft. Its primary mission is solving the **Zero-Anaphora Dilemma** and establishing distinct character voices while strictly following the Novel Bible's style guide.
 
 ### 3.2 Zero-Anaphora Resolution Algorithm & 3-Tier Context Triangulation
 In Japanese and Chinese, sentences routinely omit subjects:
 $$\text{Original: } \text{部屋に入った。剣を抜いた。微笑んだ。}$$
-Literal MT engines guess actors randomly ("*I entered... He drew... She smiled.*"). `Wortschmied` resolves omitted pronouns through four-point triangulation:
+Literal MT engines guess actors randomly ("*I entered... He drew... She smiled.*"). The Drafter resolves omitted pronouns through four-point triangulation:
 1. **Scene Presence Matrix**: Ingests active characters registered in the Novel Bible to know exactly who is inside the current room or combat encounter.
 2. **Honorific & Verb Register Hierarchy**: Japanese speech markers (e.g. `仰った` vs `申した`, or sentence-ending particles `わ`, `ぜ`, `のだ`) definitively identify speaker social status and gender.
 3. **3-Tier Hierarchical Narrative Context**:
@@ -153,7 +153,7 @@ Literal MT engines guess actors randomly ("*I entered... He drew... She smiled.*
 
 ### 3.3 Dynamic Glossary Relevance Filtering
 If a novel has a 500-term glossary, injecting all 500 terms into the drafting prompt causes prompt bloat, increases latency, and exceeds token budgets.
-`Wortschmied` performs an **in-memory relevance filter**:
+The Drafter performs an **in-memory relevance filter**:
 ```python
 relevant_glossary = [
     item for item in active_glossary
@@ -171,7 +171,7 @@ When a chapter exceeds `chunk_threshold_lines` (default: 85 lines), translating 
 ```mermaid
 sequenceDiagram
     participant Chunker as LineSemanticChunker
-    participant Drafter as Wortschmied
+    participant Drafter as Context-Aware Drafter
     
     Chunker->>Drafter: Chunk 1 (Lines 1-72)
     Drafter->>Drafter: Drafts Chunk 1
@@ -194,20 +194,20 @@ To preserve boundary continuity and eliminate pronoun hallucination with minimal
 
 ---
 
-## 4. Stage 3: Zensor (`CritiqueAgent`)
+## 4. Stage 3: Critique Agent (`CritiqueAgent`)
 
-* **German Designation**: *Zensor* (The Inspector / Censor)
+* **Role**: The Inspector & Quality Auditor
 * **Source Module**: [`src/nousetsu/agents/critic.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/critic.py)
 * **Default Model**: `gemma-4-26b-a4b-it` (Configurable via `critic_model`)
 * **Default Temperature**: `0.1` (Strict, dispassionate evaluation)
 
 ### 4.1 Core Cognitive Purpose
-`Zensor` acts as an adversarial, independent quality auditor. It never trusts the drafter or polisher blindly. It compares the candidate translation line-by-line against the original source text to detect semantic omissions, hallucinated plot points, character voice drift, and terminology errors.
+`CritiqueAgent` acts as an adversarial, independent quality auditor. It never trusts the drafter or polisher blindly. It compares the candidate translation line-by-line against the original source text to detect semantic omissions, hallucinated plot points, character voice drift, and terminology errors.
 
 ### 4.2 Dual-Pass Auditing Topology
-`Zensor` is invoked multiple times during chapter processing:
-* **Pass 1 Audit**: Audits the raw draft produced by `Wortschmied` against the raw source text. Produces initial baseline scores and actionable notes for the polisher.
-* **Pass 2+ Re-Audit**: Audits the refined prose produced by `Feinschliff` directly against the raw source text. Verifies whether previous critique notes were resolved and checks for any newly introduced drift.
+`CritiqueAgent` is invoked multiple times during chapter processing:
+* **Pass 1 Audit**: Audits the raw draft produced by `ContextAwareDrafterAgent` against the raw source text. Produces initial baseline scores and actionable notes for the polisher.
+* **Pass 2+ Re-Audit**: Audits the refined prose produced by `PolishingAgent` directly against the raw source text. Verifies whether previous critique notes were resolved and checks for any newly introduced drift.
 
 ### 4.3 Evaluation Metrics & Scoring Rubric
 The agent produces a structured [`QualityAudit`](file:///D:/Code/novel_translation_Agent/src/nousetsu/models/metadata.py) record:
@@ -219,7 +219,7 @@ The agent produces a structured [`QualityAudit`](file:///D:/Code/novel_translati
 ### 4.4 Automated Programmatic Safety Guards
 
 #### A. Programmatic Glossary Verification
-In addition to LLM self-reporting, `Zensor` executes deterministic programmatic verification:
+In addition to LLM self-reporting, `CritiqueAgent` executes deterministic programmatic verification:
 ```python
 # Programmatic check only against glossary terms present in source text
 source_present_terms = filter_glossary_for_scene(
@@ -237,7 +237,7 @@ if missing_terms:
 ```
 
 #### B. Critical Language Regression Guard
-If an LLM hallucinates or loops back into translating target English into source Japanese, `Zensor` executes zero-dependency script analysis via [`detect_language`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/language.py):
+If an LLM hallucinates or loops back into translating target English into source Japanese, `CritiqueAgent` executes zero-dependency script analysis via [`detect_language`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/language.py):
 ```python
 if bible.target_language.lower() != bible.source_language.lower():
     detected_lang = detect_language(draft_text)
@@ -250,13 +250,13 @@ if bible.target_language.lower() != bible.source_language.lower():
 This forces an immediate quality audit failure, preventing corrupted text from exiting the review loop.
 
 #### C. Nickname & Address Form Disparity Audit
-Guided by the `nickname_disparity_auditor` skill, `Zensor` actively flags when a character's formal name in narrative prose is carelessly replaced with an affectionate or shortened nickname, or when dialogue arbitrarily drops polite Japanese/Chinese/Korean address suffixes (`-sama`, `-san`, `Gege`, `Sunbaenim`) against the style guide.
+Guided by the `nickname_disparity_auditor` skill, `CritiqueAgent` actively flags when a character's formal name in narrative prose is carelessly replaced with an affectionate or shortened nickname, or when dialogue arbitrarily drops polite Japanese/Chinese/Korean address suffixes (`-sama`, `-san`, `Gege`, `Sunbaenim`) against the style guide.
 
 ---
 
-## 5. Stage 4: Feinschliff (`PolishingAgent`)
+## 5. Stage 4: Polishing Agent (`PolishingAgent`)
 
-* **German Designation**: *Feinschliff* (The Fine Polish / Lapidary)
+* **Role**: The Stylist & Prose Refiner
 * **Source Module**: [`src/nousetsu/agents/polisher.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/polisher.py)
 * **Default Model**: `gemini-3.5-flash-lite` (Configurable via `polisher_model`)
 * **Default Temperature**: `0.3` (Literary flair, cadence variety, rich vocabulary)
@@ -264,10 +264,10 @@ Guided by the `nickname_disparity_auditor` skill, `Zensor` actively flags when a
 ### 5.1 Core Cognitive Purpose
 Raw translation drafts—even when accurate—frequently sound like translated text. They suffer from syntactic rigidity, repetitive sentence structures, and passive voice.
 
-`Feinschliff` transforms the raw draft into **publication-grade literary prose**. It refines sentence cadence, eliminates translationese, preserves authentic address forms (`address_form_preservation`), implements "Show, Don't Tell" principles, and addresses every critique note generated by `Zensor`.
+`PolishingAgent` transforms the raw draft into **publication-grade literary prose**. It refines sentence cadence, eliminates translationese, preserves authentic address forms (`address_form_preservation`), implements "Show, Don't Tell" principles, and addresses every critique note generated by `CritiqueAgent`.
 
 ### 5.2 Translationese Elimination
-`Feinschliff` actively purges common webnovel translationese tropes:
+`PolishingAgent` actively purges common webnovel translationese tropes:
 | Clunky Machine Translation | Publication-Quality Polish |
 | :--- | :--- |
 | *"He couldn't help but sigh."* | *"He sighed, rubbing his temple."* |
@@ -276,13 +276,13 @@ Raw translation drafts—even when accurate—frequently sound like translated t
 | *"The sword released an immense amount of bloodlust."* | *"A murderous chill radiated from the bare blade."* |
 
 ### 5.3 Bilingual Grounding Reference
-`Feinschliff` does not polish in a vacuum. It receives both:
+`PolishingAgent` does not polish in a vacuum. It receives both:
 1. **The Draft Translation**: The primary text to refine into native English.
 2. **The Original Source Text (Reference Only)**: Provided as a reference check so the polisher can clarify ambiguous metaphors, verify character emotions, and confirm environmental details without guessing.
-3. **The Critique Notes**: Actionable directives from `Zensor` specifying exactly what needs improvement.
+3. **The Critique Notes**: Actionable directives from `CritiqueAgent` specifying exactly what needs improvement.
 
 ### 5.4 Chunked Polishing (`polish_chunked`)
-For chapters exceeding 85 lines, `Feinschliff` polishes each chunk sequentially (`_polish_single_chunk`). It passes forward the trailing sentences of the previously polished chunk to prevent tone mismatches, abrupt stylistic shifts, or duplicate opening phrases across chunk borders.
+For chapters exceeding 85 lines, `PolishingAgent` polishes each chunk sequentially (`_polish_single_chunk`). It passes forward the trailing sentences of the previously polished chunk to prevent tone mismatches, abrupt stylistic shifts, or duplicate opening phrases across chunk borders.
 
 ### 5.5 Programmatic Chapter Title Preservation Guard
 During creative prose polishing, LLMs occasionally omit structural chapter headings or volume prefixes (e.g. `บทที่ 11 - อวดดอกไม้` or `70\nChapter 11: The Awakening`):
@@ -292,31 +292,31 @@ During creative prose polishing, LLMs occasionally omit structural chapter headi
 
 ### 5.6 Diff / Patch Polishing Engine (`DiffPatcher`)
 When editing existing drafts or performing second-pass review loops, regenerating whole chapters introduces unnecessary latency and token costs:
-* **Unified Diff Mode**: Feinschliff can generate concise search-and-replace blocks (`apply_search_replace_patches()`).
+* **Unified Diff Mode**: `PolishingAgent` can generate concise search-and-replace blocks (`apply_search_replace_patches()`).
 * **Fuzzy Line Matching**: Locates and edits only the specific sentences targeted by the critic.
 * **Resilient Fallback**: Automatically reverts to full-text generation if patch application fails or produces zero changes.
 * **Efficiency**: Cuts completion token consumption by **60–80%** during reflection iterations.
 
 ---
 
-## 6. Stage 5: Chronist (`ChroniclerAgent`)
+## 6. Stage 5: Chronicler Agent (`ChroniclerAgent`)
 
-* **German Designation**: *Chronist* (The Chronicler / Memory Keeper)
+* **Role**: The Memory Keeper & Continuity Tracker
 * **Source Module**: [`src/nousetsu/agents/chronicler.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/chronicler.py)
 * **Default Model**: `gemma-4-26b-a4b-it` (Configurable via `chronicler_model`)
 * **Default Temperature**: `0.2` (Analytical, structured data extraction)
 
 ### 6.1 Core Cognitive Purpose
-When translating long series (often hundreds of chapters), early chapters are lost to memory unless systematically archived. `Chronist` ensures persistent series continuity across multiple volumes and chapters. After a chapter achieves passing quality, `Chronist` reads the final polished text and updates the series' 3-tier narrative hierarchy.
+When translating long series (often hundreds of chapters), early chapters are lost to memory unless systematically archived. `ChroniclerAgent` ensures persistent series continuity across multiple volumes and chapters. After a chapter achieves passing quality, `ChroniclerAgent` reads the final polished text and updates the series' 3-tier narrative hierarchy.
 
 ### 6.2 3-Tier Narrative Lore Extraction
-`Chronist` generates and maintains narrative structures across three scopes:
+`ChroniclerAgent` generates and maintains narrative structures across three scopes:
 1. **Micro Tier (Episodic Synopsis)**:
    - A 2-to-3 paragraph episodic summary saved to `.novel/summaries/<volume>/chapter_XXXX.json`.
    - Injected into subsequent chapter drafts as rolling context (`rolling_summaries[-3:]`).
 2. **Meso Tier (Story Arc Progression & Archiving)**:
    - Evaluates whether the current chapter triggers arc progression, major milestones, or climax resolution.
-   - When a story arc finishes, `Chronist` seals the arc record into `.novel/summaries/arcs/arc_XXXX.json` and initializes the next active arc.
+   - When a story arc finishes, `ChroniclerAgent` seals the arc record into `.novel/summaries/arcs/arc_XXXX.json` and initializes the next active arc.
 3. **Macro Tier (Whole-Story Premise)**:
    - Dynamically enriches the overarching series synopsis (`whole_story_summary` in `bible.yaml`) to reflect global world-state shifts and major faction changes.
 4. **Character State Changes**:
@@ -325,7 +325,7 @@ When translating long series (often hundreds of chapters), early chapters are lo
    - **Relationship Shifts**: Formed pact with shadow wolf, betrayed by second prince.
 
 ### 6.3 Metadata Consolidation (`assemble_metadata`)
-`Chronist` compiles all forensic audit metrics, checkpoint data, duration tracking, and token usage into a consolidated [`ChapterMetadata`](file:///D:/Code/novel_translation_Agent/src/nousetsu/models/metadata.py) record:
+`ChroniclerAgent` compiles all forensic audit metrics, checkpoint data, duration tracking, and token usage into a consolidated [`ChapterMetadata`](file:///D:/Code/novel_translation_Agent/src/nousetsu/models/metadata.py) record:
 * **Token Dimensions**: Tracks `prompt_tokens`, `completion_tokens`, `thought_tokens`, `cached_tokens`, and `total_tokens`.
 * **Execution Duration**: Computes total wall-clock time (`duration_seconds`) and granular per-step durations (`step_usage`).
 * **Stage Artifacts**: Saves final polished text, raw draft, critique notes, and active characters.
@@ -335,23 +335,23 @@ When translating long series (often hundreds of chapters), early chapters are lo
 
 ## 7. The Reflection Review Loop & Quality Gating
 
-Inside [`src/nousetsu/graph/workflow.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/graph/workflow.py), LangGraph manages the cyclic reflection exchange between `Zensor` and `Feinschliff`:
+Inside [`src/nousetsu/graph/workflow.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/graph/workflow.py), LangGraph manages the cyclic reflection exchange between `CritiqueAgent` and `PolishingAgent`:
 
 ```mermaid
 flowchart TD
-    Start([Chapter Text Received]) --> Extract[Stage 1: Schriftdetektiv]
-    Extract --> Draft[Stage 2: Wortschmied]
-    Draft --> Critique1[Stage 3: Zensor Audit #1]
-    Critique1 --> Polish1[Stage 4: Feinschliff Polish #1]
+    Start([Chapter Text Received]) --> Extract[Stage 1: Entity Extractor]
+    Extract --> Draft[Stage 2: Context-Aware Drafter]
+    Draft --> Critique1[Stage 3: Critique Audit #1]
+    Critique1 --> Polish1[Stage 4: Polish #1]
     
     Polish1 --> CheckCap{"Review Iteration >= Max Loops?<br/>(Default: 3 Loops)"}
     CheckCap -- Yes --> BestGuard["Select Best Candidate<br/>(Best Candidate Regression Guard)"]
     
-    CheckCap -- No --> CritiqueNext[Stage 3: Zensor Re-Audit]
+    CheckCap -- No --> CritiqueNext[Stage 3: Critique Re-Audit]
     CritiqueNext --> CheckScore{"Quality Score Check:<br/>Fidelity >= 8.5 AND Style >= 8.5?"}
     
-    CheckScore -- "Threshold Satisfied (Early Exit)" --> Chronicle[Stage 5: Chronist]
-    CheckScore -- "Below Threshold" --> PolishNext[Stage 4: Feinschliff Polish #2+]
+    CheckScore -- "Threshold Satisfied (Early Exit)" --> Chronicle[Stage 5: Chronicler]
+    CheckScore -- "Below Threshold" --> PolishNext[Stage 4: Polish #2+]
     PolishNext --> CheckCap
     
     BestGuard --> Chronicle
@@ -391,7 +391,7 @@ Commercial LLM endpoints employ strict automated content moderation filters that
    - When `ContextAwareDrafterAgent` catches a safety block exception, it checks `can_subdivide_text(chunk_text, min_lines=8, min_chars=200)`.
    - If divisible and recursion depth $< 4$, the chunk is bisected along prioritized boundaries (paragraph breaks `\n\n`, line breaks `\n`, sentence punctuation, or word boundaries).
    - The safe half executes via the primary LLM with full literary prose and voice differentiation, passing its translation tail as sliding context to the second half.
-   - The minimal sensitive sub-block ($\le 8$ lines or depth 4) reaches the base case, invoking **Google Translate fallback** ([`translate_via_google`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/translation_fallback.py)) and subsequent literary polishing by `Feinschliff`.
+   - The minimal sensitive sub-block ($\le 8$ lines or depth 4) reaches the base case, invoking **Google Translate fallback** ([`translate_via_google`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/translation_fallback.py)) and subsequent literary polishing by `PolishingAgent`.
 3. **Extractor & Critic Bisection**:
    - `EntityExtractorAgent` bisects blocked chunks to discover character profiles and glossary terms from safe portions, bypassing only the minimal sensitive excerpt.
    - `CritiqueAgent` bisects source and draft chunks in tandem, calculating real fidelity and style scores on safe sections and logging an audit warning on the bypassed snippet.
@@ -404,7 +404,7 @@ Operates zero-daemon local SQLite persistence (`.novel/rag/lore.db`) managed via
 * **Gemini Embedding 2**: Computes 3072-dimensional vector representations with cosine similarity.
 * **Reciprocal Rank Fusion (RRF, $k=60$)**: Synthesizes sparse and dense candidate ranks.
 * **LLM Cross-Encoder Reranking**: Evaluates fused candidates for situational relevance.
-* **Pipeline Integration**: Inbound for `Wortschmied` ($k=2$), `Zensor` ($k=2$), and `Chronist` ($k=3$), with automated post-chapter indexing of chapter summaries and 20-line scene chunks.
+* **Pipeline Integration**: Inbound for `ContextAwareDrafterAgent` ($k=2$), `CritiqueAgent` ($k=2$), and `ChroniclerAgent` ($k=3$), with automated post-chapter indexing of chapter summaries and 20-line scene chunks.
 
 ### 8.6 Forensic Prompt Tracking (`PromptTracker`) & Web Visualizer
 Provides complete transparency into LLM reasoning:
@@ -433,7 +433,7 @@ To see how the five agents collaborate in practice, observe a raw scene from a J
 彼女は腰の蒼雷剣に手をかけた。魔力を注ぎ込むと、青い稲妻が刀身を走った。
 ```
 
-### 2. Stage 1: Schriftdetektiv Output
+### 2. Stage 1: Entity Extractor Output
 ```json
 {
   "new_characters": [
@@ -464,7 +464,7 @@ To see how the five agents collaborate in practice, observe a raw scene from a J
 }
 ```
 
-### 3. Stage 2: Wortschmied Initial Draft
+### 3. Stage 2: Context-Aware Drafter Initial Draft
 ```markdown
 Deep in the forest, the girl stopped in her tracks. "I can't run anymore," she said.
 Heavy footsteps echoed from behind her. A large man stood there, carrying a giant battleaxe on his shoulder.
@@ -472,7 +472,7 @@ Heavy footsteps echoed from behind her. A large man stood there, carrying a gian
 She put her hand on the Azure Thunder Blade at her waist. As she poured mana into it, blue lightning ran across the blade.
 ```
 
-### 4. Stage 3: Zensor Audit Notes
+### 4. Stage 3: Critique Agent Audit Notes
 ```json
 {
   "fidelity_score": 9.2,
@@ -483,7 +483,7 @@ She put her hand on the Azure Thunder Blade at her waist. As she poured mana int
 }
 ```
 
-### 5. Stage 4: Feinschliff Polished Prose
+### 5. Stage 4: Polishing Agent Polished Prose
 ```markdown
 Deep within the forest shadows, Alice slowed to a halt. "No more running," she breathed, her voice steadying.
 
@@ -494,7 +494,7 @@ Behind her, heavy boots crunched into the forest loam. A massive warrior loomed 
 Her fingers tightened around the hilt of the Azure Thunder Blade at her hip. She channeled her mana—and brilliant blue arcs of lightning hissed across the steel, illuminating the dark trees in cold azure light.
 ```
 
-### 6. Stage 5: Chronist Episode Summary & Metadata
+### 6. Stage 5: Chronicler Agent Episode Summary & Metadata
 ```json
 {
   "chapter_num": 1,

@@ -1,8 +1,8 @@
-# ✍️ Stage 2: Wortschmied (`ContextAwareDrafterAgent`)
+# ✍️ Stage 2: Context-Aware Drafter (`ContextAwareDrafterAgent`)
 
 - **Source File**: [`src/nousetsu/agents/drafter.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/drafter.py)
 - **Class**: `ContextAwareDrafterAgent`
-- **German Codename**: **Wortschmied** (*The Wordsmith*)
+- **Role**: **Context-Aware Drafter** (*The Wordsmith*)
 - **Production Model**: `gemini-3.5-flash-lite` (Default via `.env` / cascade)
 - **Fallback Model**: `gemini-3.5-flash-lite` (Via `FallbackChatModel` on HTTP 429)
 
@@ -10,9 +10,9 @@
 
 ## 1. Architectural Mission
 
-`Wortschmied` is the primary literary drafting engine of the NouSetsu pipeline. Its mission is to transform raw, document-level chapter text (Japanese, Chinese, Korean) into a complete, publication-quality literary English prose draft.
+The `ContextAwareDrafterAgent` is the primary literary drafting engine of the NouSetsu pipeline. Its mission is to transform raw, document-level chapter text (Japanese, Chinese, Korean) into a complete, publication-quality literary English prose draft.
 
-Unlike simplistic segment-by-segment machine translation systems, `Wortschmied`:
+Unlike simplistic segment-by-segment machine translation systems, the Drafter:
 1. Synthesizes a **4-tier hierarchical narrative memory** (Macro whole story, Meso active arc, Micro immediate situation, and Episodic RAG lore).
 2. Resolves **zero-anaphora** (grammatically omitted subjects, pronouns, and viewpoint actors).
 3. Enforces strict **character voice differentiation** across distinct dialogue registers.
@@ -20,13 +20,13 @@ Unlike simplistic segment-by-segment machine translation systems, `Wortschmied`:
 
 ```mermaid
 graph TD
-    RAW["Raw Chapter Text"] --> DRAFT["Wortschmied<br>(ContextAwareDrafterAgent)"]
+    RAW["Raw Chapter Text"] --> DRAFT["Context-Aware Drafter<br>(ContextAwareDrafterAgent)"]
     ROSTER[("Active Characters<br>(Novel Bible)")] --> DRAFT
     GLOSS[("Active Glossary<br>(Novel Bible)")] --> DRAFT
     MEM["4-Tier Narrative Memory<br>(Macro / Meso / Micro)"] --> DRAFT
     RAG[("Episodic Hybrid RAG<br>(k=2 Lore Snippets)")] --> DRAFT
     DRAFT -->|"Initial Full Draft"| CANDIDATE["draft_text"]
-    CANDIDATE --> INSPECT["Stage 3: Zensor (Critique)"]
+    CANDIDATE --> INSPECT["Stage 3: Critique Agent (Critique)"]
 ```
 
 ---
@@ -111,22 +111,23 @@ def format_summaries(
 ## 3. Core Cognitive Mechanics
 
 ### A. 4-Tier Hierarchical Narrative Context
-To prevent context drift and hallucination across multi-hundred chapter sagas, `Wortschmied` formats narrative memory into four distinct tiers:
+To prevent context drift and hallucination across multi-hundred chapter sagas, the Drafter formats narrative memory into four distinct tiers:
 1. **Tier 1 (Macro)**: `whole_story_summary` from `NovelBible` synthesizing overall saga progression.
 2. **Tier 2 (Meso)**: `active_arc` tracking the central conflict, arc synopsis, and completed milestones.
 3. **Tier 3 (Micro)**: Immediate preceding chapter outcomes (`rolling_summaries`, up to 3 chapters) with volume folder disambiguation (e.g. `[Villainess_05] Chapter 47`).
 4. **Tier 4 (Episodic RAG)**: Top $k=2$ historical lore snippets retrieved via hybrid search (FTS5 BM25 + Gemini Embedding 2 + Cross-Encoder reranking).
 
 ### B. Zero-Anaphora Subject & Pronoun Resolution
-East Asian languages routinely drop subjects and personal pronouns. `Wortschmied` examines:
+East Asian languages routinely drop subjects and personal pronouns. The Drafter examines:
 - Honorifics and sentence-final particles (`-wa`, `-ze`, `-kashira`, `-ssu`, `-de gozaru`).
 - Verb honorific levels (sonkeigo, kenjougo, polite vs. crude speech).
 - Physical proximity and spatial blocking in the scene.
 - Active viewpoint (POV) character physiological reactions.
+- Distinct dialogue registers (e.g., tsundere, noble court lady, rough rogue).
 This prevents gender-flipping errors and pronoun hallucinations.
 
 ### C. Recursive Bisection & Google Translate Safety Fallback
-Commercial AI safety filters frequently trigger HTTP 400 `prohibited_content` blocks on battle sequences or intimate drama. `Wortschmied` handles this without aborting the batch:
+Commercial AI safety filters frequently trigger HTTP 400 `prohibited_content` blocks on battle sequences or intimate drama. The Drafter handles this without aborting the batch:
 1. Catches `is_safety_block_exception(e)`.
 2. If the text can be subdivided (`can_subdivide_text`, $\ge 8$ lines, depth $< 4$):
    - Bisects the text into balanced halves (`bisect_text`).
@@ -141,13 +142,13 @@ Commercial AI safety filters frequently trigger HTTP 400 `prohibited_content` bl
 For chapters exceeding `chunk_threshold_lines` (default: 85 lines), chunks are drafted sequentially. The last 300 words of chunk $N$'s draft are passed as `preceding_context` into chunk $N+1$, ensuring dialogue flow and sentence continuity across chunk boundaries.
 
 ### E. Per-Scene Character Roster Filtering
-In long novels with 50+ character cards, passing every profile to every chunk wastes prompt tokens and confuses zero-anaphora resolution. `Wortschmied` uses [`filter_characters_for_scene`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/character_filter.py):
+In long novels with 50+ character cards, passing every profile to every chunk wastes prompt tokens and confuses zero-anaphora resolution. The Drafter uses [`filter_characters_for_scene`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/character_filter.py):
 - **Core Role Retention**: Protagonists and leads (`role in ["protagonist", "main", "lead", "hero", "heroine"]`) are always preserved to safeguard unstated viewpoint actor tracking.
 - **Scene-Level Detection**: Supporting characters are included only if their `original_name`, `name`, or `aliases` appear in the chunk text or preceding sliding context.
 - **Fallback Guard**: If zero characters match, falls back to the top major characters to prevent empty context.
 
 ### F. Per-Scene Script-Aware Glossary Filtering
-`Wortschmied` applies [`filter_glossary_for_scene`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/glossary_filter.py) across each chunk:
+The Drafter applies [`filter_glossary_for_scene`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/glossary_filter.py) across each chunk:
 - Matches CJK ideographs via substring inclusion while enforcing regex word boundaries (`\b`) for Latin terms to eliminate false positive matches.
 - Injects only terms relevant to the current scene chunk into `active_glossary`, drastically reducing prompt overhead.
 

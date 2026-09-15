@@ -1,8 +1,8 @@
-# 🔍 Stage 1: Schriftdetektiv (`EntityExtractorAgent`)
+# 🔍 Stage 1: Entity Extractor (`EntityExtractorAgent`)
 
 - **Source File**: [`src/nousetsu/agents/extractor.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/extractor.py)
 - **Class**: `EntityExtractorAgent`
-- **German Codename**: **Schriftdetektiv** (*The Detective*)
+- **Role**: **Entity Extractor** (*The Detective*)
 - **Production Model**: `gemini-3.1-flash-lite` (Default via `.env` / cascade)
 - **Fallback Model**: `gemini-3.5-flash-lite` (Via `FallbackChatModel` on HTTP 429)
 
@@ -10,17 +10,17 @@
 
 ## 1. Architectural Mission
 
-`Schriftdetektiv` is the pre-translation entity detective. Its mission is to analyze the raw, untranslated chapter text *before drafting begins* to discover unknown character names, family factions, magical artifacts, and cultivation realm milestones not yet cataloged in the Novel Bible.
+`EntityExtractorAgent` is the pre-translation entity detective. Its mission is to analyze the raw, untranslated chapter text *before drafting begins* to discover unknown character names, family factions, magical artifacts, and cultivation realm milestones not yet cataloged in the Novel Bible.
 
-By feeding these discovered entities directly into the chapter's active glossary and character roster, subsequent stages (`Wortschmied` and `Zensor`) operate with consistent terminology from sentence one.
+By feeding these discovered entities directly into the chapter's active glossary and character roster, subsequent stages (Context-Aware Drafter and Critique Agent) operate with consistent terminology from sentence one.
 
 ```mermaid
 graph LR
-    RAW["Raw Chapter Text<br>(Japanese / Chinese / Korean)"] --> EXT["Schriftdetektiv<br>(EntityExtractorAgent)"]
+    RAW["Raw Chapter Text<br>(Japanese / Chinese / Korean)"] --> EXT["Entity Extractor<br>(EntityExtractorAgent)"]
     BIBLE_IN[("Novel Bible<br>(Known Entities)")] --> EXT
     EXT -->|"New Character Profiles"| CHARS["active_characters"]
     EXT -->|"New Glossary Items"| GLOSS["active_glossary"]
-    CHARS --> DRAFT["Stage 2: Wortschmied"]
+    CHARS --> DRAFT["Stage 2: Context-Aware Drafter"]
     GLOSS --> DRAFT
 ```
 
@@ -93,7 +93,7 @@ user_content = (
 This forces safety classifiers to treat the prompt as an analytical entity extraction request rather than raw content generation.
 
 ### B. Procedural Graph Anti-Bloat Term Pruning (arXiv:2609.09153v1)
-Naive extraction prompts often extract common conversational vocabulary ("hello", "good morning", "went to the store"), which bloats downstream prompts and wastes tokens. `Schriftdetektiv` is steered by procedural graph constraints:
+Naive extraction prompts often extract common conversational vocabulary ("hello", "good morning", "went to the store"), which bloats downstream prompts and wastes tokens. `EntityExtractorAgent` is steered by procedural graph constraints:
 - **Rule**: Only extract proper nouns, cultivation stages, magical artifacts, and clan names.
 - **Pruning**: Saves **300 to 800 output tokens** per chapter by filtering common adjectives and verbs.
 
@@ -127,7 +127,7 @@ Registered via [`src/nousetsu/skills/builtin/extractor.py`](file:///D:/Code/nove
 
 ## 5. RAG System Interaction
 
-`Schriftdetektiv` serves as the primary **outbound discovery mechanism** for the RAG knowledge store:
+`EntityExtractorAgent` serves as the primary **outbound discovery mechanism** for the RAG knowledge store:
 - Newly discovered `GlossaryItem`s and `CharacterProfile`s are persisted to `.novel/bible/bible.yaml`.
 - During historical backfills (`nousetsu migrate-rag`), all extracted characters and glossary items are embedded and indexed into `.novel/rag/lore.db` and SQLite FTS5 for hybrid retrieval.
 

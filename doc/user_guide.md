@@ -29,11 +29,11 @@ Traditional machine translation tools (e.g. Google Translate, DeepL) process tex
 * **Memory Loss**: MT engines have zero awareness of events that took place in preceding chapters.
 
 **NouSetsu** solves this with a collaborative 5-stage agent pipeline coordinated by **LangGraph**:
-1. **Schriftdetektiv** (*EntityExtractorAgent*): Discovers new character names, factions, and terms before translation.
-2. **Wortschmied** (*ContextAwareDrafterAgent*): Resolves omitted pronouns (*Zero-Anaphora*) and character voices using the persistent **Novel Bible**.
-3. **Zensor** (*CritiqueAgent*): Audits the draft against the full raw source text for fidelity (0-10) and prose style (0-10).
-4. **Feinschliff** (*PolishingAgent*): Refines draft prose into literary, publication-grade target language fiction using critique notes and source text reference.
-5. **Chronist** (*ChroniclerAgent*): Summarizes chapter turning points, updates rolling lore memory, and compiles checkpoint metadata into `.novel/metadata.json`.
+1. **Entity Extractor** (*EntityExtractorAgent*): Discovers new character names, factions, and terms before translation.
+2. **Context-Aware Drafter** (*ContextAwareDrafterAgent*): Resolves omitted pronouns (*Zero-Anaphora*) and character voices using the persistent **Novel Bible**.
+3. **Critique Agent** (*CritiqueAgent*): Audits the draft against the full raw source text for fidelity (0-10) and prose style (0-10).
+4. **Polishing Agent** (*PolishingAgent*): Refines draft prose into literary, publication-grade target language fiction using critique notes and source text reference.
+5. **Chronicler Agent** (*ChroniclerAgent*): Summarizes chapter turning points, updates rolling lore memory, and compiles checkpoint metadata into `.novel/metadata.json`.
 
 ---
 
@@ -213,11 +213,11 @@ nousetsu tui --project-dir ./my_novel
 | `--genre` | `-g` | `general` | Novel genre (`xianxia`, `wuxia`, `isekai`, `litrpg`, `romance`, `general`) |
 | `--model` | `-m` | `gemini-3.1-flash-lite` | Primary LLM model name (or set `NOVEL_MODEL` in `.env`) |
 | `--fallback-model` | | `gemini-3.5-flash-lite` | Automatic fallback model used upon HTTP 429 quota exhaustion |
-| `--extractor-model` | | `gemini-3.1-flash-lite` | Model for Stage 1: Entity Extractor (*Schriftdetektiv*) |
-| `--drafter-model` | | `gemini-3.5-flash-lite` | Model for Stage 2: Context-Aware Drafter (*Wortschmied*) |
-| `--critic-model` | | `gemma-4-26b-a4b-it` | Model for Stage 3: Critique Agent (*Zensor*) |
-| `--polisher-model` | | `gemini-3.5-flash-lite` | Model for Stage 4: Prose Polisher (*Feinschliff*) |
-| `--chronicler-model` | | `gemma-4-26b-a4b-it` | Model for Stage 5: Lore Chronicler (*Chronist*) |
+| `--extractor-model` | | `gemini-3.1-flash-lite` | Model for Stage 1: Entity Extractor |
+| `--drafter-model` | | `gemini-3.5-flash-lite` | Model for Stage 2: Context-Aware Drafter |
+| `--critic-model` | | `gemma-4-26b-a4b-it` | Model for Stage 3: Critique Agent |
+| `--polisher-model` | | `gemini-3.5-flash-lite` | Model for Stage 4: Prose Polisher |
+| `--chronicler-model` | | `gemma-4-26b-a4b-it` | Model for Stage 5: Lore Chronicler |
 | `--limit` | `-l` | None (all) | Maximum number of chapters to process in this run |
 | `--force` | `-f` | False | Force re-translation even if chapter is already marked `COMPLETED` |
 | `--max-loops` | | `3` | Maximum review reflection loops between Critic and Polisher (1–5) |
@@ -366,14 +366,14 @@ In the original academic paper:
 
 ### 🎬 Concrete Examples in Action
 
-#### Example A: In the Extractor (`Schriftdetektiv`)
+#### Example A: In the Entity Extractor (`EntityExtractorAgent`)
 * **Without PG**: The model reads a Japanese sentence, finds common descriptive phrasing, and extracts everyday words ("quickly", "good", "run") into the glossary. The output is bloated with 1,200 tokens of junk.
 * **With PG**: The prompt injects:
   > **Step $\rightarrow$ Prune Trivial Terms**: Extract only domain-specific martial ranks, spells, and unique items.  
   > **Pitfalls to Avoid**: Strictly exclude ordinary conversational vocabulary, everyday verbs, and greetings.
 * **Result**: The LLM outputs only valid novel lore (`Azure Thunder Blade`, `Clara`), saving 300–800 output tokens.
 
-#### Example B: In the Drafter (`Wortschmied`) across Chunks
+#### Example B: In the Context-Aware Drafter (`ContextAwareDrafterAgent`) across Chunks
 * **Chunk 1**: Localizes at `Scene_Init`. Tells model: *"Anchor character POV, establish narrative past tense, and identify opening speakers."*
 * **Chunk 2+**: Localizes at `Boundary_Continuity`. Tells model:
   > **Step $\rightarrow$ Boundary Continuity**: Read Preceding Scene Context to identify active speaker. Resume translating immediately.  
@@ -396,12 +396,12 @@ Terminal output displays the execution flow, transitions, guidance notes, and pi
 
 ```text
 📦 NouSetsu Procedural Graph Inspection
-├── 🎭 Stage 1: Extractor (Schriftdetektiv)
+├── 🎭 Stage 1: Entity Extractor (EntityExtractorAgent)
 │   ├── [Scan_Candidates] ──(text_received)──> [Filter_Known]
 │   ├── [Filter_Known] ──(unregistered_found)──> [Deduce_Profiles]
 │   └── [Deduce_Profiles] ──(entities_resolved)──> [Prune_Trivial_Terms]
 │       └── ⚠️ Pitfall: Strictly exclude ordinary conversational vocabulary, everyday verbs, and greetings.
-└── ✍️ Stage 2: Drafter (Wortschmied)
+└── ✍️ Stage 2: Context-Aware Drafter (ContextAwareDrafterAgent)
     ├── [Scene_Init] ──(chunk_1_or_single)──> [Zero_Anaphora_Resolution]
     ├── [Boundary_Continuity] ──(chunk_gt_1)──> [Zero_Anaphora_Resolution]
     │   └── ⚠️ Pitfall: DO NOT repeat or re-translate preceding text. DO NOT restart scene.
@@ -412,7 +412,7 @@ Terminal output displays the execution flow, transitions, guidance notes, and pi
 ### 🧬 Offline Self-Evolution (Learning Without Inference Costs)
 
 NouSetsu includes an offline refiner ([`pg_refiner.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/graph/pg_refiner.py)) based on Algorithm 1 of the paper:
-1. When `Zensor` (`CritiqueAgent`) flags translation flaws (e.g. pronoun drift or glossary omissions), a `DiagnosticTrace` records the failure.
+1. When the Critique Agent (`CritiqueAgent`) flags translation flaws (e.g. pronoun drift or glossary omissions), a `DiagnosticTrace` records the failure.
 2. An offline evolution process compares successful vs. failed chapter runs and refines graph edge attributes (e.g. appending new specific pitfalls).
 3. Changes are committed only if structural validation passes and regression tests succeed.
 4. **Inference Token Cost: 0 tokens** (runs offline or post-batch).
@@ -466,7 +466,7 @@ summaries:
 ### 3-Tier Hierarchical Narrative Memory (Macro > Meso > Micro)
 To prevent narrative drift across long multi-volume series, NouSetsu organizes memory hierarchically:
 1. **Macro Context (`whole_story_summary`)**: Global narrative synthesis capturing overarching conflicts, major world state changes, and character goals. Stored directly in `bible.yaml`.
-2. **Meso Context (`ArcSummary`)**: Story arc boundaries autonomously detected by `Chronist` (*ChroniclerAgent*). Tracks arc titles, core conflicts, and milestone progress. Saved in `.novel/summaries/arcs/arc_XXXX.json`. When completed, arcs are archived into `bible.yaml`.
+2. **Meso Context (`ArcSummary`)**: Story arc boundaries autonomously detected by the Chronicler Agent (*ChroniclerAgent*). Tracks arc titles, core conflicts, and milestone progress. Saved in `.novel/summaries/arcs/arc_XXXX.json`. When completed, arcs are archived into `bible.yaml`.
 3. **Micro Context (`ChapterSummary`)**: Immediate preceding chapter outcomes, cliffhangers, and character state changes partitioned by volume folder (`.novel/summaries/<volume>/chapter_XXXX.json`). Seamlessly backfills context across volume transitions (`Villainess_04` -> `Villainess_05`) with volume badges.
 
 ### Inspecting and Migrating Narrative Memory

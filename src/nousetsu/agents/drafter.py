@@ -152,7 +152,7 @@ class ContextAwareDrafterAgent:
     ) -> str:
         """Translate blocked sensitive chunk using Google Translate fallback and attempt literary polish."""
         self.safety_fallbacks_used += 1
-        logger.warning("⚠️ Drafter encountered safety block on chunk - falling back to Google Translate and Feinschliff polishing.")
+        logger.warning("⚠️ Drafter encountered safety block on chunk - falling back to Google Translate and PolishingAgent polishing.")
         gt_text = translate_via_google(
             text=source_chunk_text,
             source_lang=bible.source_language,

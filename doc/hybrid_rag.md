@@ -40,10 +40,10 @@ graph TD
     end
 
     subgraph "Agent Injection & Bi-Directional Pipeline"
-        DRAFT["Wortschmied (Drafter)<br>Episodic Lore (k=2)"]
-        CRIT["Zensor (Critic)<br>Canonical TM Audit (k=2)"]
-        CHRON["Chronist (Chronicler)<br>World State Continuity (k=3)"]
-        AUTO_IDX["Chronist Auto-Indexing<br>(Summary + 20-line Scene Chunks)"]
+        DRAFT["Context-Aware Drafter<br>Episodic Lore (k=2)"]
+        CRIT["Critique Agent<br>Canonical TM Audit (k=2)"]
+        CHRON["Chronicler Agent<br>World State Continuity (k=3)"]
+        AUTO_IDX["Chronicler Auto-Indexing<br>(Summary + 20-line Scene Chunks)"]
     end
 
     SRC --> CHAR_FLT
@@ -208,9 +208,9 @@ Unlike standard read-only RAG systems, NouSetsu's RAG architecture is **bi-direc
 ```mermaid
 flowchart LR
     subgraph "Inbound RAG Agents"
-        A2["Stage 2: Wortschmied<br>(Drafter)"]
-        A3["Stage 3: Zensor<br>(Critic)"]
-        A5_R["Stage 5: Chronist<br>(Chronicler Read)"]
+        A2["Stage 2: Drafter<br>(ContextAwareDrafterAgent)"]
+        A3["Stage 3: Critic<br>(CritiqueAgent)"]
+        A5_R["Stage 5: Chronicler Read<br>(ChroniclerAgent)"]
     end
 
     subgraph "Knowledge Store"
@@ -218,7 +218,7 @@ flowchart LR
     end
 
     subgraph "Outbound Auto-Indexing"
-        A5_W["Stage 5: Chronist<br>(Chronicler Write)"]
+        A5_W["Stage 5: Chronicler Write<br>(ChroniclerAgent)"]
     end
 
     VAULT -->|"k=2 Episodic Lore"| A2
@@ -227,15 +227,15 @@ flowchart LR
     A5_W -->|"Auto-Index Summary & Scene Chunks"| VAULT
 ```
 
-### 1. `Wortschmied` (ContextAwareDrafterAgent)
+### 1. `ContextAwareDrafterAgent` (Drafter)
 - **Query Synthesis**: Gathers the names of up to 5 scene characters (via [`filter_characters_for_scene`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/character_filter.py)) and the first 3 lines of the source chapter.
 - **Context Injection**: Retrieves $k=2$ episodic lore entries. Injected into the drafting prompt under `## EPISODIC LORE CONTEXT (Historical Memory)`, anchoring zero-anaphora pronoun resolution and narrative continuity.
 
-### 2. `Zensor` (CritiqueAgent)
+### 2. `CritiqueAgent` (Critic)
 - **Query Synthesis**: Focuses on character names paired with `"dialogue style canonical translation"` and `"terminology canon"`.
 - **Context Injection**: Retrieves $k=2$ translation memory canon references to audit terminology compliance, tone consistency, and dialogue cadence.
 
-### 3. `Chronist` (ChroniclerAgent)
+### 3. `ChroniclerAgent` (Chronicler)
 - **Pre-Chronicle Retrieval**: Queries scene characters and the opening lines of the finalized polished prose to fetch $k=3$ preceding lore entries, verifying that character state changes (wounds, breakthroughs) align with history.
 - **Post-Chronicle Auto-Indexing**: Implemented in [`NovelTranslationWorkflow._index_chapter_into_rag()`](file:///D:/Code/novel_translation_Agent/src/nousetsu/graph/workflow.py#L943-L1001):
   1. Formats validated `ChapterSummary` into a `summary` document.

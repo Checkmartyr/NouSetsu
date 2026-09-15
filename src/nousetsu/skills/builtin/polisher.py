@@ -1,4 +1,4 @@
-"""Built-in domain skills for PolishingAgent (Feinschliff)."""
+"""Built-in domain skills for PolishingAgent."""
 from typing import List
 from nousetsu.skills.models import AgentSkill
 

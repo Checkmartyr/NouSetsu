@@ -15,41 +15,41 @@ interface TokenAnalyticsProps {
   chapterDoc: ChapterTraceDocument;
 }
 
-// Map pipeline stage to literary German agent designations and badges
+// Map pipeline stage to agent names, roles, and badges
 const STAGE_AGENT_INFO: Record<
   string,
-  { codename: string; role: string; color: string; border: string; bg: string }
+  { name: string; role: string; color: string; border: string; bg: string }
 > = {
   extraction: {
-    codename: 'Schriftdetektiv',
+    name: 'Entity Extractor',
     role: 'Entity Detective',
     color: 'text-amber-400',
     border: 'border-amber-500/30',
     bg: 'bg-amber-500/10',
   },
   drafting: {
-    codename: 'Wortschmied',
+    name: 'Context-Aware Drafter',
     role: 'Wordsmith',
     color: 'text-blue-400',
     border: 'border-blue-500/30',
     bg: 'bg-blue-500/10',
   },
   critique: {
-    codename: 'Zensor',
+    name: 'Critique Agent',
     role: 'Inspector',
     color: 'text-purple-400',
     border: 'border-purple-500/30',
     bg: 'bg-purple-500/10',
   },
   polishing: {
-    codename: 'Feinschliff',
+    name: 'Polishing Agent',
     role: 'Prose Stylist',
     color: 'text-emerald-400',
     border: 'border-emerald-500/30',
     bg: 'bg-emerald-500/10',
   },
   chronicling: {
-    codename: 'Chronist',
+    name: 'Chronicler Agent',
     role: 'Memory Keeper',
     color: 'text-rose-400',
     border: 'border-rose-500/30',
@@ -495,7 +495,7 @@ export const TokenAnalytics: React.FC<TokenAnalyticsProps> = ({ currentTrace, ch
                               : 'bg-slate-800 border-slate-700 text-slate-400'
                           }`}
                         >
-                          {stInfo ? stInfo.codename : st}
+                          {stInfo ? stInfo.name : st}
                         </span>
                       );
                     })}
@@ -670,7 +670,7 @@ export const TokenAnalytics: React.FC<TokenAnalyticsProps> = ({ currentTrace, ch
         <div className="space-y-3">
           {stageEntries.map((sm) => {
             const info = STAGE_AGENT_INFO[sm.stage] || {
-              codename: sm.agent,
+              name: sm.agent,
               role: 'Agent',
               color: 'text-slate-300',
               border: 'border-slate-700',
@@ -699,7 +699,7 @@ export const TokenAnalytics: React.FC<TokenAnalyticsProps> = ({ currentTrace, ch
                 <div className="flex flex-wrap items-center justify-between text-xs gap-2">
                   <div className="flex items-center gap-2">
                     <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${info.bg} ${info.border} ${info.color}`}>
-                      {info.codename}
+                      {info.name}
                     </span>
                     <span className="capitalize font-semibold text-slate-200">
                       {sm.stage}

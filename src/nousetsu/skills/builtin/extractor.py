@@ -1,4 +1,4 @@
-"""Built-in domain skills for EntityExtractorAgent (Schriftdetektiv)."""
+"""Built-in domain skills for EntityExtractorAgent."""
 from typing import List
 from nousetsu.skills.models import AgentSkill
 

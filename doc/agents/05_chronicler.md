@@ -1,8 +1,8 @@
-# 📜 Stage 5: Chronist (`ChroniclerAgent`)
+# 📜 Stage 5: Chronicler Agent (`ChroniclerAgent`)
 
 - **Source File**: [`src/nousetsu/agents/chronicler.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/chronicler.py)
 - **Class**: `ChroniclerAgent`
-- **German Codename**: **Chronist** (*The Memory Keeper*)
+- **Role**: **Chronicler Agent** (*The Memory Keeper*)
 - **Production Model**: `gemma-4-26b-a4b-it` (Default via `.env` / cascade)
 - **Fallback Model**: `gemini-3.5-flash-lite` (Via `FallbackChatModel` on HTTP 429)
 
@@ -10,9 +10,9 @@
 
 ## 1. Architectural Mission
 
-`Chronist` is the memory keeper and telemetry compiler of the NouSetsu pipeline. Its mission is to synthesize the translated chapter into rolling narrative memory, detect story arc transitions, maintain character health/status shifts, assemble audit metadata, and automatically index chapter events into the RAG knowledge store.
+The `ChroniclerAgent` is the memory keeper and telemetry compiler of the NouSetsu pipeline. Its mission is to synthesize the translated chapter into rolling narrative memory, detect story arc transitions, maintain character health/status shifts, assemble audit metadata, and automatically index chapter events into the RAG knowledge store.
 
-Unlike simple summary scripts, `Chronist`:
+Unlike simple summary scripts, the Chronicler Agent:
 1. Manages a **3-tier narrative memory hierarchy** (Macro whole story, Meso story arc, Micro chapter synopsis).
 2. Autonomous **story arc boundary detection** (`ArcSummary`) and climax resolution archiving.
 3. Operates **bi-directionally with the RAG knowledge base** (inbound reading $k=3$ and outbound chunk auto-indexing).
@@ -20,7 +20,7 @@ Unlike simple summary scripts, `Chronist`:
 
 ```mermaid
 graph TD
-    FINAL["Final Translated Chapter Prose"] --> CHRON["Chronist<br>(ChroniclerAgent)"]
+    FINAL["Final Translated Chapter Prose"] --> CHRON["Chronicler Agent<br>(ChroniclerAgent)"]
     IN_RAG[("Inbound RAG Context<br>(k=3 Preceding Lore)")] --> CHRON
     BIBLE[("Novel Bible<br>(Active Arc & World Lore)")] --> CHRON
     CHRON --> MICRO["ChapterSummary<br>(.novel/summaries/Vol_XX/chapter_YYYY.json)"]
@@ -99,7 +99,7 @@ def assemble_metadata(
 ## 3. Core Cognitive Mechanics
 
 ### A. 3-Tier Hierarchical Narrative Memory (Macro > Meso > Micro)
-To guarantee consistency across multi-hundred chapter novels, `Chronist` partitions memory into three tiers:
+To guarantee consistency across multi-hundred chapter novels, the Chronicler Agent partitions memory into three tiers:
 1. **Micro (`ChapterSummary`)**: Folder-scoped snapshot containing:
    - High-density chapter synopsis ($2-3$ paragraphs).
    - Key plot events list.
@@ -108,7 +108,7 @@ To guarantee consistency across multi-hundred chapter novels, `Chronist` partiti
 3. **Macro (`whole_story_summary`)**: An overarching synthesis of the entire novel so far, ensuring that early saga promises and overarching themes remain active in prompt context.
 
 ### B. Bi-Directional RAG Knowledge Store Integration
-`Chronist` is the only pipeline agent with full bi-directional RAG capabilities:
+The Chronicler Agent is the only pipeline agent with full bi-directional RAG capabilities:
 - **Inbound Retrieval ($k=3$)**: Queries `HybridSearchEngine` for preceding character conditions, lingering injuries, or active arc commitments before generating the summary.
 - **Outbound Auto-Indexing**: Upon chapter completion, `NovelTranslationWorkflow` segments the translated chapter into $\sim 20$-line semantic scene chunks, embeds them with **Gemini Embedding 2** (`models/gemini-embedding-2`, 3072 dimensions), and writes them alongside the `ChapterSummary` directly into SQLite `lore.db` and SQLite FTS5 (`lore_fts`).
 

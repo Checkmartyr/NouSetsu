@@ -1,4 +1,4 @@
-"""Unit tests for robust JSON and regex parsing in CritiqueAgent (Zensor)."""
+"""Unit tests for robust JSON and regex parsing in CritiqueAgent."""
 from unittest.mock import MagicMock
 from langchain_core.messages import AIMessage
 from nousetsu.agents.critic import CritiqueAgent

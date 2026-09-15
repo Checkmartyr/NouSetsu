@@ -1,8 +1,8 @@
-# ✨ Stage 4: Feinschliff (`PolishingAgent`)
+# ✨ Stage 4: Polishing Agent (`PolishingAgent`)
 
 - **Source File**: [`src/nousetsu/agents/polisher.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/polisher.py)
 - **Class**: `PolishingAgent`
-- **German Codename**: **Feinschliff** (*The Stylist*)
+- **Role**: **Polishing Agent** (*The Stylist*)
 - **Production Model**: `gemini-3.5-flash-lite` (Default via `.env` / cascade)
 - **Fallback Model**: `gemini-3.5-flash-lite` (Via `FallbackChatModel` on HTTP 429)
 
@@ -10,9 +10,9 @@
 
 ## 1. Architectural Mission
 
-`Feinschliff` is the stylistic master of the NouSetsu pipeline. Its mission is to transform rough drafted prose into publication-grade, immersive literary target-language fiction by incorporating the specific editorial feedback provided by `Zensor` (CritiqueAgent).
+The `PolishingAgent` is the stylistic master of the NouSetsu pipeline. Its mission is to transform rough drafted prose into publication-grade, immersive literary target-language fiction by incorporating the specific editorial feedback provided by the Critique Agent (`CritiqueAgent`).
 
-Unlike crude automated paraphrasers, `Feinschliff`:
+Unlike crude automated paraphrasers, the Polishing Agent:
 1. Systematically purges mechanical **translationese cliches** and passive sentence structures.
 2. Ingests raw source text as a **read-only nuance reference** to resolve ambiguous draft phrasing without hallucinating new plot beats.
 3. Enhances **prose cadence, rhythm, and sensory depth** (alternating terse action beats with lyrical atmospheric exposition).
@@ -20,14 +20,14 @@ Unlike crude automated paraphrasers, `Feinschliff`:
 
 ```mermaid
 graph TD
-    DRAFT["Drafted Candidate Prose"] --> POLISH["Feinschliff<br>(PolishingAgent)"]
-    NOTES["critique_notes<br>(from Stage 3: Zensor)"] --> POLISH
+    DRAFT["Drafted Candidate Prose"] --> POLISH["Polishing Agent<br>(PolishingAgent)"]
+    NOTES["critique_notes<br>(from Stage 3: Critique Agent)"] --> POLISH
     GLOSS[("Active Glossary<br>(Novel Bible)")] --> POLISH
     SRC["Raw Source Text<br>(Read-Only Reference)"] --> POLISH
     POLISH --> OUTPUT["polished_text<br>(Publication-Grade Prose)"]
     OUTPUT --> REAUDIT{"Review Pass <= Max Loops?"}
-    REAUDIT -->|"Yes (Pass 2+)"| ZENSOR["Stage 3: Zensor (Re-Audit)"]
-    REAUDIT -->|"No (Max Loops Exceeded)"| FINISH["Stage 5: Chronist"]
+    REAUDIT -->|"Yes (Pass 2+)"| CRITIC["Stage 3: Critique Agent (Re-Audit)"]
+    REAUDIT -->|"No (Max Loops Exceeded)"| FINISH["Stage 5: Chronicler Agent"]
 ```
 
 ---
@@ -90,14 +90,14 @@ def polish_chunked(
 ## 3. Core Cognitive Mechanics
 
 ### A. Translationese Purging
-`Feinschliff` eliminates stiff machine-translation crutches:
+The Polishing Agent eliminates stiff machine-translation crutches:
 - *"could not help but..."* $\to$ Converted into direct physical actions or internal emotional impulses.
 - *"as expected of..."* $\to$ Integrated as natural character admiration or contextual acknowledgment.
 - *"it was none other than..."* $\to$ Stated directly with dramatic punch.
 - Clunky passive verbs (*"his face was slapped by her"*) $\to$ Active, visceral verbs (*"she slapped his face"*).
 
 ### B. Read-Only Nuance Disambiguation
-To prevent "telephone game" distortions across multiple polishing passes, `Feinschliff` receives the original source text marked explicitly as `(Reference Only)`:
+To prevent "telephone game" distortions across multiple polishing passes, the Polishing Agent receives the original source text marked explicitly as `(Reference Only)`:
 - Allows the polisher to verify the emotional weight or exact metaphor of an ambiguous sentence in the draft.
 - In chunked mode, source text is sliced per chunk (`raw_src_lines[src_start:src_end]`), preventing context overload.
 
@@ -125,7 +125,7 @@ To prevent stylistic polishing from stripping chapter headings (e.g. `บทท�
 
 ### G. Diff / Patch Polishing Engine (`DiffPatcher`)
 For minor critique corrections or multi-pass review loops, rewriting the entire chapter word-for-word wastes token quota and risks introducing new translation errors:
-- **SEARCH/REPLACE Diff Format**: When polishing in patch mode, `Feinschliff` outputs targeted search/replace blocks (`<<<<<<< SEARCH\n[draft text]\n=======\n[polished text]\n>>>>>>>`) or `NO_CHANGES_NEEDED`.
+- **SEARCH/REPLACE Diff Format**: When polishing in patch mode, the Polishing Agent outputs targeted search/replace blocks (`<<<<<<< SEARCH\n[draft text]\n=======\n[polished text]\n>>>>>>>`) or `NO_CHANGES_NEEDED`.
 - **Parsing & Application**: `apply_search_replace_patches()` in [`src/nousetsu/utils/diff_patcher.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/diff_patcher.py) applies targeted edits directly to `draft_text`.
 - **Zero-Loss Fallback**: If patch formatting is absent or fails to apply, the agent gracefully treats the response as full-text prose, ensuring zero corruption.
 - **Token Efficiency**: Reduces completion token consumption on Pass 2+ by up to **60–80%**, since untouched prose paragraphs are not re-emitted by the LLM.
@@ -156,8 +156,8 @@ Registered via [`src/nousetsu/skills/builtin/polisher.py`](file:///D:/Code/novel
 
 ## 5. RAG System Interaction
 
-- **Indirect Ingestion**: `Feinschliff` does not directly query the vector database; instead, it consumes the actionable critique notes from `Zensor`, which already incorporate canonical Translation Memory (TM) constraints from RAG.
-- **Cyclic Feedback**: Polished outputs are immediately re-evaluated by `Zensor` in subsequent reflection loops, ensuring stylistic embellishments never sacrifice factual fidelity.
+- **Indirect Ingestion**: The Polishing Agent does not directly query the vector database; instead, it consumes the actionable critique notes from the Critique Agent, which already incorporate canonical Translation Memory (TM) constraints from RAG.
+- **Cyclic Feedback**: Polished outputs are immediately re-evaluated by the Critique Agent in subsequent reflection loops, ensuring stylistic embellishments never sacrifice factual fidelity.
 
 ---
 

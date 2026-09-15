@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **Native LangChain Structured Outputs & Typed Pydantic Schemas**:
-  - Migrated `Schriftdetektiv` (`EntityExtractorAgent`), `Zensor` (`CritiqueAgent`), and `Chronist` (`ChroniclerAgent`) from brittle regex/JSON parsing to native LangChain structured output backed by strongly typed Pydantic models (`ExtractorResult`, `CritiqueResult`, `ChroniclerResult`).
+  - Migrated Entity Extractor (`EntityExtractorAgent`), Critique Agent (`CritiqueAgent`), and Chronicler Agent (`ChroniclerAgent`) from brittle regex/JSON parsing to native LangChain structured output backed by strongly typed Pydantic models (`ExtractorResult`, `CritiqueResult`, `ChroniclerResult`).
   - Unified `invoke_structured` orchestration utility managing provider schema constraints (`response_json_schema`), secondary fallback failover on 429 quota exhaustion, and raw trace logging.
 - **Configurable Thinking Level & Reasoning Budgets**:
   - Full support for Gemini 2.5/3.x `thinking_level` ("minimal", "low", "medium", "high", "off") and `thinking_budget` across all agents and the 4-tier configuration cascade.
@@ -17,8 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Hybrid Search RAG Knowledge Store & Cross-Encoder Reranking**:
   - SQLite FTS5 BM25 lexical keyword search and Gemini Embedding 2 (`models/gemini-embedding-2`, 3072 dimensions) dense semantic vector search managed via **SQLAlchemy 2.0 ORM** (`.novel/rag/lore.db`).
   - Reciprocal Rank Fusion (RRF, $k=60$) candidate fusion and LLM Cross-Encoder Reranker (`LLMCrossEncoderReranker`).
-  - Canonical Translation Memory (TM) retrieval to `Zensor` (CritiqueAgent) on Pass 1.
-  - Inbound lore retrieval to `Chronist` (ChroniclerAgent) and `Wortschmied` (DrafterAgent).
+  - Canonical Translation Memory (TM) retrieval to Critique Agent (`CritiqueAgent`) on Pass 1.
+  - Inbound lore retrieval to Chronicler Agent (`ChroniclerAgent`) and Context-Aware Drafter (`ContextAwareDrafterAgent`).
   - Outbound auto-indexing of chapter summaries and 20-line scene chunks upon chapter completion.
   - New CLI commands `nousetsu lore` and `nousetsu migrate-rag` (alias `index-rag`).
 - **Forensic Prompt Tracking & Web Visualizer**:
@@ -39,7 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Scene-Level Character & Glossary Filtering**:
   - `filter_characters_for_scene` dynamically filters character profiles to those active in the scene, preserving core protagonist roles while eliminating prompt bloat.
   - `filter_glossary_for_text` with script-aware word boundary detection (CJK ideographs vs Latin `\b` boundaries).
-  - Dedicated scene-based entity and glossary filtering for `Schriftdetektiv` (`EntityExtractorAgent`).
+  - Dedicated scene-based entity and glossary filtering for Entity Extractor (`EntityExtractorAgent`).
 - **Flexible Chapter CLI Range & Batch Targeting**:
   - Extended `--chapter` / `-c` to support range (`5-58`, `5..58`, `ch 5 to 58`) and start-from (`5+`) syntax.
 - **High-Performance Textual TUI**:
@@ -80,11 +80,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Initial release of **NouSetsu** novel translation system.
 - Five-agent LangGraph reflection pipeline:
-  - **Schriftdetektiv** (`EntityExtractorAgent`)
-  - **Wortschmied** (`ContextAwareDrafterAgent`)
-  - **Zensor** (`CritiqueAgent`)
-  - **Feinschliff** (`PolishingAgent`)
-  - **Chronist** (`ChroniclerAgent`)
+  - **Entity Extractor** (`EntityExtractorAgent`)
+  - **Context-Aware Drafter** (`ContextAwareDrafterAgent`)
+  - **Critique Agent** (`CritiqueAgent`)
+  - **Polishing Agent** (`PolishingAgent`)
+  - **Chronicler Agent** (`ChroniclerAgent`)
 - Persistent Novel Bible (`bible.yaml`) with character profiles, terminology glossary, and style guide.
 - Single consolidated project metadata document (`.novel/metadata.json`).
 - Textual TUI dashboard with dual-pane reading viewer and live pipeline progress visualization.

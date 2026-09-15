@@ -1,8 +1,8 @@
-# 🔎 Stage 3: Zensor (`CritiqueAgent`)
+# 🔎 Stage 3: Critique Agent (`CritiqueAgent`)
 
 - **Source File**: [`src/nousetsu/agents/critic.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/critic.py)
 - **Class**: `CritiqueAgent`
-- **German Codename**: **Zensor** (*The Inspector*)
+- **Role**: **Critique Agent** (*The Inspector*)
 - **Production Model**: `gemma-4-26b-a4b-it` (Default via `.env` / cascade)
 - **Fallback Model**: `gemini-3.5-flash-lite` (Via `FallbackChatModel` on HTTP 429)
 
@@ -10,26 +10,26 @@
 
 ## 1. Architectural Mission
 
-`Zensor` is the rigorous, line-by-line quality auditor of the NouSetsu pipeline. Its mission is to compare candidate prose (initial draft or polished revision) directly against the original raw source text to identify fidelity breaches, omissions, glossary violations, voice flattening, and intimacy discrepancies.
+The `CritiqueAgent` is the rigorous, line-by-line quality auditor of the NouSetsu pipeline. Its mission is to compare candidate prose (initial draft or polished revision) directly against the original raw source text to identify fidelity breaches, omissions, glossary violations, voice flattening, and intimacy discrepancies.
 
-Operating within the LangGraph cyclic reflection loop, `Zensor`:
+Operating within the LangGraph cyclic reflection loop, the Critique Agent:
 1. Conducts **paired line-semantic chunk auditing** (`_build_paired_chunks`).
 2. Evaluates literary fidelity ($0.0 - 10.0$) and prose style ($0.0 - 10.0$).
 3. Verifies canonical consistency against historical translations via **Translation Memory (TM) RAG** ($k=2$).
 4. Enforces programmatic glossary and language regression guards.
-5. Produces actionable, prioritized critique notes guiding `Feinschliff` (PolishingAgent).
+5. Produces actionable, prioritized critique notes guiding the Polishing Agent (`PolishingAgent`).
 
 ```mermaid
 graph TD
-    SRC["Raw Source Text"] --> AUDIT["Zensor<br>(CritiqueAgent)"]
+    SRC["Raw Source Text"] --> AUDIT["Critique Agent<br>(CritiqueAgent)"]
     DRAFT["Candidate Prose<br>(Draft or Polished Pass)"] --> AUDIT
     BIBLE[("Novel Bible<br>(Characters & Glossary)")] --> AUDIT
     TM[("Canonical Translation Memory<br>(RAG k=2)")] --> AUDIT
     AUDIT --> SCORE["QualityAudit<br>(Fidelity / Style / Glossary %)"]
     AUDIT --> NOTES["critique_notes<br>(Actionable Feedback)"]
     SCORE --> GATE{"Fidelity >= 8.5 &<br>Style >= 8.5?"}
-    GATE -->|"Yes (or Max Loops)"| NEXT["Stage 5: Chronist"]
-    GATE -->|"No"| POLISH["Stage 4: Feinschliff"]
+    GATE -->|"Yes (or Max Loops)"| NEXT["Stage 5: Chronicler Agent"]
+    GATE -->|"No"| POLISH["Stage 4: Polishing Agent"]
 ```
 
 ---
@@ -86,20 +86,20 @@ def _build_paired_chunks(self, source_text: str, draft_text: str) -> List[Any]
 ## 3. Core Cognitive Mechanics
 
 ### A. Paired Line-Semantic Chunking
-When auditing lengthy chapters, naive LLM evaluation suffers from context fatigue, skipping middle paragraphs. `Zensor` overcomes this with paired semantic chunking:
+When auditing lengthy chapters, naive LLM evaluation suffers from context fatigue, skipping middle paragraphs. The Critique Agent overcomes this with paired semantic chunking:
 - Source and draft texts are aligned into proportional line segments.
 - Each chunk preserves `start_line`, `end_line`, and corresponding `source_content`.
 - Audits are conducted per chunk and aggregated deterministically:
   $$\text{fidelity} = \frac{1}{N}\sum_{i=1}^N \text{fidelity}_i, \quad \text{style} = \frac{1}{N}\sum_{i=1}^N \text{style}_i$$
 
 ### B. Canonical Translation Memory (TM) RAG Verification
-On Pass 1, `Zensor` receives up to $k=2$ historical translation memory snippets retrieved from `.novel/rag/lore.db`:
+On Pass 1, the Critique Agent receives up to $k=2$ historical translation memory snippets retrieved from `.novel/rag/lore.db`:
 - **Context Injection**: RAG candidates are provided under `CANONICAL TRANSLATION MEMORY (HISTORICAL BENCHMARKS)`.
-- **Consistency Verification**: `Zensor` cross-examines character speech patterns and nomenclature against previous volumes to prevent tone drift across chapters.
+- **Consistency Verification**: The Critique Agent cross-examines character speech patterns and nomenclature against previous volumes to prevent tone drift across chapters.
 - **Cache Efficiency**: Subsequent reflection passes re-use the cached TM context without performing redundant database queries.
 
 ### C. Programmatic Glossary Verification
-In addition to LLM scoring, `Zensor` performs hard programmatic string checks:
+In addition to LLM scoring, the Critique Agent performs hard programmatic string checks:
 1. Filters active glossary terms to those whose `source` term actually appears in the chapter's raw source text via [`filter_glossary_for_scene`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/glossary_filter.py).
 2. Verifies whether the canonical `target` translation appears in `draft_text` via script-aware [`is_term_present`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/glossary_filter.py) (matching CJK substrings and enforcing Latin word boundaries `\bterm\b`).
 3. If missing, adds an explicit warning and deducts from `glossary_compliance_pct`.
@@ -108,7 +108,7 @@ In addition to LLM scoring, `Zensor` performs hard programmatic string checks:
 If the candidate translation inadvertently retains or reverts to the source language (e.g. Japanese kanji/kana or Chinese hanzi left unlocalized):
 - `detect_language(draft_text)` flags the collision.
 - The audit is automatically failed (`fidelity_score = 1.0`, `style_score = 1.0`, `passed = False`).
-- An urgent warning is appended, compelling `Feinschliff` or `NovelTranslationWorkflow` to re-draft.
+- An urgent warning is appended, compelling the Polishing Agent or `NovelTranslationWorkflow` to re-draft.
 
 ### E. AI Safety Block Resilience & Recursive Bisection
 If a sensitive passage trips content filters during critique:
@@ -116,7 +116,7 @@ If a sensitive passage trips content filters during critique:
 - Base case: assigns passing default scores (`fidelity = 8.5`, `style = 8.0`, `glossary = 100%`) with an audit warning (`⚠️ Sensitive scene safety block bypassed during critique`), preventing workflow stalls.
 
 ### F. Per-Scene Character Roster Filtering
-`Zensor` uses [`filter_characters_for_scene`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/character_filter.py) during line-by-line auditing:
+The Critique Agent uses [`filter_characters_for_scene`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/character_filter.py) during line-by-line auditing:
 - Ingests only character profiles present in the audited source slice or draft candidate, plus permanent core roles (`protagonist`, `lead`).
 - Focuses critique attention on the actual actors in the scene, preventing false tone warnings against uninvolved characters.
 
@@ -139,8 +139,8 @@ Registered via [`src/nousetsu/skills/builtin/critic.py`](file:///D:/Code/novel_t
 ## 5. RAG System Interaction
 
 - **Canonical TM Input**: Receives top $k=2$ past chapter translation snippets via `rag_context`.
-- **Pass 1 Enforcement**: On the initial evaluation pass, `Zensor` utilizes canonical TM to ensure terminology and honorific choices match published precedent.
-- **Pass 2+ Re-Audit**: Evaluates polished candidate prose against the raw source text to verify whether `Feinschliff` successfully resolved all issues noted in Pass 1.
+- **Pass 1 Enforcement**: On the initial evaluation pass, the Critique Agent utilizes canonical TM to ensure terminology and honorific choices match published precedent.
+- **Pass 2+ Re-Audit**: Evaluates polished candidate prose against the raw source text to verify whether the Polishing Agent successfully resolved all issues noted in Pass 1.
 
 ---
 

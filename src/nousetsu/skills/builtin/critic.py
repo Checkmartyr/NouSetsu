@@ -1,4 +1,4 @@
-"""Built-in domain skills for CritiqueAgent (Zensor)."""
+"""Built-in domain skills for CritiqueAgent."""
 from typing import List
 from nousetsu.skills.models import AgentSkill
 

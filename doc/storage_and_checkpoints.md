@@ -107,7 +107,7 @@ class ArcSummary(BaseModel):
     key_milestones: List[str]        # Concrete milestones achieved during this arc
 ```
 
-* **Autonomous Arc Archiving**: When `Chronist` detects that a major narrative arc has concluded, it writes the completed `ArcSummary` to `.novel/summaries/arcs/` and activates a new arc.
+* **Autonomous Arc Archiving**: When `ChroniclerAgent` detects that a major narrative arc has concluded, it writes the completed `ArcSummary` to `.novel/summaries/arcs/` and activates a new arc.
 * **Volume Isolation**: The internal `arcs/` subfolder is automatically excluded from volume discovery (`NovelRepository.get_folder_order()`), ensuring it is never mistaken for a chapter folder.
 
 ### 3. Micro Tier: Volume-Partitioned Episodic Summaries (`.novel/summaries/<volume>/`)

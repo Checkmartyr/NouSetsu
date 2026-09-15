@@ -1,4 +1,4 @@
-"""Tests for chapter title and header preservation in PolishingAgent (Feinschliff)."""
+"""Tests for chapter title and header preservation in PolishingAgent."""
 import pytest
 from unittest.mock import MagicMock
 from langchain_core.messages import AIMessage

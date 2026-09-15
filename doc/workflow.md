@@ -16,11 +16,11 @@ sequenceDiagram
     participant Workflow as "NovelTranslationWorkflow"
     participant Tracker as "PromptTracker"
     participant RAG as "HybridSearchEngine (lore.db)"
-    participant Extractor as "Stage 1: Schriftdetektiv (Extractor)"
-    participant Drafter as "Stage 2: Wortschmied (Drafter)"
-    participant Critic as "Stage 3: Zensor (Critic)"
-    participant Polisher as "Stage 4: Feinschliff (Polisher)"
-    participant Chronicler as "Stage 5: Chronist (Chronicler)"
+    participant Extractor as "Stage 1: Entity Extractor"
+    participant Drafter as "Stage 2: Context-Aware Drafter"
+    participant Critic as "Stage 3: Critique Agent"
+    participant Polisher as "Stage 4: Polishing Agent"
+    participant Chronicler as "Stage 5: Chronicler Agent"
     participant Repo as "NovelRepository"
 
     User->>Scanner: "Scan input folder"
@@ -106,19 +106,19 @@ sequenceDiagram
 > [!TIP]
 > For a comprehensive, in-depth technical analysis of each agent's internal prompt templates, context assembly, chunking algorithms, and safety guards, see the dedicated [**Agents Deep-Dive Guide**](./agents_deep_dive.md).
 
-| Stage | German Codename | Agent Class | Primary Function | Plain-English Role | RAG Role |
+| Stage | Agent Title | Agent Class | Primary Function | Plain-English Role | RAG Role |
 |:---:|:---|:---|:---|:---|:---:|
-| **1** | **Schriftdetektiv** | `EntityExtractorAgent` | `extract(...)` | **The Detective**: Discovers unknown character names, ranks, and magic terms before translation starts. | Feeds Bible Terms |
-| **2** | **Wortschmied** | `ContextAwareDrafterAgent` | `draft(...)` | **The Wordsmith**: Writes initial translation, resolving zero-anaphora, using scene-filtered character rosters and word-boundary glossaries. | Inbound ($k=2$) |
-| **3** | **Zensor** | `CritiqueAgent` | `evaluate(...)` | **The Inspector**: Line-by-line quality auditor scoring fidelity and style (0-10) against canonical translation memory. | Inbound TM ($k=2$) |
-| **4** | **Feinschliff** | `PolishingAgent` | `polish(...)` | **The Stylist**: Rewrites drafted prose into natural English via DiffPatcher and programmatic chapter title protection. | Indirect via Notes |
-| **5** | **Chronist** | `ChroniclerAgent` | `chronicle(...)`<br>`assemble_metadata(...)` | **The Memory Keeper**: Summarizes chapter events, updates 3-tier memory, and indexes summaries and 20-line chunks into Hybrid RAG. | Bi-directional (Read $k=3$ / Write) |
+| **1** | **Entity Extractor** | `EntityExtractorAgent` | `extract(...)` | **The Detective**: Discovers unknown character names, ranks, and magic terms before translation starts. | Feeds Bible Terms |
+| **2** | **Context-Aware Drafter** | `ContextAwareDrafterAgent` | `draft(...)` | **The Wordsmith**: Writes initial translation, resolving zero-anaphora, using scene-filtered character rosters and word-boundary glossaries. | Inbound ($k=2$) |
+| **3** | **Critique Agent** | `CritiqueAgent` | `evaluate(...)` | **The Inspector**: Line-by-line quality auditor scoring fidelity and style (0-10) against canonical translation memory. | Inbound TM ($k=2$) |
+| **4** | **Polishing Agent** | `PolishingAgent` | `polish(...)` | **The Stylist**: Rewrites drafted prose into natural English via DiffPatcher and programmatic chapter title protection. | Indirect via Notes |
+| **5** | **Chronicler Agent** | `ChroniclerAgent` | `chronicle(...)`<br>`assemble_metadata(...)` | **The Memory Keeper**: Summarizes chapter events, updates 3-tier memory, and indexes summaries and 20-line chunks into Hybrid RAG. | Bi-directional (Read $k=3$ / Write) |
 
 ---
 
 ## 🔍 Stage-by-Stage Function Breakdown
 
-### Stage 1: Entity Extraction (`EntityExtractorAgent` / *Schriftdetektiv*)
+### Stage 1: Entity Extraction (`EntityExtractorAgent`)
 * **Source Module**: [`src/nousetsu/agents/extractor.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/extractor.py)
 * **Function**:
   ```python
@@ -158,7 +158,7 @@ sequenceDiagram
 
 ---
 
-### Stage 2: Context-Aware Drafting (`ContextAwareDrafterAgent` / *Wortschmied*)
+### Stage 2: Context-Aware Drafting (`ContextAwareDrafterAgent`)
 * **Source Module**: [`src/nousetsu/agents/drafter.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/drafter.py)
 * **Function**:
   ```python
@@ -204,7 +204,7 @@ sequenceDiagram
 
 ---
 
-### Stage 3: Critique & Quality Audit (`CritiqueAgent` / *Zensor*)
+### Stage 3: Critique & Quality Audit (`CritiqueAgent`)
 * **Source Module**: [`src/nousetsu/agents/critic.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/critic.py)
 * **Function**:
   ```python
@@ -239,11 +239,11 @@ sequenceDiagram
   A tuple containing:
   1. `QualityAudit`: Structured audit containing `fidelity_score` (0-10), `style_score` (0-10), `glossary_compliance_pct` (0-100%), warnings list, and `passed` boolean.
   2. `str`: Actionable `critique_notes` describing specific pacing, fidelity, or vocabulary issues for the polisher.
-* **Role in Review Loop**: If both fidelity and style scores reach `>= 8.5/10`, the chapter is approved for publication; otherwise, the notes are passed to `Feinschliff` for another polish pass.
+* **Role in Review Loop**: If both fidelity and style scores reach `>= 8.5/10`, the chapter is approved for publication; otherwise, the notes are passed to `PolishingAgent` for another polish pass.
 
 ---
 
-### Stage 4: Prose Cadence Polishing (`PolishingAgent` / *Feinschliff*)
+### Stage 4: Prose Cadence Polishing (`PolishingAgent`)
 * **Source Module**: [`src/nousetsu/agents/polisher.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/polisher.py)
 * **Function**:
   ```python
@@ -283,7 +283,7 @@ sequenceDiagram
 
 ---
 
-### Stage 5: Narrative Lore Chronicling (`ChroniclerAgent` / *Chronist*)
+### Stage 5: Narrative Lore Chronicling (`ChroniclerAgent`)
 * **Source Module**: [`src/nousetsu/agents/chronicler.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/chronicler.py)
 * **Functions**:
   1. **`chronicle(...)`**:
@@ -338,20 +338,20 @@ sequenceDiagram
 
 ## 🔄 Automated Reflection Review Loop & Regression Guard
 
-Inside [`src/nousetsu/graph/workflow.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/graph/workflow.py), LangGraph manages conditional routing between `Feinschliff` and `Zensor`:
+Inside [`src/nousetsu/graph/workflow.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/graph/workflow.py), LangGraph manages conditional routing between `PolishingAgent` and `CritiqueAgent`:
 
 ```mermaid
 flowchart TD
-    Draft["Raw Draft Generated"] --> Critique1["Pass 1: Zensor Audits Draft"]
-    Critique1 --> Polish1["Pass 1: Feinschliff Polishes Draft"]
+    Draft["Raw Draft Generated"] --> Critique1["Pass 1: Critique Agent Audits Draft"]
+    Critique1 --> Polish1["Pass 1: Polishing Agent Polishes Draft"]
     
     Polish1 --> RoutePolish{"Loop Check:\nmax_loops <= 1?"}
-    RoutePolish -- Yes --> Chronicle["Stage 5: Chronist (Final Publication)"]
-    RoutePolish -- No --> Critique2["Pass 2+: Zensor Audits Polished Text"]
+    RoutePolish -- Yes --> Chronicle["Stage 5: Chronicler Agent (Final Publication)"]
+    RoutePolish -- No --> Critique2["Pass 2+: Critique Agent Audits Polished Text"]
     
     Critique2 --> CheckScore{"Quality Evaluation:\nFidelity & Style >= 8.5\nOR Loop >= Max Loops?"}
     CheckScore -- "Quality Met / Max Reached\n(Best Candidate Guard)" --> Chronicle
-    CheckScore -- "Quality < 8.5 (Needs Work)" --> Polish2["Pass 2+: Feinschliff Refines Text"]
+    CheckScore -- "Quality < 8.5 (Needs Work)" --> Polish2["Pass 2+: Polishing Agent Refines Text"]
     Polish2 --> RoutePolish
 ```
 

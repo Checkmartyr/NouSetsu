@@ -6,7 +6,7 @@ This document provides a technical API reference for core classes, functions, ut
 
 ## 🤖 Agents (`src/nousetsu/agents/`)
 
-### `EntityExtractorAgent` (*Schriftdetektiv*) (`src/nousetsu/agents/extractor.py`)
+### `EntityExtractorAgent` (`src/nousetsu/agents/extractor.py`)
 Extracts named entities, characters, and glossary candidates from source text before translation begins with Procedural Graph steering.
 
 ```python
@@ -43,7 +43,7 @@ class EntityExtractorAgent:
 
 ---
 
-### `ContextAwareDrafterAgent` (*Wortschmied*) (`src/nousetsu/agents/drafter.py`)
+### `ContextAwareDrafterAgent` (`src/nousetsu/agents/drafter.py`)
 Produces initial novelistic translation drafts with zero-anaphora resolution, character voices, episodic memory, and chunk-aware Procedural Graph guidance. Supports line-based semantic chunking.
 
 ```python
@@ -84,7 +84,7 @@ class ContextAwareDrafterAgent:
 
 ---
 
-### `CritiqueAgent` (*Zensor*) (`src/nousetsu/agents/critic.py`)
+### `CritiqueAgent` (`src/nousetsu/agents/critic.py`)
 Performs independent fidelity, style, and glossary compliance audits for both raw drafts and polished iterations.
 
 ```python
@@ -122,7 +122,7 @@ class CritiqueAgent:
 
 ---
 
-### `PolishingAgent` (*Feinschliff*) (`src/nousetsu/agents/polisher.py`)
+### `PolishingAgent` (`src/nousetsu/agents/polisher.py`)
 Refines prose cadence, remedies critique feedback, eliminates translationese tropes, and supports token-efficient Diff/Patch mode across semantic chunks.
 
 ```python
@@ -157,7 +157,7 @@ class PolishingAgent:
 
 ---
 
-### `ChroniclerAgent` (*Chronist*) (`src/nousetsu/agents/chronicler.py`)
+### `ChroniclerAgent` (`src/nousetsu/agents/chronicler.py`)
 Updates narrative lore, generates chapter synopses, and compiles metadata.
 
 ```python

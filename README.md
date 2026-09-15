@@ -19,12 +19,12 @@ Translating Japanese, Chinese, and Korean webnovels and light novels into public
 
 | Challenge | Traditional MT (Google / DeepL) | Raw Single-Prompt LLM | 📖 NouSetsu Multi-Agent Framework |
 | :--- | :--- | :--- | :--- |
-| **Zero-Anaphora** *(Omitted Pronouns)* | ❌ Guesses blindly; randomly swaps character genders ("he" vs "she"). | ⚠️ Frequently hallucinates subjects or flips narrative point of view. | ✅ **Wortschmied (Drafter)** resolves omitted subjects via dynamic scene context and character profiles. |
+| **Zero-Anaphora** *(Omitted Pronouns)* | ❌ Guesses blindly; randomly swaps character genders ("he" vs "she"). | ⚠️ Frequently hallucinates subjects or flips narrative point of view. | ✅ **Context-Aware Drafter** resolves omitted subjects via dynamic scene context and character profiles. |
 | **Series Memory & Continuity** | ❌ Zero memory across sentences or chapters. | ⚠️ Context window overflow; forgets plot progression after 2 chapters. | ✅ **3-Tier Narrative Memory** (Macro Whole-Story > Meso Arcs > Micro Chapters) persists throughout the series. |
 | **AI Safety Blocks** *(Sensory / Action)* | ❌ Hard failures or redacted snippets. | ❌ Monolithic HTTP 400 rejection halts the entire translation batch. | ✅ **Recursive Binary Bisection Engine** isolates sensitive lines ($\le 8$ lines) with Google Translate fallback. |
-| **Prose Quality & Cadence** | ❌ Rigid word-for-word translationese ("couldn't help but", "as expected of"). | ⚠️ Inconsistent register; characters sound identical. | ✅ **Feinschliff (Polisher)** refines sentence cadence, emotional resonance, and aristocratic court registers. |
+| **Prose Quality & Cadence** | ❌ Rigid word-for-word translationese ("couldn't help but", "as expected of"). | ⚠️ Inconsistent register; characters sound identical. | ✅ **Polishing Agent** refines sentence cadence, emotional resonance, and aristocratic court registers. |
 | **Terminology Consistency** | ❌ Spells martial arts ranks and items differently every 3 paragraphs. | ⚠️ Drifts across long batches; forgets canonical spellings. | ✅ **Novel Bible** and **Active Chapter Glossary Filter** strictly enforce terminology without prompt bloat. |
-| **Quality Verification** | ❌ No quality feedback or verification. | ❌ What the model outputs on pass 1 is all you get. | ✅ **Zensor (Critic)** reflection review loop scores fidelity/style ($\ge 8.5/10$) with **Best-Candidate Guard**. |
+| **Quality Verification** | ❌ No quality feedback or verification. | ❌ What the model outputs on pass 1 is all you get. | ✅ **Critique Agent** reflection review loop scores fidelity/style ($\ge 8.5/10$) with **Best-Candidate Guard**. |
 | **API Quota & Cost Protection** | ❌ None; user must manage quotas manually. | ❌ Constant HTTP 429 quota exhaustion on long chapters. | ✅ **32K TPM / 60 RPM Sliding Window Limiter** + Automatic Failover + Line-Based Semantic Chunking. |
 
 ---
@@ -33,13 +33,13 @@ Translating Japanese, Chinese, and Korean webnovels and light novels into public
 
 NouSetsu models the translation workflow as a collaborative literary publishing house. Each stage is assigned a specialized AI agent with a distinct cognitive role:
 
-| Stage | Codename | Agent Class | Production Model | Core Responsibility |
+| Stage | Agent Role | Agent Class | Production Model | Core Responsibility |
 | :---: | :--- | :--- | :--- | :--- |
-| **1** | **Schriftdetektiv** | [`EntityExtractorAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/extractor.py) | `gemini-3.1-flash-lite` | **The Detective**: Scans raw source text *before* drafting to identify unknown character names, cultivate power realms, and discover terms not yet registered in the Novel Bible. Steered by Procedural Graphs to prune conversational junk vocabulary. |
-| **2** | **Wortschmied** | [`ContextAwareDrafterAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/drafter.py) | `gemini-3.5-flash-lite` | **The Wordsmith**: Produces the initial full translation draft, resolving zero-anaphora (omitted pronouns/subjects), applying distinct dialogue registers, and injecting 3-tier narrative context across chapter and volume boundaries. |
-| **3** | **Zensor** | [`CritiqueAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/critic.py) | `gemma-4-26b-a4b-it` | **The Inspector**: Line-by-line auditor scoring fidelity and style (0–10), detecting skipped sentences (omissions), verifying glossary compliance, auditing nickname disparities, and providing actionable critique notes. |
-| **4** | **Feinschliff** | [`PolishingAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/polisher.py) | `gemini-3.5-flash-lite` | **The Stylist**: Rewrites drafted prose into publication-grade target fiction, purging machine-translation tropes ("couldn't help but", "as expected of"), optimizing prose cadence, and enhancing emotional depth while preserving address forms. |
-| **5** | **Chronist** | [`ChroniclerAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/chronicler.py) | `gemma-4-26b-a4b-it` | **The Memory Keeper**: Autonomously tracks story arc progression, summarizes chapter events, detects character state shifts (injuries, deaths, breakthroughs), and compiles metadata audit records into `.novel/metadata.json`. |
+| **1** | **Entity Extractor** | [`EntityExtractorAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/extractor.py) | `gemini-3.1-flash-lite` | **The Detective**: Scans raw source text *before* drafting to identify unknown character names, cultivate power realms, and discover terms not yet registered in the Novel Bible. Steered by Procedural Graphs to prune conversational junk vocabulary. |
+| **2** | **Context-Aware Drafter** | [`ContextAwareDrafterAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/drafter.py) | `gemini-3.5-flash-lite` | **The Wordsmith**: Produces the initial full translation draft, resolving zero-anaphora (omitted pronouns/subjects), applying distinct dialogue registers, and injecting 3-tier narrative context across chapter and volume boundaries. |
+| **3** | **Critique Agent** | [`CritiqueAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/critic.py) | `gemma-4-26b-a4b-it` | **The Inspector**: Line-by-line auditor scoring fidelity and style (0–10), detecting skipped sentences (omissions), verifying glossary compliance, auditing nickname disparities, and providing actionable critique notes. |
+| **4** | **Polishing Agent** | [`PolishingAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/polisher.py) | `gemini-3.5-flash-lite` | **The Stylist**: Rewrites drafted prose into publication-grade target fiction, purging machine-translation tropes ("couldn't help but", "as expected of"), optimizing prose cadence, and enhancing emotional depth while preserving address forms. |
+| **5** | **Chronicler Agent** | [`ChroniclerAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/chronicler.py) | `gemma-4-26b-a4b-it` | **The Memory Keeper**: Autonomously tracks story arc progression, summarizes chapter events, detects character state shifts (injuries, deaths, breakthroughs), and compiles metadata audit records into `.novel/metadata.json`. |
 
 > 📘 *For the exhaustive technical breakdown of every agent file and method signature, see the [Agent Architecture Deep Dive](doc/agents_deep_dive.md).*
 
@@ -50,7 +50,7 @@ NouSetsu models the translation workflow as a collaborative literary publishing 
 ### 1. 🧠 3-Tier Hierarchical Narrative Memory (Macro > Meso > Micro)
 To eliminate context drift over multi-hundred chapter epics, NouSetsu structures narrative memory into three distinct tiers inside the **Novel Bible**:
 * **Macro Context (`whole_story_summary`)**: Global narrative synthesis capturing long-term character motivations, overarching conflicts, and major world state changes.
-* **Meso Context (`ArcSummary`)**: Autonomous AI detection of story arc boundaries by `Chronist`. Tracks arc titles, core conflicts, and milestones. Serialized to `.novel/summaries/arcs/arc_XXXX.json`. Completed arcs are archived into the Novel Bible and synthesized into the Macro context.
+* **Meso Context (`ArcSummary`)**: Autonomous AI detection of story arc boundaries by the Chronicler Agent. Tracks arc titles, core conflicts, and milestones. Serialized to `.novel/summaries/arcs/arc_XXXX.json`. Completed arcs are archived into the Novel Bible and synthesized into the Macro context.
 * **Micro Context (`ChapterSummary`)**: Immediate preceding chapter outcomes, cliffhangers, and character state changes partitioned by volume folder (`.novel/summaries/<volume>/chapter_XXXX.json`). Seamlessly backfills context across volume transitions (`Villainess_04` $\to$ `Villainess_05`) with volume badges.
 
 ### 2. 🛡️ Dual-Resilience AI Safety Engine (Recursive Bisection & Fallback)
@@ -65,7 +65,7 @@ NouSetsu encodes procedural execution rules as explicit attributed graphs $G = (
 * **Offline Self-Evolution**: System refines graph edges from critique audit traces offline with zero live inference token overhead. Inspectable anytime via `nousetsu graph-info`.
 
 ### 4. 🔄 LangGraph Reflection Review Loop & Best-Candidate Guard
-* **Automated Reflection Loop**: `Zensor` and `Feinschliff` enter a multi-pass review loop, refining prose until both fidelity and style meet quality thresholds (`>= 8.5/10`) or reach the configured loop limit.
+* **Automated Reflection Loop**: The Critique Agent and Polishing Agent enter a multi-pass review loop, refining prose until both fidelity and style meet quality thresholds (`>= 8.5/10`) or reach the configured loop limit.
 * **Best-Candidate Regression Guard**: If a subsequent polishing pass scores lower than an earlier candidate, NouSetsu automatically retains the highest-scoring candidate (`best_polished_text` and `best_audit`), preventing quality degradation.
 
 ### 5. ⚡ Enterprise Quota Throttling & Per-Role Routing
@@ -80,7 +80,7 @@ NouSetsu encodes procedural execution rules as explicit attributed graphs $G = (
 ### 7. 🔍 Hybrid Search RAG Knowledge Store & Cross-Encoder Reranking
 * **Zero-Daemon Local Store**: Powered by SQLite FTS5 (BM25 lexical ranking) and dense 3072-dimensional vectors from **Gemini Embedding 2** (`models/gemini-embedding-2`), managed via **SQLAlchemy 2.0 ORM**.
 * **High-Precision Cross-Encoder**: Combines sparse and dense candidates via Reciprocal Rank Fusion (RRF, $k=60$) and reranks them with an LLM Cross-Encoder (`LLMCrossEncoderReranker`).
-* **Bi-Directional Pipeline Integration**: Injects episodic lore into `Wortschmied` (Drafter) and canonical TM references into `Zensor` (Critic), while `Chronist` (Chronicler) cross-references prior lore and automatically embeds/indexes completed summaries and scene chunks.
+* **Bi-Directional Pipeline Integration**: Injects episodic lore into the Context-Aware Drafter and canonical TM references into the Critique Agent, while the Chronicler Agent cross-references prior lore and automatically embeds/indexes completed summaries and scene chunks.
 
 ### 8. 📊 Prompt Tracking, Web Trace Visualizer & Diff/Patch Optimization
 * **Forensic Prompt Tracking**: [`PromptTracker`](file:///D:/Code/novel_translation_Agent/src/nousetsu/analysis/tracker.py) automatically records full system prompts, user inputs, raw completions, and duration/token telemetry for every pipeline step into `.novel/traces/`.
@@ -102,17 +102,17 @@ flowchart TD
     end
 
     subgraph Agent_Pipeline ["2. Five-Stage Agent Pipeline (LangGraph)"]
-        Scanner & Memory --> Extractor["Stage 1: Schriftdetektiv (EntityExtractorAgent)\nExtracts characters, terms, cultivation realms"]
-        Extractor --> Drafter["Stage 2: Wortschmied (ContextAwareDrafterAgent)\nResolves zero-anaphora, voice & episodic lore RAG"]
+        Scanner & Memory --> Extractor["Stage 1: Entity Extractor (EntityExtractorAgent)\nExtracts characters, terms, cultivation realms"]
+        Extractor --> Drafter["Stage 2: Context-Aware Drafter (ContextAwareDrafterAgent)\nResolves zero-anaphora, voice & episodic lore RAG"]
         
         subgraph Review_Loop ["Cyclic Reflection Review Loop"]
-            Drafter --> Critic["Stage 3: Zensor (CritiqueAgent)\nAudits fidelity (0-10), style (0-10), TM RAG"]
-            Critic --> Polisher["Stage 4: Feinschliff (PolishingAgent)\nDiff/Patch engine, title guard & cadence polish"]
+            Drafter --> Critic["Stage 3: Critique Agent (CritiqueAgent)\nAudits fidelity (0-10), style (0-10), TM RAG"]
+            Critic --> Polisher["Stage 4: Polishing Agent (PolishingAgent)\nDiff/Patch engine, title guard & cadence polish"]
             Polisher --> QualityCheck{"Quality Check:\nFidelity & Style >= 8.5\nOR Max Loops Reached?"}
             QualityCheck -- "Needs Refinement" --> Critic
         end
         
-        QualityCheck -- "Passed / Cap Reached\n(Best Candidate Guard)" --> Chronicler["Stage 5: Chronist (ChroniclerAgent)\n3-tier summaries, milestones & RAG auto-indexing"]
+        QualityCheck -- "Passed / Cap Reached\n(Best Candidate Guard)" --> Chronicler["Stage 5: Chronicler Agent (ChroniclerAgent)\n3-tier summaries, milestones & RAG auto-indexing"]
     end
 
     subgraph Safety_Resilience ["3. Safety, Telemetry & Fallback Engine"]
@@ -222,11 +222,11 @@ nousetsu batch [OPTIONS]
 | `--target-lang` | `-T` | `Thai` | Target language for publication-quality output |
 | `--model` | `-m` | `.env` | Primary LLM model override (defaults to `NOVEL_MODEL` in `.env`) |
 | `--fallback-model` | | `.env` | Fallback LLM model override (defaults to `NOVEL_FALLBACK_MODEL`) |
-| `--extractor-model` | | `None` | Dedicated model override for Stage 1 (Schriftdetektiv) |
-| `--drafter-model` | | `None` | Dedicated model override for Stage 2 (Wortschmied) |
-| `--critic-model` | | `None` | Dedicated model override for Stage 3 (Zensor) |
-| `--polisher-model` | | `None` | Dedicated model override for Stage 4 (Feinschliff) |
-| `--chronicler-model`| | `None` | Dedicated model override for Stage 5 (Chronist) |
+| `--extractor-model` | | `None` | Dedicated model override for Stage 1 (Entity Extractor) |
+| `--drafter-model` | | `None` | Dedicated model override for Stage 2 (Context-Aware Drafter) |
+| `--critic-model` | | `None` | Dedicated model override for Stage 3 (Critique Agent) |
+| `--polisher-model` | | `None` | Dedicated model override for Stage 4 (Polishing Agent) |
+| `--chronicler-model`| | `None` | Dedicated model override for Stage 5 (Chronicler Agent) |
 | `--max-loops` | | `3` | Maximum review reflection loops (bounds: 1–5) |
 | `--quality-threshold`| | `8.5` | Target quality score (fidelity & style) to trigger early exit |
 | `--max-tpm` | | `32000` | Rate limiter tokens-per-minute quota |

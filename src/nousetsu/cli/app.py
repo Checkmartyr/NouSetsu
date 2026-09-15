@@ -190,9 +190,9 @@ def cmd_graph_info(args: argparse.Namespace) -> None:
 
     graphs_to_show = []
     if agent_filter in ["all", "extractor"]:
-        graphs_to_show.append(("Extractor (Schriftdetektiv)", get_default_extractor_graph()))
+        graphs_to_show.append(("Entity Extractor", get_default_extractor_graph()))
     if agent_filter in ["all", "drafter"]:
-        graphs_to_show.append(("Drafter (Wortschmied)", get_default_drafter_graph()))
+        graphs_to_show.append(("Context-Aware Drafter", get_default_drafter_graph()))
 
     if not graphs_to_show:
         console.print(f"[yellow]No procedural graph found for agent '{args.agent}'. Use 'extractor', 'drafter', or 'all'.[/]")
