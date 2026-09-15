@@ -151,3 +151,58 @@ def test_repository_set_languages(tmp_path: Path):
     cfg = repo.load_config()
     assert cfg.source_language == "Chinese"
     assert cfg.target_language == "Spanish"
+
+
+def test_assemble_metadata_uses_extracted_and_strict_presence():
+    from nousetsu.agents.chronicler import ChroniclerAgent
+    from nousetsu.models.bible import CharacterProfile, GlossaryItem
+    from nousetsu.models.metadata import QualityAudit
+    chronicler = ChroniclerAgent("mock-model")
+
+    active_chars = [
+        CharacterProfile(name="Main Hero", original_name="主人公", role="protagonist"),
+        CharacterProfile(name="Friend", original_name="友人", role="supporting"),
+    ]
+    active_gloss = [
+        GlossaryItem(source="Sword", target="ดาบ"),
+        GlossaryItem(source="Shield", target="โล่"),
+    ]
+    extracted_chars = [
+        CharacterProfile(name="Villager", original_name="村人", role="supporting")
+    ]
+    extracted_terms = [
+        GlossaryItem(source="Potion", target="ยา")
+    ]
+
+    meta = chronicler.assemble_metadata(
+        chapter_id="ch_1",
+        chapter_num=1,
+        source_file="ch1.txt",
+        source_sha256="abc",
+        output_file="ch1.md",
+        source_text="友人が現れた。Swordを持って。",
+        final_text="Friend appeared with Sword.",
+        model_name="mock-model",
+        duration_seconds=10.0,
+        quality_audit=QualityAudit(),
+        active_characters=active_chars,
+        active_glossary=active_gloss,
+        draft_text="Draft",
+        critique_notes="Notes",
+        polished_text="Polished",
+        extracted_characters=extracted_chars,
+        extracted_terms=extracted_terms
+    )
+
+    # 1. stage_artifacts must contain only extracted entities, not the active full roster
+    assert meta.checkpoint.stage_artifacts.extracted_characters == extracted_chars
+    assert meta.checkpoint.stage_artifacts.extracted_terms == extracted_terms
+
+    # 2. entities_present must only contain characters strictly mentioned in text (Friend), not unmentioned protagonist
+    assert "Friend" in meta.entities_present
+    assert "Main Hero" not in meta.entities_present
+
+    # 3. glossary_terms_applied must only contain terms present in source text (Sword)
+    sources = [g.source for g in meta.glossary_terms_applied]
+    assert "Sword" in sources
+    assert "Shield" not in sources

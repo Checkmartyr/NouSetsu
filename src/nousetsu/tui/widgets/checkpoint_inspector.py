@@ -29,6 +29,19 @@ class CheckpointInspectorWidget(Widget):
     }
     """
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._last_meta_key: Optional[tuple] = None
+        self._lbl_status: Optional[Static] = None
+        self._lbl_stage: Optional[Static] = None
+        self._lbl_hash: Optional[Static] = None
+        self._lbl_fidelity: Optional[Static] = None
+        self._lbl_style: Optional[Static] = None
+        self._lbl_glossary: Optional[Static] = None
+        self._lbl_tokens: Optional[Static] = None
+        self._lbl_warnings: Optional[Static] = None
+        self._lbl_terms: Optional[Static] = None
+
     def compose(self) -> ComposeResult:
         with Horizontal():
             with Vertical(classes="inspector-col"):
@@ -46,17 +59,45 @@ class CheckpointInspectorWidget(Widget):
                 yield Static("Terms: -", id="lbl_terms")
                 yield Static("Warnings: None", id="lbl_warnings")
 
+    def on_mount(self) -> None:
+        self._cache_widgets()
+
+    def _cache_widgets(self) -> None:
+        try:
+            self._lbl_status = self.query_one("#lbl_status", Static)
+            self._lbl_stage = self.query_one("#lbl_stage", Static)
+            self._lbl_hash = self.query_one("#lbl_hash", Static)
+            self._lbl_fidelity = self.query_one("#lbl_fidelity", Static)
+            self._lbl_style = self.query_one("#lbl_style", Static)
+            self._lbl_glossary = self.query_one("#lbl_glossary", Static)
+            self._lbl_tokens = self.query_one("#lbl_tokens", Static)
+            self._lbl_warnings = self.query_one("#lbl_warnings", Static)
+            self._lbl_terms = self.query_one("#lbl_terms", Static)
+        except Exception:
+            pass
+
     def update_metadata(self, meta: Optional[ChapterMetadata]) -> None:
-        """Update inspection labels based on chapter metadata."""
-        lbl_status = self.query_one("#lbl_status", Static)
-        lbl_stage = self.query_one("#lbl_stage", Static)
-        lbl_hash = self.query_one("#lbl_hash", Static)
-        lbl_fidelity = self.query_one("#lbl_fidelity", Static)
-        lbl_style = self.query_one("#lbl_style", Static)
-        lbl_glossary = self.query_one("#lbl_glossary", Static)
-        lbl_tokens = self.query_one("#lbl_tokens", Static)
-        lbl_warnings = self.query_one("#lbl_warnings", Static)
-        lbl_terms = self.query_one("#lbl_terms", Static)
+        """Update inspection labels based on chapter metadata with cached DOM lookups."""
+        meta_key = (
+            (meta.chapter_id, meta.source_sha256, meta.checkpoint.status.value, meta.stats.total_tokens, meta.quality_audit.fidelity_score, meta.quality_audit.style_score)
+            if meta else None
+        )
+        if meta_key == self._last_meta_key and meta_key is not None:
+            return
+        self._last_meta_key = meta_key
+
+        if self._lbl_status is None:
+            self._cache_widgets()
+
+        lbl_status = self._lbl_status or self.query_one("#lbl_status", Static)
+        lbl_stage = self._lbl_stage or self.query_one("#lbl_stage", Static)
+        lbl_hash = self._lbl_hash or self.query_one("#lbl_hash", Static)
+        lbl_fidelity = self._lbl_fidelity or self.query_one("#lbl_fidelity", Static)
+        lbl_style = self._lbl_style or self.query_one("#lbl_style", Static)
+        lbl_glossary = self._lbl_glossary or self.query_one("#lbl_glossary", Static)
+        lbl_tokens = self._lbl_tokens or self.query_one("#lbl_tokens", Static)
+        lbl_warnings = self._lbl_warnings or self.query_one("#lbl_warnings", Static)
+        lbl_terms = self._lbl_terms or self.query_one("#lbl_terms", Static)
 
         if not meta:
             lbl_status.update("Status: [dim]Unprocessed / Pending[/]")

@@ -1,16 +1,34 @@
 """Literary prose polisher and style editor agent."""
 import logging
+import os
+import re
+import time
 from typing import Any, Callable, List, Optional
 from langchain_core.messages import HumanMessage, SystemMessage
 from nousetsu.agents.llm import extract_text_from_message, extract_usage_from_message, get_llm
 from nousetsu.models.bible import GlossaryItem, NovelBible
 from nousetsu.models.metadata import TokenUsage
-from nousetsu.prompts.templates import POLISHING_SYSTEM_PROMPT
+from nousetsu.models.trace import PipelineStage
+from nousetsu.prompts.templates import PATCH_POLISHING_SYSTEM_PROMPT, POLISHING_SYSTEM_PROMPT
 from nousetsu.skills.registry import SkillRegistry
+from nousetsu.utils.diff_patcher import apply_search_replace_patches, is_patch_format
+from nousetsu.utils.glossary_filter import filter_glossary_for_scene
 from nousetsu.utils.language import detect_language
 from nousetsu.utils.translation_fallback import is_safety_block_exception
 
 logger = logging.getLogger(__name__)
+
+CHAPTER_HEADER_PATTERNS = [
+    r"^(?:#+\s*)?(?:\*\*)?(?:\d+[\s_.-]+)?(?:Chapter|Chapitre|Capítulo|Kapitel|Hoofdstuk|Глава)\s+\d+",
+    r"^(?:#+\s*)?(?:\*\*)?(?:\d+[\s_.-]+)?บทที่\s*\d+",
+    r"^(?:#+\s*)?(?:\*\*)?(?:\d+[\s_.-]+)?第\s*[\d一二三四五六七八九十百千]+\s*[章回节話话]",
+    r"^(?:#+\s*)?(?:\*\*)?(?:\d+[\s_.-]+)?제\s*\d+\s*장",
+    r"^(?:#+\s*)?(?:\*\*)?(?:\d+[\s_.-]+)?Episode\s+\d+",
+    r"^(?:#+\s*)?(?:\*\*)?(?:\d+[\s_.-]+)?Ep\.\s*\d+",
+    r"^#+\s+.+",
+]
+CHAPTER_HEADER_RE = re.compile("|".join(CHAPTER_HEADER_PATTERNS), re.IGNORECASE)
+
 
 
 class PolishingAgent:
@@ -20,19 +38,105 @@ class PolishingAgent:
         self,
         model_name: str = "gemini-3.5-flash-lite",
         fallback_model: Optional[str] = None,
-        temperature: Optional[float] = None
+        temperature: Optional[float] = None,
+        thinking_level: Optional[str] = None,
+        thinking_budget: Optional[int] = None,
     ):
         self.model_name = model_name
         self.fallback_model = fallback_model
-        self.llm = get_llm(model_name=model_name, fallback_model=fallback_model, temperature=temperature)
+
+        polisher_thinking_level = (
+            thinking_level
+            or os.environ.get("NOVEL_POLISHER_THINKING_LEVEL")
+            or os.environ.get("NOVEL_THINKING_LEVEL")
+        )
+        polisher_thinking_budget = None
+        if thinking_budget is not None:
+            polisher_thinking_budget = thinking_budget
+        elif os.environ.get("NOVEL_POLISHER_THINKING_BUDGET"):
+            try:
+                polisher_thinking_budget = int(os.environ["NOVEL_POLISHER_THINKING_BUDGET"])
+            except ValueError:
+                pass
+        elif os.environ.get("NOVEL_THINKING_BUDGET"):
+            try:
+                polisher_thinking_budget = int(os.environ["NOVEL_THINKING_BUDGET"])
+            except ValueError:
+                pass
+
+        self.llm = get_llm(
+            model_name=model_name,
+            fallback_model=fallback_model,
+            temperature=temperature,
+            thinking_level=polisher_thinking_level,
+            thinking_budget=polisher_thinking_budget,
+        )
         self.last_usage: TokenUsage = TokenUsage()
         self.safety_fallbacks_used: int = 0
+        self.prompt_tracker: Optional[Any] = None
 
     @property
     def last_model_used(self) -> str:
         if hasattr(self.llm, "last_model_used") and self.llm.last_model_used:
             return self.llm.last_model_used
         return self.model_name
+
+    @staticmethod
+    def _extract_draft_chapter_header(draft_text: str) -> Optional[str]:
+        """Extracts leading chapter heading or title block from draft text if present."""
+        if not draft_text:
+            return None
+        lines = draft_text.splitlines()
+        non_empty_indices = [i for i, l in enumerate(lines[:8]) if l.strip()]
+        if not non_empty_indices:
+            return None
+
+        first_idx = non_empty_indices[0]
+        first_line = lines[first_idx].strip()
+
+        if CHAPTER_HEADER_RE.search(first_line):
+            return first_line
+
+        # Check if first non-empty line is a page/raw number (e.g. "70") and second is chapter header
+        if re.match(r"^\d+$", first_line) and len(non_empty_indices) > 1:
+            second_idx = non_empty_indices[1]
+            second_line = lines[second_idx].strip()
+            if CHAPTER_HEADER_RE.search(second_line):
+                return f"{first_line}\n{second_line}"
+
+        return None
+
+    @staticmethod
+    def _has_chapter_header(text: str) -> bool:
+        """Checks if text already contains a chapter header in its opening lines."""
+        if not text:
+            return False
+        lines = [l.strip() for l in text.splitlines()[:8] if l.strip()]
+        for line in lines[:3]:
+            if CHAPTER_HEADER_RE.search(line):
+                return True
+        return False
+
+    @classmethod
+    def _ensure_chapter_title_preserved(cls, draft_text: str, polished_text: str) -> str:
+        """Ensures that chapter title and headings present in the draft are not omitted in polished prose."""
+        if not draft_text or not polished_text:
+            return polished_text
+
+        # If polished_text is corrupt or contains patch markers, reject it immediately
+        if is_patch_format(polished_text) or "<<<<<<<" in polished_text or ">>>>>>>" in polished_text:
+            logger.error("Diff patch markers detected in _ensure_chapter_title_preserved! Reverting to draft text.")
+            return draft_text
+
+        header_block = cls._extract_draft_chapter_header(draft_text)
+        if not header_block:
+            return polished_text
+
+        if cls._has_chapter_header(polished_text):
+            return polished_text
+
+        logger.info(f"Restoring omitted chapter header in polished text: {header_block!r}")
+        return f"{header_block}\n\n{polished_text.lstrip()}"
 
     def polish(
         self,
@@ -49,7 +153,7 @@ class PolishingAgent:
         **kwargs: Any
     ) -> str:
         if draft_chunks and len(draft_chunks) > 1:
-            return self.polish_chunked(
+            raw_polished = self.polish_chunked(
                 draft_chunks=draft_chunks,
                 critique_notes=critique_notes,
                 active_glossary=active_glossary,
@@ -61,13 +165,16 @@ class PolishingAgent:
                 stop_event=stop_event,
                 **kwargs
             )
+            return self._ensure_chapter_title_preserved(draft_text=draft_text, polished_text=raw_polished)
 
         # Filter glossary to terms actually present in this chapter to avoid prompt bloat
-        relevant_glossary = [
-            item for item in active_glossary
-            if (source_text and item.source.lower() in source_text.lower()) or item.target.lower() in draft_text.lower()
-        ]
-        eval_glossary = relevant_glossary if relevant_glossary else (active_glossary[:15] if active_glossary else [])
+        eval_glossary = filter_glossary_for_scene(
+            glossary=active_glossary,
+            source_text=source_text,
+            target_text=draft_text,
+            fallback_on_empty=True,
+            max_fallback=15
+        )
         gloss_str = "\n".join([f"- {g.source} -> {g.target}" for g in eval_glossary]) or "None"
 
         resolved_genre = genre or getattr(bible, "genre", "general")
@@ -78,7 +185,9 @@ class PolishingAgent:
         )
         skills_section = f"\n{skills_text}\n" if skills_text else ""
 
-        sys_msg = POLISHING_SYSTEM_PROMPT.format(
+        use_patch = kwargs.get("use_patch", False)
+        prompt_template = PATCH_POLISHING_SYSTEM_PROMPT if use_patch else POLISHING_SYSTEM_PROMPT
+        sys_msg = prompt_template.format(
             target_lang=bible.target_language,
             source_lang=bible.source_language,
             critique_notes=critique_notes or "Preserve meaning and enhance natural rhythm.",
@@ -99,36 +208,98 @@ class PolishingAgent:
         )
         user_content = "\n\n".join(user_parts)
 
+        tracker = kwargs.get("prompt_tracker") or getattr(self, "prompt_tracker", None)
+        iteration = kwargs.get("iteration", 1)
+        t0 = time.time()
         try:
             response = self.llm.invoke([
                 SystemMessage(content=sys_msg),
                 HumanMessage(content=user_content)
             ])
+            duration = time.time() - t0
             self.last_usage = extract_usage_from_message(response)
         except Exception as e:
+            duration = time.time() - t0
+            if tracker:
+                tracker.record_error(
+                    stage=PipelineStage.POLISHING,
+                    agent="polisher",
+                    system_prompt=sys_msg,
+                    user_prompt=user_content,
+                    model=getattr(self, "last_model_used", self.model_name),
+                    err=e,
+                    duration_seconds=duration,
+                    chunk_index=1,
+                    total_chunks=1,
+                    iteration=iteration,
+                    status="safety_blocked" if is_safety_block_exception(e) else "error"
+                )
             if is_safety_block_exception(e):
                 self.safety_fallbacks_used += 1
                 logger.warning("⚠️ Polisher blocked by safety filter - retrying without raw source text reference.")
                 if source_text and source_text.strip():
+                    retry_user = (
+                        f"### Draft Translation in {bible.target_language} to Polish "
+                        f"(CRITICAL: Output MUST remain 100% in {bible.target_language}, DO NOT translate back to {bible.source_language}):\n"
+                        f"{draft_text}"
+                    )
+                    t_retry0 = time.time()
                     try:
-                        retry_user = (
-                            f"### Draft Translation in {bible.target_language} to Polish "
-                            f"(CRITICAL: Output MUST remain 100% in {bible.target_language}, DO NOT translate back to {bible.source_language}):\n"
-                            f"{draft_text}"
-                        )
                         retry_resp = self.llm.invoke([
                             SystemMessage(content=sys_msg),
                             HumanMessage(content=retry_user)
                         ])
+                        d_retry = time.time() - t_retry0
                         self.last_usage = extract_usage_from_message(retry_resp)
                         text = extract_text_from_message(retry_resp.content).strip()
                         if text.startswith("```"):
                             lines = text.splitlines()
                             if len(lines) >= 2 and lines[0].startswith("```") and lines[-1].startswith("```"):
                                 text = "\n".join(lines[1:-1]).strip()
-                        return text
-                    except Exception:
-                        pass
+                        if "NO_CHANGES_NEEDED" in text:
+                            text = draft_text
+                        elif is_patch_format(text):
+                            patched_text, applied, failed = apply_search_replace_patches(draft_text, text)
+                            if applied > 0:
+                                text = patched_text
+                            else:
+                                logger.warning(f"Failed to apply any patch edits in retry ({failed} failed); falling back to draft text.")
+                                text = draft_text
+                        if is_patch_format(text) or "<<<<<<<" in text or ">>>>>>>" in text:
+                            logger.error("Diff patch markers detected in retry polished text; reverting to draft text.")
+                            text = draft_text
+                        if tracker:
+                            tracker.record(
+                                stage=PipelineStage.POLISHING,
+                                agent="polisher",
+                                system_prompt=sys_msg,
+                                user_prompt=retry_user,
+                                raw_output=text,
+                                parsed_output=None,
+                                model=getattr(self, "last_model_used", self.model_name),
+                                token_usage=self.last_usage,
+                                duration_seconds=d_retry,
+                                chunk_index=1,
+                                total_chunks=1,
+                                iteration=iteration,
+                                metadata={"retry": True}
+                            )
+                        return self._ensure_chapter_title_preserved(draft_text=draft_text, polished_text=text)
+                    except Exception as retry_e:
+                        if tracker:
+                            tracker.record_error(
+                                stage=PipelineStage.POLISHING,
+                                agent="polisher",
+                                system_prompt=sys_msg,
+                                user_prompt=retry_user,
+                                model=getattr(self, "last_model_used", self.model_name),
+                                err=retry_e,
+                                duration_seconds=time.time() - t_retry0,
+                                chunk_index=1,
+                                total_chunks=1,
+                                iteration=iteration,
+                                status="safety_blocked" if is_safety_block_exception(retry_e) else "error"
+                            )
                 logger.warning("⚠️ Polisher blocked by safety filter - retaining draft text.")
                 return draft_text
             raise
@@ -139,6 +310,39 @@ class PolishingAgent:
             if len(lines) >= 2 and lines[0].startswith("```") and lines[-1].startswith("```"):
                 text = "\n".join(lines[1:-1]).strip()
 
+        if "NO_CHANGES_NEEDED" in text:
+            logger.info("Polisher indicated no changes needed; retaining draft text.")
+            text = draft_text
+        elif is_patch_format(text):
+            patched_text, applied, failed = apply_search_replace_patches(draft_text, text)
+            if applied > 0:
+                logger.info(f"Applied {applied} targeted patch edits to draft text (failed: {failed})")
+                text = patched_text
+            else:
+                logger.warning(f"Failed to apply any patch edits from polisher ({failed} failed); falling back to draft text.")
+                text = draft_text
+
+        # Absolute safety guard against diff marker leaks
+        if is_patch_format(text) or "<<<<<<<" in text or ">>>>>>>" in text:
+            logger.error("Unparsed diff patch markers detected in polished output! Forcing fallback to draft text.")
+            text = draft_text
+
+        if tracker:
+            tracker.record(
+                stage=PipelineStage.POLISHING,
+                agent="polisher",
+                system_prompt=sys_msg,
+                user_prompt=user_content,
+                raw_output=text,
+                parsed_output=None,
+                model=getattr(self, "last_model_used", self.model_name),
+                token_usage=self.last_usage,
+                duration_seconds=duration,
+                chunk_index=1,
+                total_chunks=1,
+                iteration=iteration
+            )
+
         # Programmatic Language Regression Guard:
         # If output reverted to source language while draft was in target language (or different), reject regression
         if bible.target_language.lower() != bible.source_language.lower():
@@ -147,7 +351,7 @@ class PolishingAgent:
                 # Reverted to source language! Fall back to draft_text to preserve target language translation
                 return draft_text
 
-        return text
+        return self._ensure_chapter_title_preserved(draft_text=draft_text, polished_text=text)
 
     def polish_chunked(
         self,
@@ -202,6 +406,11 @@ class PolishingAgent:
                     notify_callback=notify_callback
                 )
 
+            chunk_kwargs = dict(kwargs)
+            if "prompt_tracker" not in chunk_kwargs and hasattr(self, "prompt_tracker"):
+                chunk_kwargs["prompt_tracker"] = self.prompt_tracker
+            chunk_kwargs.setdefault("iteration", 1)
+
             chunk_polished = self._polish_single_chunk(
                 chunk_draft=chunk_content,
                 preceding_context=prev_polished_tail,
@@ -211,7 +420,8 @@ class PolishingAgent:
                 genre=genre,
                 source_text=chunk_source,
                 chunk_idx=chunk_idx,
-                total_chunks=total_chunks
+                total_chunks=total_chunks,
+                **chunk_kwargs
             )
             polished_parts.append(chunk_polished)
             total_usage = total_usage.add(self.last_usage)
@@ -236,13 +446,18 @@ class PolishingAgent:
         genre: Optional[str] = None,
         source_text: Optional[str] = None,
         chunk_idx: int = 1,
-        total_chunks: int = 1
+        total_chunks: int = 1,
+        prompt_tracker: Optional[Any] = None,
+        iteration: int = 1,
+        **kwargs: Any
     ) -> str:
-        relevant_glossary = [
-            item for item in active_glossary
-            if (source_text and item.source.lower() in source_text.lower()) or item.target.lower() in chunk_draft.lower()
-        ]
-        eval_glossary = relevant_glossary if relevant_glossary else (active_glossary[:15] if active_glossary else [])
+        eval_glossary = filter_glossary_for_scene(
+            glossary=active_glossary,
+            source_text=source_text,
+            target_text=chunk_draft,
+            fallback_on_empty=True,
+            max_fallback=15
+        )
         gloss_str = "\n".join([f"- {g.source} -> {g.target}" for g in eval_glossary]) or "None"
 
         resolved_genre = genre or getattr(bible, "genre", "general")
@@ -253,7 +468,9 @@ class PolishingAgent:
         )
         skills_section = f"\n{skills_text}\n" if skills_text else ""
 
-        sys_msg = POLISHING_SYSTEM_PROMPT.format(
+        use_patch = kwargs.get("use_patch", False)
+        prompt_template = PATCH_POLISHING_SYSTEM_PROMPT if use_patch else POLISHING_SYSTEM_PROMPT
+        sys_msg = prompt_template.format(
             target_lang=bible.target_language,
             source_lang=bible.source_language,
             critique_notes=critique_notes or "Preserve meaning and enhance natural rhythm.",
@@ -279,39 +496,106 @@ class PolishingAgent:
         user_parts.append(f"{chunk_header}{chunk_draft}")
         user_content = "\n\n".join(user_parts)
 
+        tracker = prompt_tracker or getattr(self, "prompt_tracker", None)
+        t0 = time.time()
         try:
             response = self.llm.invoke([
                 SystemMessage(content=sys_msg),
                 HumanMessage(content=user_content)
             ])
+            duration = time.time() - t0
             self.last_usage = extract_usage_from_message(response)
         except Exception as e:
+            duration = time.time() - t0
+            if tracker:
+                tracker.record_error(
+                    stage=PipelineStage.POLISHING,
+                    agent="polisher",
+                    system_prompt=sys_msg,
+                    user_prompt=user_content,
+                    model=getattr(self, "last_model_used", self.model_name),
+                    err=e,
+                    duration_seconds=duration,
+                    chunk_index=chunk_idx,
+                    total_chunks=total_chunks,
+                    iteration=iteration,
+                    status="safety_blocked" if is_safety_block_exception(e) else "error"
+                )
             if is_safety_block_exception(e):
                 self.safety_fallbacks_used += 1
                 logger.warning("⚠️ Polisher chunk blocked by safety filter - retrying without raw source text reference.")
                 if source_text and source_text.strip():
+                    retry_parts = []
+                    if preceding_context and preceding_context.strip():
+                        retry_parts.append(
+                            f"### Preceding Polished Context ({bible.target_language} - Reference Only):\n"
+                            f"{preceding_context.strip()}\n"
+                            f"(CRITICAL: DO NOT duplicate or re-polish the above text. Seamlessly continue polishing from the draft chunk below.)"
+                        )
+                    retry_parts.append(f"{chunk_header}{chunk_draft}")
+                    retry_content = "\n\n".join(retry_parts)
+                    t_retry0 = time.time()
                     try:
-                        retry_parts = []
-                        if preceding_context and preceding_context.strip():
-                            retry_parts.append(
-                                f"### Preceding Polished Context ({bible.target_language} - Reference Only):\n"
-                                f"{preceding_context.strip()}\n"
-                                f"(CRITICAL: DO NOT duplicate or re-polish the above text. Seamlessly continue polishing from the draft chunk below.)"
-                            )
-                        retry_parts.append(f"{chunk_header}{chunk_draft}")
-                        retry_content = "\n\n".join(retry_parts)
                         retry_resp = self.llm.invoke([
                             SystemMessage(content=sys_msg),
                             HumanMessage(content=retry_content)
                         ])
+                        d_retry = time.time() - t_retry0
                         self.last_usage = extract_usage_from_message(retry_resp)
                         text = extract_text_from_message(retry_resp.content).strip()
                         if text.startswith("```"):
                             lines = text.splitlines()
                             if len(lines) >= 2 and lines[0].startswith("```") and lines[-1].startswith("```"):
                                 text = "\n".join(lines[1:-1]).strip()
+                        if is_patch_format(text):
+                            patched_chunk, applied, failed = apply_search_replace_patches(chunk_draft, text)
+                            if applied > 0:
+                                text = patched_chunk
+                            elif "NO_CHANGES_NEEDED" in text:
+                                text = chunk_draft
+                            else:
+                                logger.warning(f"Failed to apply patch edits to chunk {chunk_idx} in retry ({failed} failed); retaining chunk draft.")
+                                text = chunk_draft
+                        elif "NO_CHANGES_NEEDED" in text:
+                            text = chunk_draft
+
+                        if is_patch_format(text) or "<<<<<<<" in text or ">>>>>>>" in text:
+                            logger.error(f"Unparsed diff patch markers detected in retry chunk {chunk_idx}! Reverting to chunk draft.")
+                            text = chunk_draft
+                        if tracker:
+                            tracker.record(
+                                stage=PipelineStage.POLISHING,
+                                agent="polisher",
+                                system_prompt=sys_msg,
+                                user_prompt=retry_content,
+                                raw_output=text,
+                                parsed_output=None,
+                                model=getattr(self, "last_model_used", self.model_name),
+                                token_usage=self.last_usage,
+                                duration_seconds=d_retry,
+                                chunk_index=chunk_idx,
+                                total_chunks=total_chunks,
+                                iteration=iteration,
+                                metadata={"retry": True}
+                            )
+                        if chunk_idx == 1:
+                            text = self._ensure_chapter_title_preserved(draft_text=chunk_draft, polished_text=text)
                         return text
                     except Exception as retry_err:
+                        if tracker:
+                            tracker.record_error(
+                                stage=PipelineStage.POLISHING,
+                                agent="polisher",
+                                system_prompt=sys_msg,
+                                user_prompt=retry_content,
+                                model=getattr(self, "last_model_used", self.model_name),
+                                err=retry_err,
+                                duration_seconds=time.time() - t_retry0,
+                                chunk_index=chunk_idx,
+                                total_chunks=total_chunks,
+                                iteration=iteration,
+                                status="safety_blocked" if is_safety_block_exception(retry_err) else "error"
+                            )
                         if not is_safety_block_exception(retry_err):
                             logger.warning(f"⚠️ Polisher retry without source failed: {retry_err}")
                 logger.warning("⚠️ Polisher chunk blocked by safety filter - retaining chunk draft.")
@@ -324,9 +608,45 @@ class PolishingAgent:
             if len(lines) >= 2 and lines[0].startswith("```") and lines[-1].startswith("```"):
                 text = "\n".join(lines[1:-1]).strip()
 
+        if "NO_CHANGES_NEEDED" in text:
+            logger.info("Polisher indicated no changes needed; retaining chunk draft.")
+            text = chunk_draft
+        elif is_patch_format(text):
+            patched_chunk, applied, failed = apply_search_replace_patches(chunk_draft, text)
+            if applied > 0:
+                logger.info(f"Applied {applied} patch edits to chunk {chunk_idx} (failed: {failed})")
+                text = patched_chunk
+            else:
+                logger.warning(f"Failed to apply patch edits to chunk {chunk_idx} ({failed} failed); retaining chunk draft.")
+                text = chunk_draft
+
+        # Absolute safety guard against diff marker leaks
+        if is_patch_format(text) or "<<<<<<<" in text or ">>>>>>>" in text:
+            logger.error(f"Unparsed diff patch markers detected in polished chunk {chunk_idx}! Forcing fallback to chunk draft.")
+            text = chunk_draft
+
+        if tracker:
+            tracker.record(
+                stage=PipelineStage.POLISHING,
+                agent="polisher",
+                system_prompt=sys_msg,
+                user_prompt=user_content,
+                raw_output=text,
+                parsed_output=None,
+                model=getattr(self, "last_model_used", self.model_name),
+                token_usage=self.last_usage,
+                duration_seconds=duration,
+                chunk_index=chunk_idx,
+                total_chunks=total_chunks,
+                iteration=iteration
+            )
+
         if bible.target_language.lower() != bible.source_language.lower():
             detected_polished = detect_language(text)
             if detected_polished and detected_polished.lower() == bible.source_language.lower():
                 return chunk_draft
+
+        if chunk_idx == 1:
+            text = self._ensure_chapter_title_preserved(draft_text=chunk_draft, polished_text=text)
 
         return text

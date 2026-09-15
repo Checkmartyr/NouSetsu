@@ -6,6 +6,7 @@ from nousetsu.analysis.token_metrics import (
     StageMetric,
     compute_token_summary,
 )
+from nousetsu.analysis.tracker import PromptTracker
 
 __all__ = [
     "ChapterMetric",
@@ -13,4 +14,5 @@ __all__ = [
     "ProjectTokenSummary",
     "StageMetric",
     "compute_token_summary",
+    "PromptTracker",
 ]

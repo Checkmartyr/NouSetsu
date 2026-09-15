@@ -1,14 +1,21 @@
 """Fidelity, tone, and terminology critique agent."""
 import json
 import logging
+import os
 import re
+import time
 from typing import Any, List, Optional, Tuple
 from langchain_core.messages import HumanMessage, SystemMessage
-from nousetsu.agents.llm import extract_text_from_message, extract_usage_from_message, get_llm
+from nousetsu.agents.llm import extract_text_from_message, extract_usage_from_message, get_llm, invoke_structured
 from nousetsu.models.bible import CharacterProfile, GlossaryItem, NovelBible
 from nousetsu.models.metadata import QualityAudit, TokenUsage
+from nousetsu.models.schemas import CritiqueResult
+from nousetsu.models.trace import PipelineStage
 from nousetsu.prompts.templates import CRITIQUE_SYSTEM_PROMPT
 from nousetsu.skills.registry import SkillRegistry
+from nousetsu.utils.character_filter import filter_characters_for_scene
+from nousetsu.utils.formatting import clamp_sentence_boundary
+from nousetsu.utils.glossary_filter import filter_glossary_for_scene, is_term_present
 from nousetsu.utils.language import detect_language
 from nousetsu.utils.translation_fallback import (
     bisect_text,
@@ -30,10 +37,39 @@ class CritiqueAgent:
         enable_recursive_subdivision: bool = True,
         subdivision_min_lines: int = 8,
         subdivision_max_depth: int = 3,
+        thinking_level: Optional[str] = None,
+        thinking_budget: Optional[int] = None,
     ):
         self.model_name = model_name
         self.fallback_model = fallback_model
-        self.llm = get_llm(model_name=model_name, fallback_model=fallback_model, temperature=0.1)
+
+        critic_thinking_level = (
+            thinking_level
+            or os.environ.get("NOVEL_CRITIC_THINKING_LEVEL")
+            or os.environ.get("NOVEL_THINKING_LEVEL")
+            or "medium"
+        )
+        critic_thinking_budget = None
+        if thinking_budget is not None:
+            critic_thinking_budget = thinking_budget
+        elif os.environ.get("NOVEL_CRITIC_THINKING_BUDGET"):
+            try:
+                critic_thinking_budget = int(os.environ["NOVEL_CRITIC_THINKING_BUDGET"])
+            except ValueError:
+                pass
+        elif os.environ.get("NOVEL_THINKING_BUDGET"):
+            try:
+                critic_thinking_budget = int(os.environ["NOVEL_THINKING_BUDGET"])
+            except ValueError:
+                pass
+
+        self.llm = get_llm(
+            model_name=model_name,
+            fallback_model=fallback_model,
+            temperature=0.1,
+            thinking_level=critic_thinking_level,
+            thinking_budget=critic_thinking_budget,
+        )
         self.last_usage: TokenUsage = TokenUsage()
         self.chunker = chunker
         self.safety_fallbacks_used: int = 0
@@ -41,6 +77,7 @@ class CritiqueAgent:
         self.subdivision_min_lines = subdivision_min_lines
         self.subdivision_max_depth = subdivision_max_depth
         self.subdivisions_count: int = 0
+        self.prompt_tracker: Optional[Any] = None
 
     @property
     def last_model_used(self) -> str:
@@ -113,16 +150,28 @@ class CritiqueAgent:
         genre: Optional[str] = None,
         chunk_idx: int = 1,
         total_chunks: int = 1,
-        depth: int = 0
+        depth: int = 0,
+        rag_context: Optional[List[Any]] = None,
+        prompt_tracker: Optional[Any] = None,
+        iteration: int = 1
     ) -> Tuple[QualityAudit, str]:
         # Filter glossary to terms actually present in this chapter to avoid prompt bloat
-        relevant_glossary = [
-            item for item in active_glossary
-            if item.source.lower() in source_text.lower() or item.target.lower() in draft_text.lower()
-        ]
-        eval_glossary = relevant_glossary if relevant_glossary else (active_glossary[:15] if active_glossary else [])
+        eval_glossary = filter_glossary_for_scene(
+            glossary=active_glossary,
+            source_text=source_text,
+            target_text=draft_text,
+            fallback_on_empty=True,
+            max_fallback=15
+        )
 
-        chars_str = "\n".join([f"- {c.name} ({c.original_name}, {c.gender}, voice: {c.voice})" for c in active_characters]) or "None"
+        # Filter character cards to those relevant to this specific scene to prevent prompt bloat
+        eval_characters = filter_characters_for_scene(
+            characters=active_characters,
+            source_text=source_text,
+            target_text=draft_text,
+            max_characters=15
+        )
+        chars_str = "\n".join([f"- {c.name} ({c.original_name}, {c.gender}, voice: {c.voice})" for c in eval_characters]) or "None"
         gloss_str = "\n".join([f"- {g.source} -> {g.target}" for g in eval_glossary]) or "None"
 
         resolved_genre = genre or getattr(bible, "genre", "general")
@@ -133,12 +182,23 @@ class CritiqueAgent:
         )
         skills_section = f"\n{skills_text}\n" if skills_text else ""
 
+        rag_section = ""
+        if rag_context:
+            canon_lines = []
+            for hit in rag_context:
+                doc = hit.document if hasattr(hit, "document") else hit
+                content = getattr(doc, "content", str(doc))
+                title = getattr(doc, "title", "Canon Reference")
+                canon_lines.append(f"- [{title}]: {clamp_sentence_boundary(content, 350)}")
+            rag_section = "\nCanonical Series Memory & Prior Translations (via RAG):\n" + "\n".join(canon_lines) + "\n"
+
         sys_msg = CRITIQUE_SYSTEM_PROMPT.format(
             source_lang=bible.source_language,
             target_lang=bible.target_language,
             characters=chars_str,
             glossary=gloss_str,
-            skills_section=skills_section
+            skills_section=skills_section,
+            rag_canon_section=rag_section
         )
 
         chunk_info = f" (Part {chunk_idx} of {total_chunks})" if total_chunks > 1 else ""
@@ -148,13 +208,36 @@ class CritiqueAgent:
             f"### Draft Translation ({bible.target_language}):\n{draft_text[:50000]}"
         )
 
+        tracker = prompt_tracker or getattr(self, "prompt_tracker", None)
+        t0 = time.time()
         try:
-            response = self.llm.invoke([
-                SystemMessage(content=sys_msg),
-                HumanMessage(content=user_content)
-            ])
+            parsed_result, response, parse_err = invoke_structured(
+                self.llm,
+                CritiqueResult,
+                [
+                    SystemMessage(content=sys_msg),
+                    HumanMessage(content=user_content)
+                ]
+            )
+            duration = time.time() - t0
             self.last_usage = extract_usage_from_message(response)
         except Exception as e:
+            duration = time.time() - t0
+            if tracker:
+                tracker.record_error(
+                    stage=PipelineStage.CRITIQUE,
+                    agent="critic",
+                    system_prompt=sys_msg,
+                    user_prompt=user_content,
+                    model=getattr(self, "last_model_used", self.model_name),
+                    err=e,
+                    duration_seconds=duration,
+                    chunk_index=chunk_idx,
+                    total_chunks=total_chunks,
+                    depth=depth,
+                    iteration=iteration,
+                    status="safety_blocked" if is_safety_block_exception(e) else "error"
+                )
             if is_safety_block_exception(e):
                 can_sub = (
                     self.enable_recursive_subdivision
@@ -181,7 +264,10 @@ class CritiqueAgent:
                             genre=genre,
                             chunk_idx=chunk_idx,
                             total_chunks=total_chunks,
-                            depth=depth + 1
+                            depth=depth + 1,
+                            rag_context=rag_context,
+                            prompt_tracker=tracker,
+                            iteration=iteration
                         )
                         left_usage = self.last_usage
                         audit_right, notes_right = self._evaluate_single(
@@ -193,7 +279,10 @@ class CritiqueAgent:
                             genre=genre,
                             chunk_idx=chunk_idx,
                             total_chunks=total_chunks,
-                            depth=depth + 1
+                            depth=depth + 1,
+                            rag_context=rag_context,
+                            prompt_tracker=tracker,
+                            iteration=iteration
                         )
                         self.last_usage = left_usage.add(self.last_usage)
                         combined_fid = round((audit_left.fidelity_score + audit_right.fidelity_score) / 2.0, 1)
@@ -223,41 +312,88 @@ class CritiqueAgent:
             raise
 
         raw_content = extract_text_from_message(response.content)
-        json_match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", raw_content)
-        content_to_parse = json_match.group(1) if json_match else raw_content
 
         audit = QualityAudit()
         critique_notes = ""
 
-        try:
-            parsed = json.loads(content_to_parse)
-            audit.fidelity_score = float(parsed.get("fidelity_score", 9.0))
-            audit.style_score = float(parsed.get("style_score", 9.0))
-            audit.glossary_compliance_pct = float(parsed.get("glossary_compliance_pct", 100.0))
-            audit.warnings = parsed.get("warnings", [])
-            audit.passed = (audit.fidelity_score >= 7.5 and audit.style_score >= 7.5)
-            critique_notes = str(parsed.get("critique_notes", ""))
-        except Exception:
-            # Attempt regex recovery of scores from raw text
-            m_fid = re.search(r"['\"]?fidelity_score['\"]?\s*[:=]\s*(\d+(?:\.\d+)?)", raw_content, re.IGNORECASE)
-            m_sty = re.search(r"['\"]?style_score['\"]?\s*[:=]\s*(\d+(?:\.\d+)?)", raw_content, re.IGNORECASE)
-            m_glo = re.search(r"['\"]?glossary_compliance_pct['\"]?\s*[:=]\s*(\d+(?:\.\d+)?)", raw_content, re.IGNORECASE)
-            m_notes = re.search(r"['\"]?critique_notes['\"]?\s*[:=]\s*['\"]([^'\"]+)['\"]", raw_content, re.IGNORECASE)
-
-            if m_fid or m_sty:
-                audit.fidelity_score = float(m_fid.group(1)) if m_fid else 6.0
-                audit.style_score = float(m_sty.group(1)) if m_sty else 6.0
-                audit.glossary_compliance_pct = float(m_glo.group(1)) if m_glo else 100.0
+        if parsed_result is not None:
+            audit = parsed_result.to_quality_audit()
+            critique_notes = parsed_result.critique_notes
+        else:
+            json_match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", raw_content)
+            content_to_parse = json_match.group(1) if json_match else raw_content
+            try:
+                parsed = json.loads(content_to_parse, strict=False)
+                audit.fidelity_score = float(parsed.get("fidelity_score", 8.0))
+                audit.style_score = float(parsed.get("style_score", 7.8))
+                audit.glossary_compliance_pct = float(parsed.get("glossary_compliance_pct", 100.0))
+                audit.warnings = parsed.get("warnings", [])
                 audit.passed = (audit.fidelity_score >= 7.5 and audit.style_score >= 7.5)
-                critique_notes = m_notes.group(1) if m_notes else "Review prose for rhythm and consistency."
-                audit.warnings.append("Critique JSON recovered via regex fallback.")
-            else:
-                audit.fidelity_score = 6.0
-                audit.style_score = 6.0
-                audit.glossary_compliance_pct = 100.0
-                audit.passed = False
-                audit.warnings.append("Critique JSON could not be parsed; conservative failing scores assigned.")
-                critique_notes = "Critique response malformed. Review prose for rhythm, zero-pronoun clarity, and verify proper nouns."
+                critique_notes = str(parsed.get("critique_notes", ""))
+            except Exception:
+                # Attempt regex recovery of scores from raw text
+                m_fid = re.search(r"['\"]?fidelity_score['\"]?\s*[:=]\s*(\d+(?:\.\d+)?)", raw_content, re.IGNORECASE)
+                m_sty = re.search(r"['\"]?style_score['\"]?\s*[:=]\s*(\d+(?:\.\d+)?)", raw_content, re.IGNORECASE)
+                m_glo = re.search(r"['\"]?glossary_compliance_pct['\"]?\s*[:=]\s*(\d+(?:\.\d+)?)", raw_content, re.IGNORECASE)
+                m_notes = re.search(r"['\"]?critique_notes['\"]?\s*[:=]\s*['\"]([\s\S]*?)['\"]\s*(?:,\s*['\"][a-zA-Z_]+['\"]|\s*\})", raw_content, re.IGNORECASE)
+                if not m_notes:
+                    m_notes = re.search(r"['\"]?critique_notes['\"]?\s*[:=]\s*['\"]([\s\S]*?)(?:['\"]|\Z)", raw_content, re.IGNORECASE)
+
+                if m_fid or m_sty:
+                    audit.fidelity_score = float(m_fid.group(1)) if m_fid else 6.0
+                    audit.style_score = float(m_sty.group(1)) if m_sty else 6.0
+                    audit.glossary_compliance_pct = float(m_glo.group(1)) if m_glo else 100.0
+                    audit.passed = (audit.fidelity_score >= 7.5 and audit.style_score >= 7.5)
+                    critique_notes = m_notes.group(1).strip() if m_notes else "Review prose for rhythm and consistency."
+                    audit.warnings.append("Critique JSON recovered via regex fallback.")
+                else:
+                    audit.fidelity_score = 6.0
+                    audit.style_score = 6.0
+                    audit.glossary_compliance_pct = 100.0
+                    audit.passed = False
+                    audit.warnings.append("Critique JSON could not be parsed; conservative failing scores assigned.")
+                    critique_notes = "Critique response malformed. Review prose for rhythm, zero-pronoun clarity, and verify proper nouns."
+
+        if tracker:
+            trace_meta: dict[str, Any] = {}
+            if rag_context:
+                trace_meta["rag_hits"] = [
+                    {
+                        "doc_id": getattr(hit, "doc_id", getattr(getattr(hit, "document", None), "doc_id", "")),
+                        "title": getattr(hit, "title", getattr(getattr(hit, "document", None), "title", "")),
+                        "folder": getattr(hit, "folder", getattr(getattr(hit, "document", None), "folder", None)),
+                        "chapter_num": getattr(hit, "chapter_num", getattr(getattr(hit, "document", None), "chapter_num", None)),
+                        "doc_type": (getattr(hit, "doc_type", "").value if hasattr(getattr(hit, "doc_type", None), "value") else str(getattr(hit, "doc_type", ""))),
+                        "sparse_score": getattr(hit, "sparse_score", None),
+                        "dense_score": getattr(hit, "dense_score", None),
+                        "rrf_score": getattr(hit, "rrf_score", None),
+                        "rerank_score": getattr(hit, "rerank_score", None),
+                    }
+                    for hit in rag_context
+                ]
+            tracker.record(
+                stage=PipelineStage.CRITIQUE,
+                agent="critic",
+                system_prompt=sys_msg,
+                user_prompt=user_content,
+                raw_output=raw_content,
+                parsed_output={
+                    "fidelity_score": audit.fidelity_score,
+                    "style_score": audit.style_score,
+                    "glossary_compliance_pct": audit.glossary_compliance_pct,
+                    "passed": audit.passed,
+                    "warnings_count": len(audit.warnings),
+                    "critique_notes_preview": critique_notes[:200]
+                },
+                model=getattr(self, "last_model_used", self.model_name),
+                token_usage=self.last_usage,
+                duration_seconds=duration,
+                chunk_index=chunk_idx,
+                total_chunks=total_chunks,
+                depth=depth,
+                iteration=iteration,
+                metadata=trace_meta
+            )
 
         return audit, critique_notes
 
@@ -273,6 +409,7 @@ class CritiqueAgent:
         notify_callback: Optional[Any] = None,
         rate_limiter: Optional[Any] = None,
         stop_event: Optional[Any] = None,
+        rag_context: Optional[List[Any]] = None,
         **kwargs: Any
     ) -> Tuple[QualityAudit, str]:
         """Audits translation chunk-by-chunk to prevent single-prompt safety blocks and context saturation."""
@@ -317,7 +454,10 @@ class CritiqueAgent:
                 active_glossary=active_glossary,
                 genre=genre,
                 chunk_idx=chunk_idx,
-                total_chunks=total_chunks
+                total_chunks=total_chunks,
+                rag_context=rag_context,
+                prompt_tracker=kwargs.get("prompt_tracker") or getattr(self, "prompt_tracker", None),
+                iteration=kwargs.get("iteration", 1)
             )
             fidelity_scores.append(chunk_audit.fidelity_score)
             style_scores.append(chunk_audit.style_score)
@@ -346,10 +486,14 @@ class CritiqueAgent:
         critique_notes = " ".join(notes_list) if notes_list else "Preserve meaning and enhance natural rhythm."
 
         # Programmatic check only against glossary terms that actually appeared in the source text
-        source_present_terms = [item for item in active_glossary if item.source.lower() in source_text.lower()]
+        source_present_terms = filter_glossary_for_scene(
+            glossary=active_glossary,
+            source_text=source_text,
+            fallback_on_empty=False
+        )
         missing_terms = []
         for item in source_present_terms:
-            if item.target.lower() not in draft_text.lower():
+            if not is_term_present(item.target, draft_text):
                 missing_terms.append(f"Glossary term '{item.target}' (source: '{item.source}') missing in draft")
         if missing_terms:
             audit.warnings.extend(missing_terms)
@@ -388,6 +532,7 @@ class CritiqueAgent:
         notify_callback: Optional[Any] = None,
         rate_limiter: Optional[Any] = None,
         stop_event: Optional[Any] = None,
+        rag_context: Optional[List[Any]] = None,
         **kwargs: Any
     ) -> Tuple[QualityAudit, str]:
         if chunks is None and self.chunker and hasattr(self.chunker, "should_chunk"):
@@ -406,6 +551,7 @@ class CritiqueAgent:
                 notify_callback=notify_callback,
                 rate_limiter=rate_limiter,
                 stop_event=stop_event,
+                rag_context=rag_context,
                 **kwargs
             )
 
@@ -416,14 +562,21 @@ class CritiqueAgent:
             bible=bible,
             active_characters=active_characters,
             active_glossary=active_glossary,
-            genre=genre
+            genre=genre,
+            rag_context=rag_context,
+            prompt_tracker=kwargs.get("prompt_tracker") or getattr(self, "prompt_tracker", None),
+            iteration=kwargs.get("iteration", 1)
         )
 
         # Programmatic check only against glossary terms that actually appeared in the source text
-        source_present_terms = [item for item in active_glossary if item.source.lower() in source_text.lower()]
+        source_present_terms = filter_glossary_for_scene(
+            glossary=active_glossary,
+            source_text=source_text,
+            fallback_on_empty=False
+        )
         missing_terms = []
         for item in source_present_terms:
-            if item.target.lower() not in draft_text.lower():
+            if not is_term_present(item.target, draft_text):
                 missing_terms.append(f"Glossary term '{item.target}' (source: '{item.source}') missing in draft")
         if missing_terms:
             audit.warnings.extend(missing_terms)

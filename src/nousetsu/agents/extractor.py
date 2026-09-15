@@ -1,15 +1,20 @@
 """Entity and terminology extraction agent."""
 import json
 import logging
+import os
 import re
+import time
 from typing import Any, List, Optional, Tuple
 from langchain_core.messages import HumanMessage, SystemMessage
-from nousetsu.agents.llm import extract_text_from_message, extract_usage_from_message, get_llm
+from nousetsu.agents.llm import extract_text_from_message, extract_usage_from_message, get_llm, invoke_structured
 from nousetsu.graph.procedural import ProceduralGraph, get_default_extractor_graph
 from nousetsu.models.bible import CharacterProfile, GlossaryItem, NovelBible
-from nousetsu.models.metadata import TokenUsage
+from nousetsu.models.metadata import PipelineStage, TokenUsage
+from nousetsu.models.schemas import ExtractorResult
 from nousetsu.prompts.templates import EXTRACTION_SYSTEM_PROMPT
 from nousetsu.skills.registry import SkillRegistry
+from nousetsu.utils.character_filter import filter_characters_for_scene
+from nousetsu.utils.glossary_filter import filter_glossary_for_scene
 from nousetsu.utils.translation_fallback import (
     bisect_text,
     can_subdivide_text,
@@ -31,18 +36,50 @@ class EntityExtractorAgent:
         enable_recursive_subdivision: bool = True,
         subdivision_min_lines: int = 8,
         subdivision_max_depth: int = 3,
+        prompt_tracker: Optional[Any] = None,
+        enable_entity_filtering: bool = True,
+        thinking_level: Optional[str] = None,
+        thinking_budget: Optional[int] = None,
     ):
         self.model_name = model_name
         self.fallback_model = fallback_model
-        self.llm = get_llm(model_name=model_name, fallback_model=fallback_model, temperature=0.1)
+
+        extractor_thinking_level = (
+            thinking_level
+            or os.environ.get("NOVEL_EXTRACTOR_THINKING_LEVEL")
+            or os.environ.get("NOVEL_THINKING_LEVEL")
+        )
+        extractor_thinking_budget = None
+        if thinking_budget is not None:
+            extractor_thinking_budget = thinking_budget
+        elif os.environ.get("NOVEL_EXTRACTOR_THINKING_BUDGET"):
+            try:
+                extractor_thinking_budget = int(os.environ["NOVEL_EXTRACTOR_THINKING_BUDGET"])
+            except ValueError:
+                pass
+        elif os.environ.get("NOVEL_THINKING_BUDGET"):
+            try:
+                extractor_thinking_budget = int(os.environ["NOVEL_THINKING_BUDGET"])
+            except ValueError:
+                pass
+
+        self.llm = get_llm(
+            model_name=model_name,
+            fallback_model=fallback_model,
+            temperature=0.1,
+            thinking_level=extractor_thinking_level,
+            thinking_budget=extractor_thinking_budget,
+        )
         self.last_usage: TokenUsage = TokenUsage()
         self.procedural_graph = procedural_graph or get_default_extractor_graph()
         self.chunker = chunker
+        self.prompt_tracker = prompt_tracker
         self.safety_fallbacks_used: int = 0
         self.enable_recursive_subdivision = enable_recursive_subdivision
         self.subdivision_min_lines = subdivision_min_lines
         self.subdivision_max_depth = subdivision_max_depth
         self.subdivisions_count: int = 0
+        self.enable_entity_filtering = enable_entity_filtering
 
     @property
     def last_model_used(self) -> str:
@@ -58,13 +95,34 @@ class EntityExtractorAgent:
         procedural_graph: Optional[ProceduralGraph] = None,
         known_characters: Optional[List[CharacterProfile]] = None,
         known_glossary: Optional[List[GlossaryItem]] = None,
-        depth: int = 0
+        depth: int = 0,
+        prompt_tracker: Optional[Any] = None,
+        chunk_idx: int = 1,
+        total_chunks: int = 1,
+        enable_filtering: Optional[bool] = None,
     ) -> Tuple[List[CharacterProfile], List[GlossaryItem], List[str]]:
         all_chars = list(bible.characters) + (known_characters or [])
         all_gloss = list(bible.glossary) + (known_glossary or [])
 
-        known_chars_str = "\n".join([f"- {c.original_name} -> {c.name} ({c.role}, {c.voice})" for c in all_chars]) or "None yet."
-        known_gloss_str = "\n".join([f"- {g.source} -> {g.target} ({g.category})" for g in all_gloss]) or "None yet."
+        should_filter = self.enable_entity_filtering if enable_filtering is None else enable_filtering
+        if should_filter:
+            active_chars = filter_characters_for_scene(
+                all_chars,
+                source_text=text,
+                fallback_on_empty=False,
+                max_characters=0
+            )
+            active_gloss = filter_glossary_for_scene(
+                all_gloss,
+                source_text=text,
+                fallback_on_empty=False
+            )
+        else:
+            active_chars = all_chars
+            active_gloss = all_gloss
+
+        known_chars_str = "\n".join([f"- {c.original_name} -> {c.name} ({c.role}, {c.voice})" for c in active_chars]) or "None yet."
+        known_gloss_str = "\n".join([f"- {g.source} -> {g.target} ({g.category})" for g in active_gloss]) or "None yet."
 
         resolved_genre = genre or getattr(bible, "genre", "general")
         skills_text = SkillRegistry.get_instance().build_prompt_section(
@@ -88,14 +146,38 @@ class EntityExtractorAgent:
             procedural_guidance=procedural_section
         )
 
+        tracker = prompt_tracker or getattr(self, "prompt_tracker", None)
+        user_msg = f"Extract fictional characters, factions, and world terminology from this novel excerpt:\n{text[:100000]}"
+        t0 = time.time()
+
         # Analytical task framing to avoid AI safety false positives on novel excerpts
         try:
-            response = self.llm.invoke([
-                SystemMessage(content=sys_msg),
-                HumanMessage(content=f"Extract fictional characters, factions, and world terminology from this novel excerpt:\n{text[:100000]}")
-            ])
+            parsed_result, response, parse_err = invoke_structured(
+                self.llm,
+                ExtractorResult,
+                [
+                    SystemMessage(content=sys_msg),
+                    HumanMessage(content=user_msg)
+                ]
+            )
+            duration = time.time() - t0
             self.last_usage = extract_usage_from_message(response)
         except Exception as e:
+            duration = time.time() - t0
+            if tracker:
+                tracker.record_error(
+                    stage=PipelineStage.EXTRACTION,
+                    agent="extractor",
+                    system_prompt=sys_msg,
+                    user_prompt=user_msg,
+                    model=getattr(self, "last_model_used", self.model_name),
+                    err=e,
+                    duration_seconds=duration,
+                    chunk_index=chunk_idx,
+                    total_chunks=total_chunks,
+                    depth=depth,
+                    status="safety_blocked" if is_safety_block_exception(e) else "error"
+                )
             if is_safety_block_exception(e):
                 can_sub = (
                     self.enable_recursive_subdivision
@@ -117,7 +199,10 @@ class EntityExtractorAgent:
                         procedural_graph=procedural_graph,
                         known_characters=known_characters,
                         known_glossary=known_glossary,
-                        depth=depth + 1
+                        depth=depth + 1,
+                        prompt_tracker=tracker,
+                        chunk_idx=chunk_idx,
+                        total_chunks=total_chunks
                     )
                     left_usage = self.last_usage
                     c_right, t_right, a_right = self._extract_single_text(
@@ -127,7 +212,10 @@ class EntityExtractorAgent:
                         procedural_graph=procedural_graph,
                         known_characters=(known_characters or []) + c_left,
                         known_glossary=(known_glossary or []) + t_left,
-                        depth=depth + 1
+                        depth=depth + 1,
+                        prompt_tracker=tracker,
+                        chunk_idx=chunk_idx,
+                        total_chunks=total_chunks
                     )
                     self.last_usage = left_usage.add(self.last_usage)
                     merged_chars = []
@@ -153,24 +241,44 @@ class EntityExtractorAgent:
             raise
 
         raw_content = extract_text_from_message(response.content)
-        # Extract JSON substring if wrapped in markdown code blocks
-        json_match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", raw_content)
-        content_to_parse = json_match.group(1) if json_match else raw_content
 
         new_chars: List[CharacterProfile] = []
         new_terms: List[GlossaryItem] = []
         active_terms: List[str] = []
 
-        try:
-            parsed = json.loads(content_to_parse)
-            for c in parsed.get("new_characters", []):
-                new_chars.append(CharacterProfile.model_validate(c))
-            for t in parsed.get("new_terms", []):
-                new_terms.append(GlossaryItem.model_validate(t))
-            active_terms = parsed.get("active_terms_in_chapter", [])
-        except Exception:
-            # Fallback if json parsing fails
-            pass
+        if parsed_result is not None:
+            new_chars = list(parsed_result.new_characters)
+            new_terms = list(parsed_result.new_terms)
+            active_terms = list(parsed_result.active_terms_in_chapter)
+        else:
+            # Fallback parsing in case of parsing exception
+            json_match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", raw_content)
+            content_to_parse = json_match.group(1) if json_match else raw_content
+            try:
+                parsed = json.loads(content_to_parse)
+                for c in parsed.get("new_characters", []):
+                    new_chars.append(CharacterProfile.model_validate(c))
+                for t in parsed.get("new_terms", []):
+                    new_terms.append(GlossaryItem.model_validate(t))
+                active_terms = parsed.get("active_terms_in_chapter", [])
+            except Exception:
+                pass
+
+        if tracker:
+            tracker.record(
+                stage=PipelineStage.EXTRACTION,
+                agent="extractor",
+                system_prompt=sys_msg,
+                user_prompt=user_msg,
+                raw_output=raw_content,
+                parsed_output={"new_characters": len(new_chars), "new_terms": len(new_terms), "active_terms": len(active_terms)},
+                model=getattr(self, "last_model_used", self.model_name),
+                token_usage=self.last_usage,
+                duration_seconds=duration,
+                chunk_index=chunk_idx,
+                total_chunks=total_chunks,
+                depth=depth
+            )
 
         return new_chars, new_terms, active_terms
 
@@ -184,8 +292,11 @@ class EntityExtractorAgent:
         notify_callback: Optional[Any] = None,
         rate_limiter: Optional[Any] = None,
         stop_event: Optional[Any] = None,
+        enable_entity_filtering: Optional[bool] = None,
         **kwargs: Any
     ) -> Tuple[List[CharacterProfile], List[GlossaryItem], List[str]]:
+        should_filter = self.enable_entity_filtering if enable_entity_filtering is None else enable_entity_filtering
+
         if chunks is None and self.chunker and hasattr(self.chunker, "should_chunk") and self.chunker.should_chunk(source_text):
             chunks = self.chunker.split_lines(source_text)
 
@@ -198,6 +309,7 @@ class EntityExtractorAgent:
                 notify_callback=notify_callback,
                 rate_limiter=rate_limiter,
                 stop_event=stop_event,
+                enable_entity_filtering=should_filter,
                 **kwargs
             )
 
@@ -206,7 +318,9 @@ class EntityExtractorAgent:
             text=source_text,
             bible=bible,
             genre=genre,
-            procedural_graph=procedural_graph
+            procedural_graph=procedural_graph,
+            prompt_tracker=kwargs.get("prompt_tracker") or getattr(self, "prompt_tracker", None),
+            enable_filtering=should_filter
         )
 
     def extract_chunked(
@@ -218,10 +332,13 @@ class EntityExtractorAgent:
         notify_callback: Optional[Any] = None,
         rate_limiter: Optional[Any] = None,
         stop_event: Optional[Any] = None,
+        enable_entity_filtering: Optional[bool] = None,
         **kwargs: Any
     ) -> Tuple[List[CharacterProfile], List[GlossaryItem], List[str]]:
         """Extracts entities across chapter chunks with rate limiting and deduplication."""
         from nousetsu.utils.rate_limiter import estimate_tokens
+
+        should_filter = self.enable_entity_filtering if enable_entity_filtering is None else enable_entity_filtering
 
         all_chars: List[CharacterProfile] = []
         all_terms: List[GlossaryItem] = []
@@ -257,7 +374,11 @@ class EntityExtractorAgent:
                 genre=genre,
                 procedural_graph=procedural_graph,
                 known_characters=all_chars,
-                known_glossary=all_terms
+                known_glossary=all_terms,
+                prompt_tracker=kwargs.get("prompt_tracker") or getattr(self, "prompt_tracker", None),
+                chunk_idx=chunk_idx,
+                total_chunks=total_chunks,
+                enable_filtering=should_filter
             )
             all_chars.extend(c_list)
             all_terms.extend(t_list)

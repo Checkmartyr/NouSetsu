@@ -29,6 +29,25 @@ class ChapterScanner:
 
     def __init__(self, repository: NovelRepository):
         self.repo = repository
+        self._sha256_cache: dict[tuple[str, int, float], str] = {}
+
+    def get_file_sha256(self, src_file: Path) -> str:
+        """Compute or retrieve cached SHA256 checksum based on file size and modification time."""
+        try:
+            st = src_file.stat()
+            key = (str(src_file.resolve()), st.st_size, st.st_mtime)
+            cached = self._sha256_cache.get(key)
+            if cached is not None:
+                return cached
+            val = self.repo.compute_sha256(src_file)
+            self._sha256_cache[key] = val
+            return val
+        except Exception:
+            return self.repo.compute_sha256(src_file)
+
+    def clear_sha256_cache(self) -> None:
+        """Clear SHA256 file checksum cache."""
+        self._sha256_cache.clear()
 
     def extract_chapter_num(self, path: Path, default_idx: int) -> int:
         """Extract numeric chapter index from filename using regex or fallback to sequential index."""
@@ -72,7 +91,7 @@ class ChapterScanner:
         for idx, src_file in enumerate(sorted_files, start=1):
             ch_num = self.extract_chapter_num(src_file, idx)
             out_file = output_path / f"{src_file.stem}.md"
-            src_sha256 = self.repo.compute_sha256(src_file)
+            src_sha256 = self.get_file_sha256(src_file)
 
             # Look up metadata from single project doc (composite key first, fallback to stem and load_metadata)
             composite_key = f"{output_path.name}/{src_file.stem}"

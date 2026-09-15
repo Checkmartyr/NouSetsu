@@ -37,6 +37,14 @@ class ProjectConfig(BaseModel):
     safety_recursive_subdivision: bool = Field(default=True, description="Enable recursive bisection of safety-blocked chunks")
     safety_subdivision_min_lines: int = Field(default=8, description="Minimum non-empty lines before terminating subdivision")
     safety_subdivision_max_depth: int = Field(default=4, description="Maximum recursion depth for bisection")
+    enable_rag: bool = Field(default=True, description="Enable hybrid search episodic lore retrieval (Tier 4 Memory)")
+    rag_top_k: int = Field(default=2, ge=1, le=10, description="Top N historical lore snippets to retrieve per chapter")
+    rag_embedding_model: Optional[str] = Field(default=None, description="Dense embedding model override (defaults to text-multilingual-embedding-002)")
+    enable_rag_reranker: bool = Field(default=True, description="Enable Cross-Encoder reranking stage after hybrid retrieval")
+    rag_reranker_model: Optional[str] = Field(default=None, description="Model override for Cross-Encoder reranker (defaults to gemini-3.5-flash-lite)")
+    filter_scene_characters: bool = Field(default=True, description="Filter character roster per scene/chunk based on textual presence and core roles")
+    filter_extractor_entities: Optional[bool] = Field(default=None, description="Filter known characters and glossary per chunk/chapter in Entity Extractor to save tokens and avoid quota exhaustion")
+    enable_patch_polishing: bool = Field(default=True, description="Enable search/replace diff patching for secondary polish passes to save output tokens")
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     def get_raw_path(self, base_dir: Path) -> Path:
@@ -106,5 +114,30 @@ class ProjectConfig(BaseModel):
     def get_agent_fallback_model(self, role: Optional[str] = None) -> Optional[str]:
         """Return fallback model for agent role or global fallback_model."""
         return self.get_fallback_model()
+
+    def get_rag_embedding_model(self) -> str:
+        """Resolve effective rag_embedding_model: config override -> .env NOVEL_RAG_EMBEDDING_MODEL -> default."""
+        return (
+            self.rag_embedding_model
+            or os.environ.get("NOVEL_RAG_EMBEDDING_MODEL")
+            or "text-multilingual-embedding-002"
+        )
+
+    def get_rag_reranker_model(self) -> str:
+        """Resolve effective rag_reranker_model: config override -> .env NOVEL_RAG_RERANKER_MODEL -> default."""
+        return (
+            self.rag_reranker_model
+            or os.environ.get("NOVEL_RAG_RERANKER_MODEL")
+            or "gemini-3.5-flash-lite"
+        )
+
+    def get_filter_extractor_entities(self) -> bool:
+        """Resolve effective filter_extractor_entities: config override -> .env -> default (True)."""
+        if self.filter_extractor_entities is not None:
+            return self.filter_extractor_entities
+        env_val = os.environ.get("NOVEL_FILTER_EXTRACTOR_ENTITIES")
+        if env_val is not None:
+            return env_val.strip().lower() in ("true", "1", "yes")
+        return True
 
 

@@ -231,3 +231,22 @@ In East Asian webnovels, characters alternate between formal names, titles, and 
    - Activated via skill `address_form_preservation`.
    - Forbids smoothing or modernizing intimate address forms into generic English equivalents.
 
+---
+
+## 🔍 Script-Aware Word Boundaries & Scene Character Filtering
+
+In large novels with hundreds of glossary entries and dozens of character profiles, naive prompt injection causes prompt bloat and false-positive term matches. NouSetsu implements two dedicated algorithmic filters:
+
+### 1. Script-Aware Glossary Filtering ([`glossary_filter.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/glossary_filter.py))
+Different writing systems require fundamentally different term matching mechanics:
+* **CJK Scripts (Chinese, Japanese, Korean)**: Do not use whitespace word boundaries. Terms are matched via direct substring inclusion (`source in text`).
+* **Non-CJK / Latin Scripts**: Rely on word boundaries. Naive substring matching causes disastrous false positives (e.g. the term `"Dan"` matching inside `"dangerous"`, or `"in"` matching inside `"king"`). `filter_glossary_for_text()` detects script type and compiles regex word boundary guards (`\bterm\b`) for Latin terms.
+* **Per-Scene Chunking**: `filter_glossary_for_scene()` filters the novel bible's glossary to only the terms present in the current ~70-line scene chunk.
+
+### 2. Per-Scene Character Roster Filtering ([`character_filter.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/character_filter.py))
+Injecting 50 character profiles into an 80-line scene where only 2 characters are talking confuses zero-anaphora resolution:
+* **Permanent Lead Anchoring**: Protagonists and main characters (`role in ["protagonist", "main", "lead"]`) are always preserved to anchor implicit viewpoint thoughts.
+* **Scene Presence Matching**: Supporting characters and villains are included only if their `original_name`, `name`, or known `aliases` are mentioned in the scene chunk or preceding sliding draft.
+* **Fallback Safety**: If no characters match, the top major characters are retained to ensure the model always has context.
+
+

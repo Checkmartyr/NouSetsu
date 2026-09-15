@@ -15,6 +15,12 @@ Each novel project managed by NouSetsu contains the following structure:
 │   ├── metadata.json               # Consolidated single metadata document
 │   ├── bible/
 │   │   └── bible.yaml              # Novel Bible (characters, glossary, style guide)
+│   ├── traces/                     # Forensic prompt & response traces
+│   │   ├── chapter_0001.jsonl      # Streaming real-time AgentPromptTrace lines
+│   │   ├── chapter_0001.json       # Consolidated ChapterTraceDocument
+│   │   └── chapter_0002.json
+│   ├── rag/                        # Hybrid Search RAG Knowledge Store
+│   │   └── lore.db                 # Zero-daemon SQLite DB (SQLAlchemy ORM + FTS5 lore_fts)
 │   └── summaries/
 │       ├── arcs/                   # Archived Meso-tier story arc summaries
 │       │   ├── arc_0001.json       # Arc 1: Royal Academy Debut (Ch 1-122)
@@ -40,6 +46,43 @@ Each novel project managed by NouSetsu contains the following structure:
 
 ---
 
+## 🔍 Forensic Prompt Trace Archive (`.novel/traces/`)
+
+To support deep auditability and power the React 19 + Vite Web Trace Visualizer (`nousetsu web`), NouSetsu records forensic trace logs in `.novel/traces/chapter_XXXX.jsonl` (streaming) and `.novel/traces/chapter_XXXX.json` (consolidated `ChapterTraceDocument`):
+
+```python
+class AgentPromptTrace(BaseModel):
+    trace_id: str                   # Unique UUID (e.g. tr_...)
+    stage: PipelineStage            # Extraction, Drafting, Critique, Polishing, Chronicling
+    agent: str                      # Agent designation (e.g. "drafter")
+    iteration: int = 1              # Review loop iteration
+    chunk_index: int = 1            # LineSemanticChunker chunk index
+    total_chunks: int = 1           # Total chunk count
+    depth: int = 0                  # Recursive subdivision depth
+    model: str                      # Exact model used (or fallback)
+    system_prompt: str              # Complete system instructions
+    user_prompt: str                # Full prompt payload
+    raw_output: str                 # Exact LLM text response
+    duration_seconds: float         # Latency in seconds
+    token_usage: TokenUsage         # Input, output, thought, and cached tokens
+    status: str                     # "success", "error", "safety_blocked", "retry"
+```
+
+* **Zero Memory Leaks**: Finalized atomically into `ChapterTraceDocument` by `PromptTracker.finalize()` at chapter conclusion.
+* **Inspection**: Viewable in terminal via `nousetsu traces --chapter <N>` or interactively via `nousetsu web` and TUI hotkey `W`.
+
+---
+
+## 🏛️ Hybrid Search RAG Database (`.novel/rag/lore.db`)
+
+Managed via **SQLAlchemy 2.0 ORM** without external server daemons:
+* **`LoreDocumentORM` Table**: Stores document ID, type (`summary`, `arc`, `entity`, `scene_chunk`), chapter number, volume folder, title, content text, and 3072-dimensional vector embedding blob.
+* **`lore_fts` Virtual Table**: Native SQLite **FTS5** table indexed for full-text BM25 keyword searches across character names, dialogue, and spell names.
+* **Automatic Synchronization**: `BatchRunner` and `_index_chapter_into_rag` auto-index newly completed chapter summaries and 20-line scene chunks upon chapter completion.
+* **Re-indexing**: `nousetsu migrate-rag` (or `nousetsu index-rag`) scans existing summaries and populates the database from scratch.
+
+---
+
 ## 🏛️ Story Arc Storage & 3-Tier Summaries (`.novel/summaries/arcs/`)
 
 NouSetsu partitions narrative memory into three distinct tiers to provide rich context without blowing LLM context windows:
@@ -52,14 +95,16 @@ Stored in dedicated JSON files (`arc_0001.json`, `arc_0002.json`) within `.novel
 
 ```python
 class ArcSummary(BaseModel):
-    arc_id: str                      # e.g. "arc_0001"
-    arc_title: str                   # e.g. "Royal Academy Debut"
-    start_chapter: int               # e.g. 1
-    end_chapter: int                 # e.g. 122
-    milestones: List[str]            # Major narrative turns within the arc
-    climax: str                      # Climax resolution or arc turning point
+    arc_id: str                      # Unique identifier e.g. "arc_0001"
+    arc_num: int = 1                 # Sequential arc index
+    title: str                       # Arc title e.g. "Royal Academy Entrance"
+    synopsis: str                    # Summary of narrative progression in this arc
+    core_conflict: str               # Central conflict or goal of this arc
     status: str = "active"           # "active" or "completed"
-    created_at: str                  # ISO 8601 timestamp
+    start_chapter: int = 1           # Starting chapter number of arc
+    end_chapter: Optional[int] = None # Ending chapter number if completed
+    folder: Optional[str] = None     # Volume/folder scope
+    key_milestones: List[str]        # Concrete milestones achieved during this arc
 ```
 
 * **Autonomous Arc Archiving**: When `Chronist` detects that a major narrative arc has concluded, it writes the completed `ArcSummary` to `.novel/summaries/arcs/` and activates a new arc.
@@ -112,9 +157,9 @@ flowchart TD
 ### Document Structure Example (`.novel/metadata.json`)
 ```json
 {
-  "schema_version": "1.0",
   "project_id": "villainess_001",
-  "last_updated": "2026-09-11T12:00:00Z",
+  "version": 1,
+  "updated_at": "2026-09-11T12:00:00Z",
   "chapters": {
     "001 - Awakening": {
       "chapter_id": "001 - Awakening",
@@ -122,10 +167,12 @@ flowchart TD
       "source_file": "raw_chapters/001 - Awakening.txt",
       "source_sha256": "3a7b9c...",
       "output_file": "translated_chapters/001 - Awakening.md",
+      "trace_file": ".novel/traces/chapter_0001.json",
+      "prompt_trace_count": 5,
       "stats": {
         "duration_seconds": 4.1,
-        "input_tokens": 820,
-        "output_tokens": 364,
+        "prompt_tokens": 820,
+        "completion_tokens": 364,
         "thought_tokens": 100,
         "cached_tokens": 0,
         "total_tokens": 1284,

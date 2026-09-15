@@ -40,6 +40,9 @@ class BatchRunner:
         chunk_threshold_lines: Optional[int] = None,
         target_chunk_lines: Optional[int] = None,
         chunk_overlap_lines: Optional[int] = None,
+        enable_rag: Optional[bool] = None,
+        enable_rag_reranker: Optional[bool] = None,
+        filter_extractor_entities: Optional[bool] = None,
         console: Optional[Console] = None
     ):
         self.repo = repository
@@ -137,6 +140,18 @@ class BatchRunner:
         resolved_target_lines = target_chunk_lines or getattr(cfg, "target_chunk_lines", 70)
         resolved_overlap_lines = chunk_overlap_lines or getattr(cfg, "chunk_overlap_lines", 3)
 
+        resolved_rag = enable_rag if enable_rag is not None else getattr(cfg, "enable_rag", True)
+        resolved_reranker = enable_rag_reranker if enable_rag_reranker is not None else getattr(cfg, "enable_rag_reranker", True)
+        resolved_filter_extractor = (
+            filter_extractor_entities
+            if filter_extractor_entities is not None
+            else (
+                cfg.get_filter_extractor_entities()
+                if hasattr(cfg, "get_filter_extractor_entities")
+                else getattr(cfg, "filter_extractor_entities", True)
+            )
+        )
+
         self.rate_limiter = SlidingWindowRateLimiter(max_tpm=resolved_tpm, max_rpm=resolved_rpm)
         self.workflow = NovelTranslationWorkflow(
             model_name=resolved_model,
@@ -155,8 +170,18 @@ class BatchRunner:
             chunk_overlap_lines=resolved_overlap_lines,
             safety_recursive_subdivision=getattr(cfg, "safety_recursive_subdivision", True),
             safety_subdivision_min_lines=getattr(cfg, "safety_subdivision_min_lines", 8),
-            safety_subdivision_max_depth=getattr(cfg, "safety_subdivision_max_depth", 4)
+            safety_subdivision_max_depth=getattr(cfg, "safety_subdivision_max_depth", 4),
+            rag_engine=self.repo.get_rag_engine() if resolved_rag else None,
+            enable_rag=resolved_rag,
+            rag_top_k=getattr(cfg, "rag_top_k", 2),
+            rag_embedding_model=cfg.get_rag_embedding_model() if hasattr(cfg, "get_rag_embedding_model") else getattr(cfg, "rag_embedding_model", "text-multilingual-embedding-002"),
+            enable_rag_reranker=resolved_reranker,
+            rag_reranker_model=default_agent_model if is_mock else (cfg.get_rag_reranker_model() if hasattr(cfg, "get_rag_reranker_model") else getattr(cfg, "rag_reranker_model", "gemini-3.5-flash-lite")),
+            traces_dir=self.repo.traces_dir,
+            enable_patch_polishing=getattr(cfg, "enable_patch_polishing", True),
+            filter_extractor_entities=resolved_filter_extractor
         )
+        self.rag_engine = self.workflow.rag_engine
         self.auto_update_bible = auto_update_bible if auto_update_bible is not None else cfg.auto_update_bible
         self.stop_event = threading.Event()
         self.batch_token_usage = TokenUsage()
@@ -192,9 +217,19 @@ class BatchRunner:
             raw_filter = str(chapter_filter).strip()
             if raw_filter:
                 filter_str = raw_filter.lower()
-                # Check if filter specifies a chapter number, e.g. "48", "048", "ch 48", "ch.48", "chapter 48", "第48話", "ep 48"
+                # Check if filter specifies a chapter range (e.g. "5-58", "ch 5 to 58", "5..58")
+                range_match = re.search(r"^(?:chapter|ch|ep|第)?\.?\s*(\d+)\s*(?:-|to|\.\.)\s*(\d+)(?:話|章)?$", filter_str, re.IGNORECASE)
+                plus_match = re.search(r"^(?:chapter|ch|ep|第)?\.?\s*(\d+)\s*(?:\+|>=)$", filter_str, re.IGNORECASE)
                 num_match = re.search(r"^(?:chapter|ch|ep|第)?\.?\s*(\d+)(?:話|章)?$", filter_str, re.IGNORECASE)
-                if num_match:
+
+                if range_match:
+                    start_num = int(range_match.group(1))
+                    end_num = int(range_match.group(2))
+                    tasks = [t for t in tasks if start_num <= t.chapter_num <= end_num]
+                elif plus_match:
+                    start_num = int(plus_match.group(1))
+                    tasks = [t for t in tasks if t.chapter_num >= start_num]
+                elif num_match:
                     target_num = int(num_match.group(1))
                     exact = [t for t in tasks if t.chapter_num == target_num]
                     if exact:

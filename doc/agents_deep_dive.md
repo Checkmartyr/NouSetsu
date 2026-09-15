@@ -80,10 +80,10 @@ Before prompting the LLM, the extractor constructs an active context payload:
    - 魔導具 -> magic tool (item)
    - 蒼雷剣 -> Azure Thunder Blade (item)
    ```
-3. **Domain Skills Injection**: Queries [`SkillRegistry`](file:///D:/Code/novel_translation_Agent/src/skills/registry.py) for active extraction skills matching the novel's source language and genre:
+3. **Domain Skills Injection**: Queries [`SkillRegistry`](file:///D:/Code/novel_translation_Agent/src/nousetsu/skills/registry.py) for active extraction skills matching the novel's source language and genre:
    - `entity_disambiguation`: Directives for separating family names from given names and parsing honorific suffixes (`-sama`, `-san`, `-dono`, `xiong`, `shidi`).
-   - `cultivation_hierarchies`: Directives for detecting martial realms (Qi Condensation, Foundation Establishment, Golden Core) and spiritual treasures.
-   - `relationship_mapping`: Directives for identifying master-disciple, sibling, and clan dynamics.
+   - `cultivation_realm_extractor`: Directives for detecting martial realms (Qi Condensation, Foundation Establishment, Golden Core) and spiritual treasures.
+   - `relationship_mapper`: Directives for identifying master-disciple, sibling, and clan dynamics.
 
 ### 2.3 System Prompt & Execution
 The agent invokes the model with [`EXTRACTION_SYSTEM_PROMPT`](file:///D:/Code/novel_translation_Agent/src/nousetsu/prompts/templates.py#L3-L39):
@@ -165,7 +165,7 @@ Only terms physically present in the chapter are injected into the prompt, reduc
 
 ### 3.4 Line-Based Semantic Chunking Architecture (`draft_chunked`)
 When a chapter exceeds `chunk_threshold_lines` (default: 85 lines), translating it in a single prompt risks context truncation or 32,000 TPM rate-limit delays.
-[`LineSemanticChunker`](file:///D:/Code/novel_translation_Agent/src/utils/chunker.py) divides the text into ~70-line chunks snapping to paragraph breaks and scene transitions (`***`, `---`, `◆◆◆`) without cutting inside dialogue quotes (`「...」`, `"..."`).
+[`LineSemanticChunker`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/chunker.py) divides the text into ~70-line chunks snapping to paragraph breaks and scene transitions (`***`, `---`, `◆◆◆`) without cutting inside dialogue quotes (`「...」`, `"..."`).
 
 `draft_chunked` processes chunks sequentially using a **Sliding Context Window**:
 ```mermaid
@@ -210,7 +210,7 @@ To preserve boundary continuity and eliminate pronoun hallucination with minimal
 * **Pass 2+ Re-Audit**: Audits the refined prose produced by `Feinschliff` directly against the raw source text. Verifies whether previous critique notes were resolved and checks for any newly introduced drift.
 
 ### 4.3 Evaluation Metrics & Scoring Rubric
-The agent produces a structured [`QualityAudit`](file:///D:/Code/novel_translation_Agent/src/models/metadata.py) record:
+The agent produces a structured [`QualityAudit`](file:///D:/Code/novel_translation_Agent/src/nousetsu/models/metadata.py) record:
 * **Fidelity Score (`0.0 - 10.0`)**: Semantic equivalence, missing descriptions, dropped sentence clauses, or hallucinated details.
 * **Style Score (`0.0 - 10.0`)**: Sentence rhythm, natural English dialogue registers, absence of machine-translation tropes.
 * **Glossary Compliance Percentage (`0.0% - 100.0%`)**: Programmatic verification of canonical glossary terms.
@@ -221,9 +221,15 @@ The agent produces a structured [`QualityAudit`](file:///D:/Code/novel_translati
 #### A. Programmatic Glossary Verification
 In addition to LLM self-reporting, `Zensor` executes deterministic programmatic verification:
 ```python
+# Programmatic check only against glossary terms present in source text
+source_present_terms = filter_glossary_for_scene(
+    glossary=active_glossary,
+    source_text=source_text,
+    fallback_on_empty=False
+)
 missing_terms = []
 for item in source_present_terms:
-    if item.target.lower() not in draft_text.lower():
+    if not is_term_present(item.target, draft_text):
         missing_terms.append(f"Glossary term '{item.target}' (source: '{item.source}') missing in draft")
 if missing_terms:
     audit.warnings.extend(missing_terms)
@@ -231,7 +237,7 @@ if missing_terms:
 ```
 
 #### B. Critical Language Regression Guard
-If an LLM hallucinates or loops back into translating target English into source Japanese, `Zensor` executes zero-dependency script analysis via [`detect_language`](file:///D:/Code/novel_translation_Agent/src/utils/language.py):
+If an LLM hallucinates or loops back into translating target English into source Japanese, `Zensor` executes zero-dependency script analysis via [`detect_language`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/language.py):
 ```python
 if bible.target_language.lower() != bible.source_language.lower():
     detected_lang = detect_language(draft_text)
@@ -278,6 +284,19 @@ Raw translation drafts—even when accurate—frequently sound like translated t
 ### 5.4 Chunked Polishing (`polish_chunked`)
 For chapters exceeding 85 lines, `Feinschliff` polishes each chunk sequentially (`_polish_single_chunk`). It passes forward the trailing sentences of the previously polished chunk to prevent tone mismatches, abrupt stylistic shifts, or duplicate opening phrases across chunk borders.
 
+### 5.5 Programmatic Chapter Title Preservation Guard
+During creative prose polishing, LLMs occasionally omit structural chapter headings or volume prefixes (e.g. `บทที่ 11 - อวดดอกไม้` or `70\nChapter 11: The Awakening`):
+* **Domain Skill Enforcement**: `chapter_header_preservation` (priority 115) directs the model to retain leading chapter headers.
+* **Regex Header Extraction**: `_extract_draft_chapter_header()` parses the draft opening lines for multi-lingual chapter markers.
+* **Deterministic Restoration**: `_ensure_chapter_title_preserved()` verifies whether the heading is present in the output; if omitted, it programmatically prepends the draft's header block, ensuring 100% heading fidelity.
+
+### 5.6 Diff / Patch Polishing Engine (`DiffPatcher`)
+When editing existing drafts or performing second-pass review loops, regenerating whole chapters introduces unnecessary latency and token costs:
+* **Unified Diff Mode**: Feinschliff can generate concise search-and-replace blocks (`apply_search_replace_patches()`).
+* **Fuzzy Line Matching**: Locates and edits only the specific sentences targeted by the critic.
+* **Resilient Fallback**: Automatically reverts to full-text generation if patch application fails or produces zero changes.
+* **Efficiency**: Cuts completion token consumption by **60–80%** during reflection iterations.
+
 ---
 
 ## 6. Stage 5: Chronist (`ChroniclerAgent`)
@@ -306,7 +325,7 @@ When translating long series (often hundreds of chapters), early chapters are lo
    - **Relationship Shifts**: Formed pact with shadow wolf, betrayed by second prince.
 
 ### 6.3 Metadata Consolidation (`assemble_metadata`)
-`Chronist` compiles all forensic audit metrics, checkpoint data, duration tracking, and token usage into a consolidated [`ChapterMetadata`](file:///D:/Code/novel_translation_Agent/src/models/metadata.py) record:
+`Chronist` compiles all forensic audit metrics, checkpoint data, duration tracking, and token usage into a consolidated [`ChapterMetadata`](file:///D:/Code/novel_translation_Agent/src/nousetsu/models/metadata.py) record:
 * **Token Dimensions**: Tracks `prompt_tokens`, `completion_tokens`, `thought_tokens`, `cached_tokens`, and `total_tokens`.
 * **Execution Duration**: Computes total wall-clock time (`duration_seconds`) and granular per-step durations (`step_usage`).
 * **Stage Artifacts**: Saves final polished text, raw draft, critique notes, and active characters.
@@ -316,7 +335,7 @@ When translating long series (often hundreds of chapters), early chapters are lo
 
 ## 7. The Reflection Review Loop & Quality Gating
 
-Inside [`src/nousetsu/graph/workflow.py`](file:///D:/Code/novel_translation_Agent/src/graph/workflow.py), LangGraph manages the cyclic reflection exchange between `Zensor` and `Feinschliff`:
+Inside [`src/nousetsu/graph/workflow.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/graph/workflow.py), LangGraph manages the cyclic reflection exchange between `Zensor` and `Feinschliff`:
 
 ```mermaid
 flowchart TD
@@ -360,10 +379,10 @@ Rather than using a single model for all tasks, each agent can be assigned an op
 * **Critique & Chronicling**: High-parameter analytical reasoning (`gemma-4-26b-a4b-it`).
 
 ### 8.2 Automatic Failover via `FallbackChatModel`
-When a model encounters an HTTP 429 quota exhaustion or `RESOURCE_EXHAUSTED` error, [`FallbackChatModel`](file:///D:/Code/novel_translation_Agent/src/agents/llm.py) automatically catches the error and retries execution using the configured `fallback_model` (e.g. `gemini-3.5-flash-lite`), ensuring zero batch interruption.
+When a model encounters an HTTP 429 quota exhaustion or `RESOURCE_EXHAUSTED` error, [`FallbackChatModel`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/llm.py) automatically catches the error and retries execution using the configured `fallback_model` (e.g. `gemini-3.5-flash-lite`), ensuring zero batch interruption.
 
 ### 8.3 Sliding-Window Rate Limiter
-[`SlidingWindowRateLimiter`](file:///D:/Code/novel_translation_Agent/src/utils/rate_limiter.py) enforces a rolling 60-second window across **32,000 TPM** and **60 RPM**. It blocks calls proactively before API requests occur, sleeping in 200–250ms interruptible increments to allow instant response to user cancellation (`X` key or `Ctrl+C`).
+[`SlidingWindowRateLimiter`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/rate_limiter.py) enforces a rolling 60-second window across **32,000 TPM** and **60 RPM**. It blocks calls proactively before API requests occur, sleeping in 200–250ms interruptible increments to allow instant response to user cancellation (`X` key or `Ctrl+C`).
 
 ### 8.4 AI Safety Block Resilience & Recursive Bisection Engine
 Commercial LLM endpoints employ strict automated content moderation filters that frequently flag East Asian webnovels for visceral combat, dark fantasy tropes, or romantic intimacy with HTTP 400 `prohibited_content` exceptions:
@@ -378,6 +397,27 @@ Commercial LLM endpoints employ strict automated content moderation filters that
    - `CritiqueAgent` bisects source and draft chunks in tandem, calculating real fidelity and style scores on safe sections and logging an audit warning on the bypassed snippet.
 4. **Telemetry & Audit Tracking**:
    - Checkpoints and metadata track `safety_fallbacks_used` and `subdivisions_count`, displaying warnings in the chapter quality audit without interrupting batch execution.
+
+### 8.5 Hybrid Search RAG Knowledge Store & Cross-Encoder Reranker
+Operates zero-daemon local SQLite persistence (`.novel/rag/lore.db`) managed via **SQLAlchemy 2.0 ORM** (`LoreDocumentORM`):
+* **FTS5 Lexical Search**: Instant BM25 candidate lookup across character names, items, and dialogue.
+* **Gemini Embedding 2**: Computes 3072-dimensional vector representations with cosine similarity.
+* **Reciprocal Rank Fusion (RRF, $k=60$)**: Synthesizes sparse and dense candidate ranks.
+* **LLM Cross-Encoder Reranking**: Evaluates fused candidates for situational relevance.
+* **Pipeline Integration**: Inbound for `Wortschmied` ($k=2$), `Zensor` ($k=2$), and `Chronist` ($k=3$), with automated post-chapter indexing of chapter summaries and 20-line scene chunks.
+
+### 8.6 Forensic Prompt Tracking (`PromptTracker`) & Web Visualizer
+Provides complete transparency into LLM reasoning:
+* **Stage Tracing**: Captures exact system prompts, user content, raw model responses, and duration per agent step into `.novel/traces/chapter_XXXX.json`.
+* **React 19 + Vite Web Visualizer**: Launch with `nousetsu web` or press `W` in the TUI to view interactive prompt timelines, diff views, and token usage cards.
+
+### 8.7 Script-Aware Boundary Filtering & Scene Character Rostering
+* **Word Boundary Precision**: Distinguishes CJK ideographs from Latin alphabets, applying regex word boundaries (`\b`) to non-CJK text to prevent substring false matches.
+* **Per-Scene Rostering**: Filters active character cards down to characters active in the current ~70-line scene chunk, eliminating prompt noise and zero-anaphora misattributions.
+
+### 8.8 KV Context Caching Prefix Stabilization
+* Reorders high-entropy dynamic elements (such as sliding draft context or chapter numbers) to the tail of the prompt.
+* Preserves a static, unchanging system prompt prefix (`GEMINI_KV_CACHE_STABLE_PREFIX`) to maximize upstream Gemini context cache hit rates and lower inference costs.
 
 ---
 

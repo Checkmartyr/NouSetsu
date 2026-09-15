@@ -1,20 +1,27 @@
 """LangGraph translation workflow wiring the multi-agent pipeline."""
+import logging
 import os
 from pathlib import Path
 import threading
 import time
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 from langgraph.graph import END, StateGraph
+
+logger = logging.getLogger(__name__)
 from nousetsu.agents.chronicler import ChroniclerAgent
 from nousetsu.agents.critic import CritiqueAgent
 from nousetsu.agents.drafter import ContextAwareDrafterAgent
 from nousetsu.agents.extractor import EntityExtractorAgent
 from nousetsu.agents.llm import invoke_with_retry
 from nousetsu.agents.polisher import PolishingAgent
+from nousetsu.analysis.tracker import PromptTracker
+from nousetsu.models.bible import ChapterSummary, NovelBible
 from nousetsu.models.exceptions import BatchStoppedException
 from nousetsu.models.metadata import PipelineStage, StageStatus, StepTokenUsage, TokenUsage
 from nousetsu.models.state import TranslationState
+from nousetsu.rag.models import DocumentType
 from nousetsu.skills.registry import SkillRegistry
+from nousetsu.utils.character_filter import filter_characters_for_scene
 from nousetsu.utils.chunker import LineSemanticChunker
 from nousetsu.utils.genre import detect_genre
 from nousetsu.utils.language import detect_language
@@ -45,8 +52,24 @@ class NovelTranslationWorkflow:
         drafter_pg: Optional[Any] = None,
         safety_recursive_subdivision: bool = True,
         safety_subdivision_min_lines: int = 8,
-        safety_subdivision_max_depth: int = 4
+        safety_subdivision_max_depth: int = 4,
+        rag_engine: Optional[Any] = None,
+        enable_rag: bool = True,
+        rag_top_k: int = 2,
+        rag_embedding_model: str = "text-multilingual-embedding-002",
+        embedding_client: Optional[Any] = None,
+        enable_rag_reranker: bool = True,
+        rag_reranker_model: str = "gemini-3.5-flash-lite",
+        reranker: Optional[Any] = None,
+        traces_dir: Optional[Path] = None,
+        prompt_tracker: Optional[PromptTracker] = None,
+        enable_patch_polishing: bool = True,
+        filter_extractor_entities: bool = True
     ):
+        self.traces_dir = traces_dir
+        self.prompt_tracker = prompt_tracker
+        self.enable_patch_polishing = enable_patch_polishing
+        self.filter_extractor_entities = filter_extractor_entities
         effective_model = model_name or os.environ.get("NOVEL_MODEL") or os.environ.get("DEFAULT_MODEL") or "gemini-3.1-flash-lite"
         self.model_name = effective_model
         is_mock = effective_model.startswith("mock") or effective_model.startswith("test")
@@ -83,7 +106,8 @@ class NovelTranslationWorkflow:
             chunker=self.chunker,
             enable_recursive_subdivision=self.safety_recursive_subdivision,
             subdivision_min_lines=self.safety_subdivision_min_lines,
-            subdivision_max_depth=self.safety_subdivision_max_depth
+            subdivision_max_depth=self.safety_subdivision_max_depth,
+            enable_entity_filtering=self.filter_extractor_entities
         )
         self.drafter = ContextAwareDrafterAgent(
             model_name=self.drafter_model,
@@ -110,6 +134,25 @@ class NovelTranslationWorkflow:
             model_name=self.chronicler_model,
             fallback_model=self.fallback_model
         )
+        self.rag_engine = rag_engine
+        self.enable_rag = enable_rag
+        self.rag_top_k = rag_top_k
+        self.rag_embedding_model = rag_embedding_model
+        self.enable_rag_reranker = enable_rag_reranker
+        if self.enable_rag and embedding_client is None and self.rag_engine is not None:
+            from nousetsu.rag.embeddings import EmbeddingClient
+            emb_model = "mock-embedding" if is_mock else rag_embedding_model
+            self.embedding_client = EmbeddingClient(model_name=emb_model)
+        else:
+            self.embedding_client = embedding_client
+
+        if self.enable_rag and self.enable_rag_reranker and reranker is None and self.rag_engine is not None:
+            from nousetsu.rag.reranker import get_reranker
+            rerank_model = "mock-reranker" if is_mock else rag_reranker_model
+            self.reranker = get_reranker(model_name=rerank_model, is_mock=is_mock)
+        else:
+            self.reranker = reranker
+
         self.stage_callback: Optional[Callable[[PipelineStage, str, float], None]] = None
         self.stop_event: Optional[threading.Event] = None
         self.last_state: Optional[TranslationState] = None
@@ -237,7 +280,9 @@ class NovelTranslationWorkflow:
             notify_callback=lambda msg: self._notify(PipelineStage.EXTRACTION, msg, 15.0),
             rate_limiter=self.rate_limiter,
             estimated_tokens=est_extract,
-            stop_event=self.stop_event
+            stop_event=self.stop_event,
+            prompt_tracker=self.prompt_tracker,
+            enable_entity_filtering=self.filter_extractor_entities
         )
         
         all_chars = list(state.novel_bible.characters) + new_chars
@@ -270,15 +315,31 @@ class NovelTranslationWorkflow:
 
         return {
             "current_stage": PipelineStage.EXTRACTION,
-            "extracted_characters": new_chars,
-            "extracted_terms": new_terms,
             "active_characters": all_chars,
             "active_glossary": all_glossary,
+            "extracted_characters": new_chars,
+            "extracted_terms": new_terms,
+            "active_terms_in_chapter": active_terms,
             "active_skills": updated_skills,
             "step_token_records": updated_token_records,
             "safety_fallbacks_used": total_safety_used,
             "subdivisions_count": total_subdivisions
         }
+
+    def _get_allowed_folders(self, bible: NovelBible, current_folder: Optional[str]) -> Optional[List[str]]:
+        """Return list of historical and current volume folders up to current_folder in chronological order."""
+        if not current_folder:
+            return None
+        if hasattr(bible, "get_all_folders"):
+            order = bible.get_all_folders()
+            if order:
+                if current_folder not in order:
+                    from natsort import natsorted
+                    order = natsorted(list(set(order) | {current_folder}))
+                if current_folder in order:
+                    idx = order.index(current_folder)
+                    return order[:idx + 1]
+        return [current_folder]
 
     def _draft_step(self, state: TranslationState) -> Dict[str, Any]:
         self._check_stop(state, PipelineStage.DRAFTING)
@@ -329,6 +390,38 @@ class NovelTranslationWorkflow:
         else:
             active_summaries = state.novel_bible.summaries
 
+        rag_hits = []
+        if self.enable_rag and self.rag_engine:
+            try:
+                allowed_folders = self._get_allowed_folders(state.novel_bible, current_folder)
+                scene_chars = filter_characters_for_scene(state.active_characters, source_text=state.source_text)
+                char_names = " ".join([c.name for c in scene_chars[:5]])
+                extracted_term_keywords = " ".join([t.source for t in state.extracted_terms[:5] if t.source])
+                first_lines = " ".join([l.strip() for l in state.source_text.splitlines() if l.strip()][:3])
+                query_parts = [p for p in [char_names, extracted_term_keywords, first_lines] if p]
+                query_text = " ".join(query_parts).strip()[:250]
+
+                query_vec = None
+                if self.embedding_client and self.embedding_client.is_available:
+                    query_vec = self.embedding_client.embed_text(query_text)
+
+                rag_hits = self.rag_engine.hybrid_search(
+                    query=query_text,
+                    query_vector=query_vec,
+                    limit=self.rag_top_k,
+                    current_folder=current_folder,
+                    allowed_folders=allowed_folders,
+                    max_chapter_num=state.chapter_num,
+                    excluded_doc_types=[DocumentType.CHARACTER, DocumentType.GLOSSARY],
+                    reranker=self.reranker if self.enable_rag_reranker else None,
+                    enable_rerank=self.enable_rag_reranker
+                )
+                if rag_hits:
+                    self._notify(PipelineStage.DRAFTING, f"Retrieved {len(rag_hits)} episodic lore entries via Hybrid RAG + Cross-Encoder...", 32.0)
+            except Exception as e:
+                logger.warning(f"RAG retrieval failed: {e}")
+                rag_hits = []
+
         draft = invoke_with_retry(
             self.drafter.draft,
             source_text=state.source_text,
@@ -341,7 +434,9 @@ class NovelTranslationWorkflow:
             notify_callback=lambda msg: self._notify(PipelineStage.DRAFTING, msg, 35.0),
             rate_limiter=self.rate_limiter,
             estimated_tokens=est_draft,
-            stop_event=self.stop_event
+            stop_event=self.stop_event,
+            rag_results=rag_hits,
+            prompt_tracker=self.prompt_tracker
         )
 
         draft_duration = round(time.time() - step_start, 2)
@@ -372,6 +467,7 @@ class NovelTranslationWorkflow:
         return {
             "current_stage": PipelineStage.DRAFTING,
             "draft_text": draft,
+            "rag_retrieved_lore": rag_hits,
             "active_skills": updated_skills,
             "step_token_records": updated_token_records,
             "safety_fallbacks_used": total_safety_used,
@@ -437,6 +533,37 @@ class NovelTranslationWorkflow:
         else:
             est_critique = estimate_tokens(state.source_text) + estimate_tokens(text_to_audit) + 500
 
+        crit_rag_hits = []
+        if self.enable_rag and self.rag_engine:
+            if is_initial_draft:
+                try:
+                    current_folder = Path(state.source_file).parent.name if state.source_file else None
+                    allowed_folders = self._get_allowed_folders(state.novel_bible, current_folder)
+                    char_names = " ".join([c.name for c in state.active_characters[:3]])
+                    extracted_term_keywords = " ".join([t.source for t in state.extracted_terms[:3] if t.source])
+                    query_parts = [p for p in [char_names, extracted_term_keywords, "dialogue style canonical translation"] if p]
+                    query_text = " ".join(query_parts).strip()[:250] if char_names else f"Chapter {state.chapter_num} terminology canon"
+                    query_vec = None
+                    if self.embedding_client and self.embedding_client.is_available:
+                        query_vec = self.embedding_client.embed_text(query_text)
+                    crit_rag_hits = self.rag_engine.hybrid_search(
+                        query=query_text,
+                        query_vector=query_vec,
+                        limit=2,
+                        current_folder=current_folder,
+                        allowed_folders=allowed_folders,
+                        max_chapter_num=state.chapter_num,
+                        reranker=self.reranker if self.enable_rag_reranker else None,
+                        enable_rerank=self.enable_rag_reranker
+                    )
+                    if crit_rag_hits:
+                        self._notify(PipelineStage.CRITIQUE, f"Retrieved {len(crit_rag_hits)} canonical TM references for audit...", 58.0)
+                except Exception as e:
+                    logger.warning(f"RAG retrieval for critique failed: {e}")
+                    crit_rag_hits = state.rag_retrieved_lore[:2] if state.rag_retrieved_lore else []
+            else:
+                crit_rag_hits = state.rag_retrieved_lore[:2] if state.rag_retrieved_lore else []
+
         audit, notes = invoke_with_retry(
             self.critic.evaluate,
             source_text=state.source_text,
@@ -445,10 +572,13 @@ class NovelTranslationWorkflow:
             active_characters=state.active_characters,
             active_glossary=state.active_glossary,
             chunks=critique_chunks,
+            rag_context=crit_rag_hits,
             notify_callback=lambda msg: self._notify(PipelineStage.CRITIQUE, msg, 60.0),
             rate_limiter=self.rate_limiter,
             estimated_tokens=est_critique,
-            stop_event=self.stop_event
+            stop_event=self.stop_event,
+            prompt_tracker=self.prompt_tracker,
+            iteration=current_iter
         )
 
         # Best-candidate regression guard
@@ -464,7 +594,20 @@ class NovelTranslationWorkflow:
             if any("LANGUAGE REGRESSION" in str(w) for w in audit.warnings):
                 is_source_lang = True
 
-        if not is_source_lang:
+        from nousetsu.utils.diff_patcher import is_patch_format
+        is_corrupt_audit = False
+        if (
+            is_patch_format(text_to_audit)
+            or "<<<<<<<" in text_to_audit
+            or ">>>>>>>" in text_to_audit
+            or (len(state.draft_text) > 300 and len(text_to_audit) < len(state.draft_text) * 0.4)
+        ):
+            is_corrupt_audit = True
+            logger.error("Critique audited corrupted or patch-leaking text! Rejecting from best candidate selection.")
+            if "CRITICAL ERROR: Audited text contains diff patch markers or severe truncation." not in audit.warnings:
+                audit.warnings.append("CRITICAL ERROR: Audited text contains diff patch markers or severe truncation.")
+
+        if not is_source_lang and not is_corrupt_audit:
             if is_initial_draft:
                 best_audit = audit
                 best_text = state.best_polished_text or ""
@@ -619,6 +762,12 @@ class NovelTranslationWorkflow:
         else:
             est_polish = estimate_tokens(base_text) * 2 + 1000
 
+        can_use_patch = False
+        if self.enable_patch_polishing and not is_initial_draft and state.quality_audit:
+            has_lang_reg = any("LANGUAGE REGRESSION" in str(w) for w in state.quality_audit.warnings)
+            if state.quality_audit.fidelity_score >= 8.0 and not has_lang_reg:
+                can_use_patch = True
+
         polished = invoke_with_retry(
             self.polisher.polish,
             draft_text=base_text,
@@ -631,8 +780,25 @@ class NovelTranslationWorkflow:
             notify_callback=lambda msg: self._notify(PipelineStage.POLISHING, msg, 80.0),
             rate_limiter=self.rate_limiter,
             estimated_tokens=est_polish,
-            stop_event=self.stop_event
+            stop_event=self.stop_event,
+            prompt_tracker=self.prompt_tracker,
+            iteration=display_iter,
+            use_patch=can_use_patch
         )
+
+        # Severe Truncation & Diff Marker Leak Guard:
+        from nousetsu.utils.diff_patcher import is_patch_format
+        if (
+            is_patch_format(polished)
+            or "<<<<<<<" in polished
+            or ">>>>>>>" in polished
+            or (len(base_text) > 300 and len(polished) < len(base_text) * 0.4)
+        ):
+            logger.error(
+                f"Polisher output failed sanity checks (patch markers or severe truncation: "
+                f"{len(polished)} vs {len(base_text)} chars). Reverting to base draft text."
+            )
+            polished = base_text
 
         # Language regression guard on polished output:
         # If output reverted to source language while target is distinct, retain target language draft
@@ -694,6 +860,18 @@ class NovelTranslationWorkflow:
         self._notify(PipelineStage.CHRONICLING, f"Updating narrative lore, summaries, and checkpoint{skills_suffix}...", 95.0)
 
         final_text = state.best_polished_text or state.polished_text or state.draft_text
+
+        # Absolute guard against corrupted or patch-leaking final text
+        from nousetsu.utils.diff_patcher import is_patch_format
+        if (
+            is_patch_format(final_text)
+            or "<<<<<<<" in final_text
+            or ">>>>>>>" in final_text
+            or (len(state.draft_text) > 300 and len(final_text) < len(state.draft_text) * 0.4)
+        ):
+            logger.error("Final text contains diff patch markers or severe truncation! Forcing fallback to draft text.")
+            final_text = state.draft_text
+
         # Ensure final_text is not in source language if draft_text is in target language
         if (
             state.novel_bible.target_language.lower() != state.novel_bible.source_language.lower()
@@ -704,6 +882,34 @@ class NovelTranslationWorkflow:
 
         final_audit = state.best_audit or state.quality_audit
 
+        chr_rag_hits = []
+        if self.enable_rag and self.rag_engine:
+            try:
+                current_folder = Path(state.source_file).parent.name if state.source_file else None
+                allowed_folders = self._get_allowed_folders(state.novel_bible, current_folder)
+                scene_chars = filter_characters_for_scene(state.active_characters, source_text=state.source_text, target_text=final_text)
+                char_names = " ".join([c.name for c in scene_chars[:4]])
+                first_lines = " ".join([l.strip() for l in final_text.splitlines() if l.strip()][:2])
+                chr_query = f"{char_names} {first_lines}".strip()[:250] if (char_names or first_lines) else f"Chapter {state.chapter_num} story arc events"
+                chr_vec = None
+                if self.embedding_client and self.embedding_client.is_available:
+                    chr_vec = self.embedding_client.embed_text(chr_query)
+                chr_rag_hits = self.rag_engine.hybrid_search(
+                    query=chr_query,
+                    query_vector=chr_vec,
+                    limit=3,
+                    current_folder=current_folder,
+                    allowed_folders=allowed_folders,
+                    max_chapter_num=state.chapter_num,
+                    reranker=self.reranker if self.enable_rag_reranker else None,
+                    enable_rerank=self.enable_rag_reranker
+                )
+                if chr_rag_hits:
+                    self._notify(PipelineStage.CHRONICLING, f"Retrieved {len(chr_rag_hits)} prior lore entries for chronicler continuity...", 96.0)
+            except Exception as e:
+                logger.warning(f"RAG retrieval for chronicler failed: {e}")
+                chr_rag_hits = []
+
         est_chronicle = min(estimate_tokens(final_text), 4000) + 400
         summary = invoke_with_retry(
             self.chronicler.chronicle,
@@ -712,10 +918,13 @@ class NovelTranslationWorkflow:
             translated_text=final_text,
             genre=state.genre,
             source_lang=state.novel_bible.source_language,
+            bible=state.novel_bible,
+            rag_context=chr_rag_hits,
             notify_callback=lambda msg: self._notify(PipelineStage.CHRONICLING, msg, 95.0),
             rate_limiter=self.rate_limiter,
             estimated_tokens=est_chronicle,
-            stop_event=self.stop_event
+            stop_event=self.stop_event,
+            prompt_tracker=self.prompt_tracker
         )
 
         current_folder = Path(state.source_file).parent.name if state.source_file else None
@@ -748,6 +957,13 @@ class NovelTranslationWorkflow:
             if fallback_warn not in final_audit.warnings:
                 final_audit.warnings.append(fallback_warn)
 
+        trace_file_path = None
+        prompt_trace_count = 0
+        if self.prompt_tracker:
+            doc = self.prompt_tracker.finalize()
+            trace_file_path = str(self.prompt_tracker.json_path)
+            prompt_trace_count = len(doc.traces)
+
         metadata = self.chronicler.assemble_metadata(
             chapter_id=state.chapter_id,
             chapter_num=state.chapter_num,
@@ -767,11 +983,27 @@ class NovelTranslationWorkflow:
             status=StageStatus.COMPLETED,
             step_usage=all_token_records,
             safety_fallbacks_used=total_safety_used,
-            subdivisions_count=total_subdivisions
+            subdivisions_count=total_subdivisions,
+            extracted_characters=state.extracted_characters,
+            extracted_terms=state.extracted_terms,
+            trace_file=trace_file_path,
+            prompt_trace_count=prompt_trace_count
         )
 
         updated_skills = dict(state.active_skills)
         updated_skills["chronicling"] = chr_skills
+
+        if self.enable_rag and self.rag_engine and summary:
+            try:
+                self._index_chapter_into_rag(
+                    chapter_num=state.chapter_num,
+                    folder=current_folder,
+                    title=f"Chapter {state.chapter_num}",
+                    summary=summary,
+                    final_text=final_text
+                )
+            except Exception as e:
+                logger.warning(f"RAG auto-indexing failed for chapter {state.chapter_num}: {e}")
 
         return {
             "current_stage": PipelineStage.CHRONICLING,
@@ -782,8 +1014,68 @@ class NovelTranslationWorkflow:
             "active_skills": updated_skills,
             "step_token_records": all_token_records,
             "safety_fallbacks_used": total_safety_used,
-            "subdivisions_count": total_subdivisions
+            "subdivisions_count": total_subdivisions,
+            "prompt_traces": self.prompt_tracker.traces if self.prompt_tracker else []
         }
+
+    def _index_chapter_into_rag(
+        self,
+        chapter_num: int,
+        folder: Optional[str],
+        title: str,
+        summary: ChapterSummary,
+        final_text: str
+    ) -> None:
+        """Index completed chapter summary and scene chunks into HybridSearchEngine."""
+        if not self.rag_engine:
+            return
+        from nousetsu.rag.models import DocumentType, LoreDocument
+
+        folder_clean = folder or "default"
+        docs: List[LoreDocument] = []
+
+        # 1. Index Chapter Summary
+        summary_content = f"Synopsis: {summary.synopsis}\nKey Events: {'; '.join(summary.key_events)}"
+        if summary.character_state_changes:
+            summary_content += f"\nCharacter Shifts: {'; '.join(summary.character_state_changes)}"
+
+        docs.append(LoreDocument(
+            doc_id=f"summary:{folder_clean}:{chapter_num:04d}",
+            doc_type=DocumentType.SUMMARY,
+            chapter_num=chapter_num,
+            folder=folder,
+            title=title,
+            content=summary_content
+        ))
+
+        # 2. Index Scene Chunks (~20 lines per chunk)
+        lines = [l.strip() for l in final_text.splitlines() if l.strip()]
+        chunk_size = 20
+        chunk_idx = 1
+        for i in range(0, len(lines), chunk_size):
+            chunk_slice = lines[i:i + chunk_size]
+            if not chunk_slice:
+                continue
+            chunk_content = "\n".join(chunk_slice)
+            docs.append(LoreDocument(
+                doc_id=f"chunk:{folder_clean}:{chapter_num:04d}:{chunk_idx:03d}",
+                doc_type=DocumentType.CHUNK,
+                chapter_num=chapter_num,
+                folder=folder,
+                title=f"{title} (Part {chunk_idx})",
+                content=chunk_content
+            ))
+            chunk_idx += 1
+
+        embeddings = None
+        if self.embedding_client and self.embedding_client.is_available:
+            try:
+                embeddings = self.embedding_client.embed_documents([d.content for d in docs])
+            except Exception as e:
+                logger.warning(f"Embedding generation failed during chapter indexing: {e}")
+                embeddings = None
+
+        self.rag_engine.index_documents(docs, embeddings)
 
     def run(
         self,
@@ -797,11 +1089,26 @@ class NovelTranslationWorkflow:
         self.stop_event = stop_event
         self.current_stage = PipelineStage.NONE
 
+        # Setup PromptTracker
+        folder = initial_state.folder
+        if not folder and initial_state.source_file:
+            folder = Path(initial_state.source_file).parent.name
+
+        traces_dir = self.traces_dir or Path(".novel/traces")
+        self.prompt_tracker = PromptTracker(
+            traces_dir=traces_dir,
+            chapter_id=initial_state.chapter_id,
+            chapter_num=initial_state.chapter_num,
+            folder=folder
+        )
+
         for agent_inst in [self.extractor, self.drafter, self.critic, self.polisher, self.chronicler]:
             if hasattr(agent_inst, "safety_fallbacks_used"):
                 agent_inst.safety_fallbacks_used = 0
             if hasattr(agent_inst, "subdivisions_count"):
                 agent_inst.subdivisions_count = 0
+            if hasattr(agent_inst, "prompt_tracker"):
+                agent_inst.prompt_tracker = self.prompt_tracker
 
         # Auto-resolve genre if general or unspecified
         if not initial_state.genre or initial_state.genre == "general":
@@ -822,6 +1129,11 @@ class NovelTranslationWorkflow:
         final_state_dict = self.graph.invoke(initial_state)
         result = TranslationState.model_validate(final_state_dict)
         self.last_state = result
+        if self.prompt_tracker:
+            result.prompt_traces = self.prompt_tracker.traces
+            if result.metadata:
+                result.metadata.trace_file = str(self.prompt_tracker.json_path)
+                result.metadata.prompt_trace_count = len(self.prompt_tracker.traces)
         if result.metadata:
             result.metadata.stats.duration_seconds = round(time.time() - start_time, 2)
         self._notify(PipelineStage.CHRONICLING, "Chapter translation completed!", 100.0)

@@ -14,6 +14,8 @@ sequenceDiagram
     actor User as "User / CLI / TUI"
     participant Scanner as "ChapterScanner"
     participant Workflow as "NovelTranslationWorkflow"
+    participant Tracker as "PromptTracker"
+    participant RAG as "HybridSearchEngine (lore.db)"
     participant Extractor as "Stage 1: Schriftdetektiv (Extractor)"
     participant Drafter as "Stage 2: Wortschmied (Drafter)"
     participant Critic as "Stage 3: Zensor (Critic)"
@@ -31,21 +33,32 @@ sequenceDiagram
     
     rect rgb(20, 30, 45)
         note over Workflow,Extractor: "Stage 1: Extraction (15%)"
-        Workflow->>Extractor: "extract(source_text, bible)"
+        Workflow->>Extractor: "extract(source_text, bible, genre, procedural_graph)"
+        Extractor->>Tracker: "record(stage=EXTRACTION, prompt, response, tokens)"
         Extractor-->>Workflow: "new_characters, new_terms, active_glossary"
     end
 
     rect rgb(25, 35, 55)
-        note over Workflow,Drafter: "Stage 2: Drafting (35%)"
-        Workflow->>Drafter: "draft(source_text, bible, characters, glossary, summaries)"
+        note over Workflow,Drafter: "Stage 2: Context-Aware Drafting (35%)"
+        opt Hybrid RAG Enabled
+            Workflow->>RAG: "hybrid_search(scene_query, k=2, rerank=True)"
+            RAG-->>Workflow: "rag_hits (episodic lore candidates)"
+        end
+        Workflow->>Drafter: "draft(source_text, bible, scene_characters, active_glossary, summaries, rag_results)"
+        Drafter->>Tracker: "record(stage=DRAFTING, prompt, response, tokens)"
         Drafter-->>Workflow: "draft_text (zero-anaphora resolved)"
     end
 
     loop Review Reflection Cycle (Max 3 Loops)
         rect rgb(35, 45, 25)
             note over Workflow,Critic: "Stage 3: Critique Audit (60%)"
-            Workflow->>Critic: "evaluate(source_text, text_to_audit, bible)"
-            Critic-->>Workflow: "quality_audit (fidelity score, style score, warnings)"
+            opt Hybrid RAG Enabled (Pass 1)
+                Workflow->>RAG: "hybrid_search(canon_terms_query, k=2)"
+                RAG-->>Workflow: "crit_rag_hits (canonical TM phrasing)"
+            end
+            Workflow->>Critic: "evaluate(source_text, text_to_audit, bible, rag_context)"
+            Critic->>Tracker: "record(stage=CRITIQUE, prompt, response, tokens)"
+            Critic-->>Workflow: "quality_audit (fidelity, style, compliance, warnings)"
         end
 
         opt Quality Threshold Met (Fidelity >= 8.5 & Style >= 8.5)
@@ -55,16 +68,28 @@ sequenceDiagram
         rect rgb(45, 30, 45)
             note over Workflow,Polisher: "Stage 4: Prose Polishing (80%)"
             Workflow->>Polisher: "polish(draft_text, critique_notes, glossary, bible)"
+            note over Polisher: "DiffPatcher: Unified Diff Mode -> Programmatic Title Guard"
+            Polisher->>Tracker: "record(stage=POLISHING, prompt, response, tokens)"
             Polisher-->>Workflow: "polished_text (cadence refined, translationese removed)"
         end
     end
 
     rect rgb(45, 40, 20)
         note over Workflow,Chronicler: "Stage 5: Chronicling (95%)"
-        Workflow->>Chronicler: "chronicle(chapter_num, best_polished_text)"
+        opt Hybrid RAG Enabled
+            Workflow->>RAG: "hybrid_search(prior_lore_query, k=3)"
+            RAG-->>Workflow: "chr_rag_hits (prior lore context)"
+        end
+        Workflow->>Chronicler: "chronicle(chapter_num, chapter_title, best_polished_text, rag_context)"
+        Chronicler->>Tracker: "record(stage=CHRONICLING, prompt, response, tokens)"
         Chronicler-->>Workflow: "new_chapter_summary (synopsis, events, state changes)"
+        opt Hybrid RAG Enabled
+            Workflow->>RAG: "auto_index(chapter_summary, 20-line scene chunks)"
+            RAG-->>Workflow: "Indexed into SQLite FTS5 + Gemini Embedding 2"
+        end
+        Workflow->>Tracker: "finalize() -> save .novel/traces/chapter_XXXX.json"
         Workflow->>Chronicler: "assemble_metadata(...)"
-        Chronicler-->>Workflow: "ChapterMetadata with CheckpointData"
+        Chronicler-->>Workflow: "ChapterMetadata with CheckpointData and trace_file"
     end
 
     Workflow->>Repo: "update_bible_memory(characters, terms, summary)"
@@ -81,13 +106,13 @@ sequenceDiagram
 > [!TIP]
 > For a comprehensive, in-depth technical analysis of each agent's internal prompt templates, context assembly, chunking algorithms, and safety guards, see the dedicated [**Agents Deep-Dive Guide**](./agents_deep_dive.md).
 
-| Stage | German Codename | Agent Class | Primary Function | Plain-English Role |
-|:---:|:---|:---|:---|:---|
-| **1** | **Schriftdetektiv** | `EntityExtractorAgent` | `extract(...)` | **The Detective**: Discovers unknown character names, ranks, and magic terms before translation starts. |
-| **2** | **Wortschmied** | `ContextAwareDrafterAgent` | `draft(...)` | **The Wordsmith**: Writes the initial complete translation, resolving omitted pronouns (*Zero-Anaphora*) and honoring character voice registers. |
-| **3** | **Zensor** | `CritiqueAgent` | `evaluate(...)` | **The Inspector**: Line-by-line quality auditor scoring fidelity and style (0-10) and generating actionable critique notes. |
-| **4** | **Feinschliff** | `PolishingAgent` | `polish(...)` | **The Stylist**: Rewrites drafted prose into natural, immersive literary English, eliminating machine-translation tropes. |
-| **5** | **Chronist** | `ChroniclerAgent` | `chronicle(...)`<br>`assemble_metadata(...)` | **The Memory Keeper**: Summarizes chapter events for future chapters and archives stats into `.novel/metadata.json`. |
+| Stage | German Codename | Agent Class | Primary Function | Plain-English Role | RAG Role |
+|:---:|:---|:---|:---|:---|:---:|
+| **1** | **Schriftdetektiv** | `EntityExtractorAgent` | `extract(...)` | **The Detective**: Discovers unknown character names, ranks, and magic terms before translation starts. | Feeds Bible Terms |
+| **2** | **Wortschmied** | `ContextAwareDrafterAgent` | `draft(...)` | **The Wordsmith**: Writes initial translation, resolving zero-anaphora, using scene-filtered character rosters and word-boundary glossaries. | Inbound ($k=2$) |
+| **3** | **Zensor** | `CritiqueAgent` | `evaluate(...)` | **The Inspector**: Line-by-line quality auditor scoring fidelity and style (0-10) against canonical translation memory. | Inbound TM ($k=2$) |
+| **4** | **Feinschliff** | `PolishingAgent` | `polish(...)` | **The Stylist**: Rewrites drafted prose into natural English via DiffPatcher and programmatic chapter title protection. | Indirect via Notes |
+| **5** | **Chronist** | `ChroniclerAgent` | `chronicle(...)`<br>`assemble_metadata(...)` | **The Memory Keeper**: Summarizes chapter events, updates 3-tier memory, and indexes summaries and 20-line chunks into Hybrid RAG. | Bi-directional (Read $k=3$ / Write) |
 
 ---
 
@@ -103,18 +128,24 @@ sequenceDiagram
       bible: NovelBible,
       genre: Optional[str] = None,
       procedural_graph: Optional[ProceduralGraph] = None,
+      chunks: Optional[List[Any]] = None,
+      notify_callback: Optional[Any] = None,
+      rate_limiter: Optional[Any] = None,
+      stop_event: Optional[Any] = None,
       **kwargs: Any
   ) -> Tuple[List[CharacterProfile], List[GlossaryItem], List[str]]:
   ```
 * **Plain English Explanation**:
-  Scans raw source text *before* translation begins to discover unknown character names, titles, magical items, and fantasy terminology not yet recorded in the Novel Bible. Uses Procedural Graph steering (`Scan_Candidates` -> `Filter_Known` -> `Deduce_Profiles` -> `Prune_Trivial_Terms`) to guide extraction.
+  Scans raw source text *before* translation begins to discover unknown character names, titles, magical items, and fantasy terminology not yet recorded in the Novel Bible. Uses Procedural Graph steering (`Scan_Candidates` -> `Filter_Known` -> `Deduce_Profiles` -> `Prune_Trivial_Terms`) to guide extraction. Records exact forensic prompts and parsed responses to `PromptTracker`.
 * **Inputs**:
   | Argument | Type | Purpose |
   |:---|:---|:---|
-  | `source_text` | `str` | Raw chapter text (first 12,000 characters). |
+  | `source_text` | `str` | Raw chapter text (or first chunk). |
   | `bible` | `NovelBible` | Existing character profiles and glossary terms to avoid duplicates. |
   | `genre` | `Optional[str]` | Optional genre override for domain-specific skill selection. |
   | `procedural_graph` | `Optional[ProceduralGraph]` | Custom or evolved Procedural Graph overriding defaults. |
+  | `chunks` | `Optional[List[Any]]` | Pre-chunked lines if source text is chunked. |
+  | `prompt_tracker` | `Optional[PromptTracker]` | Via `kwargs`: records stage prompts and token metrics to `.novel/traces/`. |
 * **Outputs**:
   A tuple containing:
   1. `List[CharacterProfile]`: Newly discovered characters with estimated gender, role, and voice.
@@ -143,30 +174,33 @@ sequenceDiagram
       notify_callback: Optional[Any] = None,
       rate_limiter: Optional[Any] = None,
       stop_event: Optional[Any] = None,
-      procedural_graph: Optional[ProceduralGraph] = None
+      procedural_graph: Optional[ProceduralGraph] = None,
+      polisher: Optional[Any] = None,
+      **kwargs: Any
   ) -> str:
   ```
 * **Plain English Explanation**:
-  Produces the first complete narrative translation of the chapter, resolving East Asian pronoun omission, adhering to character registers, and seamlessly handling sensitive scenes via recursive subdivision and Google Translate fallback.
+  Produces the first complete narrative translation of the chapter, resolving East Asian pronoun omission, adhering to character registers, and seamlessly handling sensitive scenes via recursive subdivision and Google Translate fallback. Injects inbound episodic lore from Hybrid RAG ($k=2$).
 * **Inputs**:
   | Argument | Type | Purpose |
   |:---|:---|:---|
   | `source_text` | `str` | Full chapter source text to translate. |
   | `bible` | `NovelBible` | Language settings, reading level, tense, POV, and honorific mode. |
-  | `active_characters`| `List[CharacterProfile]` | Character cards containing canonical target names and voice tone guidelines. |
-  | `active_glossary` | `List[GlossaryItem]` | Mandatory term translations that must appear in the text. |
+  | `active_characters`| `List[CharacterProfile]` | Character cards filtered dynamically per scene chunk via `filter_characters_for_scene`. |
+  | `active_glossary` | `List[GlossaryItem]` | Mandatory term translations filtered with script-aware word boundary detection. |
   | `rolling_summaries`| `List[ChapterSummary]` | Synopses of preceding chapters providing immediate plot context with volume badges. |
   | `genre` | `Optional[str]` | Genre override for specialized drafting skills. |
   | `chunks` | `Optional[List[LineChunk]]` | Pre-split semantic chunks if chapter exceeds threshold lines. |
-  | `procedural_graph` | `Optional[ProceduralGraph]` | Custom or evolved Procedural Graph for drafting. |
+  | `rag_results` | `Optional[List[Any]]` | Via `kwargs`: relevant episodic lore retrieved by Hybrid RAG ($k=2$). |
+  | `prompt_tracker` | `Optional[PromptTracker]` | Via `kwargs`: logs drafting prompt, sliding context length, and tokens. |
 * **Outputs**:
   `str`: Raw narrative English draft translation.
 * **Key Innovations**:
+  * **Hybrid Search RAG ($k=2$)**: Injects past episodic events and world lore retrieved via SQLite FTS5 BM25 + Gemini Embedding 2 with Cross-Encoder reranking.
+  * **Script-Aware Boundary Filtering & Scene Character Rostering**: Restricts characters and terms to those active in the current scene, eliminating prompt bloat.
   * **AI Safety Recursive Subdivision (`bisect_text`)**: When a chunk triggers a commercial AI safety block (e.g. Google AI `prohibited_content` HTTP 400), the drafter recursively bisects the text. Non-sensitive sub-chunks are translated by the primary LLM with full literary prose quality, while only the isolated minimal sensitive sub-block ($\le 8$ lines or depth 4) triggers **Google Translate fallback** (`deep-translator`) with subsequent literary polishing.
   * **Procedural Graph State Localization**: Dynamically localizes active node at `Scene_Init` for Chunk 1 (scene and POV anchoring) and switches to `Boundary_Continuity` for Chunk > 1 (prohibits repeating context and enforces seamless continuity from the preceding chunk tail).
   * **Line-Based Semantic Chunking**: Chapters exceeding `chunk_threshold_lines` (default: 85 lines) are partitioned into ~70-line semantic chunks with 3-line overlap.
-  * **Zero-Anaphora Resolution**: Examines scene presence and speech register particles to insert accurate pronouns without blind guessing.
-  * **Character Voice Preservation**: Distinct dialogue registers ensure a noble villain sounds haughty while a young apprentice sounds eager.
 
 ---
 
@@ -180,11 +214,18 @@ sequenceDiagram
       draft_text: str,
       bible: NovelBible,
       active_characters: List[CharacterProfile],
-      active_glossary: List[GlossaryItem]
+      active_glossary: List[GlossaryItem],
+      genre: Optional[str] = None,
+      chunks: Optional[List[Any]] = None,
+      notify_callback: Optional[Any] = None,
+      rate_limiter: Optional[Any] = None,
+      stop_event: Optional[Any] = None,
+      rag_context: Optional[List[Any]] = None,
+      **kwargs: Any
   ) -> Tuple[QualityAudit, str]:
   ```
 * **Plain English Explanation**:
-  Acts as an independent literary editor and quality inspector. Compares the translation candidate line-by-line against the original source text.
+  Acts as an independent literary editor and quality inspector. Compares the translation candidate line-by-line against the original source text and canonical Translation Memory (TM) phrasing retrieved via RAG ($k=2$).
 * **Inputs**:
   | Argument | Type | Purpose |
   |:---|:---|:---|
@@ -193,6 +234,7 @@ sequenceDiagram
   | `bible` | `NovelBible` | Source and target language specifications. |
   | `active_characters`| `List[CharacterProfile]` | Character cards for pronoun and voice verification. |
   | `active_glossary` | `List[GlossaryItem]` | Mandatory glossary terms checked programmatically against text. |
+  | `rag_context` | `Optional[List[Any]]` | Canonical series memory and prior translations retrieved via RAG ($k=2$). |
 * **Outputs**:
   A tuple containing:
   1. `QualityAudit`: Structured audit containing `fidelity_score` (0-10), `style_score` (0-10), `glossary_compliance_pct` (0-100%), warnings list, and `passed` boolean.
@@ -210,11 +252,18 @@ sequenceDiagram
       draft_text: str,
       critique_notes: str,
       active_glossary: List[GlossaryItem],
-      bible: NovelBible
+      bible: NovelBible,
+      genre: Optional[str] = None,
+      source_text: Optional[str] = None,
+      draft_chunks: Optional[List[Any]] = None,
+      notify_callback: Optional[Any] = None,
+      rate_limiter: Optional[Any] = None,
+      stop_event: Optional[Any] = None,
+      **kwargs: Any
   ) -> str:
   ```
 * **Plain English Explanation**:
-  Takes the translation and the Critic's correction notes and rewrites the prose into natural, immersive, publication-grade literary English.
+  Takes the translation and the Critic's correction notes and rewrites the prose into natural, immersive, publication-grade literary English. Features unified diff patching and automated chapter title protection.
 * **Inputs**:
   | Argument | Type | Purpose |
   |:---|:---|:---|
@@ -222,12 +271,15 @@ sequenceDiagram
   | `critique_notes` | `str` | Specific corrections identified by the Critic. |
   | `active_glossary` | `List[GlossaryItem]` | Mandatory terminology that must remain intact. |
   | `bible` | `NovelBible` | Target reading level and tone guidelines. |
+  | `source_text` | `Optional[str]` | Source text reference (bypassed gracefully if safety filtered). |
+  | `draft_chunks` | `Optional[List[Any]]` | Pre-split semantic chunks for chunked polishing. |
 * **Outputs**:
-  `str`: Refined, publication-ready literary English text.
+  `str`: Refined, publication-ready literary English text with guaranteed chapter title preservation.
 * **Key Innovations**:
+  * **Diff / Patch Polishing Engine (`DiffPatcher`)**: In addition to full prose rewriting, supports token-efficient unified diff format (`apply_search_replace_patches`), reducing completion token consumption while preserving unaltered paragraphs.
+  * **Programmatic Chapter Title Preservation Guard**: Inspects leading header lines (`CHAPTER_HEADER_RE`) and automatically restores missing titles or volume prefixes if inadvertently dropped during rewriting.
   * **Chunk-Aware Polishing**: Refines prose across chunk boundaries maintaining emotional resonance and cadence consistency.
   * **Eliminate Translationese**: Removes awkward machine-translation structures (e.g., overusing "in order to", "it cannot be helped", robotic passive voice).
-  * **Cadence Balancing**: Varies sentence length to match scene tension (punchy in action scenes, lyrical in descriptive scenes).
 
 ---
 
@@ -240,10 +292,15 @@ sequenceDiagram
          self,
          chapter_num: int,
          chapter_title: str,
-         translated_text: str
+         translated_text: str,
+         genre: Optional[str] = None,
+         source_lang: Optional[str] = None,
+         bible: Optional[NovelBible] = None,
+         rag_context: Optional[List[Any]] = None,
+         **kwargs: Any
      ) -> ChapterSummary:
      ```
-     * **Plain English**: Reads the finished translation and writes a concise episodic synopsis, recording major story events and character state changes (e.g. rank promotions, injuries, alliance shifts).
+     * **Plain English**: Reads the finished translation and inbound lore ($k=3$), then writes a concise episodic synopsis recording major story events, arc progression, and character state changes.
   2. **`assemble_metadata(...)`**:
      ```python
      def assemble_metadata(
@@ -263,10 +320,19 @@ sequenceDiagram
          draft_text: str,
          critique_notes: str,
          polished_text: str,
-         status: StageStatus = StageStatus.COMPLETED
+         status: StageStatus = StageStatus.COMPLETED,
+         step_usage: Optional[List[StepTokenUsage]] = None,
+         safety_fallbacks_used: int = 0,
+         subdivisions_count: int = 0,
+         extracted_characters: Optional[List[CharacterProfile]] = None,
+         extracted_terms: Optional[List[GlossaryItem]] = None,
+         trace_file: Optional[str] = None,
+         prompt_trace_count: int = 0
      ) -> ChapterMetadata:
      ```
-     * **Plain English**: Packages token usage statistics, duration, audit scores, and checkpoint artifacts into a consolidated `ChapterMetadata` object to be atomically saved into `.novel/metadata.json`.
+     * **Plain English**: Packages token usage statistics, durations, audit scores, checkpoint artifacts, and trace file pointers into a consolidated `ChapterMetadata` object atomically saved into `.novel/metadata.json`.
+* **Outbound RAG Auto-Indexing (`_index_chapter_into_rag`)**:
+  Immediately upon chronicling, the workflow indexes the chapter summary (`DocumentType.SUMMARY`) and partitions the polished text into ~20-line scene chunks (`DocumentType.SCENE_CHUNK`), embedding them via Gemini Embedding 2 and inserting them into the SQLite FTS5 table (`lore_fts`) for future chapter queries.
 
 ---
 

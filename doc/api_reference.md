@@ -15,7 +15,12 @@ class EntityExtractorAgent:
         self,
         model_name: str = "gemini-3.1-flash-lite",
         fallback_model: Optional[str] = None,
-        procedural_graph: Optional[ProceduralGraph] = None
+        procedural_graph: Optional[ProceduralGraph] = None,
+        chunker: Optional[Any] = None,
+        enable_recursive_subdivision: bool = True,
+        subdivision_min_lines: int = 8,
+        subdivision_max_depth: int = 3,
+        prompt_tracker: Optional[Any] = None
     )
     
     def extract(
@@ -24,6 +29,10 @@ class EntityExtractorAgent:
         bible: NovelBible,
         genre: Optional[str] = None,
         procedural_graph: Optional[ProceduralGraph] = None,
+        chunks: Optional[List[Any]] = None,
+        notify_callback: Optional[Any] = None,
+        rate_limiter: Optional[Any] = None,
+        stop_event: Optional[Any] = None,
         **kwargs: Any
     ) -> Tuple[List[CharacterProfile], List[GlossaryItem], List[str]]:
         """
@@ -43,7 +52,12 @@ class ContextAwareDrafterAgent:
         self,
         model_name: str = "gemini-3.5-flash-lite",
         fallback_model: Optional[str] = None,
-        procedural_graph: Optional[ProceduralGraph] = None
+        procedural_graph: Optional[ProceduralGraph] = None,
+        temperature: Optional[float] = None,
+        polisher: Optional[Any] = None,
+        enable_recursive_subdivision: bool = True,
+        subdivision_min_lines: int = 8,
+        subdivision_max_depth: int = 4
     )
     
     def draft(
@@ -58,7 +72,9 @@ class ContextAwareDrafterAgent:
         notify_callback: Optional[Any] = None,
         rate_limiter: Optional[Any] = None,
         stop_event: Optional[Any] = None,
-        procedural_graph: Optional[ProceduralGraph] = None
+        procedural_graph: Optional[ProceduralGraph] = None,
+        polisher: Optional[Any] = None,
+        **kwargs: Any
     ) -> str:
         """
         Translates raw text with voice registers, rolling summaries, and chunk-aware Procedural Graph guidance.
@@ -76,7 +92,11 @@ class CritiqueAgent:
     def __init__(
         self,
         model_name: str = "gemma-4-26b-a4b-it",
-        fallback_model: Optional[str] = None
+        fallback_model: Optional[str] = None,
+        chunker: Optional[Any] = None,
+        enable_recursive_subdivision: bool = True,
+        subdivision_min_lines: int = 8,
+        subdivision_max_depth: int = 3
     )
     
     def evaluate(
@@ -85,7 +105,14 @@ class CritiqueAgent:
         draft_text: str,
         bible: NovelBible,
         active_characters: List[CharacterProfile],
-        active_glossary: List[GlossaryItem]
+        active_glossary: List[GlossaryItem],
+        genre: Optional[str] = None,
+        chunks: Optional[List[Any]] = None,
+        notify_callback: Optional[Any] = None,
+        rate_limiter: Optional[Any] = None,
+        stop_event: Optional[Any] = None,
+        rag_context: Optional[List[Any]] = None,
+        **kwargs: Any
     ) -> Tuple[QualityAudit, str]:
         """
         Audits draft or polished translation against source.
@@ -96,7 +123,7 @@ class CritiqueAgent:
 ---
 
 ### `PolishingAgent` (*Feinschliff*) (`src/nousetsu/agents/polisher.py`)
-Refines prose cadence, remedies critique feedback, and eliminates translationese tropes across semantic chunks.
+Refines prose cadence, remedies critique feedback, eliminates translationese tropes, and supports token-efficient Diff/Patch mode across semantic chunks.
 
 ```python
 class PolishingAgent:
@@ -104,9 +131,7 @@ class PolishingAgent:
         self,
         model_name: str = "gemini-3.5-flash-lite",
         fallback_model: Optional[str] = None,
-        chunk_threshold_lines: int = 85,
-        target_chunk_lines: int = 70,
-        chunk_overlap_lines: int = 3
+        temperature: Optional[float] = None
     )
     
     def polish(
@@ -114,10 +139,18 @@ class PolishingAgent:
         draft_text: str,
         critique_notes: str,
         active_glossary: List[GlossaryItem],
-        bible: NovelBible
+        bible: NovelBible,
+        genre: Optional[str] = None,
+        source_text: Optional[str] = None,
+        draft_chunks: Optional[List[Any]] = None,
+        notify_callback: Optional[Any] = None,
+        rate_limiter: Optional[Any] = None,
+        stop_event: Optional[Any] = None,
+        **kwargs: Any
     ) -> str:
         """
         Polishes prose to publication standard based on critique notes.
+        Guarantees chapter title preservation and supports DiffPatcher patch application.
         Returns: Polished Markdown text.
         """
 ```
@@ -139,12 +172,42 @@ class ChroniclerAgent:
         self,
         chapter_num: int,
         chapter_title: str,
-        translated_text: str
+        translated_text: str,
+        genre: Optional[str] = None,
+        source_lang: Optional[str] = None,
+        bible: Optional[NovelBible] = None,
+        rag_context: Optional[List[Any]] = None,
+        **kwargs: Any
     ) -> ChapterSummary:
         """Generates episodic synopsis and records character state changes."""
 
-    def assemble_metadata(...) -> ChapterMetadata:
-        """Assembles final ChapterMetadata record with stats, checkpoint data, and audit scores."""
+    def assemble_metadata(
+        self,
+        chapter_id: str,
+        chapter_num: int,
+        source_file: str,
+        source_sha256: str,
+        output_file: str,
+        source_text: str,
+        final_text: str,
+        model_name: str,
+        duration_seconds: float,
+        quality_audit: QualityAudit,
+        active_characters: List[CharacterProfile],
+        active_glossary: List[GlossaryItem],
+        draft_text: str,
+        critique_notes: str,
+        polished_text: str,
+        status: StageStatus = StageStatus.COMPLETED,
+        step_usage: Optional[List[StepTokenUsage]] = None,
+        safety_fallbacks_used: int = 0,
+        subdivisions_count: int = 0,
+        extracted_characters: Optional[List[CharacterProfile]] = None,
+        extracted_terms: Optional[List[GlossaryItem]] = None,
+        trace_file: Optional[str] = None,
+        prompt_trace_count: int = 0
+    ) -> ChapterMetadata:
+        """Assembles final ChapterMetadata record with stats, checkpoint data, trace file, and audit scores."""
 ```
 
 ---
@@ -173,11 +236,114 @@ Partitions long chapters exceeding threshold lines into semantic chunks while re
 
 ```python
 class LineSemanticChunker:
-    def __init__(self, threshold_lines: int = 85, target_lines: int = 70, overlap_lines: int = 3)
+    def __init__(
+        self,
+        threshold_lines: int = 85,
+        target_chunk_lines: int = 70,
+        overlap_lines: int = 3,
+        min_split_point: int = 15
+    )
     
-    def split(self, text: str) -> List[TextChunk]:
-        """Partitions raw text into TextChunk objects with overlap context."""
+    def should_chunk(self, text: str) -> bool:
+        """Returns True if non-empty line count exceeds threshold_lines."""
+
+    def split_lines(self, text: str) -> List[LineChunk]:
+        """Partitions raw text into LineChunk objects with boundary overlap."""
 ```
+
+### `DiffPatcher` Engine (`src/nousetsu/utils/diff_patcher.py`)
+SEARCH/REPLACE diff block parser and targeted patch engine for token-frugal prose polishing.
+
+```python
+SEARCH_REPLACE_PATTERN = re.compile(
+    r"<<<<<<<\s*SEARCH\s*\r?\n(.*?)\r?\n=======\s*\r?\n(.*?)\r?\n>>>>>>>",
+    re.DOTALL
+)
+
+def is_patch_format(text: str) -> bool:
+    """Check if the given text contains at least one SEARCH/REPLACE block or NO_CHANGES_NEEDED signal."""
+
+def apply_search_replace_patches(
+    original_text: str,
+    patch_text: str
+) -> Tuple[str, int, int]:
+    """
+    Apply <<<<<<< SEARCH ... ======= ... >>>>>>> diff blocks to original_text.
+    Returns: Tuple of (modified_text, applied_count, failed_count).
+    """
+```
+
+### `PromptTracker` (`src/nousetsu/analysis/tracker.py`)
+Forensic logging engine capturing exact stage prompts, responses, and token usages into streaming `.novel/traces/chapter_XXXX.jsonl` and consolidated `.novel/traces/chapter_XXXX.json`.
+
+```python
+class PromptTracker:
+    def __init__(
+        self,
+        traces_dir: Path | str,
+        chapter_id: str,
+        chapter_num: int,
+        folder: Optional[str] = None,
+        enabled: bool = True
+    ): ...
+
+    def record(
+        self,
+        stage: PipelineStage,
+        agent: str,
+        system_prompt: str,
+        user_prompt: str,
+        raw_output: str,
+        model: str,
+        token_usage: Optional[TokenUsage] = None,
+        duration_seconds: float = 0.0,
+        iteration: int = 1,
+        chunk_index: int = 1,
+        total_chunks: int = 1,
+        depth: int = 0,
+        parsed_output: Optional[Any] = None,
+        status: str = "success",
+        error_message: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> AgentPromptTrace: ...
+
+    def record_error(
+        self,
+        stage: PipelineStage,
+        agent: str,
+        system_prompt: str,
+        user_prompt: str,
+        model: str,
+        err: Exception | str,
+        duration_seconds: float = 0.0,
+        iteration: int = 1,
+        chunk_index: int = 1,
+        total_chunks: int = 1,
+        depth: int = 0,
+        status: str = "error",
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> AgentPromptTrace: ...
+
+    def finalize(self) -> ChapterTraceDocument:
+        """Aggregate all recorded traces and persist consolidated ChapterTraceDocument (.json) to disk."""
+```
+
+### Script-Aware Word Boundaries & Scene Filtering (`src/nousetsu/utils/`)
+* **`filter_glossary_for_text` / `filter_glossary_for_scene` (`src/nousetsu/utils/glossary_filter.py`)**:
+  ```python
+  def filter_glossary_for_text(glossary: List[GlossaryItem], text: str) -> List[GlossaryItem]:
+      """Matches CJK terms via substring and Latin terms via strict regex word boundaries (\bterm\b)."""
+  ```
+* **`filter_characters_for_scene` (`src/nousetsu/utils/character_filter.py`)**:
+  ```python
+  def filter_characters_for_scene(
+      characters: List[CharacterProfile],
+      source_text: Optional[str] = None,
+      target_text: Optional[str] = None,
+      max_characters: int = 15
+  ) -> List[CharacterProfile]:
+      """Dynamically isolates characters active in the current scene chunk, preserving permanent leads."""
+  ```
 
 ### `format_duration` (`src/nousetsu/utils/formatting.py`)
 Formats seconds into clean, human-friendly duration strings.
@@ -207,6 +373,52 @@ def detect_language(text: str, default: str = "Japanese") -> str:
     Detects language from raw sample text:
     Recognizes Japanese, Chinese, Korean, Thai, Russian, English, Spanish, French, German.
     """
+```
+
+---
+
+## 🏛️ Hybrid Search RAG Knowledge Store (`src/nousetsu/rag/`)
+
+### `HybridSearchEngine` (`src/nousetsu/rag/engine.py`)
+Zero-daemon local SQLite database engine managed by SQLAlchemy 2.0 ORM combining FTS5 BM25 lexical search and dense Gemini Embedding 2 vector search via Reciprocal Rank Fusion ($k=60$) with optional Cross-Encoder reranking.
+
+```python
+class HybridSearchEngine:
+    def __init__(self, db_path: Path | str = ":memory:"): ...
+
+    def index_documents(self, documents: List[LoreDocument]) -> None:
+        """Batch upsert lore documents and sync SQLite FTS5 virtual table."""
+
+    def search_sparse(
+        self,
+        query: str,
+        limit: int = 10,
+        folder: Optional[str] = None,
+        doc_type: Optional[DocumentType] = None
+    ) -> List[Tuple[LoreDocument, int, float]]:
+        """Perform lexical BM25 search using SQLite FTS5."""
+
+    def search_dense(
+        self,
+        query_vector: List[float],
+        limit: int = 10,
+        folder: Optional[str] = None,
+        doc_type: Optional[DocumentType] = None
+    ) -> List[Tuple[LoreDocument, int, float]]:
+        """Perform dense vector search using cosine similarity."""
+
+    def hybrid_search(
+        self,
+        query: str,
+        query_vector: Optional[List[float]] = None,
+        limit: int = 2,
+        rrf_k: int = 60,
+        folder: Optional[str] = None,
+        doc_type: Optional[DocumentType] = None,
+        reranker: Optional[Any] = None,
+        enable_rerank: bool = True
+    ) -> List[SearchResult]:
+        """Combine sparse and dense rankings using Reciprocal Rank Fusion (RRF), with optional Cross-Encoder reranking."""
 ```
 
 ---
@@ -259,13 +471,13 @@ Coordinates the multi-agent LangGraph execution and reflection review cycle.
 class NovelTranslationWorkflow:
     def __init__(
         self,
-        model_name: str = "gemini-3.1-flash-lite",
-        fallback_model: Optional[str] = "gemini-3.5-flash-lite",
-        extractor_model: Optional[str] = "gemini-3.1-flash-lite",
-        drafter_model: Optional[str] = "gemini-3.5-flash-lite",
-        critic_model: Optional[str] = "gemma-4-26b-a4b-it",
-        polisher_model: Optional[str] = "gemini-3.5-flash-lite",
-        chronicler_model: Optional[str] = "gemma-4-26b-a4b-it",
+        model_name: Optional[str] = None,
+        fallback_model: Optional[str] = None,
+        extractor_model: Optional[str] = None,
+        drafter_model: Optional[str] = None,
+        critic_model: Optional[str] = None,
+        polisher_model: Optional[str] = None,
+        chronicler_model: Optional[str] = None,
         rate_limiter: Optional[SlidingWindowRateLimiter] = None,
         max_review_loops: int = 3,
         quality_threshold: float = 8.5,
@@ -274,7 +486,21 @@ class NovelTranslationWorkflow:
         target_chunk_lines: int = 70,
         chunk_overlap_lines: int = 3,
         extractor_pg: Optional[Any] = None,
-        drafter_pg: Optional[Any] = None
+        drafter_pg: Optional[Any] = None,
+        safety_recursive_subdivision: bool = True,
+        safety_subdivision_min_lines: int = 8,
+        safety_subdivision_max_depth: int = 4,
+        rag_engine: Optional[Any] = None,
+        enable_rag: bool = True,
+        rag_top_k: int = 2,
+        rag_embedding_model: str = "text-multilingual-embedding-002",
+        embedding_client: Optional[Any] = None,
+        enable_rag_reranker: bool = True,
+        rag_reranker_model: str = "gemini-3.5-flash-lite",
+        reranker: Optional[Any] = None,
+        traces_dir: Optional[Path] = None,
+        prompt_tracker: Optional[PromptTracker] = None,
+        enable_patch_polishing: bool = True
     )
     
     def run(
@@ -409,21 +635,25 @@ class BatchRunner:
     def __init__(
         self,
         repository: NovelRepository,
-        model_name: str = "gemini-3.1-flash-lite",
-        fallback_model: Optional[str] = "gemini-3.5-flash-lite",
-        extractor_model: Optional[str] = "gemini-3.1-flash-lite",
-        drafter_model: Optional[str] = "gemini-3.5-flash-lite",
-        critic_model: Optional[str] = "gemma-4-26b-a4b-it",
-        polisher_model: Optional[str] = "gemini-3.5-flash-lite",
-        chronicler_model: Optional[str] = "gemma-4-26b-a4b-it",
+        model_name: Optional[str] = None,
+        fallback_model: Optional[str] = None,
+        extractor_model: Optional[str] = None,
+        drafter_model: Optional[str] = None,
+        critic_model: Optional[str] = None,
+        polisher_model: Optional[str] = None,
+        chronicler_model: Optional[str] = None,
         auto_update_bible: Optional[bool] = None,
         max_tpm: Optional[int] = None,
         max_rpm: Optional[int] = None,
         max_review_loops: Optional[int] = None,
         quality_threshold: Optional[float] = None,
+        genre: Optional[str] = None,
+        enable_chunking: Optional[bool] = None,
         chunk_threshold_lines: Optional[int] = None,
         target_chunk_lines: Optional[int] = None,
         chunk_overlap_lines: Optional[int] = None,
+        enable_rag: Optional[bool] = None,
+        enable_rag_reranker: Optional[bool] = None,
         console: Optional[Console] = None
     )
 
@@ -521,10 +751,14 @@ def migrate_novel_summaries(
 * **`TranslationState` (`src/nousetsu/models/state.py`)**: The LangGraph state schema.
   * Fields: `chapter_id`, `chapter_num`, `source_text`, `draft_text`, `critique_notes`, `quality_audit`, `polished_text`, `review_iteration`, `max_review_loops`, `quality_threshold`, `best_polished_text`, `best_audit`, `metadata`.
 * **`ProjectConfig` (`src/nousetsu/models/config.py`)**: Project configuration settings.
-  * Fields: `project_id`, `title`, `source_language`, `target_language`, `raw_dir`, `output_dir`, `model_name`, `fallback_model`, `extractor_model`, `drafter_model`, `critic_model`, `polisher_model`, `chronicler_model`, `auto_update_bible`, `max_tpm`, `max_rpm`, `max_review_loops`, `quality_threshold`, `chunk_threshold_lines`, `target_chunk_lines`, `chunk_overlap_lines`.
+  * Fields: `project_id`, `title`, `source_language`, `target_language`, `raw_dir`, `output_dir`, `model_name`, `fallback_model`, `extractor_model`, `drafter_model`, `critic_model`, `polisher_model`, `chronicler_model`, `use_interactions_api`, `auto_update_bible`, `max_tpm`, `max_rpm`, `max_review_loops`, `quality_threshold`, `genre`, `enable_chunking`, `chunk_threshold_lines`, `target_chunk_lines`, `chunk_overlap_lines`, `cross_folder_summaries`, `safety_recursive_subdivision`, `safety_subdivision_min_lines`, `safety_subdivision_max_depth`, `enable_rag`, `rag_top_k`, `rag_embedding_model`, `enable_rag_reranker`, `rag_reranker_model`, `filter_scene_characters`, `max_scene_characters`, `enable_patch_polishing`, `created_at`.
+* **`AgentPromptTrace` (`src/nousetsu/models/trace.py`)**: Granular per-step prompt tracking trace.
+  * Fields: `trace_id`, `chapter_id`, `chapter_num`, `folder`, `stage`, `agent`, `model`, `iteration`, `chunk_index`, `total_chunks`, `depth`, `system_prompt`, `user_prompt`, `raw_output`, `parsed_output`, `token_usage`, `duration_seconds`, `status`, `error_message`, `metadata`, `timestamp`.
+* **`ChapterTraceDocument` (`src/nousetsu/models/trace.py`)**: Consolidated trace archive for a full chapter run.
+  * Fields: `chapter_id`, `chapter_num`, `folder`, `traces`, `total_token_usage`, `total_duration_seconds`, `stage_counts`, `completed_at`.
 * **`ArcSummary` (`src/nousetsu/models/bible.py`)**: Meso-tier story arc representation.
-  * Fields: `arc_id`, `arc_title`, `start_chapter`, `end_chapter`, `milestones`, `climax`, `status` (`"active"` or `"completed"`), `created_at`.
-* **`NovelBible` (`src/nousetsu/models/bible.py`)**: Root memory document holding `whole_story_summary`, `active_arc`, `characters`, `glossary`, `summaries`, and `style_guide`.
+  * Fields: `arc_id`, `arc_num`, `title`, `synopsis`, `core_conflict`, `status` (`"active"` or `"completed"`), `start_chapter`, `end_chapter`, `folder`, `key_milestones`.
+* **`NovelBible` (`src/nousetsu/models/bible.py`)**: Root memory document holding `whole_story_summary`, `active_arc`, `archived_arcs`, `characters`, `glossary`, `summaries`, and `style_guide`.
   * Methods: `get_hierarchical_context()`, `get_rolling_context()`, `format_for_drafter()`.
 * **`ChapterMetadata` (`src/nousetsu/models/metadata.py`)**: Chapter metadata record with paired `CheckpointData`, `QualityAudit`, and `TranslationStats` (including cumulative tokens, `duration_seconds`, and granular `step_usage`).
 * **`CheckpointData` (`src/nousetsu/models/metadata.py`)**: Stage tracking with `status` (`PENDING`, `IN_PROGRESS`, `PAUSED`, `COMPLETED`, `FAILED`), `stage_artifacts`, and `error_logs`.

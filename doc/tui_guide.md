@@ -8,7 +8,7 @@
 
 ```
 ┌─ NouSetsu ──────────────────────────────────────────────────────────── [12:00:00] ─┐
-│ 📚 Chapters (85%+ Height)         │ 📖 Dual Reader Pane (80% Viewport)             │
+│ 📚 Chapters (85%+ Height)         │ [📖 Reader]  [📊 Token Analysis (M)]           │
 │                                   │ ┌────────────────────────┬───────────────────┐ │
 │  ✓ Ch.001 - Awakening             │ │ 🇺🇸 English Source      │ 🇹🇭 Thai Polished  │ │
 │  ● Ch.002 - Magic Beast           │ │ The boy stepped out.   │ เด็กหนุ่มก้าวเดิน..│ │
@@ -20,8 +20,9 @@
 │  · Ch.008 - Shadow Guild          │ 📊 Inspector: Fidelity: 9.5 | Style: 9.2       │
 │                                   │ Tokens: 1,284 in 3.9s | Status: COMPLETED      │
 ├───────────────────────────────────┴────────────────────────────────────────────────┤
-│ [▶ Translate (T)]   [⚡ Batch All (B)]   [⏹ Stop (X)]       [📖 Bible (E)]          │
-│ [📁 Projects (P)]   [✨ New (N)]          [⚙ Settings (S)]   [✖ Quit (Q)]           │
+│ [▶ Trans (T)]     [⚡ Batch (B)]     [⏹ Stop (X)]        [📖 Bible (E)]            │
+│ [📁 Proj (P)]      [✨ New (N)]       [⚙ Set (S)]                                  │
+│ [📂 Folder (F)]    [📊 Tokens (M)]                                                 │
 └────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -99,25 +100,32 @@ Located below the reader pane in a compact 5-line container, displaying deep met
 
 ---
 
-### 3. Folder / Volume Selector Modal (`F` key)
+### 3. Web Trace Visualizer (`W` key)
+* Press `W` anywhere in the TUI to launch the local Vite + React 19 **Web Trace Visualizer** at `http://localhost:5173` (or port 8765 if configured).
+* If the web server is already running, it instantly focuses or opens the visualizer in your default browser.
+* Displays side-by-side prompt and output diffs, thought token inspections, and full timeline analysis for the current project.
+
+---
+
+### 4. Folder / Volume Selector Modal (`F` key)
 * When working with multi-volume novels (e.g. `Villainess_04`, `Villainess_05`), allows switching the active working volume with a single click, auto-resolving input and output folders.
 
 ---
 
-### 4. Project Selector Modal (`P` key)
+### 5. Project Selector Modal (`P` key)
 * Lists all known novel translation projects across the machine.
 * **Open from Path**: Paste any external folder path on your computer (e.g. `D:\Novels\MyBook` or `~/workspace/novel`) and hit Enter to open or auto-initialize.
 * Remembers the `last_active_project` so returning to NouSetsu automatically reopens your active book.
 
 ---
 
-### 5. New Project Modal (`N` key)
+### 6. New Project Modal (`N` key)
 * Initialize a brand-new translation project.
 * Configures project title, filesystem directory, source/target languages, custom raw chapter folder name (e.g. `raw_chapters`), and translated folder name (e.g. `translated_chapters`).
 
 ---
 
-### 6. Settings Modal (`S` key)
+### 7. Settings Modal (`S` key)
 * **Model Configuration & Routing**:
   * **Primary Model (`model_name`)**: Base model for unconfigured stages (default: `gemini-3.1-flash-lite`).
   * **Fallback Model (`fallback_model`)**: Failover model used automatically on HTTP 429 quota exhaustion (default: `gemini-3.5-flash-lite`).
@@ -155,6 +163,7 @@ Located below the reader pane in a compact 5-line container, displaying deep met
 | `X` | **Stop Translation** | Gracefully halt active translation and save pause checkpoint |
 | `E` | **Novel Bible** | Open in-terminal editor to inspect/add characters, glossary, and 3-tier summaries |
 | `M` | **Token Analytics** | Open real-time Token & Latency Analytics dashboard with DataTables |
+| `W` | **Web Traces** | Launch or open the Vite + React 19 Web Trace Visualizer in browser |
 | `F` | **Volume Selector** | Switch active translation folder/volume in multi-folder projects |
 | `P` | **Project Selector** | Switch active project or open an external project from folder path |
 | `N` | **New Project** | Open wizard to initialize a new novel translation workspace |

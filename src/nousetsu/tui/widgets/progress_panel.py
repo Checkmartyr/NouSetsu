@@ -53,6 +53,17 @@ class ProgressPanel(Widget):
     }
     """
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._badge: Optional[Static] = None
+        self._pbar: Optional[ProgressBar] = None
+        self._status_lbl: Optional[Static] = None
+        self._ch_label: Optional[Static] = None
+        self._last_stage: Optional[PipelineStage] = None
+        self._last_pct: float = -1.0
+        self._last_msg: str = ""
+        self._last_time: float = 0.0
+
     def compose(self) -> ComposeResult:
         with Vertical():
             with Horizontal(classes="panel-header-row"):
@@ -61,6 +72,18 @@ class ProgressPanel(Widget):
             with Horizontal(classes="progress-bar-row"):
                 yield Static("[dim]📖 Idle[/]", id="progress_chapter_name", classes="chapter-progress-label")
                 yield ProgressBar(id="engine_progress", total=100, show_eta=False, show_percentage=True)
+
+    def on_mount(self) -> None:
+        self._cache_widgets()
+
+    def _cache_widgets(self) -> None:
+        try:
+            self._badge = self.query_one("#stage_badge", Static)
+            self._pbar = self.query_one("#engine_progress", ProgressBar)
+            self._status_lbl = self.query_one("#engine_status_msg", Static)
+            self._ch_label = self.query_one("#progress_chapter_name", Static)
+        except Exception:
+            pass
 
     def _clean_chapter_name(self, filename: str) -> str:
         if filename in ["Batch", "Active Translation"]:
@@ -71,18 +94,39 @@ class ProgressPanel(Widget):
     def set_chapter(self, filename: str) -> None:
         """Update chapter label while engine is idle or chapter selected."""
         ch_name = self._clean_chapter_name(filename)
+        if self._ch_label is None:
+            self._cache_widgets()
         try:
-            ch_label = self.query_one("#progress_chapter_name", Static)
-            ch_label.update(f"[dim]📖 {ch_name}[/]")
+            target = self._ch_label or self.query_one("#progress_chapter_name", Static)
+            target.update(f"[dim]📖 {ch_name}[/]")
         except Exception:
             pass
 
     def update_progress(self, filename: str, stage: PipelineStage, msg: str, percent: float) -> None:
-        """Update live badge, progress bar, and status message from worker thread."""
-        badge = self.query_one("#stage_badge", Static)
-        pbar = self.query_one("#engine_progress", ProgressBar)
-        status_lbl = self.query_one("#engine_status_msg", Static)
-        ch_label = self.query_one("#progress_chapter_name", Static)
+        """Update live badge, progress bar, and status message from worker thread with cached widgets and micro-throttling."""
+        import time
+        now = time.time()
+        if (
+            stage == self._last_stage
+            and msg == self._last_msg
+            and abs(percent - self._last_pct) < 0.5
+            and (now - self._last_time) < 0.03
+            and percent not in (0.0, 100.0)
+        ):
+            return
+
+        self._last_stage = stage
+        self._last_pct = percent
+        self._last_msg = msg
+        self._last_time = now
+
+        if self._badge is None:
+            self._cache_widgets()
+
+        badge = self._badge or self.query_one("#stage_badge", Static)
+        pbar = self._pbar or self.query_one("#engine_progress", ProgressBar)
+        status_lbl = self._status_lbl or self.query_one("#engine_status_msg", Static)
+        ch_label = self._ch_label or self.query_one("#progress_chapter_name", Static)
 
         stage_styles = {
             PipelineStage.EXTRACTION: "[bold yellow] 1/5 EXTRACTION [/]",
@@ -101,10 +145,12 @@ class ProgressPanel(Widget):
 
     def set_finished(self, filename: str) -> None:
         """Mark chapter or batch as finished."""
-        badge = self.query_one("#stage_badge", Static)
-        pbar = self.query_one("#engine_progress", ProgressBar)
-        status_lbl = self.query_one("#engine_status_msg", Static)
-        ch_label = self.query_one("#progress_chapter_name", Static)
+        if self._badge is None:
+            self._cache_widgets()
+        badge = self._badge or self.query_one("#stage_badge", Static)
+        pbar = self._pbar or self.query_one("#engine_progress", ProgressBar)
+        status_lbl = self._status_lbl or self.query_one("#engine_status_msg", Static)
+        ch_label = self._ch_label or self.query_one("#progress_chapter_name", Static)
 
         badge.update("[bold green] COMPLETED [/]")
         pbar.update(progress=100)
@@ -114,9 +160,11 @@ class ProgressPanel(Widget):
 
     def set_failed(self, filename: str, err: str) -> None:
         """Mark chapter as failed."""
-        badge = self.query_one("#stage_badge", Static)
-        status_lbl = self.query_one("#engine_status_msg", Static)
-        ch_label = self.query_one("#progress_chapter_name", Static)
+        if self._badge is None:
+            self._cache_widgets()
+        badge = self._badge or self.query_one("#stage_badge", Static)
+        status_lbl = self._status_lbl or self.query_one("#engine_status_msg", Static)
+        ch_label = self._ch_label or self.query_one("#progress_chapter_name", Static)
 
         badge.update("[bold red] FAILED [/]")
         ch_name = self._clean_chapter_name(filename)
@@ -125,11 +173,14 @@ class ProgressPanel(Widget):
 
     def set_stopped(self, filename: str) -> None:
         """Mark translation as stopped/paused."""
-        badge = self.query_one("#stage_badge", Static)
-        status_lbl = self.query_one("#engine_status_msg", Static)
-        ch_label = self.query_one("#progress_chapter_name", Static)
+        if self._badge is None:
+            self._cache_widgets()
+        badge = self._badge or self.query_one("#stage_badge", Static)
+        status_lbl = self._status_lbl or self.query_one("#engine_status_msg", Static)
+        ch_label = self._ch_label or self.query_one("#progress_chapter_name", Static)
 
         badge.update("[bold yellow] STOPPED [/]")
         ch_name = self._clean_chapter_name(filename)
         ch_label.update(f"[bold yellow]⏸ {ch_name}[/]")
         status_lbl.update(f"[bold yellow]⏹ Translation stopped for {filename}. Checkpoints preserved for resume.[/]")
+

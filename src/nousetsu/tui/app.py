@@ -119,6 +119,7 @@ class NovelAgentApp(App):
         Binding("n", "open_new_project", "New Project"),
         Binding("s", "open_settings", "Settings"),
         Binding("m", "toggle_token_tab", "Tokens"),
+        Binding("w", "launch_web_visualizer", "Web Traces"),
     ]
 
     def __init__(
@@ -162,6 +163,23 @@ class NovelAgentApp(App):
         self.current_tasks: List[ChapterTask] = []
         self.selected_task: Optional[ChapterTask] = None
         self.is_translating: bool = False
+        self._file_cache: dict[Path, tuple[float, str]] = {}
+
+    def _read_file_cached(self, path: Path) -> str:
+        """Read file content with mtime cache to avoid redundant disk I/O."""
+        try:
+            if not path.exists():
+                return ""
+            mtime = path.stat().st_mtime
+            cached = self._file_cache.get(path)
+            if cached is not None and cached[0] == mtime:
+                return cached[1]
+            with open(path, "r", encoding="utf-8") as f:
+                content = f.read()
+            self._file_cache[path] = (mtime, content)
+            return content
+        except Exception as e:
+            return f"Error reading file: {e}"
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -213,6 +231,7 @@ class NovelAgentApp(App):
         self.repo.load_bible()
         self.scanner = ChapterScanner(self.repo)
         self.runner = BatchRunner(self.repo, model_name=self.model_name)
+        self._file_cache.clear()
 
         self.title = f"Novel Translation Agent - {cfg.title}"
         try:
@@ -237,6 +256,7 @@ class NovelAgentApp(App):
         self.output_dir = cfg.get_output_path(self.project_dir)
         self.scanner = ChapterScanner(self.repo)
         self.runner = BatchRunner(self.repo, model_name=self.model_name)
+        self._file_cache.clear()
         self.action_refresh_chapters()
         try:
             progress = self.query_one("#progress_panel", ProgressPanel)
@@ -249,20 +269,34 @@ class NovelAgentApp(App):
 
     def action_refresh_chapters(self) -> None:
         """Scan input directory and update chapter list view."""
+        prev_selected_file = self.selected_task.source_file if self.selected_task else None
         self.current_tasks = self.scanner.scan_directory(self.input_dir, self.output_dir)
         list_view = self.query_one("#chapter-list", ListView)
         list_view.clear()
 
-        for task in self.current_tasks:
-            list_view.append(ChapterListItem(task))
+        if self.current_tasks:
+            items = [ChapterListItem(task) for task in self.current_tasks]
+            list_view.extend(items)
 
         try:
-            self.query_one("#token_analysis", TokenAnalysisWidget).refresh_metrics()
+            tabs = self.query_one("#main-tabs", TabbedContent)
+            token_widget = self.query_one("#token_analysis", TokenAnalysisWidget)
+            if tabs.active == "tab-tokens":
+                token_widget.refresh_metrics(force=True)
+            else:
+                token_widget._dirty = True
         except Exception:
             pass
 
         if self.current_tasks:
-            self._select_task(self.current_tasks[0])
+            target_idx = 0
+            if prev_selected_file:
+                for idx, t in enumerate(self.current_tasks):
+                    if t.source_file == prev_selected_file:
+                        target_idx = idx
+                        break
+            list_view.index = target_idx
+            self._select_task(self.current_tasks[target_idx])
         else:
             self.selected_task = None
             reader = self.query_one("#reader", DualReaderWidget)
@@ -279,21 +313,8 @@ class NovelAgentApp(App):
         reader = self.query_one("#reader", DualReaderWidget)
         inspector = self.query_one("#inspector", CheckpointInspectorWidget)
 
-        src_text = ""
-        if task.source_file.exists():
-            try:
-                with open(task.source_file, "r", encoding="utf-8") as f:
-                    src_text = f.read()
-            except Exception as e:
-                src_text = f"Error reading source file: {e}"
-
-        tgt_text = ""
-        if task.output_file.exists():
-            try:
-                with open(task.output_file, "r", encoding="utf-8") as f:
-                    tgt_text = f.read()
-            except Exception:
-                tgt_text = ""
+        src_text = self._read_file_cached(task.source_file)
+        tgt_text = self._read_file_cached(task.output_file)
 
         # Load freshest metadata
         meta = self.repo.load_metadata(task.output_file)
@@ -307,6 +328,38 @@ class NovelAgentApp(App):
 
     def action_open_project_selector(self) -> None:
         self.push_screen(ProjectSelectorModal(self))
+
+    def action_launch_web_visualizer(self) -> None:
+        """Launch or focus the Nousetsu Web Trace Visualizer."""
+        import threading
+        import urllib.request
+        import webbrowser
+
+        self.registry.set_last_active_project(self.project_dir)
+        port = 5173
+        url = f"http://localhost:{port}"
+
+        running = False
+        try:
+            req = urllib.request.Request(f"{url}/api/sync-state")
+            with urllib.request.urlopen(req, timeout=0.5) as resp:
+                if resp.status == 200:
+                    running = True
+        except Exception:
+            running = False
+
+        if running:
+            webbrowser.open(url)
+            self.notify(f"Opened Web Visualizer for {self.project_dir.name} nya~!", severity="information")
+        else:
+            from nousetsu.cli.web_server import run_web_server
+            t = threading.Thread(
+                target=run_web_server,
+                kwargs={"port": port, "host": "127.0.0.1", "open_browser": True},
+                daemon=True
+            )
+            t.start()
+            self.notify(f"Started Web Visualizer on {url} nya~!", severity="information")
 
     def action_open_folder_selector(self) -> None:
         self.push_screen(FolderSelectModal(self))
@@ -370,14 +423,18 @@ class NovelAgentApp(App):
                 tabs.active = "tab-reader"
             else:
                 tabs.active = "tab-tokens"
-                self.query_one("#token_analysis", TokenAnalysisWidget).refresh_metrics()
+                widget = self.query_one("#token_analysis", TokenAnalysisWidget)
+                if getattr(widget, "_dirty", False):
+                    widget.refresh_metrics(force=True)
         except Exception:
             pass
 
     def on_tabbed_content_tab_activated(self, event: TabbedContent.TabActivated) -> None:
         if event.pane.id == "tab-tokens":
             try:
-                self.query_one("#token_analysis", TokenAnalysisWidget).refresh_metrics()
+                widget = self.query_one("#token_analysis", TokenAnalysisWidget)
+                if getattr(widget, "_dirty", False):
+                    widget.refresh_metrics(force=True)
             except Exception:
                 pass
 

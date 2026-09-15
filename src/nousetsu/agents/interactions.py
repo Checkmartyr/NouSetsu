@@ -87,7 +87,7 @@ class GeminiInteractionsClient:
                 interaction = self._genai_client.interactions.create(**kwargs)
                 return self._parse_sdk_interaction(interaction, model)
             except Exception as sdk_err:
-                logger.debug(f"SDK interactions.create failed ({sdk_err}); attempting REST fallback...")
+                logger.warning(f"SDK interactions.create failed ({type(sdk_err).__name__}: {sdk_err}); attempting REST fallback...")
 
         # Fallback: direct HTTP POST to /v1beta/interactions
         return self._rest_create_interaction(
@@ -144,7 +144,27 @@ class GeminiInteractionsClient:
         if system_instruction:
             payload["system_instruction"] = system_instruction
         if generation_config:
-            payload["generation_config"] = generation_config
+            # Strictly whitelist valid parameters for /v1beta/interactions REST endpoint
+            # Strip invalid/nested parameters like 'thinking_config' or 'thinking_budget' that trigger HTTP 400
+            allowed_keys = {
+                "temperature",
+                "thinking_level",
+                "stop_sequences",
+                "max_output_tokens",
+                "top_p",
+                "top_k",
+                "candidate_count",
+                "presence_penalty",
+                "frequency_penalty",
+                "response_mime_type",
+                "response_schema",
+            }
+            clean_gen_config = {
+                k: v for k, v in generation_config.items()
+                if k in allowed_keys and v is not None
+            }
+            if clean_gen_config:
+                payload["generation_config"] = clean_gen_config
 
         client = self._get_http_client(timeout=timeout)
         resp = client.post(url, headers=headers, json=payload)
@@ -246,6 +266,9 @@ class GeminiInteractionsChatModel(BaseChatModel):
     api_key: Optional[str] = None
     timeout: float = 180.0
     client: Optional[GeminiInteractionsClient] = None
+    thinking_level: Optional[str] = None
+    thinking_budget: Optional[int] = None
+    include_thoughts: bool = True
 
     def __init__(self, **kwargs: Any):
         super().__init__(**kwargs)
@@ -287,12 +310,25 @@ class GeminiInteractionsChatModel(BaseChatModel):
             input_data = user_inputs
 
         gen_config: Dict[str, Any] = {}
+        if self.temperature is not None:
+            gen_config["temperature"] = self.temperature
         if stop:
             gen_config["stop_sequences"] = stop
 
-        # If hybrid reasoning model, set moderate thinking level
-        if any(h in self.model_name for h in ["2.5-pro", "2.5-flash", "3.", "reasoning"]):
-            gen_config["thinking_level"] = "low"
+        # Configure thinking parameters directly in generation_config
+        # Google Interactions API (/v1beta/interactions) strictly uses generation_config["thinking_level"]
+        resolved_level = self.thinking_level or os.environ.get("NOVEL_THINKING_LEVEL")
+        if not resolved_level and any(h in self.model_name for h in ["2.5-pro", "2.5-flash", "3.", "reasoning"]):
+            resolved_level = "medium"
+
+        if resolved_level:
+            lvl_str = str(resolved_level).lower()
+            if lvl_str in ("0", "none", "off", "disabled"):
+                gen_config["thinking_level"] = "minimal"
+            elif lvl_str in ("minimal", "low", "medium", "high"):
+                gen_config["thinking_level"] = lvl_str
+            else:
+                gen_config["thinking_level"] = "medium"
 
         assert self.client is not None, "GeminiInteractionsClient is not initialized"
         result = self.client.create(
@@ -324,3 +360,31 @@ class GeminiInteractionsChatModel(BaseChatModel):
         )
 
         return ChatResult(generations=[ChatGeneration(message=ai_message)])
+
+    def with_structured_output(
+        self,
+        schema: Any,
+        include_raw: bool = False,
+        **kwargs: Any
+    ) -> Any:
+        """Return a Runnable producing structured output conforming to the schema."""
+        from langchain_core.output_parsers import PydanticOutputParser
+        from langchain_core.runnables import RunnableLambda
+
+        parser = PydanticOutputParser(pydantic_object=schema)
+
+        def _invoke_structured(input_data: Any) -> Any:
+            ai_msg = self.invoke(input_data, **kwargs)
+            try:
+                parsed = parser.parse(ai_msg.content)
+                err = None
+            except Exception as e:
+                parsed = None
+                err = e
+            if include_raw:
+                return {"raw": ai_msg, "parsed": parsed, "parsing_error": err}
+            if err:
+                raise err
+            return parsed
+
+        return RunnableLambda(_invoke_structured)

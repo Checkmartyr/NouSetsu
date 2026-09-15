@@ -22,3 +22,8 @@ projects/*
 .novel/
 *.meta.json
 ideabook/
+doc/*_th/
+node_modules/
+*.tsbuildinfo
+!web/dist/
+!web/dist/**
