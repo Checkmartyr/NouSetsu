@@ -127,3 +127,11 @@ def test_character_pronouns():
     assert loaded.pronouns.source == "she/her, I"
     assert loaded.pronouns.target == "เธอ, ฉัน"
 
+    # 8. Relational pronouns mapping
+    cp_rel = CharacterPronouns(source="she/her", target="เธอ", relational={"Amelia": "หนู/พี่"})
+    assert cp_rel.relational["Amelia"] == "หนู/พี่"
+    char_rel = CharacterProfile(name="Ifia", original_name="Ifia", pronouns=cp_rel)
+    dumped_rel = yaml.safe_dump(char_rel.model_dump(), allow_unicode=True)
+    loaded_rel = CharacterProfile.model_validate(yaml.safe_load(dumped_rel))
+    assert loaded_rel.pronouns.relational == {"Amelia": "หนู/พี่"}
+

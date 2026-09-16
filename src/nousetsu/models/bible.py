@@ -6,6 +6,10 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 class CharacterPronouns(BaseModel):
     source: str = Field(default="", description="Source language pronoun(s) (e.g. 'she/her', 'watashi', 'I')")
     target: str = Field(default="", description="Target language pronoun(s) (e.g. 'เธอ', 'ฉัน', 'เขา', 'ผม')")
+    relational: Dict[str, str] = Field(
+        default_factory=dict,
+        description="Relational pronouns/address with specific characters e.g. {'Amelia Barlen': 'หนู/พี่'}"
+    )
 
     @field_validator("source", "target", mode="before")
     @classmethod

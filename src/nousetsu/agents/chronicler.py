@@ -105,7 +105,12 @@ class ChroniclerAgent:
             if extracted_characters:
                 lines.append("Characters:")
                 for c in extracted_characters:
-                    lines.append(f"- Name: {c.name} (Source: {c.original_name}, Role: {c.role})")
+                    char_desc = f"- Name: {c.name} (Source: {c.original_name}, Role: {c.role})"
+                    if c.pronouns and (c.pronouns.source or c.pronouns.target):
+                        char_desc += f" [Pronouns: {c.pronouns.source} -> {c.pronouns.target}]"
+                    if c.relationships:
+                        char_desc += f" [Relationships: {', '.join(f'{k}: {v}' for k, v in c.relationships.items())}]"
+                    lines.append(char_desc)
             if extracted_terms:
                 lines.append("Terms:")
                 for t in extracted_terms:

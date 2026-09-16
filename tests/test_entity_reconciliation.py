@@ -302,3 +302,43 @@ def test_config_post_polish_reconciliation_cascade(monkeypatch):
     monkeypatch.setenv("NOVEL_POST_POLISH_RECONCILIATION", "true")
     assert cfg.get_post_polish_reconciliation() is True
 
+
+def test_update_bible_memory_merges_pronouns_and_relational(tmp_path: Path):
+    """Verify update_bible_memory merges general and relational pronouns into NovelBible."""
+    repo = NovelRepository(tmp_path)
+    initial_char = CharacterProfile(
+        name="Ifia",
+        original_name="Ifia",
+        gender="female",
+        role="protagonist",
+        source_pronoun="she/her",
+        target_pronoun="เธอ"
+    )
+    repo.save_bible(NovelBible(characters=[initial_char]))
+
+    # Reconciled character brings updated target pronouns and new relational pronouns
+    from nousetsu.models.bible import CharacterPronouns
+    reconciled_char = CharacterProfile(
+        name="Ifia",
+        original_name="Ifia",
+        pronouns=CharacterPronouns(
+            source="she/her, I",
+            target="เธอ, ฉัน",
+            relational={"Amelia Barlen": "หนู/พี่"}
+        )
+    )
+
+    repo.update_bible_memory(
+        new_characters=[reconciled_char],
+        new_terms=[],
+        summary=None
+    )
+
+    updated_bible = repo.load_bible()
+    char = updated_bible.find_character("Ifia")
+    assert char is not None
+    assert char.pronouns.source == "she/her, I"
+    assert char.pronouns.target == "เธอ, ฉัน"
+    assert char.pronouns.relational == {"Amelia Barlen": "หนู/พี่"}
+
+

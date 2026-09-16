@@ -218,9 +218,21 @@ def test_character_pronouns_in_drafter_and_critic_prompts():
         source_pronoun="she/her, I",
         target_pronoun="เธอ, ฉัน"
     )
-    bible = NovelBible(title="Test", source_language="English", target_language="Thai", characters=[char])
+    char.pronouns.relational = {"Amelia": "หนู/พี่"}
 
-    # 1. Drafter prompt includes pronouns
+    char2 = CharacterProfile(
+        name="Amelia",
+        original_name="Amelia",
+        gender="female",
+        role="protagonist",
+        source_pronoun="she/her, I",
+        target_pronoun="เธอ, ฉัน"
+    )
+    char2.pronouns.relational = {"Ifia": "พี่/เธอ"}
+
+    bible = NovelBible(title="Test", source_language="English", target_language="Thai", characters=[char, char2])
+
+    # 1. Drafter prompt includes pronouns and relational mappings
     drafter = ContextAwareDrafterAgent()
     mock_llm = MagicMock()
     mock_response = MagicMock()
@@ -231,17 +243,19 @@ def test_character_pronouns_in_drafter_and_critic_prompts():
     drafter.llm = mock_llm
 
     drafter._invoke_llm_draft(
-        chunk_text="Ifia smiled.",
+        chunk_text="Ifia and Amelia smiled.",
         preceding_context="",
         bible=bible,
-        active_characters=[char],
+        active_characters=[char, char2],
         active_glossary=[],
         rolling_summaries=[]
     )
     sys_prompt_drafter = mock_llm.invoke.call_args[0][0][0].content
     assert "[Source: she/her, I] -> [Target: เธอ, ฉัน]" in sys_prompt_drafter
+    assert "Relational: [with Amelia: หนู/พี่]" in sys_prompt_drafter
+    assert "Relational: [with Ifia: พี่/เธอ]" in sys_prompt_drafter
 
-    # 2. Critic prompt includes pronouns
+    # 2. Critic prompt includes pronouns and relational mappings
     critic = CritiqueAgent()
     mock_critic_llm = MagicMock()
     from langchain_core.messages import AIMessage
@@ -251,12 +265,14 @@ def test_character_pronouns_in_drafter_and_critic_prompts():
     critic.llm = mock_critic_llm
 
     critic._evaluate_single(
-        source_text="Ifia smiled.",
-        draft_text="อิเฟียยิ้ม",
+        source_text="Ifia and Amelia smiled.",
+        draft_text="อิเฟียและเอมีเลียยิ้ม",
         bible=bible,
-        active_characters=[char],
+        active_characters=[char, char2],
         active_glossary=[]
     )
     sys_prompt_critic = mock_critic_llm.invoke.call_args[0][0][0].content
     assert "[Pronouns: she/her, I -> เธอ, ฉัน]" in sys_prompt_critic
+    assert "[Relational: with Amelia: หนู/พี่]" in sys_prompt_critic
+
 

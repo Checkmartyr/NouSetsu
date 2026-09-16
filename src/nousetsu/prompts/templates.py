@@ -183,6 +183,10 @@ Analyze the final translated chapter and produce:
 Examine any provisional terms and characters extracted prior to translation against the final translated prose.
 - For terms: If the provisional English target term was refined or localized differently during drafting/polishing (e.g. provisional 'Cyan Lightning Sword' was polished into 'Azure Thunder Blade'), update the `target` to the exact term used in prose. Exclude any false-positive terms that were not actually used or translated as specific lore.
 - For characters: Confirm character names, roles, and any nicknames/titles used in the final translation. If a character name's spelling was modified in prose, update `name` and record alternative address forms in `aliases`.
+  Crucially, observe interpersonal dialogue to extract and reconcile pronouns and relational address:
+  * Record general pronouns in `pronouns.source` and `pronouns.target`.
+  * Record relational pronouns used between specific character pairs in `pronouns.relational` (e.g. {{"RelatedCharacter": "self_pronoun/addressee_pronoun"}} like {{"Amelia": "หนู/พี่"}}, {{"Master": "กระผม/ท่าน"}}).
+  * Update relationship dynamics in `relationships` (e.g. {{"RelatedCharacter": "partner/wife"}}).
 {skills_section}
 {provisional_entities_section}
 
@@ -205,9 +209,14 @@ Respond strictly in valid JSON format:
       "original_name": "Original raw name in source text",
       "aliases": ["Nicknames or variants used in text"],
       "gender": "male/female/unspecified",
-      "pronouns": {{"source": "source pronouns", "target": "confirmed target pronouns used in prose"}},
+      "pronouns": {{
+        "source": "source pronouns",
+        "target": "confirmed target pronouns used in prose",
+        "relational": {{"RelatedCharacter": "self/addressee pronouns"}}
+      }},
       "role": "protagonist/antagonist/supporting/minor",
-      "voice": "Speech style or register in translation"
+      "voice": "Speech style or register in translation",
+      "relationships": {{"RelatedCharacter": "relationship bond"}}
     }}
   ],
   "reconciled_terms": [

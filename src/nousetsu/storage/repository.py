@@ -499,6 +499,21 @@ class NovelRepository:
                 # Evolve gender if unspecified
                 if (not existing.gender or existing.gender.lower() in ["unspecified", "unknown"]) and new_char.gender and new_char.gender.lower() not in ["unspecified", "unknown"]:
                     existing.gender = new_char.gender
+                # Evolve/merge pronouns & relational mappings
+                if new_char.pronouns:
+                    if not existing.pronouns:
+                        existing.pronouns = new_char.pronouns
+                    else:
+                        if new_char.pronouns.source and new_char.pronouns.source.strip().lower() not in ["", "unspecified", "unknown"]:
+                            if not existing.pronouns.source or existing.pronouns.source.strip().lower() in ["", "unspecified", "unknown"] or len(new_char.pronouns.source) >= len(existing.pronouns.source):
+                                existing.pronouns.source = new_char.pronouns.source
+                        if new_char.pronouns.target and new_char.pronouns.target.strip().lower() not in ["", "unspecified", "unknown"]:
+                            if not existing.pronouns.target or existing.pronouns.target.strip().lower() in ["", "unspecified", "unknown"] or len(new_char.pronouns.target) >= len(existing.pronouns.target):
+                                existing.pronouns.target = new_char.pronouns.target
+                        if getattr(new_char.pronouns, "relational", None):
+                            if not hasattr(existing.pronouns, "relational") or existing.pronouns.relational is None:
+                                existing.pronouns.relational = {}
+                            existing.pronouns.relational.update(new_char.pronouns.relational)
                 # Merge relationships
                 if new_char.relationships:
                     existing.relationships.update(new_char.relationships)

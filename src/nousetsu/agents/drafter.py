@@ -338,6 +338,15 @@ class ContextAwareDrafterAgent:
             entry = f"- {c.name} ({c.original_name} / {c.gender} / {c.role}): Voice={c.voice}"
             if c.pronouns and (c.pronouns.source or c.pronouns.target):
                 entry += f" | Pronouns: [Source: {c.pronouns.source or 'N/A'}] -> [Target: {c.pronouns.target or 'N/A'}]"
+            if c.pronouns and getattr(c.pronouns, "relational", None):
+                rel_entries = []
+                for other_c in eval_characters:
+                    if other_c.name != c.name and other_c.original_name != c.original_name:
+                        p_rel = c.pronouns.relational.get(other_c.name) or c.pronouns.relational.get(other_c.original_name)
+                        if p_rel:
+                            rel_entries.append(f"with {other_c.name}: {p_rel}")
+                if rel_entries:
+                    entry += f" | Relational: [{'; '.join(rel_entries)}]"
             char_lines.append(entry)
         chars_str = "\n".join(char_lines) or "No explicit character cards registered."
 

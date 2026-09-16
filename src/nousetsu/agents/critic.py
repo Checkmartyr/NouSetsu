@@ -176,6 +176,15 @@ class CritiqueAgent:
             line = f"- {c.name} ({c.original_name}, {c.gender}, voice: {c.voice})"
             if c.pronouns and (c.pronouns.source or c.pronouns.target):
                 line += f" [Pronouns: {c.pronouns.source or 'N/A'} -> {c.pronouns.target or 'N/A'}]"
+            if c.pronouns and getattr(c.pronouns, "relational", None):
+                rel_entries = []
+                for other_c in eval_characters:
+                    if other_c.name != c.name and other_c.original_name != c.original_name:
+                        p_rel = c.pronouns.relational.get(other_c.name) or c.pronouns.relational.get(other_c.original_name)
+                        if p_rel:
+                            rel_entries.append(f"with {other_c.name}: {p_rel}")
+                if rel_entries:
+                    line += f" [Relational: {'; '.join(rel_entries)}]"
             critic_char_lines.append(line)
         chars_str = "\n".join(critic_char_lines) or "None"
         gloss_str = "\n".join([f"- {g.source} -> {g.target}" for g in eval_glossary]) or "None"
