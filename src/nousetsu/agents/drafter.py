@@ -94,10 +94,14 @@ class ContextAwareDrafterAgent:
     ) -> str:
         """Format 4-tier narrative context (Macro Whole Story > Meso Story Arc > Micro Situation > Episodic RAG Lore)."""
         selected = rolling_summaries[-limit:] if limit else rolling_summaries
-        micro_str = "\n".join([
-            f"[{s.folder}] Chapter {s.chapter_num} ({s.title}): {s.synopsis}" if getattr(s, "folder", None) else f"Chapter {s.chapter_num} ({s.title}): {s.synopsis}"
-            for s in selected
-        ]) if selected else "This is the first chapter."
+        micro_lines = []
+        for s in selected:
+            loc = f"[{s.folder}] " if getattr(s, "folder", None) else ""
+            line = f"{loc}Chapter {s.chapter_num} ({s.title}): {s.synopsis}"
+            if getattr(s, "character_state_changes", None):
+                line += f"\n  * Character Shifts / Lingering Status: {'; '.join(s.character_state_changes)}"
+            micro_lines.append(line)
+        micro_str = "\n".join(micro_lines) if micro_lines else "This is the first chapter."
 
         sections = ["### 3. Immediate Preceding Situation (Micro):", micro_str]
 
