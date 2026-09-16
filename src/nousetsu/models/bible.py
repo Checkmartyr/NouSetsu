@@ -1,6 +1,18 @@
 """Novel Bible data models for characters, glossary, style rules, and narrative memory."""
-from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field
+from typing import Any, Dict, List, Optional, Union
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+
+class CharacterPronouns(BaseModel):
+    source: str = Field(default="", description="Source language pronoun(s) (e.g. 'she/her', 'watashi', 'I')")
+    target: str = Field(default="", description="Target language pronoun(s) (e.g. 'เธอ', 'ฉัน', 'เขา', 'ผม')")
+
+    @field_validator("source", "target", mode="before")
+    @classmethod
+    def _coerce_pronouns(cls, v: Any) -> str:
+        if isinstance(v, list):
+            return ", ".join(str(item).strip() for item in v if str(item).strip())
+        return str(v or "").strip()
 
 
 class CharacterProfile(BaseModel):
@@ -11,6 +23,24 @@ class CharacterProfile(BaseModel):
     role: str = Field(default="supporting", description="Role e.g. protagonist, antagonist, supporting, mentor")
     voice: str = Field(default="neutral", description="Tone register, speech quirks, formality level")
     relationships: Dict[str, str] = Field(default_factory=dict, description="Relationship map e.g. {'Elena': 'sister'}")
+    pronouns: Optional[CharacterPronouns] = Field(
+        default=None,
+        description="Source and target language pronouns for zero-anaphora and dialogue consistency"
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_pronoun_inputs(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "pronouns" in data:
+                p = data["pronouns"]
+                if isinstance(p, str):
+                    data["pronouns"] = {"source": p, "target": ""}
+            elif any(k in data for k in ("source_pronoun", "target_pronoun", "source_pronouns", "target_pronouns")):
+                src = data.pop("source_pronoun", None) or data.pop("source_pronouns", "")
+                tgt = data.pop("target_pronoun", None) or data.pop("target_pronouns", "")
+                data["pronouns"] = {"source": src, "target": tgt}
+        return data
 
 
 class GlossaryItem(BaseModel):

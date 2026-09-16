@@ -9,7 +9,7 @@ class ExtractorResult(BaseModel):
     """Structured extraction output from EntityExtractorAgent."""
     new_characters: List[CharacterProfile] = Field(
         default_factory=list,
-        description="Newly identified characters appearing in the chapter text"
+        description="Newly identified characters appearing in the chapter text with pronouns, role, and voice"
     )
     new_terms: List[GlossaryItem] = Field(
         default_factory=list,
@@ -84,7 +84,7 @@ class ChroniclerResult(BaseModel):
     )
     reconciled_characters: List[CharacterProfile] = Field(
         default_factory=list,
-        description="Refined character profiles reconciled against final translated prose with confirmed target names and aliases"
+        description="Refined character profiles reconciled against final translated prose with confirmed target names, aliases, and pronouns"
     )
     reconciled_terms: List[GlossaryItem] = Field(
         default_factory=list,

@@ -207,3 +207,56 @@ def test_character_filter_max_characters_capping():
     # With 25 core characters, max_characters=10 should cap the return list to 10
     res = filter_characters_for_scene(chars, source_text="Some text", max_characters=10)
     assert len(res) == 10
+
+
+def test_character_pronouns_in_drafter_and_critic_prompts():
+    char = CharacterProfile(
+        name="Ifia",
+        original_name="อิเฟีย",
+        gender="female",
+        role="protagonist",
+        source_pronoun="she/her, I",
+        target_pronoun="เธอ, ฉัน"
+    )
+    bible = NovelBible(title="Test", source_language="English", target_language="Thai", characters=[char])
+
+    # 1. Drafter prompt includes pronouns
+    drafter = ContextAwareDrafterAgent()
+    mock_llm = MagicMock()
+    mock_response = MagicMock()
+    mock_response.content = "Draft text."
+    mock_response.response_metadata = {}
+    mock_response.usage_metadata = {}
+    mock_llm.invoke.return_value = mock_response
+    drafter.llm = mock_llm
+
+    drafter._invoke_llm_draft(
+        chunk_text="Ifia smiled.",
+        preceding_context="",
+        bible=bible,
+        active_characters=[char],
+        active_glossary=[],
+        rolling_summaries=[]
+    )
+    sys_prompt_drafter = mock_llm.invoke.call_args[0][0][0].content
+    assert "[Source: she/her, I] -> [Target: เธอ, ฉัน]" in sys_prompt_drafter
+
+    # 2. Critic prompt includes pronouns
+    critic = CritiqueAgent()
+    mock_critic_llm = MagicMock()
+    from langchain_core.messages import AIMessage
+    mock_critic_llm.invoke.return_value = AIMessage(
+        content='{"fidelity_score": 9.0, "style_score": 9.0, "glossary_compliance_pct": 100.0, "warnings": [], "critique_notes": ""}'
+    )
+    critic.llm = mock_critic_llm
+
+    critic._evaluate_single(
+        source_text="Ifia smiled.",
+        draft_text="อิเฟียยิ้ม",
+        bible=bible,
+        active_characters=[char],
+        active_glossary=[]
+    )
+    sys_prompt_critic = mock_critic_llm.invoke.call_args[0][0][0].content
+    assert "[Pronouns: she/her, I -> เธอ, ฉัน]" in sys_prompt_critic
+

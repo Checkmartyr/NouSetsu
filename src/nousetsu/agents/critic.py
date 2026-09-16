@@ -171,7 +171,13 @@ class CritiqueAgent:
             target_text=draft_text,
             max_characters=15
         )
-        chars_str = "\n".join([f"- {c.name} ({c.original_name}, {c.gender}, voice: {c.voice})" for c in eval_characters]) or "None"
+        critic_char_lines = []
+        for c in eval_characters:
+            line = f"- {c.name} ({c.original_name}, {c.gender}, voice: {c.voice})"
+            if c.pronouns and (c.pronouns.source or c.pronouns.target):
+                line += f" [Pronouns: {c.pronouns.source or 'N/A'} -> {c.pronouns.target or 'N/A'}]"
+            critic_char_lines.append(line)
+        chars_str = "\n".join(critic_char_lines) or "None"
         gloss_str = "\n".join([f"- {g.source} -> {g.target}" for g in eval_glossary]) or "None"
 
         resolved_genre = genre or getattr(bible, "genre", "general")

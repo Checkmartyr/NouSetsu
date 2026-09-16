@@ -333,10 +333,13 @@ class ContextAwareDrafterAgent:
             target_text=preceding_context,
             max_characters=15
         )
-        chars_str = "\n".join([
-            f"- {c.name} ({c.original_name} / {c.gender} / {c.role}): Voice={c.voice}"
-            for c in eval_characters
-        ]) or "No explicit character cards registered."
+        char_lines = []
+        for c in eval_characters:
+            entry = f"- {c.name} ({c.original_name} / {c.gender} / {c.role}): Voice={c.voice}"
+            if c.pronouns and (c.pronouns.source or c.pronouns.target):
+                entry += f" | Pronouns: [Source: {c.pronouns.source or 'N/A'}] -> [Target: {c.pronouns.target or 'N/A'}]"
+            char_lines.append(entry)
+        chars_str = "\n".join(char_lines) or "No explicit character cards registered."
 
         eval_glossary = filter_glossary_for_scene(
             glossary=active_glossary,

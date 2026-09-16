@@ -88,11 +88,20 @@ def _build_character_document(char) -> LoreDocument:
         lines.append(f"Role: {char.role}")
     if char.gender:
         lines.append(f"Gender: {char.gender}")
+    if getattr(char, "pronouns", None) and (char.pronouns.source or char.pronouns.target):
+        lines.append(f"Pronouns: [Source: {char.pronouns.source}] -> [Target: {char.pronouns.target}]")
     if char.voice:
         lines.append(f"Voice/Speech Quirks: {char.voice}")
     if char.relationships:
         rel_str = "; ".join(f"{k}: {v}" for k, v in char.relationships.items())
         lines.append(f"Relationships: {rel_str}")
+
+    meta = {"type": "character", "name": char.name, "original_name": char.original_name, "role": char.role}
+    if getattr(char, "pronouns", None):
+        if char.pronouns.source:
+            meta["source_pronouns"] = char.pronouns.source
+        if char.pronouns.target:
+            meta["target_pronouns"] = char.pronouns.target
 
     return LoreDocument(
         doc_id=f"character:{name_clean}",
@@ -101,7 +110,7 @@ def _build_character_document(char) -> LoreDocument:
         folder=None,
         title=f"Character: {char.name} ({char.original_name})",
         content="\n".join(lines),
-        metadata={"type": "character", "name": char.name, "original_name": char.original_name, "role": char.role}
+        metadata=meta
     )
 
 
