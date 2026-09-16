@@ -90,6 +90,7 @@ def cmd_batch(args: argparse.Namespace) -> None:
         enable_rag=getattr(args, "rag", None),
         enable_rag_reranker=getattr(args, "rerank", None),
         filter_extractor_entities=getattr(args, "filter_extractor", None),
+        enable_post_polish_reconciliation=getattr(args, "reconcile_terms", None),
         console=console
     )
     folder_arg = getattr(args, "folder", None)
@@ -736,6 +737,7 @@ def main() -> None:
     p_batch.add_argument("--rag", action=argparse.BooleanOptionalAction, default=True, help="Enable hybrid search episodic lore retrieval (default: True)")
     p_batch.add_argument("--rerank", action=argparse.BooleanOptionalAction, default=True, help="Enable Stage 2 Cross-Encoder reranking for RAG (default: True)")
     p_batch.add_argument("--filter-extractor", action=argparse.BooleanOptionalAction, default=None, help="Enable or disable per-chunk character/glossary filtering for Entity Extractor")
+    p_batch.add_argument("--reconcile-terms", action=argparse.BooleanOptionalAction, default=None, help="Enable post-polish term and character reconciliation via Chronicler Agent (default: True)")
 
     # skills
     p_skills = subparsers.add_parser("skills", help="List registered agent domain skills and active capabilities")

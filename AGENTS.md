@@ -95,7 +95,7 @@ Each agent in the pipeline is given a dedicated role reflecting its precise lite
 | **2** | **Context-Aware Drafter** | [`ContextAwareDrafterAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/drafter.py) | `gemini-3.5-flash-lite` | `src/nousetsu/agents/drafter.py` | **The Wordsmith**: Produces the initial full translation draft, resolving zero-anaphora (omitted pronouns/subjects), applying distinct dialogue registers, and strictly using active glossary terms. | Inbound ($k=2$) |
 | **3** | **Critique Agent** | [`CritiqueAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/critic.py) | `gemma-4-26b-a4b-it` | `src/nousetsu/agents/critic.py` | **The Inspector**: Line-by-line auditor scoring fidelity and style (0–10), detecting skipped sentences (omissions), verifying glossary compliance, and writing actionable critique notes. | Inbound TM ($k=2$) |
 | **4** | **Polishing Agent** | [`PolishingAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/polisher.py) | `gemini-3.5-flash-lite` | `src/nousetsu/agents/polisher.py` | **The Stylist**: Rewrites drafted prose into publication-grade English with Diff/Patch optimization, title preservation, cadence refinement, and emotional depth. | Indirect via Notes |
-| **5** | **Chronicler Agent** | [`ChroniclerAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/chronicler.py) | `gemma-4-26b-a4b-it` | `src/nousetsu/agents/chronicler.py` | **The Memory Keeper**: Summarizes chapter events for rolling context, tracks character status shifts (injuries, deaths, breakthroughs), and compiles metadata audit records into `.novel/metadata.json`. | Bi-directional (Read $k=3$ / Write) |
+| **5** | **Chronicler Agent** | [`ChroniclerAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/chronicler.py) | `gemma-4-26b-a4b-it` | `src/nousetsu/agents/chronicler.py` | **The Memory Keeper**: Summarizes chapter events for rolling context, tracks character status shifts (injuries, deaths, breakthroughs), reconciles provisional terms/characters into canonical Novel Bible memory, and compiles metadata audit records into `.novel/metadata.json`. | Bi-directional (Read $k=3$ / Write) |
 
 > [!NOTE]
 > Global fallback across all agent stages is anchored by `gemini-3.5-flash-lite`, activated automatically via `FallbackChatModel` when encountering HTTP 429 quota exhaustion or API exceptions.
@@ -294,6 +294,11 @@ NouSetsu tracks end-to-end token consumption and execution latency per pipeline 
     - Migrates `EntityExtractorAgent`, `CritiqueAgent`, and `ChroniclerAgent` from brittle regex / JSON parsing to native LangChain structured outputs backed by strongly typed Pydantic models (`ExtractorResult`, `CritiqueResult`, `ChroniclerResult`).
     - Unified `invoke_structured` utility transparently orchestrates provider schema constraints (`response_json_schema`), `FallbackChatModel` secondary failover on 429 quota exhaustion, `MockNovelLLM` zero-network testing, and emergency regex parsing recovery.
     - Preserves `include_raw=True` for full token usage (`usage_metadata`, `thought_tokens`) and forensic trace logging via `PromptTracker`.
+16. **Post-Polish Term and Character Reconciliation Engine**:
+    - Bridges the semantic gap between Stage 1 provisional extractions and Stage 4 polished prose.
+    - In Stage 5 (`ChroniclerAgent`), the agent inspects provisional terms and characters discovered before translation against the final polished publication text.
+    - Reconciles refined terminology (e.g. provisional `"Cyan Lightning Sword"` $\rightarrow$ polished `"Azure Thunder Blade"`), registers updated character spellings and active aliases, and prunes false-positive terms before persisting to `NovelBible` (`bible.yaml`).
+    - Configurable across the 4-tier cascade: CLI flag (`--reconcile-terms` / `--no-reconcile-terms`), `ProjectConfig.enable_post_polish_reconciliation`, environment variable `NOVEL_POST_POLISH_RECONCILIATION`, and built-in safe fallback (`True`).
 
 ---
 

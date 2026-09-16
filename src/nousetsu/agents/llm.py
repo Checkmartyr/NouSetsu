@@ -124,7 +124,7 @@ class MockNovelLLM(BaseChatModel):
             elif "fidelity_score" in str(first_msg):
                 content = '{"fidelity_score": 9.5, "style_score": 9.2, "glossary_compliance_pct": 100.0, "warnings": [], "critique_notes": "Good flow, prose is faithful."}'
             elif "synopsis" in str(first_msg):
-                content = '{"chapter_num": 1, "title": "Chapter", "synopsis": "The journey begins.", "key_events": ["Protagonist departs"], "character_state_changes": []}'
+                content = '{"chapter_num": 1, "title": "Chapter", "synopsis": "The journey begins.", "key_events": ["Protagonist departs"], "character_state_changes": [], "reconciled_characters": [], "reconciled_terms": []}'
             elif "literary prose stylist" in str(first_msg) or "POLISHING RULES" in str(first_msg) or "elite novelist" in str(first_msg):
                 content = "# Polished Chapter\n\nChapter 1: The signal of departure. The boy stepped forward with quiet determination."
             elif "CRITICAL TRANSLATION DIRECTIVES" in str(first_msg) or "literary translator" in str(first_msg):

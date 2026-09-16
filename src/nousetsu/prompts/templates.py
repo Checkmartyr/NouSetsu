@@ -178,7 +178,12 @@ Analyze the final translated chapter and produce:
 3. Character state changes (injuries, deaths, relationship developments, level-ups, item acquisitions).
 4. Story Arc updates (detect active arc title, core conflict, progress, milestones, and whether this chapter concludes the current arc).
 5. Overarching whole-story progression (synthesize if an arc completed or major milestone reached).
+6. Reconciled Terms & Characters:
+Examine any provisional terms and characters extracted prior to translation against the final translated prose.
+- For terms: If the provisional English target term was refined or localized differently during drafting/polishing (e.g. provisional 'Cyan Lightning Sword' was polished into 'Azure Thunder Blade'), update the `target` to the exact term used in prose. Exclude any false-positive terms that were not actually used or translated as specific lore.
+- For characters: Confirm character names, roles, and any nicknames/titles used in the final translation. If a character name's spelling was modified in prose, update `name` and record alternative address forms in `aliases`.
 {skills_section}
+{provisional_entities_section}
 
 Respond strictly in valid JSON format:
 {{
@@ -192,6 +197,24 @@ Respond strictly in valid JSON format:
   "character_state_changes": [
     "Allen acquired the Obsidian Relic",
     "Seraphina revealed her lineage"
+  ],
+  "reconciled_characters": [
+    {{
+      "name": "Final translated character name",
+      "original_name": "Original raw name in source text",
+      "aliases": ["Nicknames or variants used in text"],
+      "gender": "male/female/unspecified",
+      "role": "protagonist/antagonist/supporting/minor",
+      "voice": "Speech style or register in translation"
+    }}
+  ],
+  "reconciled_terms": [
+    {{
+      "source": "Original source term",
+      "target": "Final translated term actually used in prose",
+      "category": "term/item/skill/location/faction/rank",
+      "notes": "Contextual usage notes"
+    }}
   ],
   "arc_update": {{
     "title": "Current Arc Title (e.g. Royal Academy Entrance)",

@@ -37,6 +37,14 @@ class ChapterSummary(BaseModel):
     folder: Optional[str] = Field(default=None, description="Folder/volume scope for chapter summary")
     arc_update: Optional[Dict[str, Any]] = Field(default=None, description="Optional arc progression or transition update from Chronicler")
     story_update: Optional[str] = Field(default=None, description="Optional synthesized whole story update from Chronicler")
+    reconciled_characters: Optional[List[CharacterProfile]] = Field(
+        default=None,
+        description="Refined character profiles reconciled against final publication text"
+    )
+    reconciled_terms: Optional[List[GlossaryItem]] = Field(
+        default=None,
+        description="Refined glossary items reconciled against final publication text"
+    )
 
 
 class ArcSummary(BaseModel):

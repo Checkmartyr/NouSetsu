@@ -82,6 +82,14 @@ class ChroniclerResult(BaseModel):
         default=None,
         description="Optional synthesized whole-story summary update if milestone reached"
     )
+    reconciled_characters: List[CharacterProfile] = Field(
+        default_factory=list,
+        description="Refined character profiles reconciled against final translated prose with confirmed target names and aliases"
+    )
+    reconciled_terms: List[GlossaryItem] = Field(
+        default_factory=list,
+        description="Refined glossary terms reconciled against final translated prose with confirmed target terms actually used in publication prose"
+    )
     chapter_summary: Optional[Dict[str, Any]] = Field(
         default=None,
         description="Support for nested chapter_summary envelope if model formats hierarchically"
@@ -100,6 +108,8 @@ class ChroniclerResult(BaseModel):
         c_char_changes = self.character_state_changes
         arc_up = self.arc_update.model_dump() if self.arc_update else None
         story_up = self.story_update
+        rec_chars = list(self.reconciled_characters)
+        rec_terms = list(self.reconciled_terms)
 
         # Handle nested chapter_summary structure if returned
         if self.chapter_summary and isinstance(self.chapter_summary, dict):
@@ -113,6 +123,16 @@ class ChroniclerResult(BaseModel):
                 arc_up = self.chapter_summary["arc_update"]
             if not story_up and "story_update" in self.chapter_summary:
                 story_up = self.chapter_summary["story_update"]
+            if not rec_chars and "reconciled_characters" in self.chapter_summary:
+                try:
+                    rec_chars = [CharacterProfile.model_validate(c) for c in self.chapter_summary["reconciled_characters"]]
+                except Exception:
+                    pass
+            if not rec_terms and "reconciled_terms" in self.chapter_summary:
+                try:
+                    rec_terms = [GlossaryItem.model_validate(t) for t in self.chapter_summary["reconciled_terms"]]
+                except Exception:
+                    pass
 
         return ChapterSummary(
             chapter_num=c_num,
@@ -122,5 +142,7 @@ class ChroniclerResult(BaseModel):
             character_state_changes=c_char_changes,
             folder=folder,
             arc_update=arc_up,
-            story_update=story_up
+            story_update=story_up,
+            reconciled_characters=rec_chars if rec_chars else None,
+            reconciled_terms=rec_terms if rec_terms else None
         )

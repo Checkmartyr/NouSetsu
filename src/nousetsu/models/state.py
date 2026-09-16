@@ -33,6 +33,8 @@ class TranslationState(BaseModel):
     quality_audit: QualityAudit = Field(default_factory=QualityAudit)
     polished_text: str = Field(default="")
     new_chapter_summary: Optional[ChapterSummary] = None
+    reconciled_terms: List[GlossaryItem] = Field(default_factory=list, description="Terms reconciled against final polished prose")
+    reconciled_characters: List[CharacterProfile] = Field(default_factory=list, description="Characters reconciled against final polished prose")
     rag_retrieved_lore: List[SearchResult] = Field(default_factory=list, description="Historical lore snippets retrieved via Hybrid Search RAG")
 
     review_iteration: int = Field(default=1, description="Current review loop iteration (1-indexed)")

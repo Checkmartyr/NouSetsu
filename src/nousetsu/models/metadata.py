@@ -26,6 +26,8 @@ class PipelineStage(str, Enum):
 class StageArtifacts(BaseModel):
     extracted_terms: List[GlossaryItem] = Field(default_factory=list)
     extracted_characters: List[CharacterProfile] = Field(default_factory=list)
+    reconciled_terms: List[GlossaryItem] = Field(default_factory=list)
+    reconciled_characters: List[CharacterProfile] = Field(default_factory=list)
     draft_text: Optional[str] = None
     critique_notes: Optional[str] = None
     polished_text: Optional[str] = None
