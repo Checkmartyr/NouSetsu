@@ -1,6 +1,7 @@
 """Domain models for novel translation agent."""
 from nousetsu.models.bible import (
     CharacterProfile,
+    CharacterPronouns,
     ChapterSummary,
     GlossaryItem,
     NovelBible,
@@ -24,6 +25,7 @@ from nousetsu.models.trace import AgentPromptTrace, ChapterTraceDocument
 __all__ = [
     "ProjectConfig",
     "CharacterProfile",
+    "CharacterPronouns",
     "GlossaryItem",
     "StyleGuide",
     "ChapterSummary",

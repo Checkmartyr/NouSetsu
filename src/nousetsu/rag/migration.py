@@ -11,6 +11,7 @@ from nousetsu.models.bible import ArcSummary, ChapterSummary, NovelBible
 from nousetsu.rag.embeddings import EmbeddingClient
 from nousetsu.rag.engine import HybridSearchEngine
 from nousetsu.rag.models import DocumentType, LoreDocument
+from nousetsu.utils.chapter import extract_chapter_num
 
 if TYPE_CHECKING:
     from nousetsu.storage.repository import NovelRepository
@@ -32,9 +33,8 @@ class MigrationStats(BaseModel):
 
 
 def _extract_chapter_num_from_filename(filename: str) -> int:
-    """Extract chapter number from filename like '001_Chapter 1.md' or 'chapter_0048.json'."""
-    m = re.search(r"(\d+)", filename)
-    return int(m.group(1)) if m else 0
+    """Extract chapter number from filename like '001_Chapter 1.md' or '035_Extra Chapter 1.md'."""
+    return extract_chapter_num(filename, default_idx=0)
 
 
 def _build_summary_document(summary: ChapterSummary, folder: str) -> LoreDocument:
@@ -88,11 +88,20 @@ def _build_character_document(char) -> LoreDocument:
         lines.append(f"Role: {char.role}")
     if char.gender:
         lines.append(f"Gender: {char.gender}")
+    if getattr(char, "pronouns", None) and (char.pronouns.source or char.pronouns.target):
+        lines.append(f"Pronouns: [Source: {char.pronouns.source}] -> [Target: {char.pronouns.target}]")
     if char.voice:
         lines.append(f"Voice/Speech Quirks: {char.voice}")
     if char.relationships:
         rel_str = "; ".join(f"{k}: {v}" for k, v in char.relationships.items())
         lines.append(f"Relationships: {rel_str}")
+
+    meta = {"type": "character", "name": char.name, "original_name": char.original_name, "role": char.role}
+    if getattr(char, "pronouns", None):
+        if char.pronouns.source:
+            meta["source_pronouns"] = char.pronouns.source
+        if char.pronouns.target:
+            meta["target_pronouns"] = char.pronouns.target
 
     return LoreDocument(
         doc_id=f"character:{name_clean}",
@@ -101,7 +110,7 @@ def _build_character_document(char) -> LoreDocument:
         folder=None,
         title=f"Character: {char.name} ({char.original_name})",
         content="\n".join(lines),
-        metadata={"type": "character", "name": char.name, "original_name": char.original_name, "role": char.role}
+        metadata=meta
     )
 
 

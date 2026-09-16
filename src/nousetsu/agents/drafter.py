@@ -94,10 +94,14 @@ class ContextAwareDrafterAgent:
     ) -> str:
         """Format 4-tier narrative context (Macro Whole Story > Meso Story Arc > Micro Situation > Episodic RAG Lore)."""
         selected = rolling_summaries[-limit:] if limit else rolling_summaries
-        micro_str = "\n".join([
-            f"[{s.folder}] Chapter {s.chapter_num} ({s.title}): {s.synopsis}" if getattr(s, "folder", None) else f"Chapter {s.chapter_num} ({s.title}): {s.synopsis}"
-            for s in selected
-        ]) if selected else "This is the first chapter."
+        micro_lines = []
+        for s in selected:
+            loc = f"[{s.folder}] " if getattr(s, "folder", None) else ""
+            line = f"{loc}Chapter {s.chapter_num} ({s.title}): {s.synopsis}"
+            if getattr(s, "character_state_changes", None):
+                line += f"\n  * Character Shifts / Lingering Status: {'; '.join(s.character_state_changes)}"
+            micro_lines.append(line)
+        micro_str = "\n".join(micro_lines) if micro_lines else "This is the first chapter."
 
         sections = ["### 3. Immediate Preceding Situation (Micro):", micro_str]
 
@@ -329,10 +333,22 @@ class ContextAwareDrafterAgent:
             target_text=preceding_context,
             max_characters=15
         )
-        chars_str = "\n".join([
-            f"- {c.name} ({c.original_name} / {c.gender} / {c.role}): Voice={c.voice}"
-            for c in eval_characters
-        ]) or "No explicit character cards registered."
+        char_lines = []
+        for c in eval_characters:
+            entry = f"- {c.name} ({c.original_name} / {c.gender} / {c.role}): Voice={c.voice}"
+            if c.pronouns and (c.pronouns.source or c.pronouns.target):
+                entry += f" | Pronouns: [Source: {c.pronouns.source or 'N/A'}] -> [Target: {c.pronouns.target or 'N/A'}]"
+            if c.pronouns and getattr(c.pronouns, "relational", None):
+                rel_entries = []
+                for other_c in eval_characters:
+                    if other_c.name != c.name and other_c.original_name != c.original_name:
+                        p_rel = c.pronouns.relational.get(other_c.name) or c.pronouns.relational.get(other_c.original_name)
+                        if p_rel:
+                            rel_entries.append(f"with {other_c.name}: {p_rel}")
+                if rel_entries:
+                    entry += f" | Relational: [{'; '.join(rel_entries)}]"
+            char_lines.append(entry)
+        chars_str = "\n".join(char_lines) or "No explicit character cards registered."
 
         eval_glossary = filter_glossary_for_scene(
             glossary=active_glossary,

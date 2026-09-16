@@ -64,12 +64,14 @@ class NovelTranslationWorkflow:
         traces_dir: Optional[Path] = None,
         prompt_tracker: Optional[PromptTracker] = None,
         enable_patch_polishing: bool = True,
-        filter_extractor_entities: bool = True
+        filter_extractor_entities: bool = True,
+        enable_post_polish_reconciliation: bool = True
     ):
         self.traces_dir = traces_dir
         self.prompt_tracker = prompt_tracker
         self.enable_patch_polishing = enable_patch_polishing
         self.filter_extractor_entities = filter_extractor_entities
+        self.enable_post_polish_reconciliation = enable_post_polish_reconciliation
         effective_model = model_name or os.environ.get("NOVEL_MODEL") or os.environ.get("DEFAULT_MODEL") or "gemini-3.1-flash-lite"
         self.model_name = effective_model
         is_mock = effective_model.startswith("mock") or effective_model.startswith("test")
@@ -924,12 +926,17 @@ class NovelTranslationWorkflow:
             rate_limiter=self.rate_limiter,
             estimated_tokens=est_chronicle,
             stop_event=self.stop_event,
-            prompt_tracker=self.prompt_tracker
+            prompt_tracker=self.prompt_tracker,
+            extracted_characters=state.extracted_characters if self.enable_post_polish_reconciliation else [],
+            extracted_terms=state.extracted_terms if self.enable_post_polish_reconciliation else []
         )
 
         current_folder = Path(state.source_file).parent.name if state.source_file else None
         if summary and current_folder and not getattr(summary, "folder", None):
             summary.folder = current_folder
+
+        reconciled_chars = summary.reconciled_characters if (summary and summary.reconciled_characters) else []
+        reconciled_terms = summary.reconciled_terms if (summary and summary.reconciled_terms) else []
 
         chronicle_duration = round(time.time() - step_start, 2)
         chronicle_usage = getattr(self.chronicler, "last_usage", TokenUsage())
@@ -986,6 +993,8 @@ class NovelTranslationWorkflow:
             subdivisions_count=total_subdivisions,
             extracted_characters=state.extracted_characters,
             extracted_terms=state.extracted_terms,
+            reconciled_characters=reconciled_chars,
+            reconciled_terms=reconciled_terms,
             trace_file=trace_file_path,
             prompt_trace_count=prompt_trace_count
         )
@@ -1015,7 +1024,9 @@ class NovelTranslationWorkflow:
             "step_token_records": all_token_records,
             "safety_fallbacks_used": total_safety_used,
             "subdivisions_count": total_subdivisions,
-            "prompt_traces": self.prompt_tracker.traces if self.prompt_tracker else []
+            "prompt_traces": self.prompt_tracker.traces if self.prompt_tracker else [],
+            "reconciled_characters": reconciled_chars,
+            "reconciled_terms": reconciled_terms
         }
 
     def _index_chapter_into_rag(

@@ -121,7 +121,13 @@ class EntityExtractorAgent:
             active_chars = all_chars
             active_gloss = all_gloss
 
-        known_chars_str = "\n".join([f"- {c.original_name} -> {c.name} ({c.role}, {c.voice})" for c in active_chars]) or "None yet."
+        known_char_lines = []
+        for c in active_chars:
+            line = f"- {c.original_name} -> {c.name} ({c.role}, {c.voice})"
+            if c.pronouns and (c.pronouns.source or c.pronouns.target):
+                line += f" [Pronouns: {c.pronouns.source or 'N/A'} -> {c.pronouns.target or 'N/A'}]"
+            known_char_lines.append(line)
+        known_chars_str = "\n".join(known_char_lines) or "None yet."
         known_gloss_str = "\n".join([f"- {g.source} -> {g.target} ({g.category})" for g in active_gloss]) or "None yet."
 
         resolved_genre = genre or getattr(bible, "genre", "general")

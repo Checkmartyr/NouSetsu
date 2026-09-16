@@ -16,6 +16,7 @@ Respond strictly in valid JSON format:
       "original_name": "Original Name",
       "aliases": ["alias1"],
       "gender": "male/female/neutral/unknown",
+      "pronouns": {{"source": "he/him, I", "target": "canonical target pronoun"}},
       "role": "protagonist/antagonist/supporting/minor",
       "voice": "speech quirks, politeness level, tone",
       "relationships": {{"Character": "friend"}}
@@ -43,7 +44,7 @@ DRAFTING_SYSTEM_PROMPT = """You are a world-class literary translator adapting a
 Your goal is to produce an immersive, high-quality chapter draft that reads like native literary fiction while preserving 100% of the narrative meaning, atmosphere, and pacing.
 
 ## CRITICAL TRANSLATION DIRECTIVES:
-1. Zero-Anaphora Resolution: In {source_lang}, subjects and pronouns are frequently omitted. Use context, character relationships, and speech registers to accurately resolve who is speaking and acting. Never guess blindly—trace the speaker carefully.
+1. Zero-Anaphora Resolution & Pronoun Discipline: In {source_lang}, subjects and pronouns are frequently omitted. Use context, character relationships, speech registers, and registered character pronouns (source -> target) to accurately resolve who is speaking and acting. Never guess blindly—trace the speaker carefully and apply each character's assigned target pronouns.
 2. Character Voices: Ensure each character's dialogue matches their assigned register, tone, and personality.
 3. Glossary Adherence: You MUST use the exact canonical translations for all registered terms.
 4. Style Guide:
@@ -178,7 +179,16 @@ Analyze the final translated chapter and produce:
 3. Character state changes (injuries, deaths, relationship developments, level-ups, item acquisitions).
 4. Story Arc updates (detect active arc title, core conflict, progress, milestones, and whether this chapter concludes the current arc).
 5. Overarching whole-story progression (synthesize if an arc completed or major milestone reached).
+6. Reconciled Terms & Characters:
+Examine any provisional terms and characters extracted prior to translation against the final translated prose.
+- For terms: If the provisional English target term was refined or localized differently during drafting/polishing (e.g. provisional 'Cyan Lightning Sword' was polished into 'Azure Thunder Blade'), update the `target` to the exact term used in prose. Exclude any false-positive terms that were not actually used or translated as specific lore.
+- For characters: Confirm character names, roles, and any nicknames/titles used in the final translation. If a character name's spelling was modified in prose, update `name` and record alternative address forms in `aliases`.
+  Crucially, observe interpersonal dialogue to extract and reconcile pronouns and relational address:
+  * Record general pronouns in `pronouns.source` and `pronouns.target`.
+  * Record relational pronouns used between specific character pairs in `pronouns.relational` (e.g. {{"RelatedCharacter": "self_pronoun/addressee_pronoun"}} like {{"Amelia": "หนู/พี่"}}, {{"Master": "กระผม/ท่าน"}}).
+  * Update relationship dynamics in `relationships` (e.g. {{"RelatedCharacter": "partner/wife"}}).
 {skills_section}
+{provisional_entities_section}
 
 Respond strictly in valid JSON format:
 {{
@@ -192,6 +202,30 @@ Respond strictly in valid JSON format:
   "character_state_changes": [
     "Allen acquired the Obsidian Relic",
     "Seraphina revealed her lineage"
+  ],
+  "reconciled_characters": [
+    {{
+      "name": "Final translated character name",
+      "original_name": "Original raw name in source text",
+      "aliases": ["Nicknames or variants used in text"],
+      "gender": "male/female/unspecified",
+      "pronouns": {{
+        "source": "source pronouns",
+        "target": "confirmed target pronouns used in prose",
+        "relational": {{"RelatedCharacter": "self/addressee pronouns"}}
+      }},
+      "role": "protagonist/antagonist/supporting/minor",
+      "voice": "Speech style or register in translation",
+      "relationships": {{"RelatedCharacter": "relationship bond"}}
+    }}
+  ],
+  "reconciled_terms": [
+    {{
+      "source": "Original source term",
+      "target": "Final translated term actually used in prose",
+      "category": "term/item/skill/location/faction/rank",
+      "notes": "Contextual usage notes"
+    }}
   ],
   "arc_update": {{
     "title": "Current Arc Title (e.g. Royal Academy Entrance)",

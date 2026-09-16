@@ -45,6 +45,7 @@ class ProjectConfig(BaseModel):
     filter_scene_characters: bool = Field(default=True, description="Filter character roster per scene/chunk based on textual presence and core roles")
     filter_extractor_entities: Optional[bool] = Field(default=None, description="Filter known characters and glossary per chunk/chapter in Entity Extractor to save tokens and avoid quota exhaustion")
     enable_patch_polishing: bool = Field(default=True, description="Enable search/replace diff patching for secondary polish passes to save output tokens")
+    enable_post_polish_reconciliation: bool = Field(default=True, description="Enable post-polish term and entity reconciliation by Chronicler Agent")
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     def get_raw_path(self, base_dir: Path) -> Path:
@@ -136,6 +137,15 @@ class ProjectConfig(BaseModel):
         if self.filter_extractor_entities is not None:
             return self.filter_extractor_entities
         env_val = os.environ.get("NOVEL_FILTER_EXTRACTOR_ENTITIES")
+        if env_val is not None:
+            return env_val.strip().lower() in ("true", "1", "yes")
+        return True
+
+    def get_post_polish_reconciliation(self) -> bool:
+        """Resolve effective enable_post_polish_reconciliation: config override -> .env -> default (True)."""
+        if self.enable_post_polish_reconciliation is not None:
+            return self.enable_post_polish_reconciliation
+        env_val = os.environ.get("NOVEL_POST_POLISH_RECONCILIATION")
         if env_val is not None:
             return env_val.strip().lower() in ("true", "1", "yes")
         return True

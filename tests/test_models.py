@@ -1,5 +1,5 @@
 """Unit tests for data models."""
-from nousetsu.models.bible import CharacterProfile, ChapterSummary, GlossaryItem, NovelBible, StyleGuide
+from nousetsu.models.bible import CharacterProfile, CharacterPronouns, ChapterSummary, GlossaryItem, NovelBible, StyleGuide
 from nousetsu.models.metadata import (
     ChapterMetadata,
     CheckpointData,
@@ -74,3 +74,64 @@ def test_chapter_metadata_serialization():
     reloaded = ChapterMetadata.model_validate_json(json_data)
     assert reloaded.chapter_id == "chapter_0001"
     assert reloaded.quality_audit.fidelity_score == 9.5
+
+
+def test_character_pronouns():
+    # 1. Direct model creation
+    cp = CharacterPronouns(source="she/her, I", target="เธอ, ฉัน")
+    assert cp.source == "she/her, I"
+    assert cp.target == "เธอ, ฉัน"
+
+    # 2. Coercion from list
+    cp_list = CharacterPronouns(source=["she", "her"], target=["เธอ", "ฉัน"])
+    assert cp_list.source == "she, her"
+    assert cp_list.target == "เธอ, ฉัน"
+
+    # 3. Embedded in CharacterProfile
+    char = CharacterProfile(
+        name="Ifia",
+        original_name="อิเฟีย",
+        gender="female",
+        pronouns=cp
+    )
+    assert char.pronouns.source == "she/her, I"
+    assert char.pronouns.target == "เธอ, ฉัน"
+
+    # 4. Coercion from string
+    char_str = CharacterProfile(
+        name="Amelia",
+        original_name="アメリア",
+        pronouns="she/her"
+    )
+    assert char_str.pronouns.source == "she/her"
+    assert char_str.pronouns.target == ""
+
+    # 5. Flat field migration (source_pronoun, target_pronoun)
+    char_flat = CharacterProfile(
+        name="Desalo",
+        original_name="デサロ",
+        source_pronoun="he/him",
+        target_pronoun="เขา"
+    )
+    assert char_flat.pronouns.source == "he/him"
+    assert char_flat.pronouns.target == "เขา"
+
+    # 6. Backward compatibility (None pronouns)
+    char_default = CharacterProfile(name="Kael", original_name="カエル")
+    assert char_default.pronouns is None
+
+    # 7. YAML roundtrip
+    import yaml
+    dumped = yaml.safe_dump(char.model_dump(), allow_unicode=True)
+    loaded = CharacterProfile.model_validate(yaml.safe_load(dumped))
+    assert loaded.pronouns.source == "she/her, I"
+    assert loaded.pronouns.target == "เธอ, ฉัน"
+
+    # 8. Relational pronouns mapping
+    cp_rel = CharacterPronouns(source="she/her", target="เธอ", relational={"Amelia": "หนู/พี่"})
+    assert cp_rel.relational["Amelia"] == "หนู/พี่"
+    char_rel = CharacterProfile(name="Ifia", original_name="Ifia", pronouns=cp_rel)
+    dumped_rel = yaml.safe_dump(char_rel.model_dump(), allow_unicode=True)
+    loaded_rel = CharacterProfile.model_validate(yaml.safe_load(dumped_rel))
+    assert loaded_rel.pronouns.relational == {"Amelia": "หนู/พี่"}
+

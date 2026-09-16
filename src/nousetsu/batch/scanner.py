@@ -1,11 +1,13 @@
-"""Batch scanner for discovering, naturally sorting, and inspecting chapters."""
+import logging
 from dataclasses import dataclass
 from pathlib import Path
-import re
 from typing import List, Optional
 from natsort import natsorted
 from nousetsu.models.metadata import ChapterMetadata, PipelineStage, StageStatus
 from nousetsu.storage.repository import NovelRepository
+from nousetsu.utils.chapter import LEADING_SEQ_PATTERN, extract_chapter_num
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -50,26 +52,8 @@ class ChapterScanner:
         self._sha256_cache.clear()
 
     def extract_chapter_num(self, path: Path, default_idx: int) -> int:
-        """Extract numeric chapter index from filename using regex or fallback to sequential index."""
-        name = path.stem
-        # 1. Match explicit chapter prefixes first
-        match = re.search(r"(?:chapter|ch|ep|第)[\s_\.]*(\d+)", name, re.IGNORECASE)
-        if match:
-            try:
-                return int(match.group(1))
-            except ValueError:
-                pass
-
-        # 2. Strip volume indicators so volume numbers aren't mistaken for chapter numbers
-        cleaned = re.sub(r"(?:vol|volume|v)[\s_\.]*\d+", "", name, flags=re.IGNORECASE)
-        m = re.search(r"(\d+)", cleaned)
-        if m:
-            try:
-                return int(m.group(1))
-            except ValueError:
-                pass
-
-        return default_idx
+        """Extract numeric chapter index from filename using canonical extractor."""
+        return extract_chapter_num(path, default_idx)
 
     def scan_directory(self, input_dir: Path, output_dir: Path) -> List[ChapterTask]:
         """Scan input directory, sort naturally, pair with metadata, and flag status."""
@@ -87,9 +71,27 @@ class ChapterScanner:
         all_metadata = self.repo.load_all_metadata()
 
         tasks: List[ChapterTask] = []
+        seen_chapter_nums: dict[int, Path] = {}
 
         for idx, src_file in enumerate(sorted_files, start=1):
             ch_num = self.extract_chapter_num(src_file, idx)
+
+            # Auto-align duplicate chapter numbers within the same directory scan
+            if ch_num in seen_chapter_nums:
+                original_ch_num = ch_num
+                seq_m = LEADING_SEQ_PATTERN.match(src_file.stem)
+                if seq_m and int(seq_m.group(1)) not in seen_chapter_nums:
+                    ch_num = int(seq_m.group(1))
+                else:
+                    max_seen = max(seen_chapter_nums.keys()) if seen_chapter_nums else 0
+                    ch_num = max_seen + 1
+
+                logger.warning(
+                    f"Chapter collision in '{input_path.name}': '{src_file.name}' (extracted {original_ch_num}) "
+                    f"collided with '{seen_chapter_nums[original_ch_num].name}'. Auto-realigned to chapter {ch_num}."
+                )
+
+            seen_chapter_nums[ch_num] = src_file
             out_file = output_path / f"{src_file.stem}.md"
             src_sha256 = self.get_file_sha256(src_file)
 

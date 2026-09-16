@@ -79,7 +79,9 @@ def test_chronicler_prompt_prefix_alignment():
         chapter_num=5,
         chapter_title="Battle of Dawn",
         skills_section="[Skill: Lore]",
+        provisional_entities_section="[Provisional Entities]",
         rag_context_section="[Prior Lore]"
     )
     assert formatted.index("master lorekeeper") < formatted.index("Chapter Number: 5")
     assert formatted.index("synopsis") < formatted.index("Chapter Title: Battle of Dawn")
+    assert formatted.index("master lorekeeper") < formatted.index("[Provisional Entities]")

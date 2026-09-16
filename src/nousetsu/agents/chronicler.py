@@ -88,6 +88,8 @@ class ChroniclerAgent:
         source_lang: Optional[str] = None,
         bible: Optional[NovelBible] = None,
         rag_context: Optional[List[Any]] = None,
+        extracted_characters: Optional[List[CharacterProfile]] = None,
+        extracted_terms: Optional[List[GlossaryItem]] = None,
         **kwargs: Any
     ) -> ChapterSummary:
         skills_text = SkillRegistry.get_instance().build_prompt_section(
@@ -96,6 +98,24 @@ class ChroniclerAgent:
             genre=genre or "general"
         )
         skills_section = f"\n{skills_text}\n" if skills_text else ""
+
+        provisional_entities_section = ""
+        if extracted_characters or extracted_terms:
+            lines = ["\nStage 1 Provisional Entities for Reconciliation:"]
+            if extracted_characters:
+                lines.append("Characters:")
+                for c in extracted_characters:
+                    char_desc = f"- Name: {c.name} (Source: {c.original_name}, Role: {c.role})"
+                    if c.pronouns and (c.pronouns.source or c.pronouns.target):
+                        char_desc += f" [Pronouns: {c.pronouns.source} -> {c.pronouns.target}]"
+                    if c.relationships:
+                        char_desc += f" [Relationships: {', '.join(f'{k}: {v}' for k, v in c.relationships.items())}]"
+                    lines.append(char_desc)
+            if extracted_terms:
+                lines.append("Terms:")
+                for t in extracted_terms:
+                    lines.append(f"- {t.source} -> {t.target} [{t.category}]")
+            provisional_entities_section = "\n".join(lines) + "\n"
 
         rag_section = ""
         if rag_context:
@@ -111,6 +131,7 @@ class ChroniclerAgent:
             chapter_num=chapter_num,
             chapter_title=chapter_title or f"Chapter {chapter_num}",
             skills_section=skills_section,
+            provisional_entities_section=provisional_entities_section,
             rag_context_section=rag_section
         )
 
@@ -174,6 +195,10 @@ class ChroniclerAgent:
                         chap_data["arc_update"] = parsed["arc_update"]
                     if "story_update" in parsed and not chap_data.get("story_update"):
                         chap_data["story_update"] = parsed["story_update"]
+                    if "reconciled_characters" in parsed and not chap_data.get("reconciled_characters"):
+                        chap_data["reconciled_characters"] = parsed["reconciled_characters"]
+                    if "reconciled_terms" in parsed and not chap_data.get("reconciled_terms"):
+                        chap_data["reconciled_terms"] = parsed["reconciled_terms"]
                     summary = ChapterSummary.model_validate(chap_data)
                 else:
                     parsed["chapter_num"] = chapter_num
@@ -186,6 +211,9 @@ class ChroniclerAgent:
                     key_events=["Chapter concluded."],
                     character_state_changes=[]
                 )
+
+        self.last_reconciled_characters = list(summary.reconciled_characters or [])
+        self.last_reconciled_terms = list(summary.reconciled_terms or [])
 
         if tracker:
             trace_meta: dict[str, Any] = {}
@@ -213,7 +241,9 @@ class ChroniclerAgent:
                 parsed_output={
                     "synopsis": summary.synopsis[:200],
                     "key_events_count": len(summary.key_events),
-                    "character_state_changes_count": len(summary.character_state_changes)
+                    "character_state_changes_count": len(summary.character_state_changes),
+                    "reconciled_characters_count": len(self.last_reconciled_characters),
+                    "reconciled_terms_count": len(self.last_reconciled_terms)
                 },
                 model=getattr(self, "last_model_used", self.model_name),
                 token_usage=self.last_usage,
@@ -246,12 +276,16 @@ class ChroniclerAgent:
         subdivisions_count: int = 0,
         extracted_characters: Optional[List[CharacterProfile]] = None,
         extracted_terms: Optional[List[GlossaryItem]] = None,
+        reconciled_characters: Optional[List[CharacterProfile]] = None,
+        reconciled_terms: Optional[List[GlossaryItem]] = None,
         trace_file: Optional[str] = None,
         prompt_trace_count: int = 0
     ) -> ChapterMetadata:
         artifacts = StageArtifacts(
             extracted_terms=extracted_terms if extracted_terms is not None else [],
             extracted_characters=extracted_characters if extracted_characters is not None else [],
+            reconciled_terms=reconciled_terms if reconciled_terms is not None else [],
+            reconciled_characters=reconciled_characters if reconciled_characters is not None else [],
             draft_text=draft_text,
             critique_notes=critique_notes,
             polished_text=polished_text,

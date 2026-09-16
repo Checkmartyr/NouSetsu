@@ -1,6 +1,22 @@
 """Novel Bible data models for characters, glossary, style rules, and narrative memory."""
-from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field
+from typing import Any, Dict, List, Optional, Union
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+
+class CharacterPronouns(BaseModel):
+    source: str = Field(default="", description="Source language pronoun(s) (e.g. 'she/her', 'watashi', 'I')")
+    target: str = Field(default="", description="Target language pronoun(s) (e.g. 'เธอ', 'ฉัน', 'เขา', 'ผม')")
+    relational: Dict[str, str] = Field(
+        default_factory=dict,
+        description="Relational pronouns/address with specific characters e.g. {'Amelia Barlen': 'หนู/พี่'}"
+    )
+
+    @field_validator("source", "target", mode="before")
+    @classmethod
+    def _coerce_pronouns(cls, v: Any) -> str:
+        if isinstance(v, list):
+            return ", ".join(str(item).strip() for item in v if str(item).strip())
+        return str(v or "").strip()
 
 
 class CharacterProfile(BaseModel):
@@ -11,6 +27,24 @@ class CharacterProfile(BaseModel):
     role: str = Field(default="supporting", description="Role e.g. protagonist, antagonist, supporting, mentor")
     voice: str = Field(default="neutral", description="Tone register, speech quirks, formality level")
     relationships: Dict[str, str] = Field(default_factory=dict, description="Relationship map e.g. {'Elena': 'sister'}")
+    pronouns: Optional[CharacterPronouns] = Field(
+        default=None,
+        description="Source and target language pronouns for zero-anaphora and dialogue consistency"
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_pronoun_inputs(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "pronouns" in data:
+                p = data["pronouns"]
+                if isinstance(p, str):
+                    data["pronouns"] = {"source": p, "target": ""}
+            elif any(k in data for k in ("source_pronoun", "target_pronoun", "source_pronouns", "target_pronouns")):
+                src = data.pop("source_pronoun", None) or data.pop("source_pronouns", "")
+                tgt = data.pop("target_pronoun", None) or data.pop("target_pronouns", "")
+                data["pronouns"] = {"source": src, "target": tgt}
+        return data
 
 
 class GlossaryItem(BaseModel):
@@ -37,6 +71,14 @@ class ChapterSummary(BaseModel):
     folder: Optional[str] = Field(default=None, description="Folder/volume scope for chapter summary")
     arc_update: Optional[Dict[str, Any]] = Field(default=None, description="Optional arc progression or transition update from Chronicler")
     story_update: Optional[str] = Field(default=None, description="Optional synthesized whole story update from Chronicler")
+    reconciled_characters: Optional[List[CharacterProfile]] = Field(
+        default=None,
+        description="Refined character profiles reconciled against final publication text"
+    )
+    reconciled_terms: Optional[List[GlossaryItem]] = Field(
+        default=None,
+        description="Refined glossary items reconciled against final publication text"
+    )
 
 
 class ArcSummary(BaseModel):

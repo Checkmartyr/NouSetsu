@@ -61,10 +61,14 @@ class NovelBibleModal(ModalScreen):
             with TabbedContent():
                 with TabPane("Characters"):
                     with VerticalScroll():
-                        char_md = "\n\n".join([
-                            f"### {c.name} (`{c.original_name}`)\n- **Role:** {c.role} | **Gender:** {c.gender}\n- **Voice / Tone:** {c.voice}\n- **Aliases:** {', '.join(c.aliases) or 'None'}"
-                            for c in self.bible.characters
-                        ]) or "*No character profiles registered yet.*"
+                        char_cards = []
+                        for c in self.bible.characters:
+                            card = f"### {c.name} (`{c.original_name}`)\n- **Role:** {c.role} | **Gender:** {c.gender}"
+                            if c.pronouns and (c.pronouns.source or c.pronouns.target):
+                                card += f"\n- **Pronouns:** [Source: `{c.pronouns.source or 'N/A'}`] ➔ [Target: `{c.pronouns.target or 'N/A'}`]"
+                            card += f"\n- **Voice / Tone:** {c.voice}\n- **Aliases:** {', '.join(c.aliases) or 'None'}"
+                            char_cards.append(card)
+                        char_md = "\n\n".join(char_cards) or "*No character profiles registered yet.*"
                         yield Markdown(char_md, id="chars_view")
 
                 with TabPane("Glossary"):

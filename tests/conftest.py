@@ -15,3 +15,5 @@ def isolate_test_environment(monkeypatch, tmp_path_factory):
     monkeypatch.setenv("NOVEL_POLISHER_MODEL", "mock-model")
     monkeypatch.setenv("NOVEL_CHRONICLER_MODEL", "mock-model")
     monkeypatch.setenv("NOVEL_USE_INTERACTIONS", "0")
+    monkeypatch.setenv("NOVEL_MAX_TPM", "10000000")
+    monkeypatch.setenv("NOVEL_MAX_RPM", "10000")

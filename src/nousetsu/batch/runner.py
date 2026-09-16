@@ -43,6 +43,7 @@ class BatchRunner:
         enable_rag: Optional[bool] = None,
         enable_rag_reranker: Optional[bool] = None,
         filter_extractor_entities: Optional[bool] = None,
+        enable_post_polish_reconciliation: Optional[bool] = None,
         console: Optional[Console] = None
     ):
         self.repo = repository
@@ -119,11 +120,15 @@ class BatchRunner:
 
         self.genre = genre or getattr(cfg, "genre", "general")
 
-        # Rate limiting configuration (default 32K TPM / 60 RPM)
-        env_tpm = int(os.environ["NOVEL_MAX_TPM"]) if "NOVEL_MAX_TPM" in os.environ else None
-        env_rpm = int(os.environ["NOVEL_MAX_RPM"]) if "NOVEL_MAX_RPM" in os.environ else None
-        resolved_tpm = max_tpm or env_tpm or getattr(cfg, "max_tpm", 32000)
-        resolved_rpm = max_rpm or env_rpm or getattr(cfg, "max_rpm", 60)
+        # Rate limiting configuration (default 32K TPM / 60 RPM; for mock models bypass throttle)
+        if is_mock and not max_tpm and "NOVEL_MAX_TPM" not in os.environ:
+            resolved_tpm = 10_000_000
+            resolved_rpm = 10_000
+        else:
+            env_tpm = int(os.environ["NOVEL_MAX_TPM"]) if "NOVEL_MAX_TPM" in os.environ else None
+            env_rpm = int(os.environ["NOVEL_MAX_RPM"]) if "NOVEL_MAX_RPM" in os.environ else None
+            resolved_tpm = max_tpm or env_tpm or getattr(cfg, "max_tpm", 32000)
+            resolved_rpm = max_rpm or env_rpm or getattr(cfg, "max_rpm", 60)
 
         # Review loop configuration
         env_loops = int(os.environ["NOVEL_MAX_REVIEW_LOOPS"]) if "NOVEL_MAX_REVIEW_LOOPS" in os.environ else None
@@ -149,6 +154,15 @@ class BatchRunner:
                 cfg.get_filter_extractor_entities()
                 if hasattr(cfg, "get_filter_extractor_entities")
                 else getattr(cfg, "filter_extractor_entities", True)
+            )
+        )
+        resolved_reconcile = (
+            enable_post_polish_reconciliation
+            if enable_post_polish_reconciliation is not None
+            else (
+                cfg.get_post_polish_reconciliation()
+                if hasattr(cfg, "get_post_polish_reconciliation")
+                else getattr(cfg, "enable_post_polish_reconciliation", True)
             )
         )
 
@@ -179,7 +193,8 @@ class BatchRunner:
             rag_reranker_model=default_agent_model if is_mock else (cfg.get_rag_reranker_model() if hasattr(cfg, "get_rag_reranker_model") else getattr(cfg, "rag_reranker_model", "gemini-3.5-flash-lite")),
             traces_dir=self.repo.traces_dir,
             enable_patch_polishing=getattr(cfg, "enable_patch_polishing", True),
-            filter_extractor_entities=resolved_filter_extractor
+            filter_extractor_entities=resolved_filter_extractor,
+            enable_post_polish_reconciliation=resolved_reconcile
         )
         self.rag_engine = self.workflow.rag_engine
         self.auto_update_bible = auto_update_bible if auto_update_bible is not None else cfg.auto_update_bible
@@ -325,6 +340,10 @@ class BatchRunner:
                         initial_state.extracted_terms = artifacts.extracted_terms
                     if artifacts.extracted_characters:
                         initial_state.extracted_characters = artifacts.extracted_characters
+                    if getattr(artifacts, "reconciled_terms", None):
+                        initial_state.reconciled_terms = artifacts.reconciled_terms
+                    if getattr(artifacts, "reconciled_characters", None):
+                        initial_state.reconciled_characters = artifacts.reconciled_characters
                     if artifacts.polished_text:
                         initial_state.polished_text = artifacts.polished_text
                         initial_state.best_polished_text = artifacts.polished_text
@@ -355,9 +374,11 @@ class BatchRunner:
                     # Update persistent memory across chapters (scoped to current folder)
                     task_folder = task.folder or Path(task.source_file).parent.name
                     if self.auto_update_bible:
+                        chars_to_save = final_state.reconciled_characters or final_state.extracted_characters
+                        terms_to_save = final_state.reconciled_terms or final_state.extracted_terms
                         self.repo.update_bible_memory(
-                            new_characters=final_state.extracted_characters,
-                            new_terms=final_state.extracted_terms,
+                            new_characters=chars_to_save,
+                            new_terms=terms_to_save,
                             summary=final_state.new_chapter_summary,
                             folder=task_folder
                         )
@@ -396,6 +417,8 @@ class BatchRunner:
 
                     extracted_chars = getattr(last_st, "extracted_characters", []) or (task.existing_meta.checkpoint.stage_artifacts.extracted_characters if task.existing_meta else [])
                     extracted_terms = getattr(last_st, "extracted_terms", []) or (task.existing_meta.checkpoint.stage_artifacts.extracted_terms if task.existing_meta else [])
+                    reconciled_chars = getattr(last_st, "reconciled_characters", []) or (getattr(task.existing_meta.checkpoint.stage_artifacts, "reconciled_characters", []) if task.existing_meta else [])
+                    reconciled_terms = getattr(last_st, "reconciled_terms", []) or (getattr(task.existing_meta.checkpoint.stage_artifacts, "reconciled_terms", []) if task.existing_meta else [])
                     draft_text = getattr(last_st, "draft_text", None) or (task.existing_meta.checkpoint.stage_artifacts.draft_text if task.existing_meta else None)
                     critique_notes = getattr(last_st, "critique_notes", None) or (task.existing_meta.checkpoint.stage_artifacts.critique_notes if task.existing_meta else None)
                     polished_text = getattr(last_st, "best_polished_text", None) or getattr(last_st, "polished_text", None) or (task.existing_meta.checkpoint.stage_artifacts.polished_text if task.existing_meta else None)
@@ -413,6 +436,8 @@ class BatchRunner:
                             stage_artifacts=StageArtifacts(
                                 extracted_terms=extracted_terms,
                                 extracted_characters=extracted_chars,
+                                reconciled_terms=reconciled_terms,
+                                reconciled_characters=reconciled_chars,
                                 draft_text=draft_text,
                                 critique_notes=critique_notes,
                                 polished_text=polished_text,

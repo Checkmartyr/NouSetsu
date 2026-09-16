@@ -247,6 +247,33 @@ def test_drafter_3tier_hierarchical_formatting():
     assert "### 1. Global Story Progression" not in legacy_formatted
 
 
+def test_drafter_format_summaries_includes_character_state_changes():
+    """Verify that format_summaries includes character state shifts when present."""
+    drafter = ContextAwareDrafterAgent(model_name="mock-novel-llm")
+    summaries = [
+        ChapterSummary(
+            chapter_num=10,
+            title="Before the Gate",
+            synopsis="The army assembled.",
+            character_state_changes=["Amelia lost left arm", "Duke Vance poisoned with Black Lotus"],
+            folder="Vol_02"
+        ),
+        ChapterSummary(
+            chapter_num=11,
+            title="Breach",
+            synopsis="The fortress gate collapsed.",
+            character_state_changes=[],
+            folder="Vol_02"
+        )
+    ]
+    formatted = drafter.format_summaries(summaries)
+    assert "Chapter 10 (Before the Gate): The army assembled." in formatted
+    assert "* Character Shifts / Lingering Status: Amelia lost left arm; Duke Vance poisoned with Black Lotus" in formatted
+    assert "Chapter 11 (Breach): The fortress gate collapsed." in formatted
+    assert formatted.count("* Character Shifts") == 1
+
+
+
 def test_cli_narrative_command(tmp_path: Path, capsys):
     """Verify nousetsu narrative CLI command renders the Rich tree without exceptions."""
     repo = NovelRepository(tmp_path)
