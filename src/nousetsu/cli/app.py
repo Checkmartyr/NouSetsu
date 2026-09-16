@@ -10,6 +10,7 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
+from rich.tree import Tree
 import dotenv
 from nousetsu import __version__
 from nousetsu.batch.runner import BatchRunner
@@ -435,6 +436,61 @@ def cmd_migrate_rag(args: argparse.Namespace) -> None:
     console.print(Panel(tree, subtitle=status_note, border_style="green", padding=(1, 2)))
 
 
+def cmd_realign_chapters(args: argparse.Namespace) -> None:
+    project_dir = getattr(args, "project_dir", None)
+    repo = NovelRepository(project_dir) if project_dir else NovelRepository()
+    folder = getattr(args, "folder", None)
+    if not folder:
+        console.print("[red]Error:[/] You must specify --folder (e.g. --folder Villainess_06)")
+        return
+
+    dry_run = getattr(args, "dry_run", False)
+    re_chronicle = getattr(args, "re_chronicle", False)
+
+    action_label = "[yellow]Dry Run Preview[/]" if dry_run else "[bold green]Realigning Chapters & Fixing Collisions[/]"
+    console.print(f"\n{action_label} for folder [bold]{folder}[/] at [bold]{repo.root_dir}[/]...")
+
+    from nousetsu.storage.repair import realign_project_folder
+    try:
+        report = realign_project_folder(
+            repository=repo,
+            folder=folder,
+            dry_run=dry_run,
+            re_chronicle=re_chronicle,
+        )
+    except Exception as e:
+        console.print(f"[bold red]Realignment failed:[/] {e}")
+        return
+
+    tree = Tree(f"🔄 [bold magenta]Chapter Alignment Report: {folder}[/] ({report.total_chapters} Total Chapters)")
+    if report.backup_path:
+        tree.add(f"[cyan]Backup Created:[/] {report.backup_path}")
+
+    if report.realigned_chapters:
+        ch_node = tree.add(f"[yellow]Chapters Realigned ({len(report.realigned_chapters)}):[/]")
+        for fname, old_ch, new_ch in report.realigned_chapters:
+            ch_node.add(f"[white]{fname}[/] : [red]Ch.{old_ch}[/] ➔ [bold green]Ch.{new_ch}[/]")
+    else:
+        tree.add("[green]✓ No chapter collisions detected — numbering is consistent![/]")
+
+    if report.summaries_moved:
+        sum_node = tree.add(f"[blue]Summaries Relocated ({len(report.summaries_moved)}):[/]")
+        for old_f, new_f in report.summaries_moved:
+            sum_node.add(f"{old_f} ➔ [bold green]{new_f}[/]")
+
+    if report.summaries_reconstructed:
+        tree.add(f"[bold cyan]Summaries Reconstructed:[/] {len(report.summaries_reconstructed)} chapters ({', '.join(map(str, report.summaries_reconstructed))})")
+
+    if report.metadata_entries_updated:
+        tree.add(f"[green]Metadata Entries Updated:[/] {report.metadata_entries_updated}")
+
+    if report.rag_reindexed:
+        tree.add("[bold green]✓ RAG Knowledge Store re-indexed successfully[/]")
+
+    status_note = "[yellow]Dry run preview complete — no changes written to disk.[/]" if dry_run else "[bold green]✓ Chapter realignment completed successfully![/]"
+    console.print(Panel(tree, subtitle=status_note, border_style="green", padding=(1, 2)))
+
+
 def cmd_tui(args: argparse.Namespace) -> None:
     project_dir = getattr(args, "project_dir", None)
     repo = NovelRepository(project_dir) if project_dir else NovelRepository()
@@ -812,6 +868,13 @@ def main() -> None:
     p_web.add_argument("--dev", action="store_true", help="Run with live Vite dev server instead of production dist")
     p_web.add_argument("--build", action="store_true", help="Rebuild frontend assets before launching")
 
+    # realign-chapters
+    p_realign = subparsers.add_parser("realign-chapters", aliases=["realign"], help="Detect and resolve chapter numbering collisions, relocate summaries/traces, and re-index RAG")
+    p_realign.add_argument("--project-dir", "-p", default=None, help="Root folder of novel project")
+    p_realign.add_argument("--folder", "-F", required=True, help="Volume folder to realign (e.g. Villainess_06)")
+    p_realign.add_argument("--dry-run", action="store_true", help="Preview realignment changes without modifying disk")
+    p_realign.add_argument("--re-chronicle", action="store_true", help="Use ChroniclerAgent to re-generate summaries for vacated chapter slots")
+
     args = parser.parse_args()
 
     if args.command == "init":
@@ -834,6 +897,8 @@ def main() -> None:
         cmd_lore_search(args)
     elif args.command in ("migrate-rag", "index-rag"):
         cmd_migrate_rag(args)
+    elif args.command in ("realign-chapters", "realign"):
+        cmd_realign_chapters(args)
     elif args.command == "tui":
         cmd_tui(args)
     else:

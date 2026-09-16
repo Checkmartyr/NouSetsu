@@ -654,6 +654,12 @@ class NovelRepository:
         doc = self.load_project_metadata_doc()
         return doc.chapters
 
+    def save_all_metadata(self, chapters: Dict[str, ChapterMetadata]) -> None:
+        """Save all chapter metadata entries to .novel/metadata.json."""
+        doc = self.load_project_metadata_doc()
+        doc.chapters = chapters
+        self.save_project_metadata_doc(doc)
+
     def load_metadata(self, output_file: Path) -> Optional[ChapterMetadata]:
         """Load chapter metadata by composite folder/stem or stem from single project metadata file."""
         stem = output_file.stem

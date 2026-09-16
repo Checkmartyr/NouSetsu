@@ -120,11 +120,15 @@ class BatchRunner:
 
         self.genre = genre or getattr(cfg, "genre", "general")
 
-        # Rate limiting configuration (default 32K TPM / 60 RPM)
-        env_tpm = int(os.environ["NOVEL_MAX_TPM"]) if "NOVEL_MAX_TPM" in os.environ else None
-        env_rpm = int(os.environ["NOVEL_MAX_RPM"]) if "NOVEL_MAX_RPM" in os.environ else None
-        resolved_tpm = max_tpm or env_tpm or getattr(cfg, "max_tpm", 32000)
-        resolved_rpm = max_rpm or env_rpm or getattr(cfg, "max_rpm", 60)
+        # Rate limiting configuration (default 32K TPM / 60 RPM; for mock models bypass throttle)
+        if is_mock and not max_tpm and "NOVEL_MAX_TPM" not in os.environ:
+            resolved_tpm = 10_000_000
+            resolved_rpm = 10_000
+        else:
+            env_tpm = int(os.environ["NOVEL_MAX_TPM"]) if "NOVEL_MAX_TPM" in os.environ else None
+            env_rpm = int(os.environ["NOVEL_MAX_RPM"]) if "NOVEL_MAX_RPM" in os.environ else None
+            resolved_tpm = max_tpm or env_tpm or getattr(cfg, "max_tpm", 32000)
+            resolved_rpm = max_rpm or env_rpm or getattr(cfg, "max_rpm", 60)
 
         # Review loop configuration
         env_loops = int(os.environ["NOVEL_MAX_REVIEW_LOOPS"]) if "NOVEL_MAX_REVIEW_LOOPS" in os.environ else None

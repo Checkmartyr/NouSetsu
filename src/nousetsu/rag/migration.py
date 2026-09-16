@@ -11,6 +11,7 @@ from nousetsu.models.bible import ArcSummary, ChapterSummary, NovelBible
 from nousetsu.rag.embeddings import EmbeddingClient
 from nousetsu.rag.engine import HybridSearchEngine
 from nousetsu.rag.models import DocumentType, LoreDocument
+from nousetsu.utils.chapter import extract_chapter_num
 
 if TYPE_CHECKING:
     from nousetsu.storage.repository import NovelRepository
@@ -32,9 +33,8 @@ class MigrationStats(BaseModel):
 
 
 def _extract_chapter_num_from_filename(filename: str) -> int:
-    """Extract chapter number from filename like '001_Chapter 1.md' or 'chapter_0048.json'."""
-    m = re.search(r"(\d+)", filename)
-    return int(m.group(1)) if m else 0
+    """Extract chapter number from filename like '001_Chapter 1.md' or '035_Extra Chapter 1.md'."""
+    return extract_chapter_num(filename, default_idx=0)
 
 
 def _build_summary_document(summary: ChapterSummary, folder: str) -> LoreDocument:
