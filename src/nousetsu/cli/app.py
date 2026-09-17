@@ -223,6 +223,105 @@ def cmd_graph_info(args: argparse.Namespace) -> None:
         console.print(Panel(tree, border_style="cyan", padding=(1, 2)))
 
 
+def cmd_learn_graph(args: argparse.Namespace) -> None:
+    """Execute offline self-evolution loop for Procedural Graphs (arXiv:2609.09153v1)."""
+    from rich.panel import Panel
+    from rich.table import Table
+    from rich.tree import Tree
+    from nousetsu.graph.pg_refiner import ProceduralGraphRefiner, collect_traces_from_repository
+    from nousetsu.graph.procedural import get_default_drafter_graph, get_default_extractor_graph
+
+    project_dir = getattr(args, "project_dir", None)
+    repo = NovelRepository(project_dir) if project_dir else NovelRepository()
+    folder = getattr(args, "folder", None)
+    agent_target = (getattr(args, "agent", None) or "all").lower()
+    max_traces = getattr(args, "max_traces", 20) or 20
+    dry_run = getattr(args, "dry_run", False)
+    model_name = getattr(args, "model", None) or os.environ.get("NOVEL_FALLBACK_MODEL") or "gemini-3.5-flash-lite"
+
+    mode_label = "[yellow]Dry Run Preview[/]" if dry_run else "[bold green]Offline Graph Self-Evolution[/]"
+    console.print(f"\n{mode_label} for project at [bold]{repo.root_dir}[/] (Model: [cyan]{model_name}[/])...\n")
+
+    # 1. Collect diagnostic traces
+    with console.status("[bold cyan]Scanning project metadata and diagnostic traces...[/]", spinner="dots"):
+        traces = collect_traces_from_repository(
+            repo=repo,
+            folder=folder,
+            stage=agent_target,
+            max_traces=max_traces
+        )
+
+    if not traces:
+        console.print("[yellow]No diagnostic traces found in this project yet.[/]")
+        console.print("[dim]Translate chapters with CritiqueAgent auditing to generate historical traces for self-evolution.[/]")
+        return
+
+    successes = [t for t in traces if t.is_success]
+    failures = [t for t in traces if not t.is_success]
+
+    # Render summary table of collected traces
+    summary_table = Table(title="Diagnostic Rollout Traces Summary", header_style="bold magenta", border_style="dim")
+    summary_table.add_column("Category", style="cyan")
+    summary_table.add_column("Count", justify="right")
+    summary_table.add_column("Notes", style="dim")
+    summary_table.add_row("Total Traces Analyzed", str(len(traces)), f"Max cap: {max_traces}")
+    summary_table.add_row("Clean Success Traces", str(len(successes)), "Fidelity >= 8.5 & 0 warnings")
+    summary_table.add_row("Failure / Warning Traces", str(len(failures)), "Critique warnings, tone issues, omissions")
+    console.print(summary_table)
+
+    if not failures:
+        console.print("\n[bold green]All collected traces have passing quality audits and zero warnings![/]")
+        console.print("[cyan]Current procedural execution structures are performing optimally. No mutations required.[/]")
+        return
+
+    # 2. Target agents
+    agents_to_evolve = []
+    if agent_target in ["all", "extractor"]:
+        extractor_traces = [t for t in traces if t.stage == "extractor"]
+        if extractor_traces:
+            current_g = repo.load_procedural_graph("extractor", folder=folder) or get_default_extractor_graph()
+            agents_to_evolve.append(("extractor", "Entity Extractor", extractor_traces, current_g))
+    if agent_target in ["all", "drafter"]:
+        drafter_traces = [t for t in traces if t.stage == "drafter"]
+        if drafter_traces:
+            current_g = repo.load_procedural_graph("drafter", folder=folder) or get_default_drafter_graph()
+            agents_to_evolve.append(("drafter", "Context-Aware Drafter", drafter_traces, current_g))
+
+    if not agents_to_evolve:
+        console.print(f"[yellow]No failure traces matched target agent '{agent_target}'.[/]")
+        return
+
+    rejection_path = repo.novel_dir / "rejection_memory.json"
+    refiner = ProceduralGraphRefiner(model_name=model_name, rejection_memory_path=rejection_path)
+
+    for agent_key, agent_title, stage_traces, current_graph in agents_to_evolve:
+        console.print(f"\n[bold cyan]Evolving Procedural Graph for {agent_title} ({current_graph.graph_id})...[/]")
+
+        with console.status(f"[bold green]Synthesizing mutations from {len(stage_traces)} trace(s)...[/]", spinner="dots"):
+            evolved_graph, edits = refiner.refine(current_graph, stage_traces)
+
+        if not edits:
+            console.print(f"[dim yellow]No mutations committed for {agent_title} (graph remains optimal or candidate failed validation).[/]")
+            continue
+
+        tree = Tree(f"[bold green]Committed {len(edits)} Mutation(s) for {agent_title}[/]")
+        for edit in edits:
+            op_color = "green" if edit.operation == "ADD" else ("yellow" if edit.operation == "UPDATE" else "red")
+            leaf = tree.add(f"[{op_color} bold]{edit.operation}[/] [bold]{edit.edge_source} -> {edit.edge_target}[/]")
+            if edit.rationale:
+                leaf.add(f"[cyan]Rationale:[/] {edit.rationale}")
+            if edit.new_guidance:
+                leaf.add(f"[white]Guidance:[/] {edit.new_guidance}")
+            if edit.new_pitfalls:
+                leaf.add(f"[red bold]Pitfalls to Avoid:[/] {edit.new_pitfalls}")
+
+        if dry_run:
+            console.print(Panel(tree, subtitle="[yellow]Dry Run: No changes written to disk[/]", border_style="yellow", padding=(1, 2)))
+        else:
+            saved_path = repo.save_procedural_graph(evolved_graph, agent_key, folder=folder)
+            console.print(Panel(tree, subtitle=f"[bold green]✓ Evolved graph saved to {saved_path.name}[/]", border_style="green", padding=(1, 2)))
+
+
 def cmd_narrative(args: argparse.Namespace) -> None:
     from rich.tree import Tree
     project_dir = getattr(args, "project_dir", None)
@@ -808,6 +907,15 @@ def main() -> None:
     p_graph = subparsers.add_parser("graph-info", help="Inspect Procedural Graphs with Rich tree formatting (arXiv:2609.09153v1)")
     p_graph.add_argument("--agent", "-a", choices=["all", "extractor", "drafter"], default="all", help="Filter by agent graph (default: all)")
 
+    # learn-graph / refine-graph
+    p_learn = subparsers.add_parser("learn-graph", aliases=["refine-graph"], help="Execute offline self-evolution loop for Procedural Graphs (arXiv:2609.09153v1)")
+    p_learn.add_argument("--project-dir", "-p", default=None, help="Root folder of novel project")
+    p_learn.add_argument("--folder", "-F", default=None, help="Filter by specific volume folder")
+    p_learn.add_argument("--agent", "-a", choices=["all", "drafter", "extractor"], default="all", help="Target agent graph to evolve (default: all)")
+    p_learn.add_argument("--model", "-m", default=None, help="LLM model for refiner (defaults to NOVEL_FALLBACK_MODEL or gemini-3.5-flash-lite)")
+    p_learn.add_argument("--max-traces", type=int, default=20, help="Maximum number of historical traces to analyze (default: 20)")
+    p_learn.add_argument("--dry-run", action="store_true", help="Preview proposed mutations without persisting to disk")
+
     # narrative
     p_narrative = subparsers.add_parser("narrative", help="Inspect 3-tier hierarchical story memory (Whole Story > Arcs > Situation)")
     p_narrative.add_argument("--project-dir", "-p", default=None, help="Root folder of novel project")
@@ -892,6 +1000,8 @@ def main() -> None:
         cmd_skills(args)
     elif args.command == "graph-info":
         cmd_graph_info(args)
+    elif args.command in ("learn-graph", "refine-graph"):
+        cmd_learn_graph(args)
     elif args.command == "narrative":
         cmd_narrative(args)
     elif args.command == "migrate-summaries":

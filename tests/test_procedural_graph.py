@@ -163,3 +163,161 @@ def test_cmd_graph_info_renders(capsys):
     cmd_graph_info(argparse.Namespace(agent="drafter"))
     # Test invalid agent
     cmd_graph_info(argparse.Namespace(agent="non_existent"))
+
+
+def test_repository_procedural_graph_persistence(tmp_path):
+    """Verify NovelRepository saves and loads procedural graphs accurately."""
+    from nousetsu.storage.repository import NovelRepository
+    repo = NovelRepository(tmp_path)
+    base_graph = get_default_drafter_graph()
+    
+    # Initially None
+    assert repo.load_procedural_graph("drafter") is None
+
+    # Save and reload
+    saved_path = repo.save_procedural_graph(base_graph, "drafter")
+    assert saved_path.exists()
+    loaded = repo.load_procedural_graph("drafter")
+    assert loaded is not None
+    assert loaded.graph_id == base_graph.graph_id
+    assert len(loaded.edges) == len(base_graph.edges)
+
+    # Folder-scoped fallback
+    assert repo.load_procedural_graph("drafter", folder="Volume_01") is not None
+
+
+def test_collect_traces_from_repository(tmp_path):
+    """Verify collect_traces_from_repository extracts DiagnosticTraces from project metadata."""
+    from nousetsu.storage.repository import NovelRepository
+    from nousetsu.models.metadata import ChapterMetadata, QualityAudit, StageArtifacts, CheckpointData
+    from nousetsu.graph.pg_refiner import collect_traces_from_repository
+
+    repo = NovelRepository(tmp_path)
+    ch = ChapterMetadata(
+        chapter_id="chapter_0001",
+        chapter_num=1,
+        source_file="0001.txt",
+        source_sha256="abc",
+        output_file="0001.md",
+        checkpoint=CheckpointData(
+            stage_artifacts=StageArtifacts(
+                draft_text="Sample drafted text.",
+                critique_notes="Speaker attribution reversed in scene 2."
+            )
+        ),
+        quality_audit=QualityAudit(
+            fidelity_score=7.0,
+            style_score=8.0,
+            warnings=["Speaker attribution warning"]
+        )
+    )
+    repo.save_all_metadata({"chapter_0001": ch})
+
+    traces = collect_traces_from_repository(repo, stage="all")
+    assert len(traces) == 1
+    assert traces[0].stage == "drafter"
+    assert traces[0].is_success is False
+    assert traces[0].fidelity_score == 7.0
+    assert "Speaker attribution reversed" in traces[0].critique_notes
+
+
+def test_cmd_learn_graph_cli(tmp_path, monkeypatch):
+    """Verify cmd_learn_graph executes smoothly with dry-run and mock models."""
+    import argparse
+    from nousetsu.storage.repository import NovelRepository
+    from nousetsu.models.metadata import ChapterMetadata, QualityAudit, StageArtifacts, CheckpointData
+    from nousetsu.cli.app import cmd_learn_graph
+
+    repo = NovelRepository(tmp_path)
+    
+    # 1. Test when no traces exist
+    cmd_learn_graph(argparse.Namespace(
+        project_dir=str(tmp_path),
+        folder=None,
+        agent="all",
+        max_traces=10,
+        dry_run=True,
+        model="mock-novel-llm"
+    ))
+
+    # 2. Add passing chapter
+    ch_pass = ChapterMetadata(
+        chapter_id="chapter_0001",
+        chapter_num=1,
+        source_file="0001.txt",
+        source_sha256="abc",
+        output_file="0001.md",
+        checkpoint=CheckpointData(stage_artifacts=StageArtifacts(draft_text="Clean draft")),
+        quality_audit=QualityAudit(fidelity_score=9.5, style_score=9.5, warnings=[])
+    )
+    repo.save_all_metadata({"chapter_0001": ch_pass})
+
+    cmd_learn_graph(argparse.Namespace(
+        project_dir=str(tmp_path),
+        folder=None,
+        agent="drafter",
+        max_traces=10,
+        dry_run=True,
+        model="mock-novel-llm"
+    ))
+
+    # 3. Add failing chapter and mock refiner proposal
+    ch_fail = ChapterMetadata(
+        chapter_id="chapter_0002",
+        chapter_num=2,
+        source_file="0002.txt",
+        source_sha256="def",
+        output_file="0002.md",
+        checkpoint=CheckpointData(stage_artifacts=StageArtifacts(
+            draft_text="Confused dialogue",
+            critique_notes="Speaker attribution reversed between Alice and Bob."
+        )),
+        quality_audit=QualityAudit(fidelity_score=7.0, style_score=7.5, warnings=["Speaker attribution swap"])
+    )
+    repo.save_all_metadata({"chapter_0001": ch_pass, "chapter_0002": ch_fail})
+
+    from unittest.mock import patch, MagicMock
+    mock_edits_json = (
+        '[\n'
+        '  {\n'
+        '    "operation": "UPDATE",\n'
+        '    "edge_source": "Zero_Anaphora_Resolution",\n'
+        '    "edge_target": "Voice_Modulation",\n'
+        '    "new_guidance": "Verify turn-taking in rapid dialogue.",\n'
+        '    "new_pitfalls": "Do not swap character speaker registers.",\n'
+        '    "rationale": "Fix speaker attribution swap."\n'
+        '  }\n'
+        ']'
+    )
+    with patch("nousetsu.graph.pg_refiner.get_llm") as mock_get_llm:
+        mock_llm = MagicMock()
+        mock_llm.invoke.return_value = MagicMock(content=mock_edits_json)
+        mock_get_llm.return_value = mock_llm
+
+        # Run learn-graph for drafter (dry-run)
+        cmd_learn_graph(argparse.Namespace(
+            project_dir=str(tmp_path),
+            folder=None,
+            agent="drafter",
+            max_traces=10,
+            dry_run=True,
+            model="mock-novel-llm"
+        ))
+        assert repo.load_procedural_graph("drafter") is None
+
+        # Run learn-graph for drafter (live save)
+        cmd_learn_graph(argparse.Namespace(
+            project_dir=str(tmp_path),
+            folder=None,
+            agent="drafter",
+            max_traces=10,
+            dry_run=False,
+            model="mock-novel-llm"
+        ))
+        evolved = repo.load_procedural_graph("drafter")
+        assert evolved is not None
+        matching_edge = next(e for e in evolved.edges if e.source == "Zero_Anaphora_Resolution" and e.target == "Voice_Modulation")
+        assert matching_edge.guidance == "Verify turn-taking in rapid dialogue."
+        assert matching_edge.pitfalls == "Do not swap character speaker registers."
+
+

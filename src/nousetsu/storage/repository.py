@@ -181,6 +181,31 @@ class NovelRepository:
         self.rag_dir = self.novel_dir / "rag"
         self.rag_db_path = self.rag_dir / "lore.db"
         self.traces_dir = self.novel_dir / "traces"
+        self.procedural_graphs_dir = self.novel_dir / "procedural_graphs"
+
+    def load_procedural_graph(self, agent_name: str, folder: Optional[str] = None) -> Optional[Any]:
+        """Load an evolved procedural graph for an agent if available on disk."""
+        from nousetsu.graph.procedural import ProceduralGraph
+        target_dir = self.procedural_graphs_dir / folder if folder else self.procedural_graphs_dir
+        path = target_dir / f"{agent_name}.json"
+        if not path.exists() and folder:
+            path = self.procedural_graphs_dir / f"{agent_name}.json"
+        if path.exists():
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                return ProceduralGraph.model_validate(data)
+            except Exception:
+                return None
+        return None
+
+    def save_procedural_graph(self, graph: Any, agent_name: str, folder: Optional[str] = None) -> Path:
+        """Persist an evolved procedural graph to disk."""
+        target_dir = self.procedural_graphs_dir / folder if folder else self.procedural_graphs_dir
+        target_dir.mkdir(parents=True, exist_ok=True)
+        path = target_dir / f"{agent_name}.json"
+        atomic_write_json(path, graph.model_dump())
+        return path
 
     def get_rag_engine(self) -> Any:
         """Get or create the HybridSearchEngine for this project."""

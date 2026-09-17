@@ -192,6 +192,8 @@ class BatchRunner:
             enable_rag_reranker=resolved_reranker,
             rag_reranker_model=default_agent_model if is_mock else (cfg.get_rag_reranker_model() if hasattr(cfg, "get_rag_reranker_model") else getattr(cfg, "rag_reranker_model", "gemini-3.5-flash-lite")),
             traces_dir=self.repo.traces_dir,
+            extractor_pg=self.repo.load_procedural_graph("extractor"),
+            drafter_pg=self.repo.load_procedural_graph("drafter"),
             enable_patch_polishing=getattr(cfg, "enable_patch_polishing", True),
             filter_extractor_entities=resolved_filter_extractor,
             enable_post_polish_reconciliation=resolved_reconcile

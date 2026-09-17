@@ -8,7 +8,12 @@ from nousetsu.graph.procedural import (
     get_default_extractor_graph,
     get_default_drafter_graph
 )
-from nousetsu.graph.pg_refiner import DiagnosticTrace, ProceduralGraphRefiner
+from nousetsu.graph.pg_refiner import (
+    DiagnosticTrace,
+    GraphEditOperation,
+    ProceduralGraphRefiner,
+    collect_traces_from_repository,
+)
 
 if TYPE_CHECKING:
     from nousetsu.graph.workflow import NovelTranslationWorkflow
@@ -31,6 +36,8 @@ __all__ = [
     "get_default_extractor_graph",
     "get_default_drafter_graph",
     "ProceduralGraphRefiner",
-    "DiagnosticTrace"
+    "DiagnosticTrace",
+    "GraphEditOperation",
+    "collect_traces_from_repository"
 ]
 

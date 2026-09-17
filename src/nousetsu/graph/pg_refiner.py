@@ -10,7 +10,7 @@ Executes an offline diagnostic loop:
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from pydantic import BaseModel, Field
 
 from nousetsu.agents.llm import extract_text_from_message, get_llm
@@ -59,6 +59,7 @@ class ProceduralGraphRefiner:
         self.llm = get_llm(model_name=self.model_name, temperature=0.2)
         self.rejection_memory: List[Dict[str, Any]] = []
         self.rejection_memory_path = rejection_memory_path
+        self.last_committed_edits: List[GraphEditOperation] = []
 
         if self.rejection_memory_path and self.rejection_memory_path.exists():
             try:
@@ -88,35 +89,44 @@ class ProceduralGraphRefiner:
             critique_notes=critique_notes
         )
 
+    def refine(
+        self,
+        graph: ProceduralGraph,
+        traces: List[DiagnosticTrace]
+    ) -> Tuple[ProceduralGraph, List[GraphEditOperation]]:
+        """Executes mutation and validation gating, returning (evolved_graph, committed_edits)."""
+        self.last_committed_edits = []
+        failure_traces = [t for t in traces if not t.is_success]
+        success_traces = [t for t in traces if t.is_success]
+
+        if not failure_traces:
+            logger.info("No failure traces detected. Retaining current graph.")
+            return graph, []
+
+        edits = self._propose_mutations(graph, failure_traces, success_traces)
+        if not edits:
+            logger.info("Refiner proposed no edits.")
+            return graph, []
+
+        candidate_graph = self._apply_edits(graph, edits)
+
+        if self._validate_candidate(candidate_graph):
+            logger.info(f"Committed {len(edits)} mutation(s) to graph '{graph.graph_id}'.")
+            self.last_committed_edits = edits
+            return candidate_graph, edits
+        else:
+            logger.warning("Candidate graph failed structural validation. Rolling back.")
+            self._record_rejection(edits, "Failed structural verification")
+            return graph, []
+
     def evolve_graph(
         self,
         graph: ProceduralGraph,
         traces: List[DiagnosticTrace]
     ) -> ProceduralGraph:
         """Executes Step 2 (Mutation) and Step 3 (Validation Gating) over input traces."""
-        failure_traces = [t for t in traces if not t.is_success]
-        success_traces = [t for t in traces if t.is_success]
-
-        if not failure_traces:
-            logger.info("No failure traces detected. Retaining current graph.")
-            return graph
-
-        # Generate mutation proposal via refiner LLM
-        edits = self._propose_mutations(graph, failure_traces, success_traces)
-        if not edits:
-            logger.info("Refiner proposed no edits.")
-            return graph
-
-        candidate_graph = self._apply_edits(graph, edits)
-
-        # Validation gate
-        if self._validate_candidate(candidate_graph):
-            logger.info(f"Committed {len(edits)} mutation(s) to graph '{graph.graph_id}'.")
-            return candidate_graph
-        else:
-            logger.warning("Candidate graph failed structural validation. Rolling back.")
-            self._record_rejection(edits, "Failed structural verification")
-            return graph
+        evolved, _ = self.refine(graph, traces)
+        return evolved
 
     def _propose_mutations(
         self,
@@ -261,3 +271,84 @@ Respond strictly in valid JSON:
                     json.dump(self.rejection_memory, f, indent=2)
             except Exception as e:
                 logger.warning(f"Could not persist rejection memory: {e}")
+
+
+def collect_traces_from_repository(
+    repo: Any,
+    folder: Optional[str] = None,
+    stage: str = "all",
+    max_traces: int = 50
+) -> List[DiagnosticTrace]:
+    """Collect diagnostic traces from project metadata and chapter execution records."""
+    traces: List[DiagnosticTrace] = []
+    try:
+        all_meta = repo.load_all_metadata()
+    except Exception as e:
+        logger.warning(f"Could not load metadata for traces: {e}")
+        all_meta = {}
+
+    for ch_key, ch_meta in all_meta.items():
+        if folder and folder.lower() not in ch_key.lower():
+            continue
+
+        audit = getattr(ch_meta, "quality_audit", None)
+        if not audit:
+            continue
+
+        artifacts = getattr(getattr(ch_meta, "checkpoint", None), "stage_artifacts", None)
+        critique_notes = getattr(artifacts, "critique_notes", "") or ""
+        draft_text = getattr(artifacts, "draft_text", "") or ""
+
+        # Extract source text snippet if file exists
+        source_snippet = ""
+        source_file = getattr(ch_meta, "source_file", None)
+        if source_file:
+            src_path = Path(source_file)
+            if not src_path.is_absolute() and hasattr(repo, "root_dir"):
+                src_path = repo.root_dir / src_path
+            if src_path.exists():
+                try:
+                    with open(src_path, "r", encoding="utf-8") as f:
+                        source_snippet = f.read(500)
+                except Exception:
+                    pass
+
+        ch_num = getattr(ch_meta, "chapter_num", 0)
+        ch_id = getattr(ch_meta, "chapter_id", f"chapter_{ch_num}")
+
+        if stage in ["all", "drafter"]:
+            trace = DiagnosticTrace(
+                trace_id=f"audit_{ch_id}_drafter",
+                stage="drafter",
+                context_snippet=source_snippet[:500],
+                output_snippet=draft_text[:500],
+                fidelity_score=getattr(audit, "fidelity_score", 9.0),
+                style_score=getattr(audit, "style_score", 9.0),
+                warnings=list(getattr(audit, "warnings", [])),
+                critique_notes=critique_notes
+            )
+            traces.append(trace)
+
+        if stage in ["all", "extractor"] and artifacts:
+            extracted_chars = getattr(artifacts, "extracted_characters", [])
+            extracted_terms = getattr(artifacts, "extracted_terms", [])
+            if extracted_chars or extracted_terms:
+                chars_summary = ", ".join([getattr(c, "name", str(c)) for c in extracted_chars[:5]])
+                terms_summary = ", ".join([getattr(t, "source", str(t)) for t in extracted_terms[:5]])
+                trace = DiagnosticTrace(
+                    trace_id=f"audit_{ch_id}_extractor",
+                    stage="extractor",
+                    context_snippet=source_snippet[:500],
+                    output_snippet=f"Chars: {chars_summary}; Terms: {terms_summary}",
+                    fidelity_score=getattr(audit, "fidelity_score", 9.0),
+                    style_score=getattr(audit, "style_score", 9.0),
+                    warnings=[w for w in getattr(audit, "warnings", []) if any(k in w.lower() for k in ["entity", "character", "glossary", "term"])],
+                    critique_notes=critique_notes
+                )
+                traces.append(trace)
+
+        if len(traces) >= max_traces:
+            break
+
+    return traces
+
