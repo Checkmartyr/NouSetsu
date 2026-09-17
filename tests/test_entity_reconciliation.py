@@ -342,3 +342,73 @@ def test_update_bible_memory_merges_pronouns_and_relational(tmp_path: Path):
     assert char.pronouns.relational == {"Amelia Barlen": "หนู/พี่"}
 
 
+def test_update_bible_memory_preserves_cjk_original_name_against_latin_overwrite(tmp_path: Path):
+    """Verify update_bible_memory guards true CJK original_name from being overwritten by Latin/corrupted text."""
+    repo = NovelRepository(tmp_path)
+    initial_char = CharacterProfile(
+        name="กีตส์ สโตลเลน",
+        original_name="ギーツ・シュトーレン",
+        gender="male",
+        role="supporting"
+    )
+    repo.save_bible(NovelBible(characters=[initial_char]))
+
+    # Incoming character with corrupted/Latin original_name
+    incoming_char = CharacterProfile(
+        name="กีตส์ สโตลเลน",
+        original_name="Gitz Stollen",
+        aliases=["กี้ตส์"]
+    )
+    repo.update_bible_memory(new_characters=[incoming_char], new_terms=[], summary=None)
+
+    updated_bible = repo.load_bible()
+    char = updated_bible.find_character("กีตส์ สโตลเลน")
+    assert char is not None
+    # CJK original name was preserved!
+    assert char.original_name == "ギーツ・シュトーレン"
+    assert "กี้ตส์" in char.aliases
+
+
+def test_update_bible_memory_upgrades_latin_to_cjk_original_name(tmp_path: Path):
+    """Verify update_bible_memory upgrades a Latin/empty original_name when incoming character has true CJK script."""
+    repo = NovelRepository(tmp_path)
+    initial_char = CharacterProfile(
+        name="กีตส์ สโตลเลน",
+        original_name="Gitz Stollen",
+        gender="male",
+        role="supporting"
+    )
+    repo.save_bible(NovelBible(characters=[initial_char]))
+
+    # Incoming character with true CJK Japanese original_name
+    incoming_char = CharacterProfile(
+        name="กีตส์ สโตลเลน",
+        original_name="ギーツ・シュトーレン",
+        aliases=["Gitz"]
+    )
+    repo.update_bible_memory(new_characters=[incoming_char], new_terms=[], summary=None)
+
+    updated_bible = repo.load_bible()
+    char = updated_bible.find_character("กีตส์ สโตลเลน")
+    assert char is not None
+    # Upgraded to CJK Japanese!
+    assert char.original_name == "ギーツ・シュトーレン"
+
+
+def test_update_bible_memory_preserves_and_upgrades_glossary_source_script(tmp_path: Path):
+    """Verify update_bible_memory preserves CJK source in glossary items and upgrades non-CJK sources."""
+    repo = NovelRepository(tmp_path)
+    initial_term = GlossaryItem(source="Type 38 Rifle", target="ปืนเล็กยาวราบแบบ 38", category="item")
+    repo.save_bible(NovelBible(glossary=[initial_term]))
+
+    # Incoming term with true CJK Japanese source
+    incoming_term = GlossaryItem(source="三八式歩兵銃", target="ปืนเล็กยาวราบแบบ 38", category="item")
+    repo.update_bible_memory(new_characters=[], new_terms=[incoming_term], summary=None)
+
+    updated_bible = repo.load_bible()
+    term = updated_bible.find_term("三八式歩兵銃") or updated_bible.find_term("ปืนเล็กยาวราบแบบ 38")
+    assert term is not None
+    assert term.source == "三八式歩兵銃"
+
+
+

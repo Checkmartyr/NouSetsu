@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import time
 from typing import Any, Dict, List, Optional, Tuple
 import yaml
@@ -481,11 +482,18 @@ class NovelRepository:
         """Atomically merge new characters, glossary items, and chapter summary into Bible, evolving existing entries."""
         bible = self.load_bible(folder=folder)
 
+        cjk_script_re = re.compile(r'[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af]')
         for new_char in new_characters:
             existing = bible.find_character(new_char.name) or bible.find_character(new_char.original_name)
             if not existing:
                 bible.characters.append(new_char)
             else:
+                # Evolve original_name only if existing is empty/Latin and new has true source script
+                if new_char.original_name and (
+                    not existing.original_name
+                    or (not cjk_script_re.search(existing.original_name) and cjk_script_re.search(new_char.original_name))
+                ):
+                    existing.original_name = new_char.original_name
                 # Merge new aliases deduplicated
                 for alias in new_char.aliases:
                     if alias and alias.lower() not in [a.lower() for a in existing.aliases]:
@@ -519,10 +527,16 @@ class NovelRepository:
                     existing.relationships.update(new_char.relationships)
 
         for new_term in new_terms:
-            existing_term = bible.find_term(new_term.source)
+            existing_term = bible.find_term(new_term.source) or bible.find_term(new_term.target)
             if not existing_term:
                 bible.glossary.append(new_term)
             else:
+                # Upgrade source if existing lacked source script while new term provides it
+                if new_term.source and (
+                    not existing_term.source
+                    or (not cjk_script_re.search(existing_term.source) and cjk_script_re.search(new_term.source))
+                ):
+                    existing_term.source = new_term.source
                 # Enrich notes if existing was empty
                 if not existing_term.notes and new_term.notes:
                     existing_term.notes = new_term.notes

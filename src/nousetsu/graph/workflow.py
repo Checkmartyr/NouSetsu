@@ -920,6 +920,7 @@ class NovelTranslationWorkflow:
             translated_text=final_text,
             genre=state.genre,
             source_lang=state.novel_bible.source_language,
+            target_lang=state.novel_bible.target_language,
             bible=state.novel_bible,
             rag_context=chr_rag_hits,
             notify_callback=lambda msg: self._notify(PipelineStage.CHRONICLING, msg, 95.0),

@@ -6,26 +6,33 @@ Your task is to analyze the source chapter text against the existing Novel Bible
 2. Domain-specific terminology (martial arts ranks, magic spells, locations, factions, special items).
 
 Identify which entities are NEW (not yet present in the existing Novel Bible) and propose canonical {target_lang} translations for them.
+
+## STRICT LANGUAGE INTEGRITY DIRECTIVES:
+1. `original_name` (character) and `source` (term) MUST be the EXACT text as written in the raw {source_lang} source text (e.g. Japanese Kanji/Katakana/Hiragana, Chinese Hanzi, Korean Hangul). NEVER translate, romanize, or write in English/{target_lang}.
+2. `name` (character) and `target` (term) MUST be localized canonical translations strictly in {target_lang} (e.g. Thai). NEVER leave in English or {source_lang}.
+3. `pronouns.source` MUST be in {source_lang} (e.g. 俺, 私, 彼女).
+4. `pronouns.target` MUST be in {target_lang} (e.g. ผม, ฉัน, เธอ, เขา).
+5. `voice` and `relationships` should be described in {target_lang} or English.
 {skills_section}
 {procedural_guidance}
 Respond strictly in valid JSON format:
 {{
   "new_characters": [
     {{
-      "name": "Translated Name",
-      "original_name": "Original Name",
-      "aliases": ["alias1"],
+      "name": "Translated character name strictly in {target_lang}",
+      "original_name": "Character name EXACTLY as written in the raw {source_lang} source text (e.g. Kanji/Katakana/Hangul/Hanzi), NEVER translated or romanized",
+      "aliases": ["Alternative names or nicknames in {target_lang} or {source_lang}"],
       "gender": "male/female/neutral/unknown",
-      "pronouns": {{"source": "he/him, I", "target": "canonical target pronoun"}},
+      "pronouns": {{"source": "pronoun(s) in {source_lang} (e.g. 俺, 私)", "target": "canonical pronoun(s) in {target_lang} (e.g. ผม, ฉัน, เธอ)"}},
       "role": "protagonist/antagonist/supporting/minor",
-      "voice": "speech quirks, politeness level, tone",
-      "relationships": {{"Character": "friend"}}
+      "voice": "speech quirks, politeness level, tone in {target_lang}",
+      "relationships": {{"Character": "relationship in {target_lang}"}}
     }}
   ],
   "new_terms": [
     {{
-      "source": "Original Term",
-      "target": "Translated Term",
+      "source": "Exact term as written in the raw {source_lang} source text, NEVER translated",
+      "target": "Canonical translated term strictly in {target_lang}",
       "category": "term/faction/location/skill/item/rank",
       "notes": "contextual usage"
     }}
@@ -172,7 +179,7 @@ Critique Notes:
 {critique_notes}
 """
 
-CHRONICLER_SYSTEM_PROMPT = """You are the master lorekeeper and chronicler for an ongoing novel series.
+CHRONICLER_SYSTEM_PROMPT = """You are the master lorekeeper and chronicler for an ongoing {source_lang} to {target_lang} novel series.
 Analyze the final translated chapter and produce:
 1. A concise synopsis of what transpired in this chapter.
 2. Key events and turning points.
@@ -181,12 +188,19 @@ Analyze the final translated chapter and produce:
 5. Overarching whole-story progression (synthesize if an arc completed or major milestone reached).
 6. Reconciled Terms & Characters:
 Examine any provisional terms and characters extracted prior to translation against the final translated prose.
-- For terms: If the provisional English target term was refined or localized differently during drafting/polishing (e.g. provisional 'Cyan Lightning Sword' was polished into 'Azure Thunder Blade'), update the `target` to the exact term used in prose. Exclude any false-positive terms that were not actually used or translated as specific lore.
-- For characters: Confirm character names, roles, and any nicknames/titles used in the final translation. If a character name's spelling was modified in prose, update `name` and record alternative address forms in `aliases`.
-  Crucially, observe interpersonal dialogue to extract and reconcile pronouns and relational address:
-  * Record general pronouns in `pronouns.source` and `pronouns.target`.
-  * Record relational pronouns used between specific character pairs in `pronouns.relational` (e.g. {{"RelatedCharacter": "self_pronoun/addressee_pronoun"}} like {{"Amelia": "หนู/พี่"}}, {{"Master": "กระผม/ท่าน"}}).
-  * Update relationship dynamics in `relationships` (e.g. {{"RelatedCharacter": "partner/wife"}}).
+## STRICT LANGUAGE INTEGRITY RULES:
+- For characters: Confirm character names, roles, and any nicknames/titles used in the final {target_lang} translation.
+  * `name` MUST be the final translated character name strictly in {target_lang}.
+  * `original_name` MUST remain the exact original name in {source_lang} (e.g. Japanese Kanji/Katakana). NEVER replace it with translated {target_lang} or romanized English!
+  * If a character name's spelling was modified in prose, update `name` and record alternative address forms in `aliases`.
+  * Crucially, observe interpersonal dialogue to extract and reconcile pronouns and relational address:
+    - Record general pronouns in `pronouns.source` ({source_lang}) and `pronouns.target` ({target_lang}).
+    - Record relational pronouns used between specific character pairs in `pronouns.relational` (e.g. {{"RelatedCharacter": "self_pronoun/addressee_pronoun in {target_lang}"}}).
+    - Update relationship dynamics in `relationships` (e.g. {{"RelatedCharacter": "partner/wife in {target_lang}"}}).
+- For terms:
+  * `source` MUST remain the exact term from the raw {source_lang} text. NEVER emit translated {target_lang} or English into `source`.
+  * `target` MUST be the final localized term strictly in {target_lang} actually used in prose.
+  * Exclude any false-positive terms that were not actually used or translated as specific lore.
 {skills_section}
 {provisional_entities_section}
 
@@ -194,41 +208,41 @@ Respond strictly in valid JSON format:
 {{
   "chapter_num": {chapter_num},
   "title": "{chapter_title}",
-  "synopsis": "Detailed 2-3 paragraph summary of plot events...",
+  "synopsis": "Detailed 2-3 paragraph summary of plot events in {target_lang}...",
   "key_events": [
     "Event 1",
     "Event 2"
   ],
   "character_state_changes": [
-    "Allen acquired the Obsidian Relic",
-    "Seraphina revealed her lineage"
+    "Character status shift 1",
+    "Character status shift 2"
   ],
   "reconciled_characters": [
     {{
-      "name": "Final translated character name",
-      "original_name": "Original raw name in source text",
+      "name": "Final translated character name strictly in {target_lang}",
+      "original_name": "Original character name EXACTLY as written in raw {source_lang} text (e.g. Japanese Kanji/Katakana), NEVER translated or romanized",
       "aliases": ["Nicknames or variants used in text"],
       "gender": "male/female/unspecified",
       "pronouns": {{
-        "source": "source pronouns",
-        "target": "confirmed target pronouns used in prose",
-        "relational": {{"RelatedCharacter": "self/addressee pronouns"}}
+        "source": "source pronouns in {source_lang}",
+        "target": "confirmed target pronouns in {target_lang} used in prose",
+        "relational": {{"RelatedCharacter": "self/addressee pronouns in {target_lang}"}}
       }},
       "role": "protagonist/antagonist/supporting/minor",
-      "voice": "Speech style or register in translation",
-      "relationships": {{"RelatedCharacter": "relationship bond"}}
+      "voice": "Speech style or register in {target_lang}",
+      "relationships": {{"RelatedCharacter": "relationship bond in {target_lang}"}}
     }}
   ],
   "reconciled_terms": [
     {{
-      "source": "Original source term",
-      "target": "Final translated term actually used in prose",
+      "source": "Exact term from raw {source_lang} text, NEVER translated",
+      "target": "Final localized term strictly in {target_lang} actually used in prose",
       "category": "term/item/skill/location/faction/rank",
       "notes": "Contextual usage notes"
     }}
   ],
   "arc_update": {{
-    "title": "Current Arc Title (e.g. Royal Academy Entrance)",
+    "title": "Current Arc Title",
     "core_conflict": "Central conflict or objective of this arc",
     "synopsis": "Cumulative progression of the active arc so far",
     "milestones": [

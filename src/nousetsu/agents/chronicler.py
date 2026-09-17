@@ -86,24 +86,31 @@ class ChroniclerAgent:
         translated_text: str,
         genre: Optional[str] = None,
         source_lang: Optional[str] = None,
+        target_lang: Optional[str] = None,
         bible: Optional[NovelBible] = None,
         rag_context: Optional[List[Any]] = None,
         extracted_characters: Optional[List[CharacterProfile]] = None,
         extracted_terms: Optional[List[GlossaryItem]] = None,
         **kwargs: Any
     ) -> ChapterSummary:
+        resolved_src = source_lang or (bible.source_language if bible else "Japanese")
+        resolved_tgt = target_lang or (bible.target_language if bible else "Thai")
+
         skills_text = SkillRegistry.get_instance().build_prompt_section(
             agent="chronicler",
-            source_lang=source_lang,
+            source_lang=resolved_src,
             genre=genre or "general"
         )
         skills_section = f"\n{skills_text}\n" if skills_text else ""
 
         provisional_entities_section = ""
         if extracted_characters or extracted_terms:
-            lines = ["\nStage 1 Provisional Entities for Reconciliation:"]
+            lines = [
+                "\nStage 1 Provisional Entities for Reconciliation:",
+                f"Note: Original names and terms are strictly in {resolved_src}. Retain source script in original_name and source."
+            ]
             if extracted_characters:
-                lines.append("Characters:")
+                lines.append(f"Characters (PRESERVE exact {resolved_src} source name in original_name, DO NOT translate or romanize original_name):")
                 for c in extracted_characters:
                     char_desc = f"- Name: {c.name} (Source: {c.original_name}, Role: {c.role})"
                     if c.pronouns and (c.pronouns.source or c.pronouns.target):
@@ -112,7 +119,7 @@ class ChroniclerAgent:
                         char_desc += f" [Relationships: {', '.join(f'{k}: {v}' for k, v in c.relationships.items())}]"
                     lines.append(char_desc)
             if extracted_terms:
-                lines.append("Terms:")
+                lines.append(f"Terms (PRESERVE exact {resolved_src} term in source, DO NOT translate source):")
                 for t in extracted_terms:
                     lines.append(f"- {t.source} -> {t.target} [{t.category}]")
             provisional_entities_section = "\n".join(lines) + "\n"
@@ -130,6 +137,8 @@ class ChroniclerAgent:
         sys_msg = CHRONICLER_SYSTEM_PROMPT.format(
             chapter_num=chapter_num,
             chapter_title=chapter_title or f"Chapter {chapter_num}",
+            source_lang=resolved_src,
+            target_lang=resolved_tgt,
             skills_section=skills_section,
             provisional_entities_section=provisional_entities_section,
             rag_context_section=rag_section

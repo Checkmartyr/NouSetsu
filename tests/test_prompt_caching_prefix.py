@@ -76,6 +76,8 @@ def test_polishing_and_patch_prompt_prefix_alignment():
 
 def test_chronicler_prompt_prefix_alignment():
     formatted = CHRONICLER_SYSTEM_PROMPT.format(
+        source_lang="Japanese",
+        target_lang="English",
         chapter_num=5,
         chapter_title="Battle of Dawn",
         skills_section="[Skill: Lore]",
