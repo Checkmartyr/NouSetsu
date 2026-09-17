@@ -148,3 +148,18 @@ def test_pg_refiner_mutations_and_validation(tmp_path):
     refiner._record_rejection([invalid_edit], "Target node does not exist")
     assert len(refiner.rejection_memory) == 1
     assert memory_file.exists()
+
+
+def test_cmd_graph_info_renders(capsys):
+    """Verify cmd_graph_info executes and renders Rich trees without errors."""
+    import argparse
+    from nousetsu.cli.app import cmd_graph_info
+
+    # Test all
+    cmd_graph_info(argparse.Namespace(agent="all"))
+    # Test extractor
+    cmd_graph_info(argparse.Namespace(agent="extractor"))
+    # Test drafter
+    cmd_graph_info(argparse.Namespace(agent="drafter"))
+    # Test invalid agent
+    cmd_graph_info(argparse.Namespace(agent="non_existent"))

@@ -220,6 +220,9 @@ def cmd_graph_info(args: argparse.Namespace) -> None:
             if e.pitfalls:
                 edge_leaf.add(f"[red bold]Pitfalls to Avoid:[/] {e.pitfalls}")
 
+        console.print(Panel(tree, border_style="cyan", padding=(1, 2)))
+
+
 def cmd_narrative(args: argparse.Namespace) -> None:
     from rich.tree import Tree
     project_dir = getattr(args, "project_dir", None)
