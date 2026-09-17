@@ -185,6 +185,7 @@ def cmd_skills(args: argparse.Namespace) -> None:
 def cmd_graph_info(args: argparse.Namespace) -> None:
     """Display active Procedural Graphs with Rich tree formatting."""
     from rich.panel import Panel
+    from rich.tree import Tree
     from nousetsu.graph.procedural import (
         get_default_chronicler_graph,
         get_default_critic_graph,
@@ -193,19 +194,33 @@ def cmd_graph_info(args: argparse.Namespace) -> None:
         get_default_polisher_graph,
     )
 
+    project_dir = getattr(args, "project_dir", None)
+    folder = getattr(args, "folder", None)
+    if folder and not project_dir:
+        candidate_p = Path(folder)
+        if (candidate_p / ".novel").exists() or (candidate_p / "config.yaml").exists():
+            project_dir = str(candidate_p)
+            folder = None
+
+    repo = NovelRepository(project_dir) if project_dir else NovelRepository()
     agent_filter = (getattr(args, "agent", None) or "all").lower()
 
     graphs_to_show = []
     if agent_filter in ["all", "extractor"]:
-        graphs_to_show.append(("Entity Extractor", get_default_extractor_graph()))
+        g = repo.load_procedural_graph("extractor", folder=folder) or get_default_extractor_graph()
+        graphs_to_show.append(("Entity Extractor", g))
     if agent_filter in ["all", "drafter"]:
-        graphs_to_show.append(("Context-Aware Drafter", get_default_drafter_graph()))
+        g = repo.load_procedural_graph("drafter", folder=folder) or get_default_drafter_graph()
+        graphs_to_show.append(("Context-Aware Drafter", g))
     if agent_filter in ["all", "critic"]:
-        graphs_to_show.append(("Critique Agent", get_default_critic_graph()))
+        g = repo.load_procedural_graph("critic", folder=folder) or get_default_critic_graph()
+        graphs_to_show.append(("Critique Agent", g))
     if agent_filter in ["all", "polisher"]:
-        graphs_to_show.append(("Polishing Agent", get_default_polisher_graph()))
+        g = repo.load_procedural_graph("polisher", folder=folder) or get_default_polisher_graph()
+        graphs_to_show.append(("Polishing Agent", g))
     if agent_filter in ["all", "chronicler"]:
-        graphs_to_show.append(("Chronicler Agent", get_default_chronicler_graph()))
+        g = repo.load_procedural_graph("chronicler", folder=folder) or get_default_chronicler_graph()
+        graphs_to_show.append(("Chronicler Agent", g))
 
     if not graphs_to_show:
         console.print(f"[yellow]No procedural graph found for agent '{args.agent}'. Use 'extractor', 'drafter', 'critic', 'polisher', 'chronicler', or 'all'.[/]")
@@ -249,8 +264,14 @@ def cmd_learn_graph(args: argparse.Namespace) -> None:
     )
 
     project_dir = getattr(args, "project_dir", None)
-    repo = NovelRepository(project_dir) if project_dir else NovelRepository()
     folder = getattr(args, "folder", None)
+    if folder and not project_dir:
+        candidate_p = Path(folder)
+        if (candidate_p / ".novel").exists() or (candidate_p / "config.yaml").exists():
+            project_dir = str(candidate_p)
+            folder = None
+
+    repo = NovelRepository(project_dir) if project_dir else NovelRepository()
     agent_target = (getattr(args, "agent", None) or "all").lower()
     max_traces = getattr(args, "max_traces", 20) or 20
     dry_run = getattr(args, "dry_run", False)
@@ -937,6 +958,8 @@ def main() -> None:
 
     # graph-info
     p_graph = subparsers.add_parser("graph-info", help="Inspect Procedural Graphs with Rich tree formatting (arXiv:2609.09153v1)")
+    p_graph.add_argument("--project-dir", "-p", default=None, help="Root folder of novel project")
+    p_graph.add_argument("--folder", "-F", default=None, help="Filter by specific volume folder")
     p_graph.add_argument("--agent", "-a", choices=["all", "extractor", "drafter", "critic", "polisher", "chronicler"], default="all", help="Filter by agent graph (default: all)")
 
     # learn-graph / refine-graph
