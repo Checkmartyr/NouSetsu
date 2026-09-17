@@ -7,6 +7,7 @@ import time
 from typing import Any, List, Optional, Tuple
 from langchain_core.messages import HumanMessage, SystemMessage
 from nousetsu.agents.llm import extract_text_from_message, extract_usage_from_message, get_llm, invoke_structured
+from nousetsu.graph.procedural import ProceduralGraph, get_default_critic_graph
 from nousetsu.models.bible import CharacterProfile, GlossaryItem, NovelBible
 from nousetsu.models.metadata import QualityAudit, TokenUsage
 from nousetsu.models.schemas import CritiqueResult
@@ -33,6 +34,7 @@ class CritiqueAgent:
         self,
         model_name: str = "gemma-4-26b-a4b-it",
         fallback_model: Optional[str] = None,
+        procedural_graph: Optional[ProceduralGraph] = None,
         chunker: Optional[Any] = None,
         enable_recursive_subdivision: bool = True,
         subdivision_min_lines: int = 8,
@@ -71,6 +73,7 @@ class CritiqueAgent:
             thinking_budget=critic_thinking_budget,
         )
         self.last_usage: TokenUsage = TokenUsage()
+        self.procedural_graph = procedural_graph or get_default_critic_graph()
         self.chunker = chunker
         self.safety_fallbacks_used: int = 0
         self.enable_recursive_subdivision = enable_recursive_subdivision
@@ -153,7 +156,8 @@ class CritiqueAgent:
         depth: int = 0,
         rag_context: Optional[List[Any]] = None,
         prompt_tracker: Optional[Any] = None,
-        iteration: int = 1
+        iteration: int = 1,
+        procedural_graph: Optional[ProceduralGraph] = None
     ) -> Tuple[QualityAudit, str]:
         # Filter glossary to terms actually present in this chapter to avoid prompt bloat
         eval_glossary = filter_glossary_for_scene(
@@ -207,12 +211,18 @@ class CritiqueAgent:
                 canon_lines.append(f"- [{title}]: {clamp_sentence_boundary(content, 350)}")
             rag_section = "\nCanonical Series Memory & Prior Translations (via RAG):\n" + "\n".join(canon_lines) + "\n"
 
+        # Procedural Graph guidance (Lu et al., arXiv:2609.09153v1)
+        active_pg = procedural_graph or self.procedural_graph
+        guidance_text = active_pg.to_compact_guidance("Audit_Init", max_hops=2) if active_pg else ""
+        procedural_section = f"\n{guidance_text}\n" if guidance_text else ""
+
         sys_msg = CRITIQUE_SYSTEM_PROMPT.format(
             source_lang=bible.source_language,
             target_lang=bible.target_language,
             characters=chars_str,
             glossary=gloss_str,
             skills_section=skills_section,
+            procedural_guidance=procedural_section,
             rag_canon_section=rag_section
         )
 
@@ -282,7 +292,8 @@ class CritiqueAgent:
                             depth=depth + 1,
                             rag_context=rag_context,
                             prompt_tracker=tracker,
-                            iteration=iteration
+                            iteration=iteration,
+                            procedural_graph=procedural_graph
                         )
                         left_usage = self.last_usage
                         audit_right, notes_right = self._evaluate_single(
@@ -297,7 +308,8 @@ class CritiqueAgent:
                             depth=depth + 1,
                             rag_context=rag_context,
                             prompt_tracker=tracker,
-                            iteration=iteration
+                            iteration=iteration,
+                            procedural_graph=procedural_graph
                         )
                         self.last_usage = left_usage.add(self.last_usage)
                         combined_fid = round((audit_left.fidelity_score + audit_right.fidelity_score) / 2.0, 1)
@@ -425,6 +437,7 @@ class CritiqueAgent:
         rate_limiter: Optional[Any] = None,
         stop_event: Optional[Any] = None,
         rag_context: Optional[List[Any]] = None,
+        procedural_graph: Optional[ProceduralGraph] = None,
         **kwargs: Any
     ) -> Tuple[QualityAudit, str]:
         """Audits translation chunk-by-chunk to prevent single-prompt safety blocks and context saturation."""
@@ -472,7 +485,8 @@ class CritiqueAgent:
                 total_chunks=total_chunks,
                 rag_context=rag_context,
                 prompt_tracker=kwargs.get("prompt_tracker") or getattr(self, "prompt_tracker", None),
-                iteration=kwargs.get("iteration", 1)
+                iteration=kwargs.get("iteration", 1),
+                procedural_graph=procedural_graph
             )
             fidelity_scores.append(chunk_audit.fidelity_score)
             style_scores.append(chunk_audit.style_score)
@@ -548,6 +562,7 @@ class CritiqueAgent:
         rate_limiter: Optional[Any] = None,
         stop_event: Optional[Any] = None,
         rag_context: Optional[List[Any]] = None,
+        procedural_graph: Optional[ProceduralGraph] = None,
         **kwargs: Any
     ) -> Tuple[QualityAudit, str]:
         if chunks is None and self.chunker and hasattr(self.chunker, "should_chunk"):
@@ -567,6 +582,7 @@ class CritiqueAgent:
                 rate_limiter=rate_limiter,
                 stop_event=stop_event,
                 rag_context=rag_context,
+                procedural_graph=procedural_graph,
                 **kwargs
             )
 
@@ -580,7 +596,8 @@ class CritiqueAgent:
             genre=genre,
             rag_context=rag_context,
             prompt_tracker=kwargs.get("prompt_tracker") or getattr(self, "prompt_tracker", None),
-            iteration=kwargs.get("iteration", 1)
+            iteration=kwargs.get("iteration", 1),
+            procedural_graph=procedural_graph
         )
 
         # Programmatic check only against glossary terms that actually appeared in the source text

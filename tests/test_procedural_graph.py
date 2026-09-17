@@ -1,7 +1,10 @@
 """Tests for Procedural Graph integration in Extractor and Drafter agents (arXiv:2609.09153v1)."""
 import pytest
+from nousetsu.agents.chronicler import ChroniclerAgent
+from nousetsu.agents.critic import CritiqueAgent
 from nousetsu.agents.drafter import ContextAwareDrafterAgent
 from nousetsu.agents.extractor import EntityExtractorAgent
+from nousetsu.agents.polisher import PolishingAgent
 from nousetsu.graph.pg_refiner import DiagnosticTrace, GraphEditOperation, ProceduralGraphRefiner
 from nousetsu.graph.procedural import (
     ProceduralEdge,
@@ -9,8 +12,11 @@ from nousetsu.graph.procedural import (
     ProceduralNode,
     ProceduralNodeType,
     ProceduralRelation,
+    get_default_chronicler_graph,
+    get_default_critic_graph,
     get_default_drafter_graph,
     get_default_extractor_graph,
+    get_default_polisher_graph,
 )
 from nousetsu.models.bible import NovelBible, StyleGuide
 from nousetsu.models.metadata import QualityAudit
@@ -214,11 +220,16 @@ def test_collect_traces_from_repository(tmp_path):
     repo.save_all_metadata({"chapter_0001": ch})
 
     traces = collect_traces_from_repository(repo, stage="all")
-    assert len(traces) == 1
-    assert traces[0].stage == "drafter"
-    assert traces[0].is_success is False
-    assert traces[0].fidelity_score == 7.0
-    assert "Speaker attribution reversed" in traces[0].critique_notes
+    assert len(traces) == 2
+    stages = {t.stage for t in traces}
+    assert stages == {"drafter", "critic"}
+
+    drafter_traces = collect_traces_from_repository(repo, stage="drafter")
+    assert len(drafter_traces) == 1
+    assert drafter_traces[0].stage == "drafter"
+    assert drafter_traces[0].is_success is False
+    assert drafter_traces[0].fidelity_score == 7.0
+    assert "Speaker attribution reversed" in drafter_traces[0].critique_notes
 
 
 def test_cmd_learn_graph_cli(tmp_path, monkeypatch):
@@ -319,5 +330,96 @@ def test_cmd_learn_graph_cli(tmp_path, monkeypatch):
         matching_edge = next(e for e in evolved.edges if e.source == "Zero_Anaphora_Resolution" and e.target == "Voice_Modulation")
         assert matching_edge.guidance == "Verify turn-taking in rapid dialogue."
         assert matching_edge.pitfalls == "Do not swap character speaker registers."
+
+
+def test_default_graphs_for_all_agents():
+    """Verify default procedural graph creation, node count, and edge count for all 5 agents."""
+    c_g = get_default_critic_graph()
+    assert c_g.graph_id == "critic_default_v1"
+    assert len(c_g.nodes) == 5
+    assert len(c_g.edges) == 4
+    c_guidance = c_g.to_compact_guidance("Audit_Init", max_hops=2)
+    assert "Omission Verification" in c_guidance or "line-by-line alignment" in c_guidance
+    assert len(c_guidance.split()) < 120
+
+    p_g = get_default_polisher_graph()
+    assert p_g.graph_id == "polisher_default_v1"
+    assert len(p_g.nodes) == 5
+    assert len(p_g.edges) == 4
+    p_guidance = p_g.to_compact_guidance("Inspect_Critique", max_hops=2)
+    assert "Title & Heading Lock" in p_guidance or "critique notes" in p_guidance
+    assert len(p_guidance.split()) < 120
+
+    chr_g = get_default_chronicler_graph()
+    assert chr_g.graph_id == "chronicler_default_v1"
+    assert len(chr_g.nodes) == 5
+    assert len(chr_g.edges) == 4
+    chr_guidance = chr_g.to_compact_guidance("Chapter_Deconstruction", max_hops=2)
+    assert "State Shift Tracking" in chr_guidance or "plot developments" in chr_guidance
+    assert len(chr_guidance.split()) < 120
+
+
+def test_critic_polisher_chronicler_agent_procedural_graph_integration():
+    """Verify CritiqueAgent, PolishingAgent, and ChroniclerAgent format and use procedural graphs."""
+    bible = NovelBible(
+        novel_title="Test Novel",
+        source_language="Japanese",
+        target_language="English",
+        style_guide=StyleGuide()
+    )
+
+    critic = CritiqueAgent(model_name="mock-novel-llm")
+    assert critic.procedural_graph is not None
+    assert critic.procedural_graph.graph_id == "critic_default_v1"
+    audit, notes = critic.evaluate(
+        source_text="佐藤は剣を抜いた。「行くぞ！」",
+        draft_text="Sato drew his sword. 'Let's go!'",
+        bible=bible,
+        active_characters=[],
+        active_glossary=[]
+    )
+    assert audit.fidelity_score > 0
+
+    polisher = PolishingAgent(model_name="mock-novel-llm")
+    assert polisher.procedural_graph is not None
+    assert polisher.procedural_graph.graph_id == "polisher_default_v1"
+    polished = polisher.polish(
+        draft_text="Sato drew his sword. 'Let's go!'",
+        critique_notes="Smooth prose cadence.",
+        active_glossary=[],
+        bible=bible
+    )
+    assert len(polished) > 0
+
+    chronicler = ChroniclerAgent(model_name="mock-novel-llm")
+    assert chronicler.procedural_graph is not None
+    assert chronicler.procedural_graph.graph_id == "chronicler_default_v1"
+    summary = chronicler.chronicle(
+        chapter_num=1,
+        chapter_title="Chapter 1",
+        translated_text="Sato drew his sword. 'Let's go!'",
+        bible=bible
+    )
+    assert summary.chapter_num == 1
+
+
+def test_workflow_wiring_all_procedural_graphs():
+    """Verify NovelTranslationWorkflow forwards all procedural graphs to respective agents."""
+    from nousetsu.graph.workflow import NovelTranslationWorkflow
+
+    c_g = get_default_critic_graph()
+    p_g = get_default_polisher_graph()
+    chr_g = get_default_chronicler_graph()
+
+    wf = NovelTranslationWorkflow(
+        model_name="mock-novel-llm",
+        critic_pg=c_g,
+        polisher_pg=p_g,
+        chronicler_pg=chr_g
+    )
+    assert wf.critic.procedural_graph == c_g
+    assert wf.polisher.procedural_graph == p_g
+    assert wf.chronicler.procedural_graph == chr_g
+
 
 

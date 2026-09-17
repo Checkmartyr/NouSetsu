@@ -50,6 +50,9 @@ class NovelTranslationWorkflow:
         chunk_overlap_lines: int = 3,
         extractor_pg: Optional[Any] = None,
         drafter_pg: Optional[Any] = None,
+        critic_pg: Optional[Any] = None,
+        polisher_pg: Optional[Any] = None,
+        chronicler_pg: Optional[Any] = None,
         safety_recursive_subdivision: bool = True,
         safety_subdivision_min_lines: int = 8,
         safety_subdivision_max_depth: int = 4,
@@ -122,6 +125,7 @@ class NovelTranslationWorkflow:
         self.critic = CritiqueAgent(
             model_name=self.critic_model,
             fallback_model=self.fallback_model,
+            procedural_graph=critic_pg,
             chunker=self.chunker,
             enable_recursive_subdivision=self.safety_recursive_subdivision,
             subdivision_min_lines=self.safety_subdivision_min_lines,
@@ -129,12 +133,14 @@ class NovelTranslationWorkflow:
         )
         self.polisher = PolishingAgent(
             model_name=self.polisher_model,
-            fallback_model=self.fallback_model
+            fallback_model=self.fallback_model,
+            procedural_graph=polisher_pg
         )
         self.drafter.polisher = self.polisher
         self.chronicler = ChroniclerAgent(
             model_name=self.chronicler_model,
-            fallback_model=self.fallback_model
+            fallback_model=self.fallback_model,
+            procedural_graph=chronicler_pg
         )
         self.rag_engine = rag_engine
         self.enable_rag = enable_rag

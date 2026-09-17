@@ -9,6 +9,7 @@ from typing import Any, List, Optional
 logger = logging.getLogger(__name__)
 from langchain_core.messages import HumanMessage, SystemMessage
 from nousetsu.agents.llm import extract_text_from_message, extract_usage_from_message, get_llm, invoke_structured
+from nousetsu.graph.procedural import ProceduralGraph, get_default_chronicler_graph
 from nousetsu.models.bible import ChapterSummary, CharacterProfile, GlossaryItem, NovelBible
 from nousetsu.models.schemas import ChroniclerResult
 from nousetsu.models.metadata import (
@@ -37,6 +38,7 @@ class ChroniclerAgent:
         self,
         model_name: str = "gemma-4-26b-a4b-it",
         fallback_model: Optional[str] = None,
+        procedural_graph: Optional[ProceduralGraph] = None,
         thinking_level: Optional[str] = None,
         thinking_budget: Optional[int] = None,
     ):
@@ -70,6 +72,7 @@ class ChroniclerAgent:
             thinking_budget=chronicler_thinking_budget,
         )
         self.last_usage: TokenUsage = TokenUsage()
+        self.procedural_graph = procedural_graph or get_default_chronicler_graph()
         self.safety_fallbacks_used: int = 0
         self.prompt_tracker: Optional[Any] = None
 
@@ -91,6 +94,7 @@ class ChroniclerAgent:
         rag_context: Optional[List[Any]] = None,
         extracted_characters: Optional[List[CharacterProfile]] = None,
         extracted_terms: Optional[List[GlossaryItem]] = None,
+        procedural_graph: Optional[ProceduralGraph] = None,
         **kwargs: Any
     ) -> ChapterSummary:
         resolved_src = source_lang or (bible.source_language if bible else "Japanese")
@@ -134,12 +138,18 @@ class ChroniclerAgent:
                 formatted_lore.append(f"[{title}]: {clamp_sentence_boundary(content, 350)}")
             rag_section = "\nPrior Series Lore & Character Memory (via RAG):\n" + "\n".join(formatted_lore) + "\n"
 
+        # Procedural Graph guidance (Lu et al., arXiv:2609.09153v1)
+        active_pg = procedural_graph or kwargs.get("procedural_graph") or self.procedural_graph
+        guidance_text = active_pg.to_compact_guidance("Chapter_Deconstruction", max_hops=2) if active_pg else ""
+        procedural_section = f"\n{guidance_text}\n" if guidance_text else ""
+
         sys_msg = CHRONICLER_SYSTEM_PROMPT.format(
             chapter_num=chapter_num,
             chapter_title=chapter_title or f"Chapter {chapter_num}",
             source_lang=resolved_src,
             target_lang=resolved_tgt,
             skills_section=skills_section,
+            procedural_guidance=procedural_section,
             provisional_entities_section=provisional_entities_section,
             rag_context_section=rag_section
         )

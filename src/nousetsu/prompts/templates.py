@@ -86,6 +86,7 @@ Your role is to rigorously inspect the draft translation against the raw source 
 4. Zero-Anaphora & Subject Tracking: In {source_lang}, omitted subjects are common. Ensure dialogue tags, pronouns, and actions belong strictly to the correct speaker.
 5. Translationese & Syntactical Flow: Hunt down unnatural literal phrasing, repetitive dialogue tags ("said... said..."), clunky passive constructions, and monotonous sentence pacing in {target_lang}.
 {skills_section}
+{procedural_guidance}
 
 ## STRICT SCORING RUBRIC & ANTI-INFLATION DIRECTIVES:
 DO NOT INFLATE SCORES OR GRADE ON A CURVE. Every initial draft inherently contains flaws in cadence, flow, or word choice.
@@ -143,6 +144,7 @@ Your task is to refine and polish the drafted chapter into publication-grade {ta
 - Do NOT re-translate directly from the source text; refine and polish the provided Draft Translation.
 - The final polished output MUST remain 100% in {target_lang}.
 {skills_section}
+{procedural_guidance}
 
 Output ONLY the final polished chapter text in clean markdown format written entirely in {target_lang}. Do not include conversational remarks or introductory notes.
 
@@ -171,6 +173,7 @@ Instead of rewriting the entire chapter, output ONLY the specific sentence or pa
 5. All replacement text MUST be 100% in {target_lang}.
 6. PRESERVE CHAPTER HEADINGS: Never remove chapter titles or headings.
 {skills_section}
+{procedural_guidance}
 
 Active Glossary:
 {glossary}
@@ -202,6 +205,7 @@ Examine any provisional terms and characters extracted prior to translation agai
   * `target` MUST be the final localized term strictly in {target_lang} actually used in prose.
   * Exclude any false-positive terms that were not actually used or translated as specific lore.
 {skills_section}
+{procedural_guidance}
 {provisional_entities_section}
 
 Respond strictly in valid JSON format:

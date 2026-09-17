@@ -6,7 +6,10 @@ from nousetsu.graph.procedural import (
     ProceduralNodeType,
     ProceduralRelation,
     get_default_extractor_graph,
-    get_default_drafter_graph
+    get_default_drafter_graph,
+    get_default_critic_graph,
+    get_default_polisher_graph,
+    get_default_chronicler_graph
 )
 from nousetsu.graph.pg_refiner import (
     DiagnosticTrace,
@@ -35,6 +38,9 @@ __all__ = [
     "ProceduralRelation",
     "get_default_extractor_graph",
     "get_default_drafter_graph",
+    "get_default_critic_graph",
+    "get_default_polisher_graph",
+    "get_default_chronicler_graph",
     "ProceduralGraphRefiner",
     "DiagnosticTrace",
     "GraphEditOperation",

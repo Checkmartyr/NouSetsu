@@ -53,7 +53,8 @@ def test_critique_prompt_prefix_alignment():
         glossary="- Katana -> Katana",
         characters="- Bob",
         rag_canon_section="[Lore: Royal Guard]",
-        skills_section="[Skill: QA]"
+        skills_section="[Skill: QA]",
+        procedural_guidance="[PG Step 3]"
     )
     # Evaluation rubric and JSON schema appear before dynamic glossary/characters
     assert formatted.index("EVALUATION CRITERIA") < formatted.index("Active Glossary:")
@@ -68,7 +69,8 @@ def test_polishing_and_patch_prompt_prefix_alignment():
             source_lang="Japanese",
             critique_notes="Smooth rhythm",
             glossary="- Katana -> Katana",
-            skills_section="[Skill: Prose]"
+            skills_section="[Skill: Prose]",
+            procedural_guidance="[PG Step 4]"
         )
         assert formatted.index("elite novelist") < formatted.index("Active Glossary:")
         assert formatted.index("Active Glossary:") < formatted.index("Critique Notes:")
@@ -81,6 +83,7 @@ def test_chronicler_prompt_prefix_alignment():
         chapter_num=5,
         chapter_title="Battle of Dawn",
         skills_section="[Skill: Lore]",
+        procedural_guidance="[PG Step 5]",
         provisional_entities_section="[Provisional Entities]",
         rag_context_section="[Prior Lore]"
     )

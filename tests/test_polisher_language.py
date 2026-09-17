@@ -19,7 +19,8 @@ def test_polishing_prompt_target_language_directive():
         source_lang="English",
         critique_notes="Make it smoother",
         glossary="None",
-        skills_section=""
+        skills_section="",
+        procedural_guidance=""
     )
     assert "Thai" in formatted
     assert "English" in formatted

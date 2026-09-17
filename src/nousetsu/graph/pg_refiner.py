@@ -349,6 +349,50 @@ def collect_traces_from_repository(
                 )
                 traces.append(trace)
 
+        if stage in ["all", "critic"]:
+            trace = DiagnosticTrace(
+                trace_id=f"audit_{ch_id}_critic",
+                stage="critic",
+                context_snippet=source_snippet[:500],
+                output_snippet=critique_notes[:500],
+                fidelity_score=getattr(audit, "fidelity_score", 9.0),
+                style_score=getattr(audit, "style_score", 9.0),
+                warnings=list(getattr(audit, "warnings", [])),
+                critique_notes=critique_notes
+            )
+            traces.append(trace)
+
+        if stage in ["all", "polisher"] and artifacts:
+            polished_text = getattr(artifacts, "polished_text", "") or ""
+            if polished_text:
+                trace = DiagnosticTrace(
+                    trace_id=f"audit_{ch_id}_polisher",
+                    stage="polisher",
+                    context_snippet=draft_text[:500],
+                    output_snippet=polished_text[:500],
+                    fidelity_score=getattr(audit, "fidelity_score", 9.0),
+                    style_score=getattr(audit, "style_score", 9.0),
+                    warnings=list(getattr(audit, "warnings", [])),
+                    critique_notes=critique_notes
+                )
+                traces.append(trace)
+
+        if stage in ["all", "chronicler"]:
+            ch_summary = getattr(ch_meta, "summary", None)
+            summary_text = getattr(ch_summary, "synopsis", "") if ch_summary else ""
+            if summary_text:
+                trace = DiagnosticTrace(
+                    trace_id=f"audit_{ch_id}_chronicler",
+                    stage="chronicler",
+                    context_snippet=draft_text[:500],
+                    output_snippet=summary_text[:500],
+                    fidelity_score=getattr(audit, "fidelity_score", 9.0),
+                    style_score=getattr(audit, "style_score", 9.0),
+                    warnings=list(getattr(audit, "warnings", [])),
+                    critique_notes=critique_notes
+                )
+                traces.append(trace)
+
         if len(traces) >= max_traces:
             break
 

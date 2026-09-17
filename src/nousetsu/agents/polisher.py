@@ -6,6 +6,7 @@ import time
 from typing import Any, Callable, List, Optional
 from langchain_core.messages import HumanMessage, SystemMessage
 from nousetsu.agents.llm import extract_text_from_message, extract_usage_from_message, get_llm
+from nousetsu.graph.procedural import ProceduralGraph, get_default_polisher_graph
 from nousetsu.models.bible import GlossaryItem, NovelBible
 from nousetsu.models.metadata import TokenUsage
 from nousetsu.models.trace import PipelineStage
@@ -38,6 +39,7 @@ class PolishingAgent:
         self,
         model_name: str = "gemini-3.5-flash-lite",
         fallback_model: Optional[str] = None,
+        procedural_graph: Optional[ProceduralGraph] = None,
         temperature: Optional[float] = None,
         thinking_level: Optional[str] = None,
         thinking_budget: Optional[int] = None,
@@ -72,6 +74,7 @@ class PolishingAgent:
             thinking_budget=polisher_thinking_budget,
         )
         self.last_usage: TokenUsage = TokenUsage()
+        self.procedural_graph = procedural_graph or get_default_polisher_graph()
         self.safety_fallbacks_used: int = 0
         self.prompt_tracker: Optional[Any] = None
 
@@ -150,6 +153,7 @@ class PolishingAgent:
         notify_callback: Optional[Any] = None,
         rate_limiter: Optional[Any] = None,
         stop_event: Optional[Any] = None,
+        procedural_graph: Optional[ProceduralGraph] = None,
         **kwargs: Any
     ) -> str:
         if draft_chunks and len(draft_chunks) > 1:
@@ -163,6 +167,7 @@ class PolishingAgent:
                 notify_callback=notify_callback,
                 rate_limiter=rate_limiter,
                 stop_event=stop_event,
+                procedural_graph=procedural_graph,
                 **kwargs
             )
             return self._ensure_chapter_title_preserved(draft_text=draft_text, polished_text=raw_polished)
@@ -185,6 +190,11 @@ class PolishingAgent:
         )
         skills_section = f"\n{skills_text}\n" if skills_text else ""
 
+        # Procedural Graph guidance (Lu et al., arXiv:2609.09153v1)
+        active_pg = procedural_graph or kwargs.get("procedural_graph") or self.procedural_graph
+        guidance_text = active_pg.to_compact_guidance("Inspect_Critique", max_hops=2) if active_pg else ""
+        procedural_section = f"\n{guidance_text}\n" if guidance_text else ""
+
         use_patch = kwargs.get("use_patch", False)
         prompt_template = PATCH_POLISHING_SYSTEM_PROMPT if use_patch else POLISHING_SYSTEM_PROMPT
         sys_msg = prompt_template.format(
@@ -192,7 +202,8 @@ class PolishingAgent:
             source_lang=bible.source_language,
             critique_notes=critique_notes or "Preserve meaning and enhance natural rhythm.",
             glossary=gloss_str,
-            skills_section=skills_section
+            skills_section=skills_section,
+            procedural_guidance=procedural_section
         )
 
         user_parts = []
@@ -364,6 +375,7 @@ class PolishingAgent:
         notify_callback: Optional[Any] = None,
         rate_limiter: Optional[Any] = None,
         stop_event: Optional[Any] = None,
+        procedural_graph: Optional[ProceduralGraph] = None,
         **kwargs: Any
     ) -> str:
         """Polishes a long draft chunk-by-chunk with sliding context to avoid output limits and TPM stalls."""
@@ -421,6 +433,7 @@ class PolishingAgent:
                 source_text=chunk_source,
                 chunk_idx=chunk_idx,
                 total_chunks=total_chunks,
+                procedural_graph=procedural_graph,
                 **chunk_kwargs
             )
             polished_parts.append(chunk_polished)
@@ -449,6 +462,7 @@ class PolishingAgent:
         total_chunks: int = 1,
         prompt_tracker: Optional[Any] = None,
         iteration: int = 1,
+        procedural_graph: Optional[ProceduralGraph] = None,
         **kwargs: Any
     ) -> str:
         eval_glossary = filter_glossary_for_scene(
@@ -468,6 +482,11 @@ class PolishingAgent:
         )
         skills_section = f"\n{skills_text}\n" if skills_text else ""
 
+        # Procedural Graph guidance (Lu et al., arXiv:2609.09153v1)
+        active_pg = procedural_graph or kwargs.get("procedural_graph") or self.procedural_graph
+        guidance_text = active_pg.to_compact_guidance("Inspect_Critique", max_hops=2) if active_pg else ""
+        procedural_section = f"\n{guidance_text}\n" if guidance_text else ""
+
         use_patch = kwargs.get("use_patch", False)
         prompt_template = PATCH_POLISHING_SYSTEM_PROMPT if use_patch else POLISHING_SYSTEM_PROMPT
         sys_msg = prompt_template.format(
@@ -475,7 +494,8 @@ class PolishingAgent:
             source_lang=bible.source_language,
             critique_notes=critique_notes or "Preserve meaning and enhance natural rhythm.",
             glossary=gloss_str,
-            skills_section=skills_section
+            skills_section=skills_section,
+            procedural_guidance=procedural_section
         )
 
         user_parts = []

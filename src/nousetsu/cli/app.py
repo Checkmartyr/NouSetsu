@@ -185,8 +185,13 @@ def cmd_skills(args: argparse.Namespace) -> None:
 def cmd_graph_info(args: argparse.Namespace) -> None:
     """Display active Procedural Graphs with Rich tree formatting."""
     from rich.panel import Panel
-    from rich.tree import Tree
-    from nousetsu.graph.procedural import get_default_drafter_graph, get_default_extractor_graph
+    from nousetsu.graph.procedural import (
+        get_default_chronicler_graph,
+        get_default_critic_graph,
+        get_default_drafter_graph,
+        get_default_extractor_graph,
+        get_default_polisher_graph,
+    )
 
     agent_filter = (getattr(args, "agent", None) or "all").lower()
 
@@ -195,9 +200,15 @@ def cmd_graph_info(args: argparse.Namespace) -> None:
         graphs_to_show.append(("Entity Extractor", get_default_extractor_graph()))
     if agent_filter in ["all", "drafter"]:
         graphs_to_show.append(("Context-Aware Drafter", get_default_drafter_graph()))
+    if agent_filter in ["all", "critic"]:
+        graphs_to_show.append(("Critique Agent", get_default_critic_graph()))
+    if agent_filter in ["all", "polisher"]:
+        graphs_to_show.append(("Polishing Agent", get_default_polisher_graph()))
+    if agent_filter in ["all", "chronicler"]:
+        graphs_to_show.append(("Chronicler Agent", get_default_chronicler_graph()))
 
     if not graphs_to_show:
-        console.print(f"[yellow]No procedural graph found for agent '{args.agent}'. Use 'extractor', 'drafter', or 'all'.[/]")
+        console.print(f"[yellow]No procedural graph found for agent '{args.agent}'. Use 'extractor', 'drafter', 'critic', 'polisher', 'chronicler', or 'all'.[/]")
         return
 
     for title, g in graphs_to_show:
@@ -229,7 +240,13 @@ def cmd_learn_graph(args: argparse.Namespace) -> None:
     from rich.table import Table
     from rich.tree import Tree
     from nousetsu.graph.pg_refiner import ProceduralGraphRefiner, collect_traces_from_repository
-    from nousetsu.graph.procedural import get_default_drafter_graph, get_default_extractor_graph
+    from nousetsu.graph.procedural import (
+        get_default_chronicler_graph,
+        get_default_critic_graph,
+        get_default_drafter_graph,
+        get_default_extractor_graph,
+        get_default_polisher_graph,
+    )
 
     project_dir = getattr(args, "project_dir", None)
     repo = NovelRepository(project_dir) if project_dir else NovelRepository()
@@ -286,6 +303,21 @@ def cmd_learn_graph(args: argparse.Namespace) -> None:
         if drafter_traces:
             current_g = repo.load_procedural_graph("drafter", folder=folder) or get_default_drafter_graph()
             agents_to_evolve.append(("drafter", "Context-Aware Drafter", drafter_traces, current_g))
+    if agent_target in ["all", "critic"]:
+        critic_traces = [t for t in traces if t.stage == "critic"]
+        if critic_traces:
+            current_g = repo.load_procedural_graph("critic", folder=folder) or get_default_critic_graph()
+            agents_to_evolve.append(("critic", "Critique Agent", critic_traces, current_g))
+    if agent_target in ["all", "polisher"]:
+        polisher_traces = [t for t in traces if t.stage == "polisher"]
+        if polisher_traces:
+            current_g = repo.load_procedural_graph("polisher", folder=folder) or get_default_polisher_graph()
+            agents_to_evolve.append(("polisher", "Polishing Agent", polisher_traces, current_g))
+    if agent_target in ["all", "chronicler"]:
+        chronicler_traces = [t for t in traces if t.stage == "chronicler"]
+        if chronicler_traces:
+            current_g = repo.load_procedural_graph("chronicler", folder=folder) or get_default_chronicler_graph()
+            agents_to_evolve.append(("chronicler", "Chronicler Agent", chronicler_traces, current_g))
 
     if not agents_to_evolve:
         console.print(f"[yellow]No failure traces matched target agent '{agent_target}'.[/]")
@@ -905,13 +937,13 @@ def main() -> None:
 
     # graph-info
     p_graph = subparsers.add_parser("graph-info", help="Inspect Procedural Graphs with Rich tree formatting (arXiv:2609.09153v1)")
-    p_graph.add_argument("--agent", "-a", choices=["all", "extractor", "drafter"], default="all", help="Filter by agent graph (default: all)")
+    p_graph.add_argument("--agent", "-a", choices=["all", "extractor", "drafter", "critic", "polisher", "chronicler"], default="all", help="Filter by agent graph (default: all)")
 
     # learn-graph / refine-graph
     p_learn = subparsers.add_parser("learn-graph", aliases=["refine-graph"], help="Execute offline self-evolution loop for Procedural Graphs (arXiv:2609.09153v1)")
     p_learn.add_argument("--project-dir", "-p", default=None, help="Root folder of novel project")
     p_learn.add_argument("--folder", "-F", default=None, help="Filter by specific volume folder")
-    p_learn.add_argument("--agent", "-a", choices=["all", "drafter", "extractor"], default="all", help="Target agent graph to evolve (default: all)")
+    p_learn.add_argument("--agent", "-a", choices=["all", "extractor", "drafter", "critic", "polisher", "chronicler"], default="all", help="Target agent graph to evolve (default: all)")
     p_learn.add_argument("--model", "-m", default=None, help="LLM model for refiner (defaults to NOVEL_FALLBACK_MODEL or gemini-3.5-flash-lite)")
     p_learn.add_argument("--max-traces", type=int, default=20, help="Maximum number of historical traces to analyze (default: 20)")
     p_learn.add_argument("--dry-run", action="store_true", help="Preview proposed mutations without persisting to disk")

@@ -194,6 +194,9 @@ class BatchRunner:
             traces_dir=self.repo.traces_dir,
             extractor_pg=self.repo.load_procedural_graph("extractor"),
             drafter_pg=self.repo.load_procedural_graph("drafter"),
+            critic_pg=self.repo.load_procedural_graph("critic"),
+            polisher_pg=self.repo.load_procedural_graph("polisher"),
+            chronicler_pg=self.repo.load_procedural_graph("chronicler"),
             enable_patch_polishing=getattr(cfg, "enable_patch_polishing", True),
             filter_extractor_entities=resolved_filter_extractor,
             enable_post_polish_reconciliation=resolved_reconcile
