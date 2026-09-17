@@ -14,7 +14,13 @@ from rich.tree import Tree
 import dotenv
 from nousetsu import __version__
 from nousetsu.batch.runner import BatchRunner
-from nousetsu.storage.repository import NovelRepository, ProjectRegistry
+from nousetsu.storage.repository import (
+    NovelRepository,
+    ProjectRegistry,
+    get_projects_root_dir,
+    resolve_project_dir,
+    get_new_project_dir,
+)
 from nousetsu.tui.app import NovelAgentApp
 
 dotenv.load_dotenv()
@@ -31,7 +37,8 @@ console = Console()
 
 def cmd_init(args: argparse.Namespace) -> None:
     project_dir = getattr(args, "project_dir", None)
-    repo = NovelRepository(project_dir) if project_dir else NovelRepository()
+    target_path = resolve_project_dir(project_dir, for_creation=True, title=args.title)
+    repo = NovelRepository(target_path)
     source_lang = args.source_lang or os.environ.get("SOURCE_LANG", "auto")
     target_lang = args.target_lang or os.environ.get("TARGET_LANG", "English")
     bible = repo.initialize_project(
@@ -58,7 +65,7 @@ def cmd_init(args: argparse.Namespace) -> None:
 
 def cmd_batch(args: argparse.Namespace) -> None:
     project_dir = getattr(args, "project_dir", None)
-    repo = NovelRepository(project_dir) if project_dir else NovelRepository()
+    repo = NovelRepository(resolve_project_dir(project_dir))
     cfg = repo.load_config()
     if getattr(args, "interactions", None) is not None:
         os.environ["NOVEL_USE_INTERACTIONS"] = "1" if args.interactions else "0"
@@ -876,11 +883,11 @@ def cmd_web(args: argparse.Namespace) -> None:
     url = f"http://localhost:{port}"
     reg = ProjectRegistry()
     if project_dir:
-        p_path = Path(project_dir).resolve()
+        p_path = resolve_project_dir(project_dir)
         if p_path.exists():
             reg.register_project(p_path)
             reg.set_last_active_project(p_path)
-    active_p = reg.get_last_active_project() or repo_root
+    active_p = reg.get_last_active_project() or resolve_project_dir(None)
 
     if dev_mode or not dist_dir.exists():
         # Start API server on 5174 in background thread for Vite proxy
@@ -921,7 +928,7 @@ def main() -> None:
 
     # init
     p_init = subparsers.add_parser("init", help="Initialize novel project and Novel Bible")
-    p_init.add_argument("--project-dir", "-p", default=None, help="Root folder of novel project")
+    p_init.add_argument("--project-dir", "-p", default=None, help="Root folder of novel project (defaults to NOVEL_PROJECTS_DIR/<title>, e.g. project/<title>)")
     p_init.add_argument("--title", default="Ascendance of a Bookworm", help="Novel series title")
     p_init.add_argument("--source-lang", default=default_src, help="Source language (e.g. Japanese, Chinese, Korean)")
     p_init.add_argument("--target-lang", default=default_tgt, help="Target language (e.g. English, Spanish)")
@@ -930,7 +937,7 @@ def main() -> None:
 
     # batch
     p_batch = subparsers.add_parser("batch", help="Run folder-to-folder automated batch translation")
-    p_batch.add_argument("--project-dir", "-p", default=None, help="Root folder of novel project")
+    p_batch.add_argument("--project-dir", "-p", default=None, help="Folder or name of novel project (resolves in NOVEL_PROJECTS_DIR or current directory)")
     p_batch.add_argument("--folder", "-F", default=None, help="Translation folder within project (auto-resolves matching input/output folders)")
     p_batch.add_argument("--input-dir", "-i", default="raw_chapters", help="Folder containing raw chapters")
     p_batch.add_argument("--output-dir", "-o", default="translated_chapters", help="Folder for translated output")
@@ -1041,7 +1048,7 @@ def main() -> None:
 
     # web
     p_web = subparsers.add_parser("web", help="Launch interactive Trace Visualizer web app in your browser")
-    p_web.add_argument("--project-dir", "-P", default=None, help="Root folder of novel project to open in web app")
+    p_web.add_argument("--project-dir", "-P", default=None, help="Folder or name of novel project (resolves in NOVEL_PROJECTS_DIR or current directory)")
     p_web.add_argument("--folder", "-F", default=None, help="Specific volume folder to focus on")
     p_web.add_argument("--port", "-p", type=int, default=5173, help="Port to run visualizer server on (default: 5173)")
     p_web.add_argument("--dev", action="store_true", help="Run with live Vite dev server instead of production dist")

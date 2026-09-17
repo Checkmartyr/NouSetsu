@@ -7,7 +7,8 @@ import {
   BookOpen,
   BookMarked,
   Settings as SettingsIcon,
-  Play
+  Play,
+  Plus
 } from 'lucide-react';
 import { LoadedChapter, ProjectMeta } from '../types/trace';
 import { WorkspaceTab } from '../types/dashboard';
@@ -28,6 +29,7 @@ interface NavbarProps {
   activeProject: ProjectMeta | null;
   projects: ProjectMeta[];
   onSwitchProject: (path: string) => void;
+  onOpenNewProjectModal?: () => void;
   autoSync: boolean;
   onToggleAutoSync: () => void;
   isSyncing: boolean;
@@ -47,6 +49,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   activeProject,
   projects,
   onSwitchProject,
+  onOpenNewProjectModal,
   autoSync,
   onToggleAutoSync,
   isSyncing,
@@ -137,9 +140,9 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
             )}
 
-            {/* TUI Project Selector Dropdown */}
+            {/* TUI Project Selector Dropdown & New Project Button */}
             {activeProject && projects.length > 0 ? (
-              <div className="flex items-center gap-1.5 max-w-[170px]">
+              <div className="flex items-center gap-1.5 max-w-[240px]">
                 <select
                   value={activeProject.path}
                   onChange={(e) => onSwitchProject(e.target.value)}
@@ -153,6 +156,18 @@ export const Navbar: React.FC<NavbarProps> = ({
                     </option>
                   ))}
                 </select>
+
+                {onOpenNewProjectModal && (
+                  <button
+                    type="button"
+                    onClick={onOpenNewProjectModal}
+                    title="Initialize new novel project inside project/"
+                    className="flex items-center gap-1 px-2 py-1 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 border border-indigo-500/30 text-xs font-semibold cursor-pointer transition-colors shrink-0"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>New</span>
+                  </button>
+                )}
               </div>
             ) : null}
 

@@ -44,6 +44,107 @@ def atomic_write_yaml(file_path: Path, data: Any) -> None:
     atomic_write_file(file_path, content, encoding="utf-8")
 
 
+def get_codebase_root() -> Path:
+    """Return the absolute path to the repository root directory."""
+    return Path(__file__).resolve().parent.parent.parent.parent
+
+
+def get_projects_root_dir() -> Path:
+    """Return the root directory where novel projects are stored, configured by NOVEL_PROJECTS_DIR in .env."""
+    reg_env = os.environ.get("NOVEL_REGISTRY_DIR")
+    if reg_env:
+        # In hermetic test isolation, keep projects inside the isolated test registry dir
+        # unless NOVEL_PROJECTS_DIR was explicitly overridden with a custom non-repo directory
+        env_dir = os.environ.get("NOVEL_PROJECTS_DIR")
+        if env_dir:
+            p = Path(env_dir)
+            if p.is_absolute() and p.resolve() != (get_codebase_root() / "project").resolve():
+                return p.resolve()
+        test_projects = (Path(reg_env) / "projects").resolve()
+        test_projects.mkdir(parents=True, exist_ok=True)
+        return test_projects
+
+    env_dir = os.environ.get("NOVEL_PROJECTS_DIR")
+    if env_dir:
+        p = Path(env_dir)
+        if not p.is_absolute():
+            p = (get_codebase_root() / p).resolve()
+        return p
+    repo_root = get_codebase_root()
+    if (repo_root / "project").exists():
+        return (repo_root / "project").resolve()
+    if (repo_root / "projects").exists():
+        return (repo_root / "projects").resolve()
+    return (repo_root / "project").resolve()
+
+
+def get_new_project_dir(title: Optional[str] = None, folder_name: Optional[str] = None) -> Path:
+    """Determine the destination folder path for initializing a new novel project."""
+    projects_root = get_projects_root_dir()
+    if folder_name:
+        p = Path(folder_name)
+        if p.is_absolute() or folder_name.startswith((".", "/", "\\")):
+            return p.expanduser().resolve()
+        return (projects_root / folder_name).resolve()
+
+    if title and title.strip() and title.strip().lower() != "untitled novel":
+        # Sanitize title for valid folder name
+        clean_title = re.sub(r'[<>:"/\\|?*]', "_", title.strip()).strip(". ")
+        if clean_title:
+            return (projects_root / clean_title).resolve()
+
+    return (projects_root / "new_novel").resolve()
+
+
+def resolve_project_dir(
+    project_path: Optional[str | Path] = None,
+    for_creation: bool = False,
+    title: Optional[str] = None
+) -> Path:
+    """Resolve a project directory path from user input, short name, or environment cascade."""
+    if for_creation:
+        return get_new_project_dir(title=title, folder_name=str(project_path) if project_path else None)
+
+    if project_path:
+        p = Path(project_path)
+        # Direct existing directory (e.g. project/Villainess or D:\...)
+        if p.exists():
+            return p.resolve()
+        # Check relative to projects root (e.g. "Villainess" -> project/Villainess)
+        projects_root = get_projects_root_dir()
+        cand = projects_root / project_path
+        if cand.exists():
+            return cand.resolve()
+        # Fallback to resolved input path
+        return p.expanduser().resolve()
+
+    # No project path supplied: resolve active or discovered project
+    cwd = Path.cwd().resolve()
+    codebase_root = get_codebase_root().resolve()
+
+    # Check last active project in registry first
+    reg = ProjectRegistry()
+    active = reg.get_last_active_project()
+    if active and active.exists() and (active / ".novel").exists():
+        return active.resolve()
+
+    # If user is in a dedicated novel subdirectory (not repo root) that has .novel
+    if cwd != codebase_root and (cwd / ".novel").exists():
+        return cwd
+
+    # Discover projects in NOVEL_PROJECTS_DIR
+    projects_root = get_projects_root_dir()
+    if projects_root.exists() and projects_root.is_dir():
+        for child in sorted(projects_root.iterdir()):
+            if child.is_dir() and (child / ".novel").exists():
+                return child.resolve()
+
+    if (cwd / ".novel").exists():
+        return cwd
+
+    return cwd
+
+
 class ProjectRegistry:
     """Tracks known and discovered novel translation projects."""
 
@@ -127,21 +228,40 @@ class ProjectRegistry:
         """Return list of project metadata for all known and discoverable projects."""
         paths = self._load_data()
         
-        # Auto-discover current working directory, projects/, and project/ subdirectories if not under isolated test
-        is_isolated_test = bool(os.environ.get("PYTEST_CURRENT_TEST") and not self.is_custom_storage and not os.environ.get("NOVEL_REGISTRY_DIR"))
-        if not is_isolated_test:
-            cwd = Path.cwd().resolve()
-            if str(cwd) not in paths and (cwd / ".novel").exists():
-                paths.append(str(cwd))
-
-            for folder_name in ["projects", "project"]:
-                projects_dir = cwd / folder_name
-                if projects_dir.exists() and projects_dir.is_dir():
-                    for child in projects_dir.iterdir():
+        reg_env = os.environ.get("NOVEL_REGISTRY_DIR")
+        if reg_env:
+            # Under hermetic test isolation, only discover projects in the isolated projects_root
+            projects_root = get_projects_root_dir()
+            if projects_root.exists() and projects_root.is_dir():
+                for child in sorted(projects_root.iterdir()):
+                    if child.is_dir() and (child / ".novel").exists():
+                        p_str = str(child.resolve())
+                        if p_str not in paths:
+                            paths.append(p_str)
+        else:
+            is_isolated_test = bool(os.environ.get("PYTEST_CURRENT_TEST") and not self.is_custom_storage)
+            if not is_isolated_test:
+                # Auto-discover projects in configured NOVEL_PROJECTS_DIR
+                projects_root = get_projects_root_dir()
+                if projects_root.exists() and projects_root.is_dir():
+                    for child in sorted(projects_root.iterdir()):
                         if child.is_dir() and (child / ".novel").exists():
                             p_str = str(child.resolve())
                             if p_str not in paths:
                                 paths.append(p_str)
+
+                cwd = Path.cwd().resolve()
+                if str(cwd) not in paths and (cwd / ".novel").exists():
+                    paths.append(str(cwd))
+
+                for folder_name in ["projects", "project"]:
+                    projects_dir = cwd / folder_name
+                    if projects_dir.exists() and projects_dir.is_dir():
+                        for child in projects_dir.iterdir():
+                            if child.is_dir() and (child / ".novel").exists():
+                                p_str = str(child.resolve())
+                                if p_str not in paths:
+                                    paths.append(p_str)
 
         results = []
         valid_paths = []
@@ -172,8 +292,11 @@ class ProjectRegistry:
 class NovelRepository:
     """Manages file storage for a novel translation project."""
 
-    def __init__(self, root_dir: Path | str = Path(".")):
-        self.root_dir = Path(root_dir).expanduser().resolve()
+    def __init__(self, root_dir: Optional[Path | str] = None):
+        if root_dir is None:
+            self.root_dir = resolve_project_dir(None)
+        else:
+            self.root_dir = resolve_project_dir(root_dir)
         self.novel_dir = self.root_dir / ".novel"
         self.bible_dir = self.novel_dir / "bible"
         self.summaries_dir = self.novel_dir / "summaries"

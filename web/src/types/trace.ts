@@ -69,6 +69,16 @@ export interface ProjectMeta {
 export interface ActiveProjectResponse {
   active_project: ProjectMeta | null;
   projects: ProjectMeta[];
+  projects_dir?: string;
+}
+
+export interface CreateProjectRequest {
+  title: string;
+  folder_name?: string;
+  source_language?: string;
+  target_language?: string;
+  genre?: string;
+  model?: string;
 }
 
 export interface SyncState {

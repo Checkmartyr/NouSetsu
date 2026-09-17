@@ -5,7 +5,12 @@ from textual.binding import Binding
 from textual.containers import Container, Horizontal, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Label, Static
-from nousetsu.storage.repository import NovelRepository, ProjectRegistry
+from nousetsu.storage.repository import (
+    NovelRepository,
+    ProjectRegistry,
+    get_projects_root_dir,
+    resolve_project_dir,
+)
 
 
 class NewProjectModal(ModalScreen):
@@ -43,6 +48,8 @@ class NewProjectModal(ModalScreen):
         self.registry = ProjectRegistry()
 
     def compose(self) -> ComposeResult:
+        proj_root = get_projects_root_dir()
+        proj_name = proj_root.name
         with Container(id="new-project-dialog"):
             yield Label("✨ Initialize New Novel Translation Project", classes="pane-title")
 
@@ -50,8 +57,8 @@ class NewProjectModal(ModalScreen):
                 yield Label("Novel Title:", classes="form-label")
                 yield Input(placeholder="e.g. The Rising of the Shield Hero", id="inp_title")
 
-                yield Label("Project Folder Path (Absolute or relative path, e.g. D:\\Novels\\Book or project\\book):", classes="form-label")
-                yield Input(placeholder="e.g. D:\\Novels\\MyNovel or project\\my_novel", value="project/new_novel", id="inp_path")
+                yield Label(f"Project Folder Path (Default inside {proj_name}/):", classes="form-label")
+                yield Input(placeholder=f"e.g. {proj_name}\\MyNovel or D:\\Novels\\MyNovel", value=f"{proj_name}/new_novel", id="inp_path")
 
                 yield Label("Source Language (or 'Auto' to detect from raw chapters):", classes="form-label")
                 yield Input(value="Auto", id="inp_src_lang")
@@ -82,7 +89,7 @@ class NewProjectModal(ModalScreen):
             self.dismiss()
         elif event.button.id == "btn_create":
             title = self.query_one("#inp_title", Input).value.strip() or "Untitled Novel"
-            proj_path_str = self.query_one("#inp_path", Input).value.strip() or "project/new_novel"
+            proj_path_str = self.query_one("#inp_path", Input).value.strip() or "new_novel"
             src_lang = self.query_one("#inp_src_lang", Input).value.strip() or "Auto"
             tgt_lang = self.query_one("#inp_tgt_lang", Input).value.strip() or "Thai"
             raw_dir = self.query_one("#inp_raw_dir", Input).value.strip() or "raw_chapters"
@@ -91,7 +98,7 @@ class NewProjectModal(ModalScreen):
             genre = self.query_one("#inp_genre", Input).value.strip() or "general"
             status = self.query_one("#new_proj_status", Static)
 
-            target_path = Path(proj_path_str).expanduser().resolve()
+            target_path = resolve_project_dir(proj_path_str, for_creation=True, title=title)
             target_path.mkdir(parents=True, exist_ok=True)
 
             repo = NovelRepository(target_path)

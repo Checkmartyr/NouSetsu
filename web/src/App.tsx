@@ -18,6 +18,7 @@ import { StudioView } from './components/StudioView';
 import { ReaderView } from './components/ReaderView';
 import { BibleView } from './components/BibleView';
 import { SettingsView } from './components/SettingsView';
+import { NewProjectModal } from './components/NewProjectModal';
 import { UploadCloud, AlertCircle, Sparkles, CheckCircle2 } from 'lucide-react';
 
 export const App: React.FC = () => {
@@ -68,6 +69,8 @@ export const App: React.FC = () => {
   // TUI Project Synchronization State
   const [activeProject, setActiveProject] = useState<ProjectMeta | null>(null);
   const [projects, setProjects] = useState<ProjectMeta[]>([]);
+  const [projectsDirName, setProjectsDirName] = useState<string>('project');
+  const [isNewProjectModalOpen, setIsNewProjectModalOpen] = useState(false);
   const [autoSync, setAutoSync] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncToast, setSyncToast] = useState<string | null>(null);
@@ -210,6 +213,10 @@ export const App: React.FC = () => {
         if (activeRes) {
           setActiveProject(activeRes.active_project);
           setProjects(activeRes.projects);
+          if (activeRes.projects_dir) {
+            const dirParts = activeRes.projects_dir.split(/[/\\]/);
+            setProjectsDirName(dirParts[dirParts.length - 1] || 'project');
+          }
         }
 
         if (projectChanged) {
@@ -230,6 +237,10 @@ export const App: React.FC = () => {
       if (activeRes && activeRes.active_project) {
         setActiveProject(activeRes.active_project);
         setProjects(activeRes.projects);
+        if (activeRes.projects_dir) {
+          const dirParts = activeRes.projects_dir.split(/[/\\]/);
+          setProjectsDirName(dirParts[dirParts.length - 1] || 'project');
+        }
         lastSyncRef.current = {
           active_project_path: activeRes.active_project.path,
           active_project_title: activeRes.active_project.title,
@@ -241,6 +252,13 @@ export const App: React.FC = () => {
     };
     init();
   }, [loadTracesFromBackend]);
+
+  // Handle project created via modal
+  const handleProjectCreated = async (created: ProjectMeta) => {
+    setActiveProject(created);
+    await syncWithBackend(true);
+    triggerToast(`(=^･ω･^=) Created and switched to: ${created.title}!`);
+  };
 
   // Background sync polling (every 3s)
   useEffect(() => {
@@ -383,6 +401,7 @@ export const App: React.FC = () => {
         activeProject={activeProject}
         projects={projects}
         onSwitchProject={handleSwitchProject}
+        onOpenNewProjectModal={() => setIsNewProjectModalOpen(true)}
         autoSync={autoSync}
         onToggleAutoSync={() => setAutoSync(!autoSync)}
         isSyncing={isSyncing}
@@ -492,6 +511,14 @@ export const App: React.FC = () => {
           </p>
         </div>
       )}
+
+      {/* New Project Modal */}
+      <NewProjectModal
+        isOpen={isNewProjectModalOpen}
+        onClose={() => setIsNewProjectModalOpen(false)}
+        onProjectCreated={handleProjectCreated}
+        projectsDirName={projectsDirName}
+      />
     </div>
   );
 };

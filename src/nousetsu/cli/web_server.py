@@ -27,7 +27,13 @@ from nousetsu.batch.scanner import ChapterScanner, ChapterTask
 from nousetsu.models.bible import CharacterProfile, GlossaryItem, NovelBible
 from nousetsu.models.config import ProjectConfig
 from nousetsu.models.metadata import StageStatus
-from nousetsu.storage.repository import NovelRepository, ProjectRegistry
+from nousetsu.storage.repository import (
+    NovelRepository,
+    ProjectRegistry,
+    get_projects_root_dir,
+    resolve_project_dir,
+    get_new_project_dir,
+)
 from nousetsu.utils.language import detect_language
 
 logger = logging.getLogger(__name__)
@@ -36,6 +42,7 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 # SSE Event Bus & Active Job Manager
 # ============================================================================
+
 
 class SSEEventBus:
     """Thread-safe Server-Sent Events bus for publishing agent events to web clients."""
@@ -128,6 +135,15 @@ active_job = ActiveTranslationJob()
 
 class SwitchProjectRequest(BaseModel):
     project_path: str
+
+
+class CreateProjectRequest(BaseModel):
+    title: str = Field(..., description="Novel title")
+    folder_name: Optional[str] = Field(None, description="Optional folder name inside NOVEL_PROJECTS_DIR")
+    source_language: Optional[str] = Field("Japanese", description="Source language")
+    target_language: Optional[str] = Field("Thai", description="Target language")
+    genre: Optional[str] = Field("general", description="Novel genre")
+    model: Optional[str] = Field(None, description="Primary model override")
 
 
 class TranslateStartRequest(BaseModel):
@@ -512,53 +528,53 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
     )
 
     def _resolve_repo(project_path: Optional[str] = None) -> NovelRepository:
-        if project_path:
-            p = Path(project_path).resolve()
-            if not p.exists() or not (p / ".novel").exists():
-                raise HTTPException(status_code=400, detail=f"Invalid project path: {p}")
-            return NovelRepository(p)
-        reg = ProjectRegistry()
-        active = reg.get_last_active_project() or NovelRepository().root_dir
-        return NovelRepository(active)
+        target_path = resolve_project_dir(project_path)
+        if not target_path.exists() or not (target_path / ".novel").exists():
+            raise HTTPException(status_code=400, detail=f"Invalid project path: {target_path}")
+        return NovelRepository(target_path)
 
     # ------------------------------------------------------------------------
-    # 1. Projects & Sync State Endpoints (Backward Compatible)
+    # 1. Projects & Sync State Endpoints
     # ------------------------------------------------------------------------
 
     @app.get("/api/active-project")
     async def get_active_project() -> Dict[str, Any]:
         registry = ProjectRegistry()
-        active_p = registry.get_last_active_project() or NovelRepository().root_dir
+        active_p = registry.get_last_active_project() or resolve_project_dir(None)
         active_meta = _get_project_meta(active_p)
         active_meta["is_active"] = True
 
-        all_paths = registry._load_data()
+        discovered = registry.list_projects()
         projects = []
         seen = set()
 
         projects.append(active_meta)
         seen.add(str(active_p.resolve()))
 
-        for p_str in all_paths:
-            p = Path(p_str)
-            if p.exists() and (p / ".novel").exists() and str(p.resolve()) not in seen:
-                meta = _get_project_meta(p)
-                meta["is_active"] = (str(p.resolve()) == str(active_p.resolve()))
-                projects.append(meta)
-                seen.add(str(p.resolve()))
+        for d in discovered:
+            p_str = d.get("path")
+            if p_str and p_str not in seen:
+                p = Path(p_str)
+                if p.exists() and (p / ".novel").exists():
+                    meta = _get_project_meta(p)
+                    meta["is_active"] = (str(p.resolve()) == str(active_p.resolve()))
+                    projects.append(meta)
+                    seen.add(str(p.resolve()))
 
         return {
             "active_project": active_meta,
             "projects": projects,
+            "projects_dir": str(get_projects_root_dir()),
         }
 
     @app.post("/api/active-project")
     async def set_active_project(body: SwitchProjectRequest) -> Dict[str, Any]:
-        new_path = Path(body.project_path).resolve()
+        new_path = resolve_project_dir(body.project_path)
         if not new_path.exists() or not (new_path / ".novel").exists():
             raise HTTPException(status_code=400, detail=f"Invalid project path: {new_path}")
 
         registry = ProjectRegistry()
+        registry.register_project(new_path)
         registry.set_last_active_project(new_path)
         meta = _get_project_meta(new_path)
         meta["is_active"] = True
@@ -566,6 +582,57 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
         return {
             "success": True,
             "active_project": meta,
+        }
+
+    @app.post("/api/projects/create")
+    async def create_project(body: CreateProjectRequest) -> Dict[str, Any]:
+        title = body.title.strip()
+        if not title:
+            raise HTTPException(status_code=400, detail="Novel title cannot be empty")
+
+        target_dir = get_new_project_dir(title=title, folder_name=body.folder_name)
+        if (target_dir / ".novel").exists():
+            raise HTTPException(status_code=409, detail=f"Project already exists at {target_dir.name}")
+
+        target_dir.mkdir(parents=True, exist_ok=True)
+        repo = NovelRepository(target_dir)
+        repo.initialize_project(
+            title=title,
+            source_lang=body.source_language or "Japanese",
+            target_lang=body.target_language or "Thai",
+            model_name=body.model,
+            genre=body.genre or "general",
+        )
+
+        registry = ProjectRegistry()
+        registry.register_project(target_dir)
+        registry.set_last_active_project(target_dir)
+
+        meta = _get_project_meta(target_dir)
+        meta["is_active"] = True
+
+        return {
+            "success": True,
+            "active_project": meta,
+        }
+
+    @app.get("/api/projects")
+    async def get_all_projects() -> Dict[str, Any]:
+        registry = ProjectRegistry()
+        active_p = registry.get_last_active_project() or resolve_project_dir(None)
+        discovered = registry.list_projects()
+        projects = []
+        for d in discovered:
+            p = Path(d["path"])
+            meta = _get_project_meta(p)
+            meta["is_active"] = (str(p.resolve()) == str(active_p.resolve()))
+            projects.append(meta)
+
+        return {
+            "projects_dir": str(get_projects_root_dir()),
+            "active_project_path": str(active_p.resolve()) if active_p else None,
+            "active_project": _get_project_meta(active_p) if active_p and active_p.exists() else None,
+            "projects": projects,
         }
 
     @app.get("/api/sync-state")

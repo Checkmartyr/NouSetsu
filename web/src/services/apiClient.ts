@@ -1,4 +1,4 @@
-import { ActiveProjectResponse, SyncState, ProjectTracesResponse } from '../types/trace';
+import { ActiveProjectResponse, SyncState, ProjectTracesResponse, CreateProjectRequest, ProjectMeta } from '../types/trace';
 
 const API_BASE = '';
 
@@ -65,3 +65,22 @@ export async function switchActiveProject(projectPath: string): Promise<boolean>
     return false;
   }
 }
+
+/**
+ * Initialize a new novel translation project inside NOVEL_PROJECTS_DIR
+ */
+export async function createProject(
+  data: CreateProjectRequest
+): Promise<{ success: boolean; active_project: ProjectMeta }> {
+  const res = await fetch(`${API_BASE}/api/projects/create`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || 'Failed to create project');
+  }
+  return await res.json();
+}
+
