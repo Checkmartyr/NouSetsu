@@ -1,15 +1,34 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { LoadedChapter, ProjectMeta, SyncState } from './types/trace';
+import { WorkspaceTab } from './types/dashboard';
 import { DEMO_CHAPTER_TRACE } from './services/mockData';
 import { openDirectoryPicker, groupFilesIntoChapters } from './services/traceLoader';
-import { fetchActiveProject, fetchSyncState, fetchProjectTraces, switchActiveProject } from './services/apiClient';
+import {
+  fetchActiveProject,
+  fetchSyncState,
+  fetchProjectTraces,
+  switchActiveProject,
+} from './services/apiClient';
+import { connectSSE } from './services/dashboardApi';
 import { Navbar } from './components/Navbar';
 import { StagePipeline } from './components/StagePipeline';
 import { TraceTimeline } from './components/TraceTimeline';
 import { TraceDetail, DetailTab } from './components/TraceDetail';
+import { StudioView } from './components/StudioView';
+import { ReaderView } from './components/ReaderView';
+import { BibleView } from './components/BibleView';
+import { SettingsView } from './components/SettingsView';
 import { UploadCloud, AlertCircle, Sparkles, CheckCircle2 } from 'lucide-react';
 
 export const App: React.FC = () => {
+  // Navigation & Workspace State
+  const [activeWorkspace, setActiveWorkspace] = useState<WorkspaceTab>('studio');
+  const [readerChapterNum, setReaderChapterNum] = useState<number | null>(null);
+
+  // Real-time Event Logs from SSE
+  const [logs, setLogs] = useState<string[]>([]);
+
+  // Trace State
   const [chapters, setChapters] = useState<LoadedChapter[]>([
     {
       id: 'demo_chapter_1',
@@ -66,6 +85,34 @@ export const App: React.FC = () => {
     setTimeout(() => setSyncToast(null), 4000);
   };
 
+  // Connect to SSE stream
+  useEffect(() => {
+    const disconnect = connectSSE((event, data) => {
+      const ts = new Date().toLocaleTimeString();
+      let logMsg = `[${ts}] ${event}`;
+
+      if (event === 'log' && typeof data === 'object' && data.message) {
+        logMsg = `[${ts}] ${data.message}`;
+      } else if (event === 'stage_progress' && typeof data === 'object') {
+        logMsg = `[${ts}] Ch.${data.chapter_num ?? '?'}: [${data.stage}] ${data.message || ''}`;
+      } else if (event === 'chapter_finished' && typeof data === 'object') {
+        logMsg = `[${ts}] ✓ Finished Ch.${data.chapter_num ?? '?'}`;
+        // Automatically reload traces on chapter completion
+        if (activeProject?.path) {
+          loadTracesFromBackend(activeProject.path);
+        }
+      } else if (typeof data === 'object' && data.message) {
+        logMsg = `[${ts}] [${event}] ${data.message}`;
+      }
+
+      setLogs((prev) => [...prev.slice(-300), logMsg]);
+    });
+
+    return () => {
+      disconnect();
+    };
+  }, [activeProject]);
+
   // If chapter changes, preserve active stage filter or select first trace
   const handleSelectChapter = (id: string) => {
     setSelectedChapterId(id);
@@ -110,21 +157,17 @@ export const App: React.FC = () => {
         const currentTraceId = selectedTraceIdRef.current;
         const currentStageFilter = selectedStageFilterRef.current;
 
-        // 1. Resolve target chapter: retain user's active chapter if it exists!
         let targetChapter = res.chapters.find((c) => c.id === currentChapterId);
         if (!targetChapter) {
           targetChapter = res.chapters[0];
           setSelectedChapterId(targetChapter.id);
         }
 
-        // 2. Resolve trace in target chapter: retain user's active trace & stage!
         const targetTraces = targetChapter.document.traces || [];
         const traceStillExists = targetTraces.some((t) => t.trace_id === currentTraceId);
         const currentTraceObj = targetTraces.find((t) => t.trace_id === currentTraceId);
 
         if (traceStillExists) {
-          // If user had a stage filter active and current trace was from a different stage
-          // (e.g. was waiting for Polishing to finish), prioritize newly completed stage trace!
           if (currentStageFilter && currentTraceObj && currentTraceObj.stage !== currentStageFilter) {
             const matchingStageTrace = targetTraces.find((t) => t.stage === currentStageFilter);
             if (matchingStageTrace) {
@@ -132,9 +175,7 @@ export const App: React.FC = () => {
               return;
             }
           }
-          // Otherwise, retain current trace without resetting!
         } else {
-          // Current trace no longer exists (e.g. project switch or new chapter selected)
           if (currentStageFilter) {
             const matchingStageTrace = targetTraces.find((t) => t.stage === currentStageFilter);
             if (matchingStageTrace) {
@@ -165,7 +206,6 @@ export const App: React.FC = () => {
       if (projectChanged || tracesUpdated || force) {
         lastSyncRef.current = syncState;
 
-        // Re-fetch project metadata
         const activeRes = await fetchActiveProject();
         if (activeRes) {
           setActiveProject(activeRes.active_project);
@@ -173,19 +213,17 @@ export const App: React.FC = () => {
         }
 
         if (projectChanged) {
-          triggerToast(`(=^･ω･^=) Synced with TUI project: ${syncState.active_project_title || 'Novel'}`);
-        } else if (tracesUpdated) {
-          triggerToast(`🐾 New traces detected from TUI! Refreshed.`);
+          triggerToast(`(=^･ω･^=) Connected to project: ${syncState.active_project_title || 'Novel'}`);
         }
 
         await loadTracesFromBackend(syncState.active_project_path || undefined);
       }
     } catch {
-      // Backend not available or interrupted
+      // Backend unavailable or offline
     }
   }, [loadTracesFromBackend]);
 
-  // Initial mount: connect to backend if available
+  // Initial mount
   useEffect(() => {
     const init = async () => {
       const activeRes = await fetchActiveProject();
@@ -199,33 +237,32 @@ export const App: React.FC = () => {
           latest_trace_mtime: activeRes.active_project.latest_trace_mtime,
         };
         await loadTracesFromBackend(activeRes.active_project.path);
-        triggerToast(`🟢 Connected to TUI project: ${activeRes.active_project.title}`);
       }
     };
     init();
   }, [loadTracesFromBackend]);
 
-  // Background sync polling (every 2.5s)
+  // Background sync polling (every 3s)
   useEffect(() => {
     if (!autoSync) return;
     const interval = setInterval(() => {
       syncWithBackend(false);
-    }, 2500);
+    }, 3000);
     return () => clearInterval(interval);
   }, [autoSync, syncWithBackend]);
 
-  // Handle user switching project from Web Navbar
+  // Switch project
   const handleSwitchProject = async (targetPath: string) => {
     const ok = await switchActiveProject(targetPath);
     if (ok) {
       await syncWithBackend(true);
-      triggerToast(`Switched active project in TUI registry!`);
+      triggerToast(`Switched active project!`);
     } else {
       setErrorMessage(`Failed to switch project to ${targetPath}`);
     }
   };
 
-  // Open directory via File System Access API (Manual mode)
+  // Open directory via File System Access API
   const handleOpenDirectory = async () => {
     setErrorMessage(null);
     try {
@@ -248,7 +285,7 @@ export const App: React.FC = () => {
     }
   };
 
-  // Load from file input or drag-drop (Manual mode)
+  // Load from file input
   const handleLoadFiles = async (fileList: FileList) => {
     setErrorMessage(null);
     try {
@@ -297,11 +334,11 @@ export const App: React.FC = () => {
     triggerToast('Loaded demo chapter trace dataset nya~!');
   };
 
-  // Drag-and-drop listener
+  // Drag-and-drop listener for Traces view
   useEffect(() => {
     const handleDragOver = (e: DragEvent) => {
       e.preventDefault();
-      setIsDraggingOver(true);
+      if (activeWorkspace === 'traces') setIsDraggingOver(true);
     };
 
     const handleDragLeave = (e: DragEvent) => {
@@ -314,7 +351,7 @@ export const App: React.FC = () => {
     const handleDrop = (e: DragEvent) => {
       e.preventDefault();
       setIsDraggingOver(false);
-      if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+      if (activeWorkspace === 'traces' && e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
         handleLoadFiles(e.dataTransfer.files);
       }
     };
@@ -328,12 +365,14 @@ export const App: React.FC = () => {
       window.removeEventListener('dragleave', handleDragLeave);
       window.removeEventListener('drop', handleDrop);
     };
-  }, []);
+  }, [activeWorkspace]);
 
   return (
     <div className="flex flex-col h-screen bg-slate-950 text-slate-100 overflow-hidden font-sans relative">
-      {/* Top Navigation with TUI sync */}
+      {/* Top Navigation */}
       <Navbar
+        activeTab={activeWorkspace}
+        onSelectTab={setActiveWorkspace}
         chapters={chapters}
         selectedChapterId={selectedChapterId}
         onSelectChapter={handleSelectChapter}
@@ -350,17 +389,17 @@ export const App: React.FC = () => {
         onManualSync={() => syncWithBackend(true)}
       />
 
-      {/* Sync Toast Notification */}
+      {/* Sync Toast */}
       {syncToast && (
-        <div className="absolute top-20 right-6 z-50 bg-indigo-900/90 text-indigo-100 border border-indigo-500/50 backdrop-blur px-4 py-2 rounded-xl text-xs font-medium shadow-xl flex items-center gap-2 animate-fade-in">
+        <div className="fixed top-20 right-6 z-50 bg-indigo-900/90 text-indigo-100 border border-indigo-500/50 backdrop-blur px-4 py-2 rounded-xl text-xs font-medium shadow-xl flex items-center gap-2 animate-fade-in pointer-events-none">
           <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
           <span>{syncToast}</span>
         </div>
       )}
 
-      {/* Error banner */}
+      {/* Error Banner */}
       {errorMessage && (
-        <div className="bg-red-500/20 border-b border-red-500/30 px-4 py-2 text-red-300 text-xs flex items-center justify-between">
+        <div className="bg-red-500/20 border-b border-red-500/30 px-4 py-2 text-red-300 text-xs flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
             <AlertCircle className="w-4 h-4" />
             <span>{errorMessage}</span>
@@ -374,41 +413,69 @@ export const App: React.FC = () => {
         </div>
       )}
 
-      {/* Pipeline Stage Progression Ribbon */}
-      <StagePipeline
-        traces={traces}
-        selectedStageFilter={selectedStageFilter}
-        onSelectStageFilter={handleSelectStageFilter}
-      />
-
-      {/* Main Workspace (Split View) */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Timeline sidebar */}
-        <TraceTimeline
-          traces={traces}
-          selectedTraceId={selectedTraceId}
-          onSelectTrace={setSelectedTraceId}
-          selectedStageFilter={selectedStageFilter}
-        />
-
-        {/* Trace Inspector */}
-        {currentTrace && currentChapter ? (
-          <TraceDetail
-            trace={currentTrace}
-            chapterDoc={currentChapter.document}
-            activeTab={activeDetailTab}
-            onTabChange={setActiveDetailTab}
+      {/* Workspace Body */}
+      <div className="flex-1 overflow-hidden">
+        {activeWorkspace === 'studio' ? (
+          <StudioView
+            activeProjectPath={activeProject?.path || null}
+            activeProjectTitle={activeProject?.title || null}
+            onNavigateToReader={(chapterNum) => {
+              setReaderChapterNum(chapterNum);
+              setActiveWorkspace('reader');
+            }}
+            logs={logs}
+          />
+        ) : activeWorkspace === 'reader' ? (
+          <ReaderView
+            activeProjectPath={activeProject?.path || null}
+            initialChapterNum={readerChapterNum}
+            onBackToStudio={() => setActiveWorkspace('studio')}
+          />
+        ) : activeWorkspace === 'bible' ? (
+          <BibleView
+            activeProjectPath={activeProject?.path || null}
+            activeProjectTitle={activeProject?.title || null}
+          />
+        ) : activeWorkspace === 'settings' ? (
+          <SettingsView
+            activeProjectPath={activeProject?.path || null}
+            activeProjectTitle={activeProject?.title || null}
           />
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center p-8 text-slate-500 text-sm space-y-3">
-            <p>No traces recorded for this chapter yet.</p>
-            <button
-              onClick={handleLoadDemo}
-              className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5"
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Load Demo Traces</span>
-            </button>
+          /* TRACES WORKSPACE */
+          <div className="flex flex-col h-full overflow-hidden">
+            <StagePipeline
+              traces={traces}
+              selectedStageFilter={selectedStageFilter}
+              onSelectStageFilter={handleSelectStageFilter}
+            />
+            <div className="flex-1 flex overflow-hidden">
+              <TraceTimeline
+                traces={traces}
+                selectedTraceId={selectedTraceId}
+                onSelectTrace={setSelectedTraceId}
+                selectedStageFilter={selectedStageFilter}
+              />
+              {currentTrace && currentChapter ? (
+                <TraceDetail
+                  trace={currentTrace}
+                  chapterDoc={currentChapter.document}
+                  activeTab={activeDetailTab}
+                  onTabChange={setActiveDetailTab}
+                />
+              ) : (
+                <div className="flex-1 flex flex-col items-center justify-center p-8 text-slate-500 text-sm space-y-3">
+                  <p>No traces recorded for this chapter yet.</p>
+                  <button
+                    onClick={handleLoadDemo}
+                    className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Load Demo Traces</span>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
