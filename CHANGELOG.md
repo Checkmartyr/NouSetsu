@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Procedural Graphs Across All 5 Pipeline Agents** (arXiv:2609.09153v1):
+  - Equipped `CritiqueAgent` (Stage 3), `PolishingAgent` (Stage 4), and `ChroniclerAgent` (Stage 5) with Procedural Graphs alongside `EntityExtractorAgent` and `ContextAwareDrafterAgent`.
+  - Added deterministic action transitions, cognitive checkpoints, and anti-bloat pitfall warnings dynamically injected into prompts (<80 tokens) without breaking Gemini KV context caching prefix stability.
+  - Exported default graphs (`get_default_critic_graph`, `get_default_polisher_graph`, `get_default_chronicler_graph`) in `src/nousetsu/graph/procedural.py`.
+- **Offline Graph Self-Evolution CLI (`nousetsu learn-graph`)**:
+  - Implemented `nousetsu learn-graph` (alias `refine-graph`) to execute offline self-evolution on procedural graphs by analyzing diagnostic audit traces from `.novel/traces/`.
+  - Added support for `--agent` (`all`, `extractor`, `drafter`, `critic`, `polisher`, `chronicler`), `--dry-run`, and `--max-traces`.
+- **Chapter Numbering Collision Realignment CLI (`nousetsu realign-chapters`)**:
+  - Added `nousetsu realign-chapters` (alias `realign`) to detect and resolve chapter numbering collisions across volume folders, relocate summaries and traces safely, and synchronize RAG memory.
+- **Antigravity Custom Skill `doc-updater`**:
+  - Added automated 6-phase operational runbook and Rich-powered drift detection script (`scripts/check_doc_drift.py`) to systematically audit and synchronize project documentation with codebase changes.
+
+### Changed
+- **CLI Project Directory Auto-Resolution**:
+  - `nousetsu learn-graph` and `nousetsu graph-info` automatically resolve `--folder` / `-F` to `--project-dir` when pointing to a path containing `.novel/`.
+- **Rich Tree Visualization in `graph-info`**:
+  - Updated `nousetsu graph-info` to inspect and render procedural execution graphs for all 5 agents with Rich tree panels.
+- **Test Suite Metrics**:
+  - Expanded test coverage to 347 passing tests across 52 test modules in ~42s.
+
+### Fixed
+- **Source and Target Language Enforcement in Prompts**:
+  - Explicitly injected `source_lang` and `target_lang` into extraction, chronicling, and Bible memory prompt templates.
+- **Refiner Edge Target Alias Support**:
+  - Made `edge_target` optional with alias support in `GraphEditOperation` for robust schema validation during offline graph refinement.
+
 ## [0.3.0] - 2026-09-15
 
 ### Added

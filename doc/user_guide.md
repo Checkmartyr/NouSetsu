@@ -197,6 +197,12 @@ nousetsu migrate-summaries -p ./my_novel
 
 # 13. Explicit TUI Launch with Custom Paths
 nousetsu tui --project-dir ./my_novel
+
+# 14. Offline Self-Evolution for Procedural Graphs (arXiv:2609.09153v1)
+nousetsu learn-graph -p ./my_novel -a all
+
+# 15. Realignment of Chapter Numbering Collisions
+nousetsu realign-chapters -p ./my_novel -F Villainess_06
 ```
 
 ### Full `nousetsu batch` Flags
@@ -401,21 +407,45 @@ Terminal output displays the execution flow, transitions, guidance notes, and pi
 │   ├── [Filter_Known] ──(unregistered_found)──> [Deduce_Profiles]
 │   └── [Deduce_Profiles] ──(entities_resolved)──> [Prune_Trivial_Terms]
 │       └── ⚠️ Pitfall: Strictly exclude ordinary conversational vocabulary, everyday verbs, and greetings.
-└── ✍️ Stage 2: Context-Aware Drafter (ContextAwareDrafterAgent)
-    ├── [Scene_Init] ──(chunk_1_or_single)──> [Zero_Anaphora_Resolution]
-    ├── [Boundary_Continuity] ──(chunk_gt_1)──> [Zero_Anaphora_Resolution]
-    │   └── ⚠️ Pitfall: DO NOT repeat or re-translate preceding text. DO NOT restart scene.
-    ├── [Zero_Anaphora_Resolution] ──(subjects_resolved)──> [Voice_Modulation]
-    └── [Voice_Modulation] ──(voices_locked)──> [Glossary_Lock]
+├── ✍️ Stage 2: Context-Aware Drafter (ContextAwareDrafterAgent)
+│   ├── [Scene_Init] ──(chunk_1_or_single)──> [Zero_Anaphora_Resolution]
+│   ├── [Boundary_Continuity] ──(chunk_gt_1)──> [Zero_Anaphora_Resolution]
+│   │   └── ⚠️ Pitfall: DO NOT repeat or re-translate preceding text. DO NOT restart scene.
+│   ├── [Zero_Anaphora_Resolution] ──(subjects_resolved)──> [Voice_Modulation]
+│   └── [Voice_Modulation] ──(voices_locked)──> [Glossary_Lock]
+├── 🔍 Stage 3: Critique Agent (CritiqueAgent)
+│   ├── [Audit_Init] ──(draft_received)──> [Omission_Check]
+│   ├── [Omission_Check] ──(omissions_verified)──> [Glossary_Audit]
+│   ├── [Glossary_Audit] ──(terms_checked)──> [Register_Tone_Check]
+│   └── [Register_Tone_Check] ──(register_verified)──> [Scoring_Gating]
+├── 🎨 Stage 4: Polishing Agent (PolishingAgent)
+│   ├── [Inspect_Critique] ──(notes_ingested)──> [Title_Header_Lock]
+│   │   └── ⚠️ Pitfall: NEVER drop or translate away the chapter header or title line!
+│   ├── [Title_Header_Lock] ──(header_anchored)──> [Translationese_Filter]
+│   ├── [Translationese_Filter] ──(cliches_purged)──> [Cadence_Rhythm_Polish]
+│   └── [Cadence_Rhythm_Polish] ──(flow_optimized)──> [Patch_Fidelity_Lock]
+└── 📚 Stage 5: Chronicler Agent (ChroniclerAgent)
+    ├── [Chapter_Deconstruction] ──(prose_analyzed)──> [State_Shift_Tracking]
+    ├── [State_Shift_Tracking] ──(shifts_recorded)──> [Arc_Boundary_Detection]
+    ├── [Arc_Boundary_Detection] ──(arc_analyzed)──> [Entity_Reconciliation]
+    └── [Entity_Reconciliation] ──(terms_reconciled)──> [Bible_Memory_Commit]
 ```
 
-### 🧬 Offline Self-Evolution (Learning Without Inference Costs)
+### 🧬 Offline Self-Evolution (`nousetsu learn-graph`)
 
-NouSetsu includes an offline refiner ([`pg_refiner.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/graph/pg_refiner.py)) based on Algorithm 1 of the paper:
-1. When the Critique Agent (`CritiqueAgent`) flags translation flaws (e.g. pronoun drift or glossary omissions), a `DiagnosticTrace` records the failure.
-2. An offline evolution process compares successful vs. failed chapter runs and refines graph edge attributes (e.g. appending new specific pitfalls).
+NouSetsu includes an offline self-evolution refiner ([`pg_refiner.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/graph/pg_refiner.py)) based on Algorithm 1 of the paper:
+1. When the Critique Agent (`CritiqueAgent`) audits translation drafts, a `DiagnosticTrace` records any omissions, register shifts, or terminology discrepancies into `.novel/traces/`.
+2. Running `nousetsu learn-graph` analyzes historical audit traces across completed chapters, clusters recurring flaws, and synthesizes localized graph edge mutations (e.g. appending new specific pitfalls or sharpening guidance).
 3. Changes are committed only if structural validation passes and regression tests succeed.
-4. **Inference Token Cost: 0 tokens** (runs offline or post-batch).
+4. **Inference Token Cost: 0 tokens during active batch translation** (runs offline or post-batch).
+
+```bash
+# Run offline self-evolution on all agent graphs
+nousetsu learn-graph -p project/Villainess -a all
+
+# Run offline evolution on a specific agent graph with dry-run preview
+nousetsu learn-graph -p project/Villainess -a critic --dry-run
+```
 
 ---
 

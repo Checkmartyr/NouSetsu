@@ -299,6 +299,14 @@ NouSetsu tracks end-to-end token consumption and execution latency per pipeline 
     - In Stage 5 (`ChroniclerAgent`), the agent inspects provisional terms and characters discovered before translation against the final polished publication text.
     - Reconciles refined terminology (e.g. provisional `"Cyan Lightning Sword"` $\rightarrow$ polished `"Azure Thunder Blade"`), registers updated character spellings and active aliases, and prunes false-positive terms before persisting to `NovelBible` (`bible.yaml`).
     - Configurable across the 4-tier cascade: CLI flag (`--reconcile-terms` / `--no-reconcile-terms`), `ProjectConfig.enable_post_polish_reconciliation`, environment variable `NOVEL_POST_POLISH_RECONCILIATION`, and built-in safe fallback (`True`).
+17. **Procedural Graphs (arXiv:2609.09153v1) & Offline Self-Evolution Engine**:
+    - Equips all five pipeline agents (`EntityExtractorAgent`, `ContextAwareDrafterAgent`, `CritiqueAgent`, `PolishingAgent`, `ChroniclerAgent`) with compact, graph-directed action paths and deterministic cognitive checkpoints.
+    - Zero-token-overhead deterministic edge localization: runtime logic selects the active transition edge based on pipeline state (e.g. `Scene_Init` vs `Boundary_Continuity` for Drafter, `Inspect_Critique` for Polisher, `Chapter_Deconstruction` for Chronicler) and injects only $<80$ tokens of targeted guidance and pitfall warnings.
+    - Invariant KV prefix preservation: procedural guidance is anchored after task formatting rules to maintain Gemini KV context caching hits.
+    - `nousetsu graph-info`: Rich tree visualization of nodes, transition edges, actions, and anti-bloat pitfalls across all agents (`-a all` or `-a <agent>`).
+    - `nousetsu learn-graph`: Offline self-evolution loop that analyzes diagnostic audit traces from `.novel/traces/`, detects repetitive failure modes or omissions, and synthesizes localized graph mutations.
+18. **Chapter Numbering Collision Realignment Engine**:
+    - `nousetsu realign-chapters`: Detects and resolves chapter numbering gaps or collisions across volume folders (e.g. `Villainess_06`), relocates summaries, traces, and checkpoints safely, and synchronizes the local RAG knowledge store.
 
 ---
 
@@ -313,7 +321,7 @@ uv sync
 # Query CLI version
 uv run nousetsu --version
 
-# Run complete test suite (320 tests across 49 modules in ~89s)
+# Run complete test suite (347 tests across 52 modules in ~42s)
 uv run pytest
 
 # Run specific test modules
@@ -338,6 +346,7 @@ uv run pytest tests/test_patch_polishing.py
 uv run pytest tests/test_prompt_tracker.py
 uv run pytest tests/test_web_server.py
 uv run pytest tests/test_rag_engine.py
+uv run pytest tests/test_procedural_graph.py
 
 # Launch the interactive Textual TUI dashboard (default behavior on bare 'nousetsu')
 uv run nousetsu
@@ -362,7 +371,14 @@ uv run nousetsu narrative -p project/Villainess
 uv run nousetsu migrate-summaries -p project/Villainess
 
 # Inspect Procedural Graphs with Rich tree formatting (arXiv:2609.09153v1)
-uv run nousetsu graph-info -a drafter
+uv run nousetsu graph-info -a all
+uv run nousetsu graph-info -p project/Villainess -a critic
+
+# Run offline self-evolution loop on diagnostic traces to optimize procedural graphs
+uv run nousetsu learn-graph -p project/Villainess -a all
+
+# Detect and resolve chapter numbering collisions across volume folders
+uv run nousetsu realign-chapters -p project/Villainess -F Villainess_06
 
 # Initialize a new novel project
 uv run nousetsu init --title "The Villainess" --genre general --source-lang English --target-lang Thai

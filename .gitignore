@@ -27,3 +27,4 @@ node_modules/
 *.tsbuildinfo
 !web/dist/
 !web/dist/**
+.agents/private/

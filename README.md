@@ -8,7 +8,7 @@
 [![Package Manager: uv](https://img.shields.io/badge/managed%20by-uv-purple.svg)](https://github.com/astral-sh/uv)
 [![Framework: LangGraph](https://img.shields.io/badge/agent-LangGraph-orange.svg)](https://github.com/langchain-ai/langgraph)
 [![UI: Textual](https://img.shields.io/badge/ui-Textual%20%26%20Rich-green.svg)](https://textual.textualize.io/)
-[![Tests: 325 Passed](https://img.shields.io/badge/tests-325%20passed-brightgreen.svg)](https://github.com/Checkmartyr/NouSetsu)
+[![Tests: 347 Passed](https://img.shields.io/badge/tests-347%20passed-brightgreen.svg)](https://github.com/Checkmartyr/NouSetsu)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
 ---
@@ -198,7 +198,9 @@ NouSetsu provides a comprehensive suite of subcommands for headless automation, 
 | `nousetsu narrative` | Renders interactive 3-tier narrative memory tree (Macro > Meso > Micro) | `nousetsu narrative -p project/Villainess` |
 | `nousetsu migrate-summaries` | Upgrades legacy flat summaries into 3-tier story arc hierarchies | `nousetsu migrate-summaries -p project/Villainess` |
 | `nousetsu skills` | Lists and filters active domain skills by agent, language, or genre | `nousetsu skills --agent drafter --genre xianxia` |
-| `nousetsu graph-info` | Visualizes procedural execution graphs and name discipline directives | `nousetsu graph-info --agent drafter --verbose` |
+| `nousetsu graph-info` | Visualizes procedural execution graphs and name discipline directives (arXiv:2609.09153v1) | `nousetsu graph-info -a all` |
+| `nousetsu learn-graph` | Executes offline self-evolution loop on diagnostic traces to mutate procedural graphs | `nousetsu learn-graph -p project/Villainess -a all` |
+| `nousetsu realign-chapters` | Detects and resolves chapter numbering collisions across volume folders and syncs RAG | `nousetsu realign-chapters -p project/Villainess -F Villainess_06` |
 | `nousetsu traces` | Inspects, analyzes, and exports agent prompt and output traces | `nousetsu traces -c 48 --show-prompts` |
 | `nousetsu web` | Launches the interactive Vite + React 19 Trace Visualizer web app | `nousetsu web --port 5173` |
 | `nousetsu lore` | Searches project Lore Vault using Hybrid RAG + Cross-Encoder | `nousetsu lore "magic sword"` |
@@ -323,7 +325,7 @@ NouSetsu/
 │   ├── storage/                    # Repository, project registry, and summary migrator
 │   ├── tui/                        # Textual TUI dashboard, reader, and token analytics
 │   └── utils/                      # Utilities (rate limiter, chunker, diff patcher, language detector)
-└── tests/                          # Comprehensive pytest test suite (288 tests across 45 modules)
+└── tests/                          # Comprehensive pytest test suite (347 tests across 52 modules)
 ```
 
 ---
@@ -342,59 +344,60 @@ uv run --no-sync pytest
 platform win32 -- Python 3.13.12, pytest-9.1.1, pluggy-1.6.0
 rootdir: D:\Code\novel_translation_Agent
 configfile: pyproject.toml
-collected 288 items
+collected 347 items
 
 tests\test_character_filter.py ...........                               [  3%]
-tests\test_checkpoint.py .....                                           [  5%]
-tests\test_chronicler_rag.py ...                                         [  6%]
-tests\test_chunker.py ......                                             [  8%]
-tests\test_critic_rag.py ...                                             [  9%]
-tests\test_cross_folder_summaries.py ........                            [ 12%]
-tests\test_diff_patcher.py ......                                        [ 14%]
-tests\test_drafter_chunking.py .                                         [ 14%]
-tests\test_formatting.py .....                                           [ 16%]
-tests\test_glossary_filter.py ......                                     [ 18%]
-tests\test_hierarchy_summary.py .....                                    [ 20%]
-tests\test_interactions.py ......                                        [ 22%]
-tests\test_language.py ...........                                       [ 26%]
-tests\test_migration.py ...                                              [ 27%]
-tests\test_model_env.py .....                                            [ 29%]
-tests\test_model_fallback.py ........                                    [ 31%]
-tests\test_models.py ...                                                 [ 32%]
-tests\test_multi_folder.py ....                                          [ 34%]
-tests\test_patch_polishing.py ...                                        [ 35%]
-tests\test_polisher_language.py .......                                  [ 37%]
-tests\test_polisher_title.py ........                                    [ 40%]
-tests\test_procedural_graph.py .....                                     [ 42%]
-tests\test_projects.py ....                                              [ 43%]
-tests\test_prompt_caching_prefix.py .....                                [ 45%]
-tests\test_prompt_tracker.py ....                                        [ 46%]
-tests\test_rag_engine.py .......                                         [ 49%]
-tests\test_rag_integration.py ...                                        [ 50%]
-tests\test_rag_migration.py .....                                        [ 52%]
-tests\test_rag_reranker.py ......                                        [ 54%]
-tests\test_rate_limiter.py ........                                      [ 56%]
-tests\test_recursive_subdivision.py ......................               [ 64%]
-tests\test_remediation_fixes.py .........                                [ 67%]
-tests\test_retry.py ....                                                 [ 69%]
-tests\test_review_loop.py ......                                         [ 71%]
-tests\test_runner.py .......                                             [ 73%]
-tests\test_safety_blocks.py ............                                 [ 77%]
-tests\test_scanner.py ..                                                 [ 78%]
-tests\test_skills.py ............                                        [ 82%]
-tests\test_step_duration.py ...                                          [ 83%]
-tests\test_stop.py ..                                                    [ 84%]
-tests\test_token_metrics.py ....                                         [ 85%]
-tests\test_token_tracking.py ....                                        [ 87%]
-tests\test_translation_fallback.py ..................                    [ 93%]
-tests\test_tui.py ...........                                            [ 97%]
-tests\test_web_server.py ........                                        [100%]
+tests\test_checkpoint.py .....                                           [  4%]
+tests\test_chronicler_rag.py ...                                         [  5%]
+tests\test_chunker.py ......                                             [  7%]
+tests\test_critic_rag.py ...                                             [  8%]
+tests\test_cross_folder_summaries.py ........                            [ 10%]
+tests\test_diff_patcher.py ......                                        [ 12%]
+tests\test_drafter_chunking.py .                                         [ 12%]
+tests\test_formatting.py .....                                           [ 14%]
+tests\test_glossary_filter.py ......                                     [ 15%]
+tests\test_hierarchy_summary.py .....                                    [ 17%]
+tests\test_interactions.py ......                                        [ 19%]
+tests\test_language.py ...........                                       [ 22%]
+tests\test_migration.py ...                                              [ 23%]
+tests\test_model_env.py .....                                            [ 24%]
+tests\test_model_fallback.py ........                                    [ 27%]
+tests\test_models.py ...                                                 [ 27%]
+tests\test_multi_folder.py ....                                          [ 29%]
+tests\test_patch_polishing.py ...                                        [ 29%]
+tests\test_polisher_language.py .......                                  [ 31%]
+tests\test_polisher_title.py ........                                    [ 34%]
+tests\test_procedural_graph.py ..........                                [ 37%]
+tests\test_projects.py ....                                              [ 38%]
+tests\test_prompt_caching_prefix.py .....                                [ 39%]
+tests\test_prompt_tracker.py ....                                        [ 41%]
+tests\test_rag_engine.py .......                                         [ 43%]
+tests\test_rag_integration.py ...                                        [ 44%]
+tests\test_rag_migration.py .....                                        [ 45%]
+tests\test_rag_reranker.py ......                                        [ 47%]
+tests\test_rate_limiter.py ........                                      [ 49%]
+tests\test_recursive_subdivision.py ......................               [ 56%]
+tests\test_remediation_fixes.py .........                                [ 58%]
+tests\test_retry.py ....                                                 [ 60%]
+tests\test_review_loop.py ......                                         [ 61%]
+tests\test_runner.py .......                                             [ 63%]
+tests\test_safety_blocks.py ............                                 [ 67%]
+tests\test_scanner.py ..                                                 [ 68%]
+tests\test_skills.py ............                                        [ 71%]
+tests\test_step_duration.py ...                                          [ 72%]
+tests\test_stop.py ..                                                    [ 73%]
+tests\test_token_metrics.py ....                                         [ 74%]
+tests\test_token_tracking.py ....                                        [ 75%]
+tests\test_translation_fallback.py ..................                    [ 81%]
+tests\test_tui.py ...........                                            [ 84%]
+tests\test_web_server.py ........                                        [ 86%]
+... (347 items across 52 test modules)
 
-============================ 288 passed in 106.44s ============================
+============================ 347 passed in 42.95s =============================
 ```
 
 * **Hermetic Isolation**: Tests run in isolated temporary directories (`tmp_path`), protecting your real novel projects.
-* **Deterministic Execution**: Zero live LLM calls during tests via `MockNovelLLM`, achieving fast execution (~102s for 288 tests across 45 modules).
+* **Deterministic Execution**: Zero live LLM calls during tests via `MockNovelLLM`, achieving ultra-fast execution (~42s for 347 tests across 52 modules).
 
 ---
 
