@@ -108,7 +108,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   <label className="block text-slate-400 mb-1">Novel Title</label>
                   <input
                     type="text"
-                    value={settings.title}
+                    value={settings.title || ''}
                     onChange={(e) => setSettings({ ...settings, title: e.target.value })}
                     className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-200 focus:outline-none focus:border-indigo-500"
                   />
@@ -118,7 +118,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   <label className="block text-slate-400 mb-1">Genre</label>
                   <input
                     type="text"
-                    value={settings.genre}
+                    value={settings.genre || ''}
                     onChange={(e) => setSettings({ ...settings, genre: e.target.value })}
                     className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-200 focus:outline-none focus:border-indigo-500"
                     placeholder="isekai, xianxia, litrpg, romance..."
@@ -129,7 +129,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   <label className="block text-slate-400 mb-1">Source Language</label>
                   <input
                     type="text"
-                    value={settings.source_language}
+                    value={settings.source_language || ''}
                     onChange={(e) =>
                       setSettings({ ...settings, source_language: e.target.value })
                     }
@@ -141,7 +141,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   <label className="block text-slate-400 mb-1">Target Language</label>
                   <input
                     type="text"
-                    value={settings.target_language}
+                    value={settings.target_language || ''}
                     onChange={(e) =>
                       setSettings({ ...settings, target_language: e.target.value })
                     }
@@ -167,7 +167,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   </label>
                   <input
                     type="text"
-                    value={settings.model_name}
+                    value={settings.model_name || ''}
                     onChange={(e) =>
                       setSettings({ ...settings, model_name: e.target.value })
                     }
@@ -185,7 +185,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   </label>
                   <input
                     type="text"
-                    value={settings.fallback_model}
+                    value={settings.fallback_model || ''}
                     onChange={(e) =>
                       setSettings({ ...settings, fallback_model: e.target.value })
                     }
@@ -211,13 +211,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <div className="grid grid-cols-2 gap-4 text-xs">
                 <div>
                   <label className="block text-slate-400 mb-1">
-                    Max Review Loops ({settings.max_review_loops})
+                    Max Review Loops ({settings.max_review_loops ?? 2})
                   </label>
                   <input
                     type="range"
                     min={1}
                     max={5}
-                    value={settings.max_review_loops}
+                    value={settings.max_review_loops ?? 2}
                     onChange={(e) =>
                       setSettings({
                         ...settings,
@@ -236,14 +236,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
                 <div>
                   <label className="block text-slate-400 mb-1">
-                    Quality Score Threshold ({settings.quality_threshold})
+                    Quality Score Threshold ({settings.quality_threshold ?? 8.5})
                   </label>
                   <input
                     type="range"
                     min={6.0}
                     max={9.5}
                     step={0.1}
-                    value={settings.quality_threshold}
+                    value={settings.quality_threshold ?? 8.5}
                     onChange={(e) =>
                       setSettings({
                         ...settings,
@@ -277,7 +277,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   </label>
                   <input
                     type="number"
-                    value={settings.chunk_threshold_lines}
+                    value={settings.chunk_threshold_lines ?? 85}
                     onChange={(e) =>
                       setSettings({
                         ...settings,
@@ -292,7 +292,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   <label className="block text-slate-400 mb-1">Chunk Size (lines)</label>
                   <input
                     type="number"
-                    value={settings.chunk_size_lines}
+                    value={settings.chunk_size_lines ?? 70}
                     onChange={(e) =>
                       setSettings({
                         ...settings,
@@ -309,7 +309,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   </label>
                   <input
                     type="number"
-                    value={settings.chunk_overlap_lines}
+                    value={settings.chunk_overlap_lines ?? 3}
                     onChange={(e) =>
                       setSettings({
                         ...settings,
@@ -336,7 +336,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   </label>
                   <input
                     type="text"
-                    value={settings.raw_dir}
+                    value={settings.raw_dir || ''}
                     onChange={(e) => setSettings({ ...settings, raw_dir: e.target.value })}
                     className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200"
                   />
@@ -348,7 +348,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   </label>
                   <input
                     type="text"
-                    value={settings.translated_dir}
+                    value={settings.translated_dir || ''}
                     onChange={(e) =>
                       setSettings({ ...settings, translated_dir: e.target.value })
                     }

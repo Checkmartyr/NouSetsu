@@ -63,8 +63,10 @@ export const StudioView: React.FC<StudioViewProps> = ({
     setChapters(chList);
     setStatus(transStat);
 
-    if (chList.length > 0 && selectedChapterNum === null) {
-      setSelectedChapterNum(chList[0].chapter_num);
+    if (chList.length > 0) {
+      if (selectedChapterNum === null || !chList.some((c) => c.chapter_num === selectedChapterNum)) {
+        setSelectedChapterNum(chList[0].chapter_num);
+      }
     }
   };
 
@@ -82,7 +84,9 @@ export const StudioView: React.FC<StudioViewProps> = ({
     if (selectedChapterNum === null || !activeProjectPath) return;
     let active = true;
     setLoadingContent(true);
-    fetchChapterContent(selectedChapterNum, activeProjectPath).then((content) => {
+    const selectedChapObj = chapters.find((c) => c.chapter_num === selectedChapterNum);
+    const folderToFetch = selectedFolder !== 'all' ? selectedFolder : (selectedChapObj?.folder || undefined);
+    fetchChapterContent(selectedChapterNum, activeProjectPath, folderToFetch).then((content) => {
       if (active) {
         setChapterContent(content);
         setLoadingContent(false);
@@ -91,7 +95,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
     return () => {
       active = false;
     };
-  }, [selectedChapterNum, activeProjectPath]);
+  }, [selectedChapterNum, activeProjectPath, chapters, selectedFolder]);
 
   // Scroll logs to bottom when updated
   useEffect(() => {
@@ -147,6 +151,14 @@ export const StudioView: React.FC<StudioViewProps> = ({
       selectedFolder === 'all' ? true : c.folder === selectedFolder;
     return matchesSearch && matchesStatus && matchesFolder;
   });
+
+  useEffect(() => {
+    if (filteredChapters.length > 0) {
+      if (selectedChapterNum === null || !filteredChapters.some((c) => c.chapter_num === selectedChapterNum)) {
+        setSelectedChapterNum(filteredChapters[0].chapter_num);
+      }
+    }
+  }, [selectedFolder, filteredChapters]);
 
   const stages = [
     { key: 'EXTRACTION', label: '1. Extractor', agent: 'EntityExtractorAgent' },
@@ -412,7 +424,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
             </div>
 
             <div className="flex items-center gap-3">
-              {chapterContent?.has_translated && (
+              {(chapterContent?.has_translated || Boolean(chapterContent?.translated_text?.trim())) && (
                 <button
                   onClick={() => selectedChapterNum && onNavigateToReader(selectedChapterNum)}
                   className="flex items-center gap-1.5 px-3 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-medium cursor-pointer transition-colors"
@@ -447,14 +459,14 @@ export const StudioView: React.FC<StudioViewProps> = ({
               <div className="flex flex-col h-full overflow-hidden bg-slate-900/10">
                 <div className="px-4 py-2 bg-slate-900/60 text-xs font-semibold text-emerald-400 uppercase tracking-wider border-b border-slate-800 flex items-center justify-between">
                   <span>Literary English Translation</span>
-                  {chapterContent?.has_translated && (
+                  {(chapterContent?.has_translated || Boolean(chapterContent?.translated_text?.trim())) && (
                     <span className="text-[11px] text-slate-400 font-normal">
                       Publication Draft
                     </span>
                   )}
                 </div>
                 <div className="flex-1 p-6 overflow-y-auto text-sm leading-relaxed text-slate-200 whitespace-pre-wrap selection:bg-emerald-500/30">
-                  {chapterContent?.translated_text ? (
+                  {chapterContent?.translated_text?.trim() ? (
                     chapterContent.translated_text
                   ) : (
                     <div className="h-full flex flex-col items-center justify-center text-slate-500 text-sm gap-2">

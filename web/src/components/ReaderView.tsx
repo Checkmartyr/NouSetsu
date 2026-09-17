@@ -40,10 +40,12 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
     if (!activeProjectPath) return;
     fetchChapters(activeProjectPath).then((list) => {
       setChapters(list);
-      if (list.length > 0 && !initialChapterNum) {
-        // Default to first completed chapter or first chapter
-        const firstCompleted = list.find((c) => c.is_completed);
-        setCurrentChapterNum(firstCompleted ? firstCompleted.chapter_num : list[0].chapter_num);
+      if (list.length > 0) {
+        if (!initialChapterNum || !list.some((c) => c.chapter_num === currentChapterNum)) {
+          // Default to first completed / translated chapter or first chapter
+          const firstCompleted = list.find((c) => c.is_completed || c.translated_exists);
+          setCurrentChapterNum(firstCompleted ? firstCompleted.chapter_num : list[0].chapter_num);
+        }
       }
     });
   }, [activeProjectPath, initialChapterNum]);
@@ -51,11 +53,12 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
   useEffect(() => {
     if (!activeProjectPath || !currentChapterNum) return;
     setLoading(true);
-    fetchChapterContent(currentChapterNum, activeProjectPath).then((res) => {
+    const curChap = chapters.find((c) => c.chapter_num === currentChapterNum);
+    fetchChapterContent(currentChapterNum, activeProjectPath, curChap?.folder || undefined).then((res) => {
       setContent(res);
       setLoading(false);
     });
-  }, [currentChapterNum, activeProjectPath]);
+  }, [currentChapterNum, activeProjectPath, chapters]);
 
   const currentIndex = chapters.findIndex((c) => c.chapter_num === currentChapterNum);
   const hasPrev = currentIndex > 0;
@@ -225,10 +228,10 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
           <div className="max-w-3xl w-full">
             {loading ? (
               <div className="text-center py-20 opacity-50">Loading translation...</div>
-            ) : content?.has_translated ? (
+            ) : (content?.has_translated || Boolean(content?.translated_text?.trim())) ? (
               <article className="prose max-w-none">
                 <div className={`font-serif whitespace-pre-wrap ${fontClasses[fontSize]}`}>
-                  {content.translated_text}
+                  {content?.translated_text}
                 </div>
               </article>
             ) : (

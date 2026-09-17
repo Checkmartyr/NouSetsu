@@ -114,14 +114,18 @@ export async function updateBible(data: BibleData, projectPath?: string): Promis
   }
 }
 
-export async function fetchRawBible(projectPath?: string): Promise<{ raw_yaml: string } | null> {
+export async function fetchRawBible(projectPath?: string): Promise<{ raw_yaml: string; raw?: string } | null> {
   try {
     const params = new URLSearchParams();
     if (projectPath) params.set('project_path', projectPath);
     const qs = params.toString() ? `?${params.toString()}` : '';
     const res = await fetch(`${API_BASE}/api/bible/raw${qs}`);
     if (!res.ok) return null;
-    return await res.json();
+    const data = await res.json();
+    return {
+      raw_yaml: data.raw_yaml || data.raw || '',
+      raw: data.raw || data.raw_yaml || '',
+    };
   } catch (e) {
     return null;
   }
@@ -135,7 +139,7 @@ export async function updateRawBible(rawYaml: string, projectPath?: string): Pro
     const res = await fetch(`${API_BASE}/api/bible/raw${qs}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ raw_yaml: rawYaml }),
+      body: JSON.stringify({ raw_yaml: rawYaml, raw: rawYaml }),
     });
     return res.ok;
   } catch (e) {
@@ -151,7 +155,14 @@ export async function fetchSettings(projectPath?: string): Promise<ProjectSettin
     const qs = params.toString() ? `?${params.toString()}` : '';
     const res = await fetch(`${API_BASE}/api/settings${qs}`);
     if (!res.ok) return null;
-    return (await res.json()) as ProjectSettings;
+    const data = await res.json();
+    if (data && data.config && typeof data.config === 'object') {
+      return {
+        ...data.config,
+        ...data,
+      } as ProjectSettings;
+    }
+    return data as ProjectSettings;
   } catch (e) {
     return null;
   }

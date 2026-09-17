@@ -147,17 +147,26 @@ export const BibleView: React.FC<BibleViewProps> = ({
 
   const openEditCharModal = (char: BibleCharacter, index: number) => {
     setEditingCharIndex(index);
-    setCharForm({ ...char });
+    setCharForm({
+      ...char,
+      speaking_style: char.speaking_style || char.voice || '',
+      voice: char.voice || char.speaking_style || '',
+    });
     setIsCharModalOpen(true);
   };
 
   const saveCharModal = () => {
     if (!bible) return;
+    const finalCharForm: BibleCharacter = {
+      ...charForm,
+      speaking_style: charForm.speaking_style || charForm.voice || '',
+      voice: charForm.voice || charForm.speaking_style || '',
+    };
     const newChars = [...bible.characters];
     if (editingCharIndex !== null) {
-      newChars[editingCharIndex] = charForm;
+      newChars[editingCharIndex] = finalCharForm;
     } else {
-      newChars.push(charForm);
+      newChars.push(finalCharForm);
     }
     const updated = { ...bible, characters: newChars };
     handleSaveBible(updated);
@@ -173,23 +182,36 @@ export const BibleView: React.FC<BibleViewProps> = ({
   // Glossary Operations
   const openAddTermModal = () => {
     setEditingTermIndex(null);
-    setTermForm({ term: '', translation: '', category: 'term', notes: '' });
+    setTermForm({ term: '', translation: '', source: '', target: '', category: 'term', notes: '' });
     setIsTermModalOpen(true);
   };
 
   const openEditTermModal = (term: BibleTerm, index: number) => {
     setEditingTermIndex(index);
-    setTermForm({ ...term });
+    setTermForm({
+      ...term,
+      term: term.term || term.source || '',
+      translation: term.translation || term.target || '',
+      source: term.source || term.term || '',
+      target: term.target || term.translation || '',
+    });
     setIsTermModalOpen(true);
   };
 
   const saveTermModal = () => {
     if (!bible) return;
+    const finalTermForm: BibleTerm = {
+      ...termForm,
+      term: termForm.term || termForm.source || '',
+      translation: termForm.translation || termForm.target || '',
+      source: termForm.source || termForm.term || '',
+      target: termForm.target || termForm.translation || '',
+    };
     const newGlossary = [...bible.glossary];
     if (editingTermIndex !== null) {
-      newGlossary[editingTermIndex] = termForm;
+      newGlossary[editingTermIndex] = finalTermForm;
     } else {
-      newGlossary.push(termForm);
+      newGlossary.push(finalTermForm);
     }
     const updated = { ...bible, glossary: newGlossary };
     handleSaveBible(updated);
@@ -218,8 +240,9 @@ export const BibleView: React.FC<BibleViewProps> = ({
 
   const filteredGlossary = (bible?.glossary || []).filter((t) => {
     const q = searchTerm.toLowerCase();
-    const matchesSearch =
-      t.term.toLowerCase().includes(q) || t.translation.toLowerCase().includes(q);
+    const termVal = (t.source || t.term || '').toLowerCase();
+    const transVal = (t.target || t.translation || '').toLowerCase();
+    const matchesSearch = termVal.includes(q) || transVal.includes(q);
     const matchesCat =
       termCategoryFilter === 'all' ? true : t.category === termCategoryFilter;
     return matchesSearch && matchesCat;
@@ -383,9 +406,9 @@ export const BibleView: React.FC<BibleViewProps> = ({
                       )}
                     </div>
 
-                    {c.speaking_style && (
+                    {(c.speaking_style || c.voice) && (
                       <p className="text-xs text-slate-400 mt-2 italic">
-                        &ldquo;{c.speaking_style}&rdquo;
+                        &ldquo;{c.speaking_style || c.voice}&rdquo;
                       </p>
                     )}
 
@@ -453,10 +476,10 @@ export const BibleView: React.FC<BibleViewProps> = ({
                   {filteredGlossary.map((t, i) => (
                     <tr key={i} className="hover:bg-slate-900/60 transition-colors">
                       <td className="p-3 font-medium text-slate-200 font-mono">
-                        {t.term}
+                        {t.source || t.term}
                       </td>
                       <td className="p-3 text-emerald-400 font-semibold">
-                        {t.translation}
+                        {t.target || t.translation}
                       </td>
                       <td className="p-3">
                         <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px] uppercase">
@@ -471,14 +494,14 @@ export const BibleView: React.FC<BibleViewProps> = ({
                           <button
                             onClick={() => openEditTermModal(t, i)}
                             className="p-1 text-slate-400 hover:text-indigo-400 cursor-pointer"
-                            aria-label={`Edit term ${t.term}`}
+                            aria-label={`Edit term ${t.source || t.term}`}
                           >
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={() => deleteTerm(i)}
                             className="p-1 text-slate-400 hover:text-rose-400 cursor-pointer"
-                            aria-label={`Delete term ${t.term}`}
+                            aria-label={`Delete term ${t.source || t.term}`}
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -634,12 +657,16 @@ export const BibleView: React.FC<BibleViewProps> = ({
                 />
               </div>
               <div className="col-span-2">
-                <label className="block text-slate-400 mb-1">Speaking Style</label>
+                <label className="block text-slate-400 mb-1">Speaking Style / Voice</label>
                 <input
                   type="text"
-                  value={charForm.speaking_style || ''}
+                  value={charForm.speaking_style || charForm.voice || ''}
                   onChange={(e) =>
-                    setCharForm({ ...charForm, speaking_style: e.target.value })
+                    setCharForm({
+                      ...charForm,
+                      speaking_style: e.target.value,
+                      voice: e.target.value,
+                    })
                   }
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200"
                   placeholder="e.g. haughty noblewoman, playful catgirl, calm elder"
@@ -696,8 +723,14 @@ export const BibleView: React.FC<BibleViewProps> = ({
                 <label className="block text-slate-400 mb-1">Source Term *</label>
                 <input
                   type="text"
-                  value={termForm.term}
-                  onChange={(e) => setTermForm({ ...termForm, term: e.target.value })}
+                  value={termForm.term || termForm.source || ''}
+                  onChange={(e) =>
+                    setTermForm({
+                      ...termForm,
+                      term: e.target.value,
+                      source: e.target.value,
+                    })
+                  }
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 font-mono"
                   placeholder="e.g. 聖剣"
                 />
@@ -706,9 +739,13 @@ export const BibleView: React.FC<BibleViewProps> = ({
                 <label className="block text-slate-400 mb-1">Standard Translation *</label>
                 <input
                   type="text"
-                  value={termForm.translation}
+                  value={termForm.translation || termForm.target || ''}
                   onChange={(e) =>
-                    setTermForm({ ...termForm, translation: e.target.value })
+                    setTermForm({
+                      ...termForm,
+                      translation: e.target.value,
+                      target: e.target.value,
+                    })
                   }
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200"
                   placeholder="e.g. Holy Sword"

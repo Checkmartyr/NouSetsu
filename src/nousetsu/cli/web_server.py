@@ -134,16 +134,28 @@ class TranslateStartRequest(BaseModel):
     project_path: Optional[str] = None
     folder: Optional[str] = None
     chapter: Optional[int] = None
+    chapter_num: Optional[int] = None
     limit: Optional[int] = None
     force: bool = False
+    force_retranslate: bool = False
     model: Optional[str] = None
     fallback_model: Optional[str] = None
     max_loops: Optional[int] = None
     quality_threshold: Optional[float] = None
 
+    def get_chapter(self) -> Optional[int]:
+        return self.chapter if self.chapter is not None else self.chapter_num
+
+    def get_force(self) -> bool:
+        return self.force or self.force_retranslate
+
 
 class RawYamlRequest(BaseModel):
-    raw: str
+    raw: Optional[str] = None
+    raw_yaml: Optional[str] = None
+
+    def get_content(self) -> str:
+        return self.raw if self.raw is not None else (self.raw_yaml or "")
 
 
 # ============================================================================
@@ -306,13 +318,63 @@ def _load_project_traces(project_path: Path) -> List[Dict[str, Any]]:
 def _scan_project_tasks(repo: NovelRepository, folder: Optional[str] = None) -> List[ChapterTask]:
     """Scan and resolve chapter tasks for a project and optional subfolder."""
     cfg = repo.load_config()
+    scanner = ChapterScanner(repo)
+
+    if folder and folder != "all":
+        # Check if the folder exists directly in repo.root_dir
+        folder_cand = repo.root_dir / folder
+        if folder_cand.exists() and folder_cand.is_dir():
+            raw_path = folder_cand
+            out_cand_th = repo.root_dir / f"{folder}_th"
+            out_cand_tr = repo.root_dir / f"{folder}_trans"
+            if out_cand_th.exists():
+                output_path = out_cand_th
+            elif out_cand_tr.exists():
+                output_path = out_cand_tr
+            else:
+                output_path = cfg.get_output_path(repo.root_dir)
+        else:
+            raw_path = cfg.get_raw_path(repo.root_dir)
+            output_path = cfg.get_output_path(repo.root_dir)
+        return scanner.scan_directory(raw_path, output_path)
+
+    # When folder is None or "all": scan primary path and discover all volume folders
     raw_path = cfg.get_raw_path(repo.root_dir)
     output_path = cfg.get_output_path(repo.root_dir)
-    if folder:
-        raw_path = raw_path / folder
-        output_path = output_path / folder
-    scanner = ChapterScanner(repo)
-    return scanner.scan_directory(raw_path, output_path)
+    primary_tasks = scanner.scan_directory(raw_path, output_path)
+
+    all_tasks = list(primary_tasks)
+    seen_files = {str(t.source_file.resolve()) for t in primary_tasks}
+
+    ignored_dir_names = {
+        "node_modules", "web", "src-tauri", "dist", ".git", ".novel", ".venv",
+        "__pycache__", "translated_chapters", "raw_chapters"
+    }
+
+    try:
+        for child in sorted(repo.root_dir.iterdir()):
+            if (
+                child.is_dir()
+                and not child.name.startswith(".")
+                and not child.name.endswith("_th")
+                and not child.name.endswith("_trans")
+                and child.name not in ignored_dir_names
+            ):
+                if child.resolve() != raw_path.resolve():
+                    has_chapters = any(f.suffix.lower() in (".txt", ".md") for f in child.iterdir() if f.is_file())
+                    if has_chapters:
+                        out_th = repo.root_dir / f"{child.name}_th"
+                        out_tr = repo.root_dir / f"{child.name}_trans"
+                        sub_out = out_th if out_th.exists() else (out_tr if out_tr.exists() else output_path)
+                        sub_tasks = scanner.scan_directory(child, sub_out)
+                        for st in sub_tasks:
+                            if str(st.source_file.resolve()) not in seen_files:
+                                all_tasks.append(st)
+                                seen_files.add(str(st.source_file.resolve()))
+    except Exception as e:
+        logger.warning("Error auto-discovering volume subfolders: %s", e)
+
+    return all_tasks
 
 
 # ============================================================================
@@ -613,6 +675,10 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
         tasks = _scan_project_tasks(repo, folder=folder)
         task = next((t for t in tasks if t.chapter_num == chapter_num), None)
 
+        if not task and folder:
+            all_tasks = _scan_project_tasks(repo, folder=None)
+            task = next((t for t in all_tasks if t.chapter_num == chapter_num), None)
+
         source_text = ""
         translated_text = ""
 
@@ -630,9 +696,13 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
 
         return {
             "chapter_num": chapter_num,
-            "folder": folder,
+            "folder": task.folder if task else folder,
+            "source_file": str(task.source_file) if task else "",
+            "output_file": str(task.output_file) if task else "",
             "source_text": source_text,
             "translated_text": translated_text,
+            "has_source": bool(source_text.strip()),
+            "has_translated": bool(translated_text.strip()),
             "title": task.source_file.stem if task else f"Chapter {chapter_num}",
         }
 
@@ -647,9 +717,9 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
                 _run_batch_worker,
                 repo=repo,
                 folder=body.folder,
-                chapter_num=body.chapter,
+                chapter_num=body.get_chapter(),
                 limit=body.limit,
-                force_retranslate=body.force,
+                force_retranslate=body.get_force(),
                 model=body.model,
                 fallback_model=body.fallback_model,
                 max_loops=body.max_loops,
@@ -723,12 +793,41 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
     async def get_bible(project_path: Optional[str] = Query(None)) -> Dict[str, Any]:
         repo = _resolve_repo(project_path)
         bible = repo.load_bible()
-        return bible.model_dump()
+        data = bible.model_dump()
+
+        # Add UI compatibility aliases for glossary and characters
+        for g in data.get("glossary", []):
+            if "source" in g and "term" not in g:
+                g["term"] = g["source"]
+            if "target" in g and "translation" not in g:
+                g["translation"] = g["target"]
+
+        for c in data.get("characters", []):
+            if "voice" in c and "speaking_style" not in c:
+                c["speaking_style"] = c["voice"]
+
+        return data
 
     @app.put("/api/bible")
     async def update_bible(bible_data: Dict[str, Any], project_path: Optional[str] = Query(None)) -> Dict[str, Any]:
         repo = _resolve_repo(project_path)
         try:
+            # Normalize glossary items: term -> source, translation -> target
+            if "glossary" in bible_data and isinstance(bible_data["glossary"], list):
+                for item in bible_data["glossary"]:
+                    if isinstance(item, dict):
+                        if "term" in item and "source" not in item:
+                            item["source"] = item["term"]
+                        if "translation" in item and "target" not in item:
+                            item["target"] = item["translation"]
+
+            # Normalize characters: speaking_style -> voice
+            if "characters" in bible_data and isinstance(bible_data["characters"], list):
+                for char in bible_data["characters"]:
+                    if isinstance(char, dict):
+                        if "speaking_style" in char and "voice" not in char:
+                            char["voice"] = char["speaking_style"]
+
             bible = NovelBible.model_validate(bible_data)
             repo.save_bible(bible)
             return {"success": True, "bible": bible.model_dump()}
@@ -740,14 +839,16 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
         repo = _resolve_repo(project_path)
         bible_path = repo.bible_file_path()
         if not bible_path.exists():
-            return {"raw": ""}
-        return {"raw": bible_path.read_text(encoding="utf-8", errors="replace")}
+            return {"raw": "", "raw_yaml": ""}
+        content = bible_path.read_text(encoding="utf-8", errors="replace")
+        return {"raw": content, "raw_yaml": content}
 
     @app.put("/api/bible/raw")
     async def update_bible_raw(body: RawYamlRequest, project_path: Optional[str] = Query(None)) -> Dict[str, Any]:
         repo = _resolve_repo(project_path)
         try:
-            parsed = yaml.safe_load(body.raw)
+            raw_text = body.get_content()
+            parsed = yaml.safe_load(raw_text)
             if not isinstance(parsed, dict):
                 raise ValueError("YAML must represent a dictionary document.")
             bible = NovelBible.model_validate(parsed)
@@ -765,6 +866,20 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
         repo = _resolve_repo(project_path)
         cfg = repo.load_config()
         return {
+            "title": cfg.title,
+            "genre": cfg.genre,
+            "source_language": cfg.source_language,
+            "target_language": cfg.target_language,
+            "raw_dir": cfg.raw_dir,
+            "translated_dir": cfg.output_dir,
+            "output_dir": cfg.output_dir,
+            "model_name": cfg.model_name or os.environ.get("NOVEL_MODEL", "gemini-3.1-flash-lite"),
+            "fallback_model": cfg.fallback_model or os.environ.get("NOVEL_FALLBACK_MODEL", "gemini-3.5-flash-lite"),
+            "max_review_loops": cfg.max_review_loops,
+            "quality_threshold": cfg.quality_threshold,
+            "chunk_threshold_lines": cfg.chunk_threshold_lines,
+            "chunk_size_lines": cfg.target_chunk_lines,
+            "chunk_overlap_lines": cfg.chunk_overlap_lines,
             "config": cfg.model_dump(),
             "env": {
                 "NOVEL_MODEL": os.environ.get("NOVEL_MODEL", "gemini-3.1-flash-lite"),
@@ -785,9 +900,44 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
     async def update_settings(body: Dict[str, Any], project_path: Optional[str] = Query(None)) -> Dict[str, Any]:
         repo = _resolve_repo(project_path)
         try:
-            cfg = ProjectConfig.model_validate(body)
+            cfg = repo.load_config()
+            src = body.get("config") if isinstance(body.get("config"), dict) else body
+
+            if "title" in src and src["title"] is not None:
+                cfg.title = str(src["title"])
+            if "genre" in src and src["genre"] is not None:
+                cfg.genre = str(src["genre"])
+            if "source_language" in src and src["source_language"] is not None:
+                cfg.source_language = str(src["source_language"])
+            if "target_language" in src and src["target_language"] is not None:
+                cfg.target_language = str(src["target_language"])
+            if "raw_dir" in src and src["raw_dir"] is not None:
+                cfg.raw_dir = str(src["raw_dir"])
+            if "translated_dir" in src and src["translated_dir"] is not None:
+                cfg.output_dir = str(src["translated_dir"])
+            elif "output_dir" in src and src["output_dir"] is not None:
+                cfg.output_dir = str(src["output_dir"])
+            if "model_name" in src:
+                cfg.model_name = str(src["model_name"]).strip() or None
+            if "fallback_model" in src:
+                cfg.fallback_model = str(src["fallback_model"]).strip() or None
+            if "max_review_loops" in src and src["max_review_loops"] is not None:
+                cfg.max_review_loops = int(src["max_review_loops"])
+            if "quality_threshold" in src and src["quality_threshold"] is not None:
+                cfg.quality_threshold = float(src["quality_threshold"])
+            if "chunk_threshold_lines" in src and src["chunk_threshold_lines"] is not None:
+                cfg.chunk_threshold_lines = int(src["chunk_threshold_lines"])
+            if "chunk_size_lines" in src and src["chunk_size_lines"] is not None:
+                cfg.target_chunk_lines = int(src["chunk_size_lines"])
+            elif "target_chunk_lines" in src and src["target_chunk_lines"] is not None:
+                cfg.target_chunk_lines = int(src["target_chunk_lines"])
+            if "chunk_overlap_lines" in src and src["chunk_overlap_lines"] is not None:
+                cfg.chunk_overlap_lines = int(src["chunk_overlap_lines"])
+
             repo.save_config(cfg)
             return {"success": True, "config": cfg.model_dump()}
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Invalid settings payload: {e}")
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Invalid settings payload: {e}")
 

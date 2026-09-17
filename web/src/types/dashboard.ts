@@ -49,6 +49,7 @@ export interface BibleCharacter {
   gender?: string;
   role?: string;
   speaking_style?: string;
+  voice?: string;
   summary?: string;
   aliases?: string[];
   power_level?: string;
@@ -56,8 +57,10 @@ export interface BibleCharacter {
 }
 
 export interface BibleTerm {
-  term: string;
-  translation: string;
+  term?: string;
+  translation?: string;
+  source?: string;
+  target?: string;
   category?: string;
   notes?: string;
 }
@@ -81,17 +84,18 @@ export interface BibleData {
 }
 
 export interface ProjectSettings {
-  title: string;
-  genre: string;
-  source_language: string;
-  target_language: string;
-  raw_dir: string;
-  translated_dir: string;
-  model_name: string;
-  fallback_model: string;
-  max_review_loops: number;
-  quality_threshold: number;
-  chunk_threshold_lines: number;
-  chunk_size_lines: number;
-  chunk_overlap_lines: number;
+  title?: string;
+  genre?: string;
+  source_language?: string;
+  target_language?: string;
+  raw_dir?: string;
+  translated_dir?: string;
+  model_name?: string;
+  fallback_model?: string;
+  max_review_loops?: number;
+  quality_threshold?: number;
+  chunk_threshold_lines?: number;
+  chunk_size_lines?: number;
+  chunk_overlap_lines?: number;
+  [key: string]: any;
 }

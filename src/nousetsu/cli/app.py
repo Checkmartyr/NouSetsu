@@ -850,10 +850,16 @@ def cmd_web(args: argparse.Namespace) -> None:
     port = getattr(args, "port", 5173) or 5173
     dev_mode = getattr(args, "dev", False)
     do_build = getattr(args, "build", False)
+    project_dir = getattr(args, "project_dir", None)
+    folder = getattr(args, "folder", None)
 
-    # Locate web/ directory
-    repo = NovelRepository()
-    web_dir = repo.root_dir / "web"
+    # Locate web/ directory relative to codebase root or repo
+    repo_root = Path(__file__).resolve().parent.parent.parent.parent
+    web_dir = repo_root / "web"
+    if not web_dir.exists():
+        repo = NovelRepository(project_dir=project_dir)
+        web_dir = repo.root_dir / "web"
+
     if not web_dir.exists():
         console.print(f"[bold red]Web frontend directory not found at:[/] {web_dir}")
         return
@@ -869,7 +875,12 @@ def cmd_web(args: argparse.Namespace) -> None:
 
     url = f"http://localhost:{port}"
     reg = ProjectRegistry()
-    active_p = reg.get_last_active_project() or repo.root_dir
+    if project_dir:
+        p_path = Path(project_dir).resolve()
+        if p_path.exists():
+            reg.register_project(p_path)
+            reg.set_last_active_project(p_path)
+    active_p = reg.get_last_active_project() or repo_root
 
     if dev_mode or not dist_dir.exists():
         # Start API server on 5174 in background thread for Vite proxy
@@ -1030,6 +1041,8 @@ def main() -> None:
 
     # web
     p_web = subparsers.add_parser("web", help="Launch interactive Trace Visualizer web app in your browser")
+    p_web.add_argument("--project-dir", "-P", default=None, help="Root folder of novel project to open in web app")
+    p_web.add_argument("--folder", "-F", default=None, help="Specific volume folder to focus on")
     p_web.add_argument("--port", "-p", type=int, default=5173, help="Port to run visualizer server on (default: 5173)")
     p_web.add_argument("--dev", action="store_true", help="Run with live Vite dev server instead of production dist")
     p_web.add_argument("--build", action="store_true", help="Rebuild frontend assets before launching")
