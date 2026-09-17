@@ -39,12 +39,14 @@ class DiagnosticTrace(BaseModel):
 class GraphEditOperation(BaseModel):
     """Structured mutation operation for a Procedural Graph edge."""
     operation: str = "UPDATE"  # "ADD", "UPDATE", "DELETE"
-    edge_source: str
-    edge_target: str
+    edge_source: str = Field(default="", alias="source")
+    edge_target: Optional[str] = Field(default="", alias="target")
     new_condition: Optional[str] = None
     new_guidance: Optional[str] = None
     new_pitfalls: Optional[str] = None
     rationale: str = ""
+
+    model_config = {"populate_by_name": True}
 
 
 class ProceduralGraphRefiner:
@@ -218,7 +220,7 @@ Respond strictly in valid JSON:
             # Find matching edge
             target_edge = None
             for e in new_graph.edges:
-                if e.source == edit.edge_source and e.target == edit.edge_target:
+                if e.source == edit.edge_source and (not edit.edge_target or e.target == edit.edge_target):
                     target_edge = e
                     break
 
