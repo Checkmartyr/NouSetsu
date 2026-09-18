@@ -133,9 +133,9 @@ export interface ProjectSettings {
   model_catalog?: string[];
   max_review_loops?: number;
   quality_threshold?: number;
-  chunk_threshold_lines?: number;
-  chunk_size_lines?: number;
-  chunk_overlap_lines?: number;
+  chunk_threshold_lines?: number | '';
+  chunk_size_lines?: number | '';
+  chunk_overlap_lines?: number | '';
   [key: string]: any;
 }
 

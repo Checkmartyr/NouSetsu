@@ -104,7 +104,28 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setSaving(true);
     // Exclude nested stale config and env snapshots before sending to backend
     const { config, env, ...cleanSettings } = settings;
-    const success = await updateSettings(cleanSettings, activeProjectPath);
+    const sanitizedSettings = {
+      ...cleanSettings,
+      chunk_threshold_lines:
+        cleanSettings.chunk_threshold_lines === '' ||
+        cleanSettings.chunk_threshold_lines === undefined ||
+        isNaN(Number(cleanSettings.chunk_threshold_lines))
+          ? 85
+          : Number(cleanSettings.chunk_threshold_lines),
+      chunk_size_lines:
+        cleanSettings.chunk_size_lines === '' ||
+        cleanSettings.chunk_size_lines === undefined ||
+        isNaN(Number(cleanSettings.chunk_size_lines))
+          ? 70
+          : Number(cleanSettings.chunk_size_lines),
+      chunk_overlap_lines:
+        cleanSettings.chunk_overlap_lines === '' ||
+        cleanSettings.chunk_overlap_lines === undefined ||
+        isNaN(Number(cleanSettings.chunk_overlap_lines))
+          ? 3
+          : Number(cleanSettings.chunk_overlap_lines),
+    };
+    const success = await updateSettings(sanitizedSettings, activeProjectPath);
     setSaving(false);
     if (success) {
       showToast('Settings saved to config.yaml successfully!');
@@ -765,13 +786,25 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   </label>
                   <input
                     type="number"
-                    value={settings.chunk_threshold_lines ?? 85}
-                    onChange={(e) =>
+                    min={1}
+                    placeholder="85"
+                    value={settings.chunk_threshold_lines === '' ? '' : (settings.chunk_threshold_lines ?? 85)}
+                    onChange={(e) => {
+                      const val = e.target.value;
                       setSettings({
                         ...settings,
-                        chunk_threshold_lines: parseInt(e.target.value, 10) || 85,
-                      })
-                    }
+                        chunk_threshold_lines: val === '' || isNaN(parseInt(val, 10)) ? '' : parseInt(val, 10),
+                      });
+                    }}
+                    onBlur={() => {
+                      if (
+                        settings.chunk_threshold_lines === '' ||
+                        settings.chunk_threshold_lines === undefined ||
+                        isNaN(Number(settings.chunk_threshold_lines))
+                      ) {
+                        setSettings({ ...settings, chunk_threshold_lines: 85 });
+                      }
+                    }}
                     className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 font-mono"
                   />
                 </div>
@@ -780,13 +813,25 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   <label className="block text-slate-400 mb-1">Chunk Size (lines)</label>
                   <input
                     type="number"
-                    value={settings.chunk_size_lines ?? 70}
-                    onChange={(e) =>
+                    min={1}
+                    placeholder="70"
+                    value={settings.chunk_size_lines === '' ? '' : (settings.chunk_size_lines ?? 70)}
+                    onChange={(e) => {
+                      const val = e.target.value;
                       setSettings({
                         ...settings,
-                        chunk_size_lines: parseInt(e.target.value, 10) || 70,
-                      })
-                    }
+                        chunk_size_lines: val === '' || isNaN(parseInt(val, 10)) ? '' : parseInt(val, 10),
+                      });
+                    }}
+                    onBlur={() => {
+                      if (
+                        settings.chunk_size_lines === '' ||
+                        settings.chunk_size_lines === undefined ||
+                        isNaN(Number(settings.chunk_size_lines))
+                      ) {
+                        setSettings({ ...settings, chunk_size_lines: 70 });
+                      }
+                    }}
                     className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 font-mono"
                   />
                 </div>
@@ -797,13 +842,25 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   </label>
                   <input
                     type="number"
-                    value={settings.chunk_overlap_lines ?? 3}
-                    onChange={(e) =>
+                    min={0}
+                    placeholder="3"
+                    value={settings.chunk_overlap_lines === '' ? '' : (settings.chunk_overlap_lines ?? 3)}
+                    onChange={(e) => {
+                      const val = e.target.value;
                       setSettings({
                         ...settings,
-                        chunk_overlap_lines: parseInt(e.target.value, 10) || 3,
-                      })
-                    }
+                        chunk_overlap_lines: val === '' || isNaN(parseInt(val, 10)) ? '' : parseInt(val, 10),
+                      });
+                    }}
+                    onBlur={() => {
+                      if (
+                        settings.chunk_overlap_lines === '' ||
+                        settings.chunk_overlap_lines === undefined ||
+                        isNaN(Number(settings.chunk_overlap_lines))
+                      ) {
+                        setSettings({ ...settings, chunk_overlap_lines: 3 });
+                      }
+                    }}
                     className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 font-mono"
                   />
                 </div>
