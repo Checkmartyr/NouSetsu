@@ -313,238 +313,280 @@ class BatchRunner:
                 if progress_callback:
                     progress_callback(task.source_file.name, idx, total_tasks, "RUNNING")
 
-                # Read source text
-                with open(task.source_file, "r", encoding="utf-8") as sf:
-                    source_text = sf.read()
-
-                # Load fresh Novel Bible state for current chapter
-                bible = self.repo.load_bible()
-                if (not bible.source_language) or bible.source_language.strip().lower() in ["auto", "autodetect", "detect", "unknown"]:
-                    detected = detect_language(source_text, default="Japanese")
-                    bible = self.repo.set_languages(source_lang=detected)
-
-                # Prepare initial state with possible checkpoint resumption
-                initial_state = TranslationState(
-                    chapter_id=f"chapter_{task.chapter_num:04d}",
-                    chapter_num=task.chapter_num,
-                    source_file=str(task.source_file),
-                    source_sha256=task.source_sha256,
-                    output_file=str(task.output_file),
-                    source_text=source_text,
-                    model_name=self.model_name,
-                    genre=self.genre or getattr(bible, "genre", "general"),
-                    novel_bible=bible,
-                    max_review_loops=self.max_review_loops,
-                    quality_threshold=self.quality_threshold
-                )
-
-                # Resume stage artifacts if present
-                if task.needs_resume and task.existing_meta:
-                    artifacts = task.existing_meta.checkpoint.stage_artifacts
-                    if artifacts.draft_text:
-                        initial_state.draft_text = artifacts.draft_text
-                    if artifacts.critique_notes:
-                        initial_state.critique_notes = artifacts.critique_notes
-                    if artifacts.extracted_terms:
-                        initial_state.extracted_terms = artifacts.extracted_terms
-                    if artifacts.extracted_characters:
-                        initial_state.extracted_characters = artifacts.extracted_characters
-                    if getattr(artifacts, "reconciled_terms", None):
-                        initial_state.reconciled_terms = artifacts.reconciled_terms
-                    if getattr(artifacts, "reconciled_characters", None):
-                        initial_state.reconciled_characters = artifacts.reconciled_characters
-                    if artifacts.polished_text:
-                        initial_state.polished_text = artifacts.polished_text
-                        initial_state.best_polished_text = artifacts.polished_text
-                    if task.existing_meta.quality_audit and task.existing_meta.quality_audit.fidelity_score > 0:
-                        initial_state.quality_audit = task.existing_meta.quality_audit
-                        initial_state.best_audit = task.existing_meta.quality_audit
-                    if getattr(artifacts, "safety_fallbacks_used", 0):
-                        initial_state.safety_fallbacks_used = artifacts.safety_fallbacks_used
-                    if getattr(artifacts, "subdivisions_count", 0):
-                        initial_state.subdivisions_count = artifacts.subdivisions_count
-
                 try:
-                    # Run LangGraph pipeline with stage notification
-                    def _on_stage(st: PipelineStage, msg: str, pct: float):
-                        if stage_callback:
-                            stage_callback(task.source_file.name, st, msg, pct)
-
-                    final_state = self.workflow.run(
-                        initial_state,
-                        stage_callback=_on_stage,
-                        stop_event=self.stop_event
+                    meta = self.run_chapter(
+                        task=task,
+                        force_retranslate=force_retranslate,
+                        stop_event=self.stop_event,
+                        stage_callback=stage_callback
                     )
-
-                    # Write translated text
-                    with open(task.output_file, "w", encoding="utf-8") as out_f:
-                        out_f.write(final_state.polished_text)
-
-                    # Update persistent memory across chapters (scoped to current folder)
-                    task_folder = task.folder or Path(task.source_file).parent.name
-                    if self.auto_update_bible:
-                        chars_to_save = final_state.reconciled_characters or final_state.extracted_characters
-                        terms_to_save = final_state.reconciled_terms or final_state.extracted_terms
-                        self.repo.update_bible_memory(
-                            new_characters=chars_to_save,
-                            new_terms=terms_to_save,
-                            summary=final_state.new_chapter_summary,
-                            folder=task_folder
-                        )
-                    elif final_state.new_chapter_summary:
-                        self.repo.update_bible_memory(
-                            new_characters=[],
-                            new_terms=[],
-                            summary=final_state.new_chapter_summary,
-                            folder=task_folder
-                        )
-
-                    # Save chapter metadata and checkpoint
-                    if final_state.metadata:
-                        st = final_state.metadata.stats
-                        tok_use = TokenUsage(
-                            input_tokens=st.prompt_tokens,
-                            output_tokens=st.completion_tokens,
-                            thought_tokens=st.thought_tokens,
-                            cached_tokens=st.cached_tokens,
-                            total_tokens=st.total_tokens,
-                        )
-                        self.task_token_usage[task.source_file.name] = tok_use
-                        self.batch_token_usage = self.batch_token_usage.add(tok_use)
-
-                        self.repo.save_metadata(final_state.metadata, task.output_file)
-                        results.append(final_state.metadata)
-
-                    tok_display = f" [cyan]({final_state.metadata.stats.total_tokens:,} tokens)[/]" if (final_state.metadata and final_state.metadata.stats.total_tokens) else ""
-                    progress.update(overall_task, advance=1, description=f"[bold green]Finished: {desc}{tok_display}")
-                    if progress_callback:
-                        progress_callback(task.source_file.name, idx, total_tasks, "COMPLETED")
+                    if meta:
+                        results.append(meta)
+                        tok_display = f" [cyan]({meta.stats.total_tokens:,} tokens)[/]" if (meta.stats and meta.stats.total_tokens) else ""
+                        progress.update(overall_task, advance=1, description=f"[bold green]Finished: {desc}{tok_display}")
+                        if progress_callback:
+                            progress_callback(task.source_file.name, idx, total_tasks, "COMPLETED")
 
                 except BatchStoppedException:
-                    paused_stage = getattr(self.workflow, "current_stage", PipelineStage.NONE)
-                    last_st = getattr(self.workflow, "last_state", initial_state) or initial_state
-
-                    extracted_chars = getattr(last_st, "extracted_characters", []) or (task.existing_meta.checkpoint.stage_artifacts.extracted_characters if task.existing_meta else [])
-                    extracted_terms = getattr(last_st, "extracted_terms", []) or (task.existing_meta.checkpoint.stage_artifacts.extracted_terms if task.existing_meta else [])
-                    reconciled_chars = getattr(last_st, "reconciled_characters", []) or (getattr(task.existing_meta.checkpoint.stage_artifacts, "reconciled_characters", []) if task.existing_meta else [])
-                    reconciled_terms = getattr(last_st, "reconciled_terms", []) or (getattr(task.existing_meta.checkpoint.stage_artifacts, "reconciled_terms", []) if task.existing_meta else [])
-                    draft_text = getattr(last_st, "draft_text", None) or (task.existing_meta.checkpoint.stage_artifacts.draft_text if task.existing_meta else None)
-                    critique_notes = getattr(last_st, "critique_notes", None) or (task.existing_meta.checkpoint.stage_artifacts.critique_notes if task.existing_meta else None)
-                    polished_text = getattr(last_st, "best_polished_text", None) or getattr(last_st, "polished_text", None) or (task.existing_meta.checkpoint.stage_artifacts.polished_text if task.existing_meta else None)
-
-                    paused_meta = ChapterMetadata(
-                        chapter_id=f"chapter_{task.chapter_num:04d}",
-                        chapter_num=task.chapter_num,
-                        source_file=str(task.source_file),
-                        source_sha256=task.source_sha256,
-                        output_file=str(task.output_file),
-                        model=self.model_name,
-                        checkpoint=CheckpointData(
-                            status=StageStatus.PAUSED,
-                            last_completed_stage=paused_stage,
-                            stage_artifacts=StageArtifacts(
-                                extracted_terms=extracted_terms,
-                                extracted_characters=extracted_chars,
-                                reconciled_terms=reconciled_terms,
-                                reconciled_characters=reconciled_chars,
-                                draft_text=draft_text,
-                                critique_notes=critique_notes,
-                                polished_text=polished_text,
-                                safety_fallbacks_used=getattr(last_st, "safety_fallbacks_used", 0),
-                                subdivisions_count=getattr(last_st, "subdivisions_count", 0)
-                            )
-                        )
-                    )
-                    self.repo.save_metadata(paused_meta, task.output_file)
-                    results.append(paused_meta)
-
+                    paused_meta = self.repo.load_metadata(task.output_file) or task.existing_meta
+                    if paused_meta:
+                        results.append(paused_meta)
                     progress.update(overall_task, description=f"[bold yellow]Paused: {desc}")
                     if progress_callback:
                         progress_callback(task.source_file.name, idx, total_tasks, "PAUSED")
+                    paused_stage = getattr(self.workflow, "current_stage", PipelineStage.NONE)
                     self.console.print(f"\n[bold yellow]🛑 Translation paused at {paused_stage.value.upper()} stage for {desc}. Checkpoints preserved.[/]")
                     break
 
                 except Exception as err:
-                    import traceback
-                    tb_str = traceback.format_exc()
-                    failed_stage = getattr(self.workflow, "current_stage", PipelineStage.NONE)
-
-                    last_st = getattr(self.workflow, "last_state", initial_state) or initial_state
-                    existing_artifacts = (
-                        task.existing_meta.checkpoint.stage_artifacts
-                        if (task.existing_meta and task.existing_meta.checkpoint)
-                        else StageArtifacts()
-                    )
-
-                    extracted_chars = getattr(last_st, "extracted_characters", []) or existing_artifacts.extracted_characters
-                    extracted_terms = getattr(last_st, "extracted_terms", []) or existing_artifacts.extracted_terms
-                    draft_text = getattr(last_st, "draft_text", None) or existing_artifacts.draft_text
-                    critique_notes = getattr(last_st, "critique_notes", None) or existing_artifacts.critique_notes
-                    polished_text = getattr(last_st, "best_polished_text", None) or getattr(last_st, "polished_text", None) or existing_artifacts.polished_text
-
-                    # Determine last completed stage strictly preceding the failed stage
-                    stage_order_map = {
-                        PipelineStage.NONE: 0,
-                        PipelineStage.EXTRACTION: 1,
-                        PipelineStage.DRAFTING: 2,
-                        PipelineStage.CRITIQUE: 3,
-                        PipelineStage.POLISHING: 4,
-                        PipelineStage.CHRONICLING: 5,
-                    }
-                    failed_order = stage_order_map.get(failed_stage, 0)
-                    max_allowed_order = max(0, failed_order - 1)
-
-                    if max_allowed_order >= 4 and polished_text:
-                        completed_stage = PipelineStage.POLISHING
-                    elif max_allowed_order >= 3 and critique_notes:
-                        completed_stage = PipelineStage.CRITIQUE
-                    elif max_allowed_order >= 2 and draft_text:
-                        completed_stage = PipelineStage.DRAFTING
-                    elif max_allowed_order >= 1 and (extracted_terms or extracted_chars):
-                        completed_stage = PipelineStage.EXTRACTION
-                    else:
-                        completed_stage = PipelineStage.NONE
-
-                    completed_order = stage_order_map.get(completed_stage, 0)
-                    saved_chars = extracted_chars if completed_order >= 1 else []
-                    saved_terms = extracted_terms if completed_order >= 1 else []
-                    saved_draft = draft_text if completed_order >= 2 else None
-                    saved_notes = critique_notes if completed_order >= 3 else None
-                    saved_polish = polished_text if completed_order >= 4 else None
-
-                    # Save failed checkpoint with detailed error diagnostics and preserved stage artifacts
-                    failed_meta = ChapterMetadata(
-                        chapter_id=f"chapter_{task.chapter_num:04d}",
-                        chapter_num=task.chapter_num,
-                        source_file=str(task.source_file),
-                        source_sha256=task.source_sha256,
-                        output_file=str(task.output_file),
-                        model=self.model_name,
-                        checkpoint=task.existing_meta.checkpoint if (task.existing_meta and task.existing_meta.checkpoint) else CheckpointData()
-                    )
-                    failed_meta.checkpoint.stage_artifacts = StageArtifacts(
-                        extracted_terms=saved_terms,
-                        extracted_characters=saved_chars,
-                        draft_text=saved_draft,
-                        critique_notes=saved_notes,
-                        polished_text=saved_polish,
-                        safety_fallbacks_used=getattr(last_st, "safety_fallbacks_used", 0),
-                        subdivisions_count=getattr(last_st, "subdivisions_count", 0)
-                    )
-                    if completed_stage != PipelineStage.NONE:
-                        failed_meta.checkpoint.last_completed_stage = completed_stage
-
-                    failed_meta.checkpoint.record_error(
-                        stage=failed_stage,
-                        err=err,
-                        traceback_str=tb_str,
-                        model=self.model_name
-                    )
-                    self.repo.save_metadata(failed_meta, task.output_file)
-
+                    failed_meta = self.repo.load_metadata(task.output_file) or task.existing_meta
+                    if failed_meta:
+                        results.append(failed_meta)
                     progress.update(overall_task, advance=1, description=f"[bold red]Failed: {desc} ({err})")
                     if progress_callback:
                         progress_callback(task.source_file.name, idx, total_tasks, "FAILED")
+
+        self._print_batch_summary(results)
+        return results
+
+    def run_chapter(
+        self,
+        task: ChapterTask,
+        force_retranslate: bool = False,
+        stop_event: Optional[threading.Event] = None,
+        notify_callback: Optional[Callable[[str], None]] = None,
+        stage_callback: Optional[Callable[[str, PipelineStage, str, float], None]] = None
+    ) -> Optional[ChapterMetadata]:
+        """Execute translation for a single chapter task with checkpoint resumption and error handling."""
+        effective_stop = stop_event or self.stop_event
+        if effective_stop and effective_stop.is_set():
+            raise BatchStoppedException("Translation stopped by user before chapter start.")
+
+        if task.is_completed and not force_retranslate:
+            return task.existing_meta
+
+        # Read source text
+        with open(task.source_file, "r", encoding="utf-8") as sf:
+            source_text = sf.read()
+
+        # Load fresh Novel Bible state for current chapter
+        bible = self.repo.load_bible()
+        if (not bible.source_language) or bible.source_language.strip().lower() in ["auto", "autodetect", "detect", "unknown"]:
+            detected = detect_language(source_text, default="Japanese")
+            bible = self.repo.set_languages(source_lang=detected)
+
+        # Prepare initial state with possible checkpoint resumption
+        initial_state = TranslationState(
+            chapter_id=f"chapter_{task.chapter_num:04d}",
+            chapter_num=task.chapter_num,
+            source_file=str(task.source_file),
+            source_sha256=task.source_sha256,
+            output_file=str(task.output_file),
+            source_text=source_text,
+            model_name=self.model_name,
+            genre=self.genre or getattr(bible, "genre", "general"),
+            novel_bible=bible,
+            max_review_loops=self.max_review_loops,
+            quality_threshold=self.quality_threshold
+        )
+
+        # Resume stage artifacts if present
+        if task.needs_resume and task.existing_meta:
+            artifacts = task.existing_meta.checkpoint.stage_artifacts
+            if artifacts.draft_text:
+                initial_state.draft_text = artifacts.draft_text
+            if artifacts.critique_notes:
+                initial_state.critique_notes = artifacts.critique_notes
+            if artifacts.extracted_terms:
+                initial_state.extracted_terms = artifacts.extracted_terms
+            if artifacts.extracted_characters:
+                initial_state.extracted_characters = artifacts.extracted_characters
+            if getattr(artifacts, "reconciled_terms", None):
+                initial_state.reconciled_terms = artifacts.reconciled_terms
+            if getattr(artifacts, "reconciled_characters", None):
+                initial_state.reconciled_characters = artifacts.reconciled_characters
+            if artifacts.polished_text:
+                initial_state.polished_text = artifacts.polished_text
+                initial_state.best_polished_text = artifacts.polished_text
+            if task.existing_meta.quality_audit and task.existing_meta.quality_audit.fidelity_score > 0:
+                initial_state.quality_audit = task.existing_meta.quality_audit
+                initial_state.best_audit = task.existing_meta.quality_audit
+            if getattr(artifacts, "safety_fallbacks_used", 0):
+                initial_state.safety_fallbacks_used = artifacts.safety_fallbacks_used
+            if getattr(artifacts, "subdivisions_count", 0):
+                initial_state.subdivisions_count = artifacts.subdivisions_count
+
+        def _on_stage(st: PipelineStage, msg: str, pct: float):
+            if stage_callback:
+                stage_callback(task.source_file.name, st, msg, pct)
+            if notify_callback:
+                notify_callback(msg)
+
+        try:
+            final_state = self.workflow.run(
+                initial_state,
+                stage_callback=_on_stage,
+                stop_event=effective_stop
+            )
+
+            # Ensure output dir exists and write translated text
+            task.output_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(task.output_file, "w", encoding="utf-8") as out_f:
+                out_f.write(final_state.polished_text)
+
+            # Update persistent memory across chapters (scoped to current folder)
+            task_folder = task.folder or Path(task.source_file).parent.name
+            if self.auto_update_bible:
+                chars_to_save = final_state.reconciled_characters or final_state.extracted_characters
+                terms_to_save = final_state.reconciled_terms or final_state.extracted_terms
+                self.repo.update_bible_memory(
+                    new_characters=chars_to_save,
+                    new_terms=terms_to_save,
+                    summary=final_state.new_chapter_summary,
+                    folder=task_folder
+                )
+            elif final_state.new_chapter_summary:
+                self.repo.update_bible_memory(
+                    new_characters=[],
+                    new_terms=[],
+                    summary=final_state.new_chapter_summary,
+                    folder=task_folder
+                )
+
+            # Save chapter metadata and checkpoint
+            if final_state.metadata:
+                st = final_state.metadata.stats
+                tok_use = TokenUsage(
+                    input_tokens=st.prompt_tokens,
+                    output_tokens=st.completion_tokens,
+                    thought_tokens=st.thought_tokens,
+                    cached_tokens=st.cached_tokens,
+                    total_tokens=st.total_tokens,
+                )
+                self.task_token_usage[task.source_file.name] = tok_use
+                self.batch_token_usage = self.batch_token_usage.add(tok_use)
+
+                self.repo.save_metadata(final_state.metadata, task.output_file)
+                return final_state.metadata
+
+            return None
+
+        except BatchStoppedException:
+            paused_stage = getattr(self.workflow, "current_stage", PipelineStage.NONE)
+            last_st = getattr(self.workflow, "last_state", initial_state) or initial_state
+
+            extracted_chars = getattr(last_st, "extracted_characters", []) or (task.existing_meta.checkpoint.stage_artifacts.extracted_characters if task.existing_meta else [])
+            extracted_terms = getattr(last_st, "extracted_terms", []) or (task.existing_meta.checkpoint.stage_artifacts.extracted_terms if task.existing_meta else [])
+            reconciled_chars = getattr(last_st, "reconciled_characters", []) or (getattr(task.existing_meta.checkpoint.stage_artifacts, "reconciled_characters", []) if task.existing_meta else [])
+            reconciled_terms = getattr(last_st, "reconciled_terms", []) or (getattr(task.existing_meta.checkpoint.stage_artifacts, "reconciled_terms", []) if task.existing_meta else [])
+            draft_text = getattr(last_st, "draft_text", None) or (task.existing_meta.checkpoint.stage_artifacts.draft_text if task.existing_meta else None)
+            critique_notes = getattr(last_st, "critique_notes", None) or (task.existing_meta.checkpoint.stage_artifacts.critique_notes if task.existing_meta else None)
+            polished_text = getattr(last_st, "best_polished_text", None) or getattr(last_st, "polished_text", None) or (task.existing_meta.checkpoint.stage_artifacts.polished_text if task.existing_meta else None)
+
+            paused_meta = ChapterMetadata(
+                chapter_id=f"chapter_{task.chapter_num:04d}",
+                chapter_num=task.chapter_num,
+                source_file=str(task.source_file),
+                source_sha256=task.source_sha256,
+                output_file=str(task.output_file),
+                model=self.model_name,
+                checkpoint=CheckpointData(
+                    status=StageStatus.PAUSED,
+                    last_completed_stage=paused_stage,
+                    stage_artifacts=StageArtifacts(
+                        extracted_terms=extracted_terms,
+                        extracted_characters=extracted_chars,
+                        reconciled_terms=reconciled_terms,
+                        reconciled_characters=reconciled_chars,
+                        draft_text=draft_text,
+                        critique_notes=critique_notes,
+                        polished_text=polished_text,
+                        safety_fallbacks_used=getattr(last_st, "safety_fallbacks_used", 0),
+                        subdivisions_count=getattr(last_st, "subdivisions_count", 0)
+                    )
+                )
+            )
+            self.repo.save_metadata(paused_meta, task.output_file)
+            raise
+
+        except Exception as err:
+            import traceback
+            tb_str = traceback.format_exc()
+            failed_stage = getattr(self.workflow, "current_stage", PipelineStage.NONE)
+
+            last_st = getattr(self.workflow, "last_state", initial_state) or initial_state
+            existing_artifacts = (
+                task.existing_meta.checkpoint.stage_artifacts
+                if (task.existing_meta and task.existing_meta.checkpoint)
+                else StageArtifacts()
+            )
+
+            extracted_chars = getattr(last_st, "extracted_characters", []) or existing_artifacts.extracted_characters
+            extracted_terms = getattr(last_st, "extracted_terms", []) or existing_artifacts.extracted_terms
+            draft_text = getattr(last_st, "draft_text", None) or existing_artifacts.draft_text
+            critique_notes = getattr(last_st, "critique_notes", None) or existing_artifacts.critique_notes
+            polished_text = getattr(last_st, "best_polished_text", None) or getattr(last_st, "polished_text", None) or existing_artifacts.polished_text
+
+            # Determine last completed stage strictly preceding the failed stage
+            stage_order_map = {
+                PipelineStage.NONE: 0,
+                PipelineStage.EXTRACTION: 1,
+                PipelineStage.DRAFTING: 2,
+                PipelineStage.CRITIQUE: 3,
+                PipelineStage.POLISHING: 4,
+                PipelineStage.CHRONICLING: 5,
+            }
+            failed_order = stage_order_map.get(failed_stage, 0)
+            max_allowed_order = max(0, failed_order - 1)
+
+            if max_allowed_order >= 4 and polished_text:
+                completed_stage = PipelineStage.POLISHING
+            elif max_allowed_order >= 3 and critique_notes:
+                completed_stage = PipelineStage.CRITIQUE
+            elif max_allowed_order >= 2 and draft_text:
+                completed_stage = PipelineStage.DRAFTING
+            elif max_allowed_order >= 1 and (extracted_terms or extracted_chars):
+                completed_stage = PipelineStage.EXTRACTION
+            else:
+                completed_stage = PipelineStage.NONE
+
+            completed_order = stage_order_map.get(completed_stage, 0)
+            saved_chars = extracted_chars if completed_order >= 1 else []
+            saved_terms = extracted_terms if completed_order >= 1 else []
+            saved_draft = draft_text if completed_order >= 2 else None
+            saved_notes = critique_notes if completed_order >= 3 else None
+            saved_polish = polished_text if completed_order >= 4 else None
+
+            # Save failed checkpoint with detailed error diagnostics and preserved stage artifacts
+            failed_meta = ChapterMetadata(
+                chapter_id=f"chapter_{task.chapter_num:04d}",
+                chapter_num=task.chapter_num,
+                source_file=str(task.source_file),
+                source_sha256=task.source_sha256,
+                output_file=str(task.output_file),
+                model=self.model_name,
+                checkpoint=task.existing_meta.checkpoint if (task.existing_meta and task.existing_meta.checkpoint) else CheckpointData()
+            )
+            failed_meta.checkpoint.stage_artifacts = StageArtifacts(
+                extracted_terms=saved_terms,
+                extracted_characters=saved_chars,
+                draft_text=saved_draft,
+                critique_notes=saved_notes,
+                polished_text=saved_polish,
+                safety_fallbacks_used=getattr(last_st, "safety_fallbacks_used", 0),
+                subdivisions_count=getattr(last_st, "subdivisions_count", 0)
+            )
+            if completed_stage != PipelineStage.NONE:
+                failed_meta.checkpoint.last_completed_stage = completed_stage
+
+            failed_meta.checkpoint.record_error(
+                stage=failed_stage,
+                err=err,
+                traceback_str=tb_str,
+                model=self.model_name
+            )
+            self.repo.save_metadata(failed_meta, task.output_file)
+            raise
 
         self._print_batch_summary(results)
         return results

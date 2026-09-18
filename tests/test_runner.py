@@ -252,3 +252,35 @@ def test_cli_batch_rag_and_rerank_arguments():
             assert parsed_args.rerank is False
 
 
+def test_batch_runner_run_chapter_standalone(tmp_path: Path):
+    repo = NovelRepository(tmp_path)
+    repo.initialize_project("Single Chapter Test", "Japanese", "English")
+
+    input_dir = tmp_path / "raw"
+    output_dir = tmp_path / "out"
+    input_dir.mkdir()
+    output_dir.mkdir()
+
+    ch1_file = input_dir / "ch_01.txt"
+    ch1_file.write_text("第一章：孤高の剣士。\n彼の手には黒い剣が握られていた。", encoding="utf-8")
+
+    from nousetsu.batch.scanner import ChapterScanner
+    scanner = ChapterScanner(repo)
+    tasks = scanner.scan_directory(input_dir, output_dir)
+    assert len(tasks) == 1
+    task = tasks[0]
+
+    notifications = []
+    def on_notify(msg: str):
+        notifications.append(msg)
+
+    runner = BatchRunner(repo, model_name="mock-model")
+    meta = runner.run_chapter(task, notify_callback=on_notify)
+
+    assert meta is not None
+    assert meta.checkpoint.status == StageStatus.COMPLETED
+    assert (output_dir / "ch_01.md").exists()
+    assert len(notifications) > 0
+
+
+

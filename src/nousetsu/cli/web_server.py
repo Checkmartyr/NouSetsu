@@ -26,6 +26,7 @@ from nousetsu.batch.runner import BatchRunner
 from nousetsu.batch.scanner import ChapterScanner, ChapterTask
 from nousetsu.models.bible import CharacterProfile, GlossaryItem, NovelBible
 from nousetsu.models.config import ProjectConfig
+from nousetsu.models.exceptions import BatchStoppedException
 from nousetsu.models.metadata import StageStatus
 from nousetsu.storage.repository import (
     NovelRepository,
@@ -430,14 +431,17 @@ def _run_batch_worker(
                 "index": idx,
             })
 
-            meta = runner.run_chapter(
-                task,
-                force_retranslate=force_retranslate,
-                stop_event=stop_event,
-                notify_callback=on_notify,
-            )
+            try:
+                meta = runner.run_chapter(
+                    task,
+                    force_retranslate=force_retranslate,
+                    stop_event=stop_event,
+                    notify_callback=on_notify,
+                )
+            except BatchStoppedException:
+                break
 
-            if meta:
+            if meta and meta.checkpoint and meta.checkpoint.status == StageStatus.COMPLETED:
                 completed_count += 1
                 audit_dict = meta.quality_audit.model_dump() if meta.quality_audit else {}
                 event_bus.publish_sync("chapter_completed", {
