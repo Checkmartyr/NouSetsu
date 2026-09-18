@@ -472,6 +472,7 @@ export const App: React.FC = () => {
             key={activeProject?.path || 'settings'}
             activeProjectPath={activeProject?.path || null}
             activeProjectTitle={activeProject?.title || null}
+            onProjectUpdated={() => syncWithBackend(true)}
           />
         ) : (
           /* TRACES WORKSPACE */

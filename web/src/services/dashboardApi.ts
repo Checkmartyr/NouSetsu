@@ -159,9 +159,11 @@ export async function fetchSettings(projectPath?: string): Promise<ProjectSettin
     if (!res.ok) return null;
     const data = await res.json();
     if (data && data.config && typeof data.config === 'object') {
+      const { config, ...rest } = data;
       return {
-        ...data.config,
-        ...data,
+        ...config,
+        ...rest,
+        env: data.env,
       } as ProjectSettings;
     }
     return data as ProjectSettings;

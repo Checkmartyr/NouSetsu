@@ -115,19 +115,66 @@ def test_bible_endpoints(client: TestClient, web_test_repo: NovelRepository):
 def test_settings_endpoints(client: TestClient, web_test_repo: NovelRepository):
     proj_param = str(web_test_repo.root_dir)
 
-    # GET /api/settings
+    # 1. GET /api/settings
     res = client.get(f"/api/settings?project_path={proj_param}")
     assert res.status_code == 200
     data = res.json()
     assert "config" in data
     assert "env" in data
+    assert data["title"] == "Web Test Novel"
 
-    # PUT /api/settings
-    cfg = data["config"]
-    cfg["max_review_loops"] = 4
-    res_put = client.put(f"/api/settings?project_path={proj_param}", json=cfg)
+    # 2. PUT /api/settings with top-level fields (like UI sends)
+    payload = {
+        "title": "Renamed Test Novel",
+        "genre": "isekai",
+        "source_language": "Japanese",
+        "target_language": "English",
+        "model_name": "test-gemini-pro",
+        "fallback_model": "test-gemini-flash",
+        "max_review_loops": 4,
+        "quality_threshold": 9.2,
+        "chunk_threshold_lines": 100,
+        "chunk_size_lines": 80,
+        "chunk_overlap_lines": 5,
+    }
+    res_put = client.put(f"/api/settings?project_path={proj_param}", json=payload)
     assert res_put.status_code == 200
     assert res_put.json()["success"] is True
+
+    # 3. Verify disk config.yaml is updated
+    cfg_disk = web_test_repo.load_config()
+    assert cfg_disk.title == "Renamed Test Novel"
+    assert cfg_disk.genre == "isekai"
+    assert cfg_disk.source_language == "Japanese"
+    assert cfg_disk.target_language == "English"
+    assert cfg_disk.model_name == "test-gemini-pro"
+    assert cfg_disk.fallback_model == "test-gemini-flash"
+    assert cfg_disk.max_review_loops == 4
+    assert cfg_disk.quality_threshold == 9.2
+    assert cfg_disk.chunk_threshold_lines == 100
+    assert cfg_disk.target_chunk_lines == 80
+    assert cfg_disk.chunk_overlap_lines == 5
+
+    # 4. Verify bible.yaml is synced
+    bible_disk = web_test_repo.load_bible()
+    assert bible_disk.title == "Renamed Test Novel"
+    assert bible_disk.genre == "isekai"
+    assert bible_disk.source_language == "Japanese"
+    assert bible_disk.target_language == "English"
+
+    # 5. Verify subsequent GET /api/settings returns new values
+    res_get2 = client.get(f"/api/settings?project_path={proj_param}")
+    assert res_get2.status_code == 200
+    data2 = res_get2.json()
+    assert data2["title"] == "Renamed Test Novel"
+    assert data2["genre"] == "isekai"
+    assert data2["model_name"] == "test-gemini-pro"
+    assert data2["max_review_loops"] == 4
+
+    # 6. Verify payload with nested config (backward compatibility)
+    res_put2 = client.put(f"/api/settings?project_path={proj_param}", json={"config": {"max_review_loops": 2}})
+    assert res_put2.status_code == 200
+    assert web_test_repo.load_config().max_review_loops == 2
 
 
 def test_translation_controls(client: TestClient, web_test_repo: NovelRepository):

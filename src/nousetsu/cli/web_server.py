@@ -209,12 +209,35 @@ def _get_project_meta(project_path: Path) -> Dict[str, Any]:
     bible_json = novel_dir / "bible.json"
     traces_dir = novel_dir / "traces"
 
-    # Try YAML config first, then json
+    # 1. Read bible as base novel information if available
+    if bible_file.exists():
+        try:
+            with open(bible_file, "r", encoding="utf-8") as f:
+                b = yaml.safe_load(f) or {}
+                title = b.get("title", title)
+                genre = b.get("genre", genre)
+                src_lang = b.get("source_language", src_lang)
+                tgt_lang = b.get("target_language", tgt_lang)
+        except Exception:
+            pass
+    elif bible_json.exists():
+        try:
+            with open(bible_json, "r", encoding="utf-8") as f:
+                b = json.load(f)
+                title = b.get("title", title)
+                genre = b.get("genre", genre)
+                src_lang = b.get("source_language", src_lang)
+                tgt_lang = b.get("target_language", tgt_lang)
+        except Exception:
+            pass
+
+    # 2. Config file takes highest precedence for project title, genre, and languages
     if config_file.exists():
         try:
             with open(config_file, "r", encoding="utf-8") as f:
                 cfg = yaml.safe_load(f) or {}
                 title = cfg.get("title", title)
+                genre = cfg.get("genre", genre)
                 src_lang = cfg.get("source_language", src_lang)
                 tgt_lang = cfg.get("target_language", tgt_lang)
         except Exception:
@@ -224,25 +247,9 @@ def _get_project_meta(project_path: Path) -> Dict[str, Any]:
             with open(config_json, "r", encoding="utf-8") as f:
                 cfg = json.load(f)
                 title = cfg.get("title", title)
+                genre = cfg.get("genre", genre)
                 src_lang = cfg.get("source_language", src_lang)
                 tgt_lang = cfg.get("target_language", tgt_lang)
-        except Exception:
-            pass
-
-    if bible_file.exists():
-        try:
-            with open(bible_file, "r", encoding="utf-8") as f:
-                b = yaml.safe_load(f) or {}
-                title = b.get("title", title)
-                genre = b.get("genre", genre)
-        except Exception:
-            pass
-    elif bible_json.exists():
-        try:
-            with open(bible_json, "r", encoding="utf-8") as f:
-                b = json.load(f)
-                title = b.get("title", title)
-                genre = b.get("genre", genre)
         except Exception:
             pass
 
@@ -1079,13 +1086,26 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
             "raw_dir": cfg.raw_dir,
             "translated_dir": cfg.output_dir,
             "output_dir": cfg.output_dir,
-            "model_name": cfg.model_name or os.environ.get("NOVEL_MODEL", "gemini-3.1-flash-lite"),
-            "fallback_model": cfg.fallback_model or os.environ.get("NOVEL_FALLBACK_MODEL", "gemini-3.5-flash-lite"),
+            "model_name": cfg.model_name or "",
+            "fallback_model": cfg.fallback_model or "",
+            "extractor_model": cfg.extractor_model or "",
+            "drafter_model": cfg.drafter_model or "",
+            "critic_model": cfg.critic_model or "",
+            "polisher_model": cfg.polisher_model or "",
+            "chronicler_model": cfg.chronicler_model or "",
             "max_review_loops": cfg.max_review_loops,
             "quality_threshold": cfg.quality_threshold,
             "chunk_threshold_lines": cfg.chunk_threshold_lines,
             "chunk_size_lines": cfg.target_chunk_lines,
+            "target_chunk_lines": cfg.target_chunk_lines,
             "chunk_overlap_lines": cfg.chunk_overlap_lines,
+            "enable_chunking": cfg.enable_chunking,
+            "enable_rag": cfg.enable_rag,
+            "rag_top_k": cfg.rag_top_k,
+            "filter_scene_characters": cfg.filter_scene_characters,
+            "filter_extractor_entities": cfg.filter_extractor_entities,
+            "enable_patch_polishing": cfg.enable_patch_polishing,
+            "enable_post_polish_reconciliation": cfg.enable_post_polish_reconciliation,
             "config": cfg.model_dump(),
             "env": {
                 "NOVEL_MODEL": os.environ.get("NOVEL_MODEL", "gemini-3.1-flash-lite"),
@@ -1107,30 +1127,46 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
         repo = _resolve_repo(project_path)
         try:
             cfg = repo.load_config()
-            src = body.get("config") if isinstance(body.get("config"), dict) else body
+            # Start with nested config if present, then let top-level body fields override it
+            src: Dict[str, Any] = {}
+            if isinstance(body.get("config"), dict):
+                src.update(body["config"])
+            for k, v in body.items():
+                if k not in ("config", "env"):
+                    src[k] = v
 
             if "title" in src and src["title"] is not None:
-                cfg.title = str(src["title"])
+                cfg.title = str(src["title"]).strip()
             if "genre" in src and src["genre"] is not None:
-                cfg.genre = str(src["genre"])
+                cfg.genre = str(src["genre"]).strip()
             if "source_language" in src and src["source_language"] is not None:
-                cfg.source_language = str(src["source_language"])
+                cfg.source_language = str(src["source_language"]).strip()
             if "target_language" in src and src["target_language"] is not None:
-                cfg.target_language = str(src["target_language"])
+                cfg.target_language = str(src["target_language"]).strip()
             if "raw_dir" in src and src["raw_dir"] is not None:
-                cfg.raw_dir = str(src["raw_dir"])
+                cfg.raw_dir = str(src["raw_dir"]).strip()
             if "translated_dir" in src and src["translated_dir"] is not None:
-                cfg.output_dir = str(src["translated_dir"])
+                cfg.output_dir = str(src["translated_dir"]).strip()
             elif "output_dir" in src and src["output_dir"] is not None:
-                cfg.output_dir = str(src["output_dir"])
+                cfg.output_dir = str(src["output_dir"]).strip()
             if "model_name" in src:
-                cfg.model_name = str(src["model_name"]).strip() or None
+                val = str(src["model_name"]).strip() if src["model_name"] is not None else ""
+                cfg.model_name = val if val else None
             if "fallback_model" in src:
-                cfg.fallback_model = str(src["fallback_model"]).strip() or None
+                val = str(src["fallback_model"]).strip() if src["fallback_model"] is not None else ""
+                cfg.fallback_model = val if val else None
+
+            for m_field in ("extractor_model", "drafter_model", "critic_model", "polisher_model", "chronicler_model"):
+                if m_field in src:
+                    val = str(src[m_field]).strip() if src[m_field] is not None else ""
+                    setattr(cfg, m_field, val if val else None)
+
             if "max_review_loops" in src and src["max_review_loops"] is not None:
                 cfg.max_review_loops = int(src["max_review_loops"])
             if "quality_threshold" in src and src["quality_threshold"] is not None:
                 cfg.quality_threshold = float(src["quality_threshold"])
+            if "enable_chunking" in src and src["enable_chunking"] is not None:
+                cfg.enable_chunking = bool(src["enable_chunking"])
             if "chunk_threshold_lines" in src and src["chunk_threshold_lines"] is not None:
                 cfg.chunk_threshold_lines = int(src["chunk_threshold_lines"])
             if "chunk_size_lines" in src and src["chunk_size_lines"] is not None:
@@ -1139,11 +1175,63 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
                 cfg.target_chunk_lines = int(src["target_chunk_lines"])
             if "chunk_overlap_lines" in src and src["chunk_overlap_lines"] is not None:
                 cfg.chunk_overlap_lines = int(src["chunk_overlap_lines"])
+            if "enable_rag" in src and src["enable_rag"] is not None:
+                cfg.enable_rag = bool(src["enable_rag"])
+            if "rag_top_k" in src and src["rag_top_k"] is not None:
+                cfg.rag_top_k = int(src["rag_top_k"])
+            if "filter_scene_characters" in src and src["filter_scene_characters"] is not None:
+                cfg.filter_scene_characters = bool(src["filter_scene_characters"])
+            if "filter_extractor_entities" in src:
+                cfg.filter_extractor_entities = bool(src["filter_extractor_entities"]) if src["filter_extractor_entities"] is not None else None
+            if "enable_patch_polishing" in src and src["enable_patch_polishing"] is not None:
+                cfg.enable_patch_polishing = bool(src["enable_patch_polishing"])
+            if "enable_post_polish_reconciliation" in src and src["enable_post_polish_reconciliation"] is not None:
+                cfg.enable_post_polish_reconciliation = bool(src["enable_post_polish_reconciliation"])
 
             repo.save_config(cfg)
-            return {"success": True, "config": cfg.model_dump()}
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Invalid settings payload: {e}")
+
+            # Sync updated project metadata to Novel Bible if present
+            try:
+                bible_path = repo.bible_file_path()
+                if bible_path.exists():
+                    bible = repo.load_bible()
+                    modified = False
+                    if cfg.title and bible.title != cfg.title:
+                        bible.title = cfg.title
+                        modified = True
+                    if cfg.genre and bible.genre != cfg.genre:
+                        bible.genre = cfg.genre
+                        modified = True
+                    if cfg.source_language and bible.source_language != cfg.source_language:
+                        bible.source_language = cfg.source_language
+                        modified = True
+                    if cfg.target_language and bible.target_language != cfg.target_language:
+                        bible.target_language = cfg.target_language
+                        modified = True
+                    if modified:
+                        repo.save_bible(bible)
+            except Exception as e:
+                logger.warning("Could not sync Bible with updated settings: %s", e)
+
+            return {
+                "success": True,
+                "config": cfg.model_dump(),
+                "title": cfg.title,
+                "genre": cfg.genre,
+                "source_language": cfg.source_language,
+                "target_language": cfg.target_language,
+                "raw_dir": cfg.raw_dir,
+                "translated_dir": cfg.output_dir,
+                "output_dir": cfg.output_dir,
+                "model_name": cfg.model_name or "",
+                "fallback_model": cfg.fallback_model or "",
+                "max_review_loops": cfg.max_review_loops,
+                "quality_threshold": cfg.quality_threshold,
+                "chunk_threshold_lines": cfg.chunk_threshold_lines,
+                "chunk_size_lines": cfg.target_chunk_lines,
+                "target_chunk_lines": cfg.target_chunk_lines,
+                "chunk_overlap_lines": cfg.chunk_overlap_lines,
+            }
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Invalid settings payload: {e}")
 

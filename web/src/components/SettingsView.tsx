@@ -15,11 +15,13 @@ import { fetchSettings, updateSettings } from '../services/dashboardApi';
 interface SettingsViewProps {
   activeProjectPath: string | null;
   activeProjectTitle: string | null;
+  onProjectUpdated?: () => void;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
   activeProjectPath,
   activeProjectTitle,
+  onProjectUpdated,
 }) => {
   const [settings, setSettings] = useState<ProjectSettings | null>(null);
   const [loading, setLoading] = useState(false);
@@ -47,10 +49,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     e.preventDefault();
     if (!activeProjectPath || !settings) return;
     setSaving(true);
-    const success = await updateSettings(settings, activeProjectPath);
+    // Exclude nested stale config and env snapshots before sending to backend
+    const { config, env, ...cleanSettings } = settings;
+    const success = await updateSettings(cleanSettings, activeProjectPath);
     setSaving(false);
     if (success) {
       showToast('Settings saved to config.yaml successfully!');
+      await loadSettingsData();
+      if (onProjectUpdated) {
+        onProjectUpdated();
+      }
     } else {
       alert('Failed to update project settings.');
     }
@@ -172,10 +180,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       setSettings({ ...settings, model_name: e.target.value })
                     }
                     className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
-                    placeholder="gemini-3.1-flash-lite, gemma-4-26b-a4b-it"
+                    placeholder={settings.env?.NOVEL_MODEL || 'Inherit from .env (e.g. gemini-3.1-flash-lite)'}
                   />
                   <span className="text-[10px] text-slate-500 mt-1 block">
-                    Used for primary drafter, polisher, and chronicler stages.
+                    Override for this novel, or leave blank to inherit from .env ({settings.env?.NOVEL_MODEL || 'gemini-3.1-flash-lite'}).
                   </span>
                 </div>
 
@@ -190,10 +198,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       setSettings({ ...settings, fallback_model: e.target.value })
                     }
                     className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
-                    placeholder="gemini-3.5-flash-lite"
+                    placeholder={settings.env?.NOVEL_FALLBACK_MODEL || 'Inherit from .env (e.g. gemini-3.5-flash-lite)'}
                   />
                   <span className="text-[10px] text-slate-500 mt-1 block">
-                    Automatic failover when primary model hits rate limit or errors.
+                    Override fallback for this novel, or leave blank to inherit ({settings.env?.NOVEL_FALLBACK_MODEL || 'gemini-3.5-flash-lite'}).
                   </span>
                 </div>
               </div>
