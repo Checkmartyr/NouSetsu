@@ -12,11 +12,11 @@ import time
 import urllib.parse
 import webbrowser
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import uvicorn
 import yaml
-from fastapi import FastAPI, HTTPException, Query, Request, Response, status
+from fastapi import FastAPI, File, Form, HTTPException, Query, Request, Response, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -172,6 +172,18 @@ class RawYamlRequest(BaseModel):
 
     def get_content(self) -> str:
         return self.raw if self.raw is not None else (self.raw_yaml or "")
+
+
+class UploadFileItem(BaseModel):
+    name: str = Field(..., description="File name (e.g. 0001.txt or ch01.md)")
+    content: str = Field(..., description="Text content of the file")
+
+
+class UploadChaptersRequest(BaseModel):
+    project_path: Optional[str] = None
+    folder: Optional[str] = Field(None, description="Target volume or subfolder name (default: raw_chapters)")
+    files: List[UploadFileItem] = Field(..., description="Files to upload")
+    overwrite: bool = Field(False, description="Whether to overwrite existing files")
 
 
 # ============================================================================
@@ -545,6 +557,68 @@ def _get_translated_word_count(file_path: Path) -> int:
         return 0
 
 
+def _process_chapter_files(
+    repo: NovelRepository,
+    folder: Optional[str],
+    files: List[Tuple[str, str]],
+    overwrite: bool = False,
+) -> Dict[str, Any]:
+    """Save uploaded chapter text files to target raw directory or volume subfolder."""
+    cfg = repo.load_config()
+    raw_dir_name = cfg.raw_dir or "raw_chapters"
+
+    # Resolve target directory
+    if not folder or folder.strip() in ("", "default", raw_dir_name, "raw_chapters"):
+        dest_dir = cfg.get_raw_path(repo.root_dir)
+        target_folder_name = raw_dir_name
+    else:
+        # Sanitize folder path
+        clean_folder = os.path.normpath(folder.strip()).lstrip("/\\")
+        if not clean_folder or ".." in clean_folder.split(os.sep):
+            raise HTTPException(status_code=400, detail="Invalid folder name.")
+        dest_dir = (repo.root_dir / clean_folder).resolve()
+        # Security check: must reside inside project root
+        try:
+            dest_dir.relative_to(repo.root_dir.resolve())
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Target folder outside of project root is not permitted.")
+        target_folder_name = clean_folder
+
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    uploaded: List[str] = []
+    skipped: List[str] = []
+
+    for name, content in files:
+        safe_name = Path(name).name
+        safe_name = re.sub(r'[<>:"/\\|?*]', "_", safe_name).strip()
+        if not safe_name or safe_name.startswith("."):
+            continue
+
+        target_file = dest_dir / safe_name
+        if target_file.exists() and not overwrite:
+            skipped.append(safe_name)
+            continue
+
+        target_file.write_text(content, encoding="utf-8")
+        uploaded.append(safe_name)
+
+    # Invalidate file stats and sha256 caches
+    _FILE_STATS_CACHE.clear()
+    scanner = ChapterScanner(repo)
+    scanner.clear_sha256_cache()
+
+    return {
+        "success": True,
+        "folder": target_folder_name,
+        "uploaded": uploaded,
+        "skipped": skipped,
+        "total_uploaded": len(uploaded),
+        "total_skipped": len(skipped),
+        "message": f"Successfully uploaded {len(uploaded)} file(s) to '{target_folder_name}'" + (f" ({len(skipped)} skipped)" if skipped else "") + ".",
+    }
+
+
 # ============================================================================
 # FastAPI Application Factory
 # ============================================================================
@@ -837,6 +911,79 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
             "active_folder": active_job.active_folder,
             "active_stage": active_job.active_stage,
         }
+
+    @app.get("/api/folders")
+    async def get_project_folders(project_path: Optional[str] = Query(None)) -> Dict[str, Any]:
+        """List all available chapter folders in the active project."""
+        repo = _resolve_repo(project_path)
+        cfg = repo.load_config()
+        raw_dir_name = cfg.raw_dir or "raw_chapters"
+
+        ignored_dir_names = {
+            "node_modules", "web", "src-tauri", "dist", ".git", ".novel", ".venv",
+            "__pycache__", "translated_chapters", raw_dir_name, cfg.output_dir
+        }
+
+        folders = [raw_dir_name]
+        try:
+            for child in sorted(repo.root_dir.iterdir()):
+                if (
+                    child.is_dir()
+                    and not child.name.startswith(".")
+                    and not child.name.endswith("_th")
+                    and not child.name.endswith("_trans")
+                    and child.name not in ignored_dir_names
+                ):
+                    folders.append(child.name)
+        except Exception as e:
+            logger.warning("Error listing project folders: %s", e)
+
+        return {
+            "default_folder": raw_dir_name,
+            "folders": folders,
+        }
+
+    @app.post("/api/chapters/upload")
+    async def upload_chapters(body: UploadChaptersRequest) -> Dict[str, Any]:
+        """Upload raw chapter text files into project raw directory or subfolder (JSON payload)."""
+        repo = _resolve_repo(body.project_path)
+        file_tuples = [(f.name, f.content) for f in body.files]
+        if not file_tuples:
+            raise HTTPException(status_code=400, detail="No files provided for upload.")
+        return _process_chapter_files(
+            repo=repo,
+            folder=body.folder,
+            files=file_tuples,
+            overwrite=body.overwrite,
+        )
+
+    @app.post("/api/chapters/upload-form")
+    async def upload_chapters_form(
+        files: List[UploadFile] = File(...),
+        project_path: Optional[str] = Form(None),
+        folder: Optional[str] = Form(None),
+        overwrite: bool = Form(False),
+    ) -> Dict[str, Any]:
+        """Upload raw chapter text files into project raw directory or subfolder (Multipart form)."""
+        repo = _resolve_repo(project_path)
+        if not files:
+            raise HTTPException(status_code=400, detail="No files uploaded.")
+
+        file_tuples: List[Tuple[str, str]] = []
+        for uf in files:
+            try:
+                raw_bytes = await uf.read()
+                content = raw_bytes.decode("utf-8", errors="replace")
+                file_tuples.append((uf.filename or "chapter.txt", content))
+            except Exception as e:
+                logger.warning("Error reading uploaded file %s: %s", uf.filename, e)
+
+        return _process_chapter_files(
+            repo=repo,
+            folder=folder,
+            files=file_tuples,
+            overwrite=overwrite,
+        )
 
     # ------------------------------------------------------------------------
     # 3. Server-Sent Events (SSE) Bus

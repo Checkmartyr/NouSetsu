@@ -3,7 +3,9 @@ import {
   ChapterContent,
   TranslationStatus,
   BibleData,
-  ProjectSettings
+  ProjectSettings,
+  ProjectFoldersResult,
+  UploadChaptersResult,
 } from '../types/dashboard';
 
 const API_BASE = '';
@@ -223,3 +225,41 @@ export function connectSSE(onEvent: (eventName: string, data: any) => void): () 
     eventSource.close();
   };
 }
+
+export async function fetchProjectFolders(projectPath?: string): Promise<ProjectFoldersResult> {
+  try {
+    const params = new URLSearchParams();
+    if (projectPath) params.set('project_path', projectPath);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    const res = await fetch(`${API_BASE}/api/folders${qs}`);
+    if (!res.ok) return { default_folder: 'raw_chapters', folders: ['raw_chapters'] };
+    return (await res.json()) as ProjectFoldersResult;
+  } catch (e) {
+    console.error('Failed to fetch project folders:', e);
+    return { default_folder: 'raw_chapters', folders: ['raw_chapters'] };
+  }
+}
+
+export async function uploadChapters(params: {
+  files: { name: string; content: string }[];
+  projectPath?: string;
+  folder?: string;
+  overwrite?: boolean;
+}): Promise<UploadChaptersResult> {
+  const res = await fetch(`${API_BASE}/api/chapters/upload`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      project_path: params.projectPath,
+      folder: params.folder,
+      files: params.files,
+      overwrite: params.overwrite ?? false,
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.detail || 'Failed to upload chapters');
+  }
+  return data as UploadChaptersResult;
+}
+

@@ -10,7 +10,8 @@ import {
   ChevronDown,
   ChevronUp,
   Sparkles,
-  BookOpen
+  BookOpen,
+  Upload
 } from 'lucide-react';
 import { ChapterItem, ChapterContent, TranslationStatus } from '../types/dashboard';
 import {
@@ -20,6 +21,7 @@ import {
   startTranslation,
   stopTranslation
 } from '../services/dashboardApi';
+import { UploadModal } from './UploadModal';
 
 interface StudioViewProps {
   activeProjectPath: string | null;
@@ -46,6 +48,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
   const [selectedFolder, setSelectedFolder] = useState<string>('all');
   const [isLogDrawerOpen, setIsLogDrawerOpen] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
 
   // Translation Options Modal / Fields
   const [limitCount, setLimitCount] = useState<number | undefined>(undefined);
@@ -278,6 +281,15 @@ export const StudioView: React.FC<StudioViewProps> = ({
           )}
 
           <button
+            onClick={() => setIsUploadModalOpen(true)}
+            title="Upload chapter files"
+            className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-sm font-semibold shadow-sm transition-all cursor-pointer"
+          >
+            <Upload className="w-4 h-4 text-indigo-400" />
+            <span className="hidden sm:inline">Upload</span>
+          </button>
+
+          <button
             onClick={refreshData}
             title="Refresh chapter list"
             className="p-2 text-slate-400 hover:text-slate-200 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-lg cursor-pointer transition-colors"
@@ -337,8 +349,21 @@ export const StudioView: React.FC<StudioViewProps> = ({
           {/* Chapter Task List */}
           <div className="flex-1 overflow-y-auto divide-y divide-slate-800/50">
             {filteredChapters.length === 0 ? (
-              <div className="p-6 text-center text-xs text-slate-500">
-                No chapters match the filter criteria.
+              <div className="p-8 text-center text-xs text-slate-500 flex flex-col items-center justify-center gap-3">
+                <FileText className="w-8 h-8 text-slate-600" />
+                <p>
+                  {chapters.length === 0
+                    ? 'No chapters found in this project yet.'
+                    : 'No chapters match the filter criteria.'}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setIsUploadModalOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-semibold cursor-pointer transition-colors"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Upload Chapters</span>
+                </button>
               </div>
             ) : (
               filteredChapters.map((ch) => {
@@ -545,6 +570,20 @@ export const StudioView: React.FC<StudioViewProps> = ({
           </div>
         )}
       </div>
+
+      {/* Upload Chapters Modal */}
+      <UploadModal
+        isOpen={isUploadModalOpen}
+        onClose={() => setIsUploadModalOpen(false)}
+        activeProjectPath={activeProjectPath}
+        activeProjectTitle={activeProjectTitle}
+        onUploadSuccess={({ folder }) => {
+          refreshData();
+          if (folder && folder !== 'raw_chapters' && folder !== 'default') {
+            setSelectedFolder(folder);
+          }
+        }}
+      />
     </div>
   );
 };

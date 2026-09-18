@@ -99,3 +99,19 @@ export interface ProjectSettings {
   chunk_overlap_lines?: number;
   [key: string]: any;
 }
+
+export interface ProjectFoldersResult {
+  default_folder: string;
+  folders: string[];
+}
+
+export interface UploadChaptersResult {
+  success: boolean;
+  folder: string;
+  uploaded: string[];
+  skipped: string[];
+  total_uploaded: number;
+  total_skipped: number;
+  message: string;
+}
+

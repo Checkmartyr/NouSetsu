@@ -151,3 +151,107 @@ def test_translation_controls(client: TestClient, web_test_repo: NovelRepository
     # Stop translation
     res_stop = client.post("/api/translate/stop")
     assert res_stop.status_code == 200
+
+
+def test_folders_and_upload_endpoints(client: TestClient, web_test_repo: NovelRepository):
+    proj_param = str(web_test_repo.root_dir)
+
+    # 1. GET /api/folders
+    res_folders = client.get(f"/api/folders?project_path={proj_param}")
+    assert res_folders.status_code == 200
+    folders_data = res_folders.json()
+    assert folders_data["default_folder"] == "raw_chapters"
+    assert "raw_chapters" in folders_data["folders"]
+
+    # 2. POST /api/chapters/upload (JSON) to default raw_chapters
+    res_up = client.post("/api/chapters/upload", json={
+        "project_path": proj_param,
+        "files": [
+            {"name": "0002.txt", "content": "第2章 冒険の始まり。\n剣を抜いた。"},
+            {"name": "0003.txt", "content": "第3章 静かな森。\n風が吹いた。"},
+        ],
+        "overwrite": False,
+    })
+    assert res_up.status_code == 200
+    up_data = res_up.json()
+    assert up_data["success"] is True
+    assert up_data["total_uploaded"] == 2
+    assert "0002.txt" in up_data["uploaded"]
+    assert "0003.txt" in up_data["uploaded"]
+
+    # Verify files exist on disk in raw_chapters
+    raw_dir = web_test_repo.root_dir / "raw_chapters"
+    assert (raw_dir / "0002.txt").exists()
+    assert "冒険の始まり" in (raw_dir / "0002.txt").read_text(encoding="utf-8")
+
+    # Verify duplicate upload with overwrite=False skips existing files
+    res_skip = client.post("/api/chapters/upload", json={
+        "project_path": proj_param,
+        "files": [
+            {"name": "0002.txt", "content": "Changed content"},
+            {"name": "0004.txt", "content": "第4章 新たな仲間。"},
+        ],
+        "overwrite": False,
+    })
+    assert res_skip.status_code == 200
+    skip_data = res_skip.json()
+    assert skip_data["total_uploaded"] == 1
+    assert skip_data["total_skipped"] == 1
+    assert "0002.txt" in skip_data["skipped"]
+    assert "0004.txt" in skip_data["uploaded"]
+    # Check 0002.txt wasn't overwritten
+    assert "冒険の始まり" in (raw_dir / "0002.txt").read_text(encoding="utf-8")
+
+    # Verify duplicate upload with overwrite=True updates files
+    res_ov = client.post("/api/chapters/upload", json={
+        "project_path": proj_param,
+        "files": [
+            {"name": "0002.txt", "content": "Updated content: 冒険第2章。"},
+        ],
+        "overwrite": True,
+    })
+    assert res_ov.status_code == 200
+    ov_data = res_ov.json()
+    assert ov_data["total_uploaded"] == 1
+    assert "Updated content" in (raw_dir / "0002.txt").read_text(encoding="utf-8")
+
+    # 3. POST /api/chapters/upload (JSON) to subfolder (e.g. Villainess_05)
+    res_vol = client.post("/api/chapters/upload", json={
+        "project_path": proj_param,
+        "folder": "Villainess_05",
+        "files": [
+            {"name": "0121.txt", "content": "第121章 舞踏会の夜。\n悪役令嬢は微笑んだ。"},
+        ],
+        "overwrite": False,
+    })
+    assert res_vol.status_code == 200
+    vol_data = res_vol.json()
+    assert vol_data["folder"] == "Villainess_05"
+    assert vol_data["total_uploaded"] == 1
+    vol_file = web_test_repo.root_dir / "Villainess_05" / "0121.txt"
+    assert vol_file.exists()
+    assert "悪役令嬢" in vol_file.read_text(encoding="utf-8")
+
+    # Verify GET /api/folders now includes Villainess_05
+    res_folders_after = client.get(f"/api/folders?project_path={proj_param}")
+    assert "Villainess_05" in res_folders_after.json()["folders"]
+
+    # 4. POST /api/chapters/upload-form (multipart)
+    res_form = client.post(
+        "/api/chapters/upload-form",
+        data={"project_path": proj_param, "folder": "raw_chapters", "overwrite": "true"},
+        files={"files": ("0005.txt", b"Chapter 5 via multipart form", "text/plain")},
+    )
+    assert res_form.status_code == 200
+    form_data = res_form.json()
+    assert form_data["total_uploaded"] == 1
+    assert (raw_dir / "0005.txt").exists()
+
+    # 5. Security test: Directory traversal attempt rejected
+    res_bad = client.post("/api/chapters/upload", json={
+        "project_path": proj_param,
+        "folder": "../../secret_dir",
+        "files": [{"name": "evil.txt", "content": "hack"}],
+    })
+    assert res_bad.status_code == 400
+
