@@ -56,6 +56,12 @@ export interface BibleCharacter {
   aliases?: string[];
   power_level?: string;
   status?: string;
+  relationships?: Record<string, string>;
+  pronouns?: {
+    source?: string;
+    target?: string;
+    relational?: Record<string, string>;
+  } | string;
 }
 
 export interface BibleTerm {

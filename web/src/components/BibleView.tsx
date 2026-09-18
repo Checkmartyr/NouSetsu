@@ -12,7 +12,8 @@ import {
   Check,
   X,
   Sparkles,
-  BookOpen
+  BookOpen,
+  Eye
 } from 'lucide-react';
 import { BibleData, BibleCharacter, BibleTerm } from '../types/dashboard';
 import {
@@ -21,13 +22,14 @@ import {
   fetchRawBible,
   updateRawBible
 } from '../services/dashboardApi';
+import { CharacterVisualizer } from './CharacterVisualizer';
 
 interface BibleViewProps {
   activeProjectPath: string | null;
   activeProjectTitle: string | null;
 }
 
-type BibleTab = 'characters' | 'glossary' | 'memory' | 'raw';
+type BibleTab = 'characters' | 'visualizer' | 'glossary' | 'memory' | 'raw';
 
 export const BibleView: React.FC<BibleViewProps> = ({
   activeProjectPath,
@@ -38,6 +40,9 @@ export const BibleView: React.FC<BibleViewProps> = ({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+
+  // Selected character for visualizer
+  const [selectedCharIndex, setSelectedCharIndex] = useState<number | null>(0);
 
   // Raw YAML Mode
   const [rawYaml, setRawYaml] = useState('');
@@ -51,6 +56,8 @@ export const BibleView: React.FC<BibleViewProps> = ({
   // Character Modal / Form
   const [isCharModalOpen, setIsCharModalOpen] = useState(false);
   const [editingCharIndex, setEditingCharIndex] = useState<number | null>(null);
+  const [aliasesInput, setAliasesInput] = useState('');
+  const [relationshipsInput, setRelationshipsInput] = useState('');
   const [charForm, setCharForm] = useState<BibleCharacter>({
     name: '',
     original_name: '',
@@ -136,12 +143,16 @@ export const BibleView: React.FC<BibleViewProps> = ({
       name: '',
       original_name: '',
       gender: 'unknown',
-      role: '',
+      role: 'supporting',
       speaking_style: '',
       power_level: '',
-      status: '',
+      status: 'active',
       summary: '',
+      aliases: [],
+      relationships: {},
     });
+    setAliasesInput('');
+    setRelationshipsInput('');
     setIsCharModalOpen(true);
   };
 
@@ -152,13 +163,37 @@ export const BibleView: React.FC<BibleViewProps> = ({
       speaking_style: char.speaking_style || char.voice || '',
       voice: char.voice || char.speaking_style || '',
     });
+    setAliasesInput((char.aliases || []).join(', '));
+    const relStr = char.relationships
+      ? Object.entries(char.relationships)
+          .map(([k, v]) => `${k}: ${v}`)
+          .join(', ')
+      : '';
+    setRelationshipsInput(relStr);
     setIsCharModalOpen(true);
   };
 
   const saveCharModal = () => {
     if (!bible) return;
+    const parsedAliases = aliasesInput
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    const parsedRelationships: Record<string, string> = {};
+    if (relationshipsInput.trim()) {
+      relationshipsInput.split(',').forEach((part) => {
+        const [k, v] = part.split(':');
+        if (k && v) {
+          parsedRelationships[k.trim()] = v.trim();
+        }
+      });
+    }
+
     const finalCharForm: BibleCharacter = {
       ...charForm,
+      aliases: parsedAliases,
+      relationships: parsedRelationships,
       speaking_style: charForm.speaking_style || charForm.voice || '',
       voice: charForm.voice || charForm.speaking_style || '',
     };
@@ -291,6 +326,17 @@ export const BibleView: React.FC<BibleViewProps> = ({
             Characters ({bible?.characters?.length ?? 0})
           </button>
           <button
+            onClick={() => setActiveTab('visualizer')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${
+              activeTab === 'visualizer'
+                ? 'bg-indigo-600 text-white shadow'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            Visualizer
+          </button>
+          <button
             onClick={() => setActiveTab('glossary')}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${
               activeTab === 'glossary'
@@ -330,6 +376,17 @@ export const BibleView: React.FC<BibleViewProps> = ({
       <div className="flex-1 overflow-y-auto p-6">
         {loading ? (
           <div className="text-center py-20 text-slate-500">Loading Bible data...</div>
+        ) : activeTab === 'visualizer' ? (
+          /* CHARACTER VISUALIZER VIEW */
+          <div className="h-full -m-6 flex flex-col overflow-hidden">
+            <CharacterVisualizer
+              characters={bible?.characters || []}
+              selectedCharacterIndex={selectedCharIndex ?? 0}
+              onSelectCharacter={(idx) => setSelectedCharIndex(idx)}
+              onEditCharacter={(c, idx) => openEditCharModal(c, idx)}
+              onAddCharacter={openAddCharModal}
+            />
+          </div>
         ) : activeTab === 'characters' ? (
           /* CHARACTERS VIEW */
           <div className="space-y-4">
@@ -370,10 +427,22 @@ export const BibleView: React.FC<BibleViewProps> = ({
                       </div>
                       <div className="flex items-center gap-1">
                         <button
+                          onClick={() => {
+                            const origIdx = (bible?.characters || []).indexOf(c);
+                            setSelectedCharIndex(origIdx !== -1 ? origIdx : i);
+                            setActiveTab('visualizer');
+                          }}
+                          title="Visualize Character Sheet & Network"
+                          aria-label={`Visualize ${c.name}`}
+                          className="p-1 text-slate-400 hover:text-amber-400 cursor-pointer transition-colors"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+                        <button
                           onClick={() => openEditCharModal(c, i)}
                           title="Edit"
                           aria-label={`Edit ${c.name}`}
-                          className="p-1 text-slate-400 hover:text-indigo-400 cursor-pointer"
+                          className="p-1 text-slate-400 hover:text-indigo-400 cursor-pointer transition-colors"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
@@ -381,7 +450,7 @@ export const BibleView: React.FC<BibleViewProps> = ({
                           onClick={() => deleteChar(i)}
                           title="Delete"
                           aria-label={`Delete ${c.name}`}
-                          className="p-1 text-slate-400 hover:text-rose-400 cursor-pointer"
+                          className="p-1 text-slate-400 hover:text-rose-400 cursor-pointer transition-colors"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -402,6 +471,11 @@ export const BibleView: React.FC<BibleViewProps> = ({
                       {c.power_level && (
                         <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20">
                           {c.power_level}
+                        </span>
+                      )}
+                      {c.relationships && Object.keys(c.relationships).length > 0 && (
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-pink-500/10 text-pink-300 border border-pink-500/20">
+                          {Object.keys(c.relationships).length} links
                         </span>
                       )}
                     </div>
@@ -654,6 +728,48 @@ export const BibleView: React.FC<BibleViewProps> = ({
                   onChange={(e) => setCharForm({ ...charForm, role: e.target.value })}
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200"
                   placeholder="Protagonist, Rival, Villainess"
+                />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-slate-400 mb-1">Aliases & Nicknames (comma-separated)</label>
+                <input
+                  type="text"
+                  value={aliasesInput}
+                  onChange={(e) => setAliasesInput(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200"
+                  placeholder="e.g. Black Beast, Sword Sovereign, Saintess"
+                />
+              </div>
+              <div>
+                <label className="block text-slate-400 mb-1">Power Level / Realm</label>
+                <input
+                  type="text"
+                  value={charForm.power_level || ''}
+                  onChange={(e) => setCharForm({ ...charForm, power_level: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200"
+                  placeholder="e.g. Level 99, Core Formation"
+                />
+              </div>
+              <div>
+                <label className="block text-slate-400 mb-1">Status</label>
+                <input
+                  type="text"
+                  value={charForm.status || ''}
+                  onChange={(e) => setCharForm({ ...charForm, status: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200"
+                  placeholder="e.g. Active, Injured, Deceased"
+                />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-slate-400 mb-1">
+                  Relationships (Target: relation, comma-separated)
+                </label>
+                <input
+                  type="text"
+                  value={relationshipsInput}
+                  onChange={(e) => setRelationshipsInput(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200"
+                  placeholder="e.g. Elena: sister, Gabriel: rival, Demon King: enemy"
                 />
               </div>
               <div className="col-span-2">
