@@ -125,7 +125,18 @@ def resolve_project_dir(
     # Check last active project in registry first
     reg = ProjectRegistry()
     active = reg.get_last_active_project()
+    projects_root = get_projects_root_dir()
+
     if active and active.exists() and (active / ".novel").exists():
+        if projects_root.exists() and projects_root.is_dir():
+            try:
+                active.relative_to(projects_root)
+                return active.resolve()
+            except ValueError:
+                # active is outside projects_root; check if projects_root has valid projects first!
+                for child in sorted(projects_root.iterdir()):
+                    if child.is_dir() and (child / ".novel").exists():
+                        return child.resolve()
         return active.resolve()
 
     # If user is in a dedicated novel subdirectory (not repo root) that has .novel
