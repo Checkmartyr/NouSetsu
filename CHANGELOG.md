@@ -8,6 +8,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Bible Language Integrity & Sanitization Engine**:
+  - Implemented [`sanitize_bible`](file:///D:/Code/novel_translation_Agent/src/nousetsu/storage/bible_sanitizer.py) in `src/nousetsu/storage/bible_sanitizer.py` to strictly enforce language purity in `.novel/bible/bible.yaml`.
+  - Added iterative fixed-point character profile deduplication, resolving variant aliases, given-name subsets, and compound title prefixes.
+  - Added consonant-skeleton Katakana-to-Romaji normalization and Thai tone-mark stripping (`strip_thai_accents`) to canonicalize relationship and pronoun keys against roster characters.
+  - Enforced glossary source validation (purging corrupted non-CJK sources), relationship role translation, voice description translation, and active arc milestone normalization.
+  - Integrated sanitizer hook directly into [`NovelRepository.save_bible`](file:///D:/Code/novel_translation_Agent/src/nousetsu/storage/repository.py) and `update_bible_memory`.
+- **Fast Chapter Scanner CLI (`nousetsu scan`) & Parallelization**:
+  - Added `nousetsu scan` CLI subcommand with `--project-dir`, `--folder`, and `--all-projects` to quickly inspect chapter queues and project status.
+  - Added `ChapterScanner.scan_parallel` leveraging `ThreadPoolExecutor` and composite metadata cache keys `(path, size, mtime)` achieving a 320x scanning speedup.
+- **Stateful Subdivision Pattern Memory & Polisher Bisection Engine**:
+  - Added `subdivision_pattern_memory` to `TranslationState` and `StageArtifacts.subdivided_blocks`.
+  - Enabled `CritiqueAgent` and `PolishingAgent` to consume stateful subdivision patterns when encountering commercial AI safety blocks, recursively bisecting sensitive scenes down to $\le 8$ lines and preserving safe literary prose without redundant bisection overhead.
+- **Configurable Projects Directory (`NOVEL_PROJECTS_DIR`)**:
+  - Added `NOVEL_PROJECTS_DIR` environment variable support in `.env` (with `./project` fallback) and helper utilities in `src/nousetsu/utils/env.py`.
+- **Web Studio Multi-Folder Upload & Character Visualizer**:
+  - Added `/api/projects/{name}/chapters/upload` API endpoint for dragging and dropping raw chapters into target volume folders.
+  - Added interactive Character Visualizer in Web Studio with character dossiers and relationship webs.
+  - Added `run_chapter` method to `BatchRunner` for granular single-chapter web executions.
+  - Added dynamic free-port detection (`_find_free_port`) and `VITE_API_PORT` passing to prevent port conflicts with Docker Desktop.
+- **Active Character Injection in Chronicler**:
+  - Injected scene-active characters into `CHRONICLER_SYSTEM_PROMPT` matching Extractor and Drafter filtering behavior.
 - **Procedural Graphs Across All 5 Pipeline Agents** (arXiv:2609.09153v1):
   - Equipped `CritiqueAgent` (Stage 3), `PolishingAgent` (Stage 4), and `ChroniclerAgent` (Stage 5) with Procedural Graphs alongside `EntityExtractorAgent` and `ContextAwareDrafterAgent`.
   - Added deterministic action transitions, cognitive checkpoints, and anti-bloat pitfall warnings dynamically injected into prompts (<80 tokens) without breaking Gemini KV context caching prefix stability.
@@ -26,9 +47,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Rich Tree Visualization in `graph-info`**:
   - Updated `nousetsu graph-info` to inspect and render procedural execution graphs for all 5 agents with Rich tree panels.
 - **Test Suite Metrics**:
-  - Expanded test coverage to 347 passing tests across 52 test modules in ~42s.
+  - Expanded test coverage to 380 passing tests across 55 test modules in ~45s.
 
 ### Fixed
+- **Project Settings Persistence in Web Server**:
+  - Fixed project settings updates directly writing to `.novel/config.yaml` and synchronizing with `bible.yaml`.
+- **Web Project Loading & Chapter Disambiguation**:
+  - Resolved selected project loading, multi-folder chapter disambiguation, and metadata scanning performance in web UI.
 - **Source and Target Language Enforcement in Prompts**:
   - Explicitly injected `source_lang` and `target_lang` into extraction, chronicling, and Bible memory prompt templates.
 - **Refiner Edge Target Alias Support**:

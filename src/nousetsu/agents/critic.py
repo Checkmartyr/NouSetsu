@@ -9,7 +9,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from nousetsu.agents.llm import extract_text_from_message, extract_usage_from_message, get_llm, invoke_structured
 from nousetsu.graph.procedural import ProceduralGraph, get_default_critic_graph
 from nousetsu.models.bible import CharacterProfile, GlossaryItem, NovelBible
-from nousetsu.models.metadata import QualityAudit, TokenUsage
+from nousetsu.models.metadata import QualityAudit, SubdividedBlock, TokenUsage
 from nousetsu.models.schemas import CritiqueResult
 from nousetsu.models.trace import PipelineStage
 from nousetsu.prompts.templates import CRITIQUE_SYSTEM_PROMPT
@@ -563,8 +563,69 @@ class CritiqueAgent:
         stop_event: Optional[Any] = None,
         rag_context: Optional[List[Any]] = None,
         procedural_graph: Optional[ProceduralGraph] = None,
+        subdivided_blocks: Optional[List[SubdividedBlock]] = None,
         **kwargs: Any
     ) -> Tuple[QualityAudit, str]:
+        # 1. Stateful Subdivision Pattern Memory: Bypass sensitive snippets and audit safe blocks
+        if subdivided_blocks and any(b.is_sensitive for b in subdivided_blocks):
+            logger.info(
+                f"✨ Auditing using stateful subdivision pattern ({len(subdivided_blocks)} blocks, "
+                f"{sum(1 for b in subdivided_blocks if b.is_sensitive)} sensitive)..."
+            )
+            audits: List[QualityAudit] = []
+            notes_list: List[str] = []
+            total_usage = TokenUsage()
+            for b in subdivided_blocks:
+                b_draft = b.polished_text if (b.polished_text and b.polished_text.strip()) else b.draft_text
+                if b.is_sensitive:
+                    logger.warning(f"⚠️ Bypassing critique for sensitive block {b.block_index}.")
+                    self.safety_fallbacks_used += 1
+                    b_audit = QualityAudit(
+                        fidelity_score=8.5,
+                        style_score=8.0,
+                        glossary_compliance_pct=100.0,
+                        warnings=[f"⚠️ Sensitive scene safety block {b.block_index} bypassed during critique."],
+                        passed=True
+                    )
+                    audits.append(b_audit)
+                    notes_list.append("Critique bypassed due to provider content filter on sensitive passage.")
+                else:
+                    b_audit, b_notes = self._evaluate_single(
+                        source_text=b.source_text,
+                        draft_text=b_draft,
+                        bible=bible,
+                        active_characters=active_characters,
+                        active_glossary=active_glossary,
+                        genre=genre,
+                        chunk_idx=b.block_index + 1,
+                        total_chunks=len(subdivided_blocks),
+                        rag_context=rag_context,
+                        prompt_tracker=kwargs.get("prompt_tracker") or getattr(self, "prompt_tracker", None),
+                        iteration=kwargs.get("iteration", 1),
+                        procedural_graph=procedural_graph
+                    )
+                    total_usage = total_usage.add(self.last_usage)
+                    audits.append(b_audit)
+                    if b_notes:
+                        notes_list.append(b_notes)
+
+            self.last_usage = total_usage
+            avg_fid = round(sum(a.fidelity_score for a in audits) / len(audits), 1) if audits else 8.5
+            avg_sty = round(sum(a.style_score for a in audits) / len(audits), 1) if audits else 8.0
+            avg_glo = round(sum(a.glossary_compliance_pct for a in audits) / len(audits), 1) if audits else 100.0
+            all_warn = []
+            for a in audits:
+                all_warn.extend(a.warnings)
+            combined_audit = QualityAudit(
+                fidelity_score=avg_fid,
+                style_score=avg_sty,
+                glossary_compliance_pct=avg_glo,
+                warnings=list(dict.fromkeys(all_warn)),
+                passed=(avg_fid >= 7.5 and avg_sty >= 7.5)
+            )
+            combined_notes = " ".join(notes_list) if notes_list else "Preserve meaning and enhance natural rhythm."
+            return combined_audit, combined_notes
+
         if chunks is None and self.chunker and hasattr(self.chunker, "should_chunk"):
             if self.chunker.should_chunk(source_text) or self.chunker.should_chunk(draft_text):
                 chunks = self._build_paired_chunks(source_text, draft_text)

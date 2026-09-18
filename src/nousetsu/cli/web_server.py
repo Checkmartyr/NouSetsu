@@ -24,7 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from nousetsu.batch.runner import BatchRunner
-from nousetsu.batch.scanner import ChapterScanner, ChapterTask
+from nousetsu.batch.scanner import ChapterScanner, ChapterTask, extract_chapter_num, LEADING_SEQ_PATTERN
 from nousetsu.models.bible import CharacterProfile, GlossaryItem, NovelBible
 from nousetsu.models.config import ProjectConfig
 from nousetsu.models.exceptions import BatchStoppedException
@@ -36,7 +36,11 @@ from nousetsu.storage.repository import (
     resolve_project_dir,
     get_new_project_dir,
 )
+from nousetsu.utils.env import load_env, get_env_snapshot
 from nousetsu.utils.language import detect_language
+
+# Ensure environment variables from central .env are loaded into web server process
+load_env()
 
 logger = logging.getLogger(__name__)
 
@@ -352,10 +356,98 @@ def _load_project_traces(project_path: Path) -> List[Dict[str, Any]]:
     return loaded
 
 
+# In-memory caches for web server endpoints
+_CHAPTERS_CACHE: Dict[Tuple[str, Optional[str]], Tuple[float, List[Dict[str, Any]]]] = {}
+
+
+def _invalidate_chapter_caches(project_path: Optional[str] = None) -> None:
+    """Clear chapter caches when mutations occur (translations, uploads, settings)."""
+    if project_path:
+        p_str = str(project_path)
+        keys_to_del = [k for k in _CHAPTERS_CACHE if k[0] == p_str]
+        for k in keys_to_del:
+            _CHAPTERS_CACHE.pop(k, None)
+    else:
+        _CHAPTERS_CACHE.clear()
+
+
 def _scan_project_tasks(repo: NovelRepository, folder: Optional[str] = None) -> List[ChapterTask]:
     """Scan and resolve chapter tasks for a project and optional subfolder using optimized scanner."""
     scanner = ChapterScanner(repo)
-    return scanner.scan_project(folder=folder)
+    return scanner.scan_project(folder=folder, compute_hashes=False)
+
+
+def _find_chapter_files(
+    repo: NovelRepository,
+    chapter_num: int,
+    folder: Optional[str] = None
+) -> Optional[Tuple[Path, Path, Optional[str], str]]:
+    """Directly resolve source and output files for a chapter without full project scan.
+
+    Returns (source_file, output_file, folder_name, chapter_title) or None.
+    """
+    cfg = repo.load_config()
+    raw_dirs: List[Tuple[Optional[str], Path]] = []
+
+    # 1. Primary requested folder
+    if folder and folder != "all":
+        cand = repo.root_dir / folder
+        if cand.is_dir():
+            raw_dirs.append((folder, cand))
+
+    # 2. Configured default raw_chapters
+    raw_default = cfg.get_raw_path(repo.root_dir)
+    if raw_default.is_dir() and not any(d == raw_default for _, d in raw_dirs):
+        raw_dirs.append((None, raw_default))
+
+    # 3. Discovered subdirectories (if folder is not specified or chapter not found in folder)
+    ignored = {
+        "node_modules", "web", "src-tauri", "dist", ".git", ".novel", ".venv",
+        "__pycache__", "translated_chapters", "raw_chapters"
+    }
+    try:
+        with os.scandir(repo.root_dir) as it:
+            for e in it:
+                if (
+                    e.is_dir()
+                    and not e.name.startswith(".")
+                    and not e.name.endswith("_th")
+                    and not e.name.endswith("_trans")
+                    and e.name not in ignored
+                ):
+                    p = Path(e.path)
+                    if not any(d == p for _, d in raw_dirs):
+                        raw_dirs.append((e.name, p))
+    except Exception:
+        pass
+
+    for f_name, r_dir in raw_dirs:
+        try:
+            with os.scandir(r_dir) as it:
+                for idx, entry in enumerate(it, start=1):
+                    if entry.is_file():
+                        name_lower = entry.name.lower()
+                        if name_lower.endswith(".txt") or name_lower.endswith(".md"):
+                            stem = Path(entry.name).stem
+                            seq_m = LEADING_SEQ_PATTERN.match(stem)
+                            ch = int(seq_m.group(1)) if seq_m else extract_chapter_num(Path(entry.path), idx)
+                            if ch == chapter_num:
+                                src_file = Path(entry.path)
+                                # Resolve output directory
+                                out_dir = None
+                                if f_name:
+                                    for suff in ["_th", "_trans", "_en"]:
+                                        cand_out = repo.root_dir / f"{f_name}{suff}"
+                                        if cand_out.is_dir():
+                                            out_dir = cand_out
+                                            break
+                                if not out_dir:
+                                    out_dir = cfg.get_output_path(repo.root_dir)
+                                out_file = out_dir / f"{src_file.stem}.md"
+                                return (src_file, out_file, f_name, src_file.stem)
+        except Exception:
+            continue
+    return None
 
 
 # ============================================================================
@@ -377,6 +469,7 @@ def _run_batch_worker(
     stop_event: threading.Event
 ) -> None:
     try:
+        load_env(repo.root_dir)
         runner = BatchRunner(
             repository=repo,
             model_name=model,
@@ -470,6 +563,7 @@ def _run_batch_worker(
         event_bus.publish_sync("batch_error", {"error": str(e)})
     finally:
         job.finish()
+        _invalidate_chapter_caches(str(repo.root_dir))
 
 
 # File stats in-memory cache for fast /api/chapters response
@@ -479,16 +573,17 @@ _FILE_STATS_CACHE: Dict[Tuple[str, float, int], Tuple[int, int]] = {}
 def _get_raw_file_stats(file_path: Path) -> Tuple[int, int]:
     """Return (line_count, word_count) cached by (path, mtime, size)."""
     try:
-        if not file_path.exists():
-            return (0, 0)
         st = file_path.stat()
-        key = (str(file_path.resolve()), st.st_mtime, st.st_size)
+        key = (str(file_path), st.st_mtime, st.st_size)
         if key in _FILE_STATS_CACHE:
             return _FILE_STATS_CACHE[key]
         with open(file_path, "r", encoding="utf-8", errors="replace") as f:
-            lines = f.readlines()
-            line_cnt = len(lines)
-            word_cnt = sum(len(l.split()) if l.isascii() else len(l.strip()) for l in lines)
+            content = f.read()
+            line_cnt = content.count("\n") + (1 if content and not content.endswith("\n") else 0)
+            if content.isascii():
+                word_cnt = len(content.split())
+            else:
+                word_cnt = len(content.strip())
             _FILE_STATS_CACHE[key] = (line_cnt, word_cnt)
             return (line_cnt, word_cnt)
     except Exception:
@@ -498,10 +593,8 @@ def _get_raw_file_stats(file_path: Path) -> Tuple[int, int]:
 def _get_translated_word_count(file_path: Path) -> int:
     """Return word count of output file cached by (path, mtime, size)."""
     try:
-        if not file_path.exists():
-            return 0
         st = file_path.stat()
-        key = (str(file_path.resolve()), st.st_mtime, st.st_size)
+        key = (str(file_path), st.st_mtime, st.st_size)
         if key in _FILE_STATS_CACHE:
             return _FILE_STATS_CACHE[key][1]
         with open(file_path, "r", encoding="utf-8", errors="replace") as f:
@@ -561,6 +654,7 @@ def _process_chapter_files(
 
     # Invalidate file stats and sha256 caches
     _FILE_STATS_CACHE.clear()
+    _invalidate_chapter_caches(str(repo.root_dir))
     scanner = ChapterScanner(repo)
     scanner.clear_sha256_cache()
 
@@ -581,6 +675,7 @@ def _process_chapter_files(
 
 def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
     """Create and configure the FastAPI application."""
+    load_env()
     dist_path = dist_dir or (Path(__file__).resolve().parent.parent.parent.parent / "web" / "dist")
 
     app = FastAPI(
@@ -750,6 +845,13 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
         folder: Optional[str] = Query(None)
     ) -> List[Dict[str, Any]]:
         repo = _resolve_repo(project_path)
+        cache_key = (str(repo.root_dir), folder)
+        now = time.time()
+        if cache_key in _CHAPTERS_CACHE:
+            ts, cached_res = _CHAPTERS_CACHE[cache_key]
+            if now - ts < 4.0:
+                return cached_res
+
         tasks = _scan_project_tasks(repo, folder=folder)
 
         def _calc_task_stats(t: ChapterTask) -> Tuple[int, int, int]:
@@ -802,6 +904,7 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
                 "quality_audit": t.existing_meta.quality_audit.model_dump() if (t.existing_meta and t.existing_meta.quality_audit) else None,
             })
 
+        _CHAPTERS_CACHE[cache_key] = (now, results)
         return results
 
     @app.get("/api/chapters/{chapter_num}/content")
@@ -811,39 +914,55 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
         folder: Optional[str] = Query(None)
     ) -> Dict[str, Any]:
         repo = _resolve_repo(project_path)
-        tasks = _scan_project_tasks(repo, folder=folder)
-        task = next((t for t in tasks if t.chapter_num == chapter_num), None)
 
-        if not task and folder:
-            all_tasks = _scan_project_tasks(repo, folder=None)
-            task = next((t for t in all_tasks if t.chapter_num == chapter_num), None)
+        # 1. Fast direct file resolution (sub-millisecond) without full project scan
+        match = _find_chapter_files(repo, chapter_num, folder=folder)
+        source_file = None
+        output_file = None
+        resolved_folder = folder
+        title = f"Chapter {chapter_num}"
+
+        if match:
+            source_file, output_file, resolved_folder, title = match
+        else:
+            # 2. Fallback to tasks scan only if direct file resolution didn't locate the chapter
+            tasks = _scan_project_tasks(repo, folder=folder)
+            task = next((t for t in tasks if t.chapter_num == chapter_num), None)
+            if not task and folder:
+                all_tasks = _scan_project_tasks(repo, folder=None)
+                task = next((t for t in all_tasks if t.chapter_num == chapter_num), None)
+            if task:
+                source_file = task.source_file
+                output_file = task.output_file
+                resolved_folder = task.folder
+                title = task.source_file.stem
 
         source_text = ""
         translated_text = ""
 
-        if task:
-            if task.source_file.exists():
-                try:
-                    source_text = task.source_file.read_text(encoding="utf-8", errors="replace")
-                except Exception as e:
-                    source_text = f"Error reading source file: {e}"
-            if task.output_file.exists():
-                try:
-                    translated_text = task.output_file.read_text(encoding="utf-8", errors="replace")
-                except Exception as e:
-                    translated_text = f"Error reading output file: {e}"
+        if source_file and source_file.exists():
+            try:
+                source_text = source_file.read_text(encoding="utf-8", errors="replace")
+            except Exception as e:
+                source_text = f"Error reading source file: {e}"
+
+        if output_file and output_file.exists():
+            try:
+                translated_text = output_file.read_text(encoding="utf-8", errors="replace")
+            except Exception as e:
+                translated_text = f"Error reading output file: {e}"
 
         return {
             "chapter_num": chapter_num,
-            "folder": task.folder if task else folder,
-            "source_file": str(task.source_file) if task else "",
-            "output_file": str(task.output_file) if task else "",
-            "output_file_name": task.output_file.name if task else "",
+            "folder": resolved_folder,
+            "source_file": str(source_file) if source_file else "",
+            "output_file": str(output_file) if output_file else "",
+            "output_file_name": output_file.name if output_file else "",
             "source_text": source_text,
             "translated_text": translated_text,
             "has_source": bool(source_text.strip()),
             "has_translated": bool(translated_text.strip()),
-            "title": task.source_file.stem if task else f"Chapter {chapter_num}",
+            "title": title,
         }
 
     @app.post("/api/translate/start")
@@ -852,6 +971,7 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
             raise HTTPException(status_code=409, detail="A translation job is already in progress.")
 
         repo = _resolve_repo(body.project_path)
+        load_env(repo.root_dir)
         try:
             active_job.start(
                 _run_batch_worker,
@@ -1077,7 +1197,9 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
     @app.get("/api/settings")
     async def get_settings(project_path: Optional[str] = Query(None)) -> Dict[str, Any]:
         repo = _resolve_repo(project_path)
+        load_env(repo.root_dir)
         cfg = repo.load_config()
+        env_snap = get_env_snapshot()
         return {
             "title": cfg.title,
             "genre": cfg.genre,
@@ -1093,6 +1215,8 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
             "critic_model": cfg.critic_model or "",
             "polisher_model": cfg.polisher_model or "",
             "chronicler_model": cfg.chronicler_model or "",
+            "effective_model_name": cfg.get_model_name(),
+            "effective_fallback_model": cfg.get_fallback_model(),
             "max_review_loops": cfg.max_review_loops,
             "quality_threshold": cfg.quality_threshold,
             "chunk_threshold_lines": cfg.chunk_threshold_lines,
@@ -1107,19 +1231,7 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
             "enable_patch_polishing": cfg.enable_patch_polishing,
             "enable_post_polish_reconciliation": cfg.enable_post_polish_reconciliation,
             "config": cfg.model_dump(),
-            "env": {
-                "NOVEL_MODEL": os.environ.get("NOVEL_MODEL", "gemini-3.1-flash-lite"),
-                "NOVEL_FALLBACK_MODEL": os.environ.get("NOVEL_FALLBACK_MODEL", "gemini-3.5-flash-lite"),
-                "NOVEL_EXTRACTOR_MODEL": os.environ.get("NOVEL_EXTRACTOR_MODEL", ""),
-                "NOVEL_DRAFTER_MODEL": os.environ.get("NOVEL_DRAFTER_MODEL", ""),
-                "NOVEL_CRITIC_MODEL": os.environ.get("NOVEL_CRITIC_MODEL", "gemma-4-26b-a4b-it"),
-                "NOVEL_POLISHER_MODEL": os.environ.get("NOVEL_POLISHER_MODEL", ""),
-                "NOVEL_CHRONICLER_MODEL": os.environ.get("NOVEL_CHRONICLER_MODEL", "gemma-4-26b-a4b-it"),
-                "SOURCE_LANG": os.environ.get("SOURCE_LANG", "auto"),
-                "TARGET_LANG": os.environ.get("TARGET_LANG", "English"),
-                "NOVEL_MAX_TPM": os.environ.get("NOVEL_MAX_TPM", "32000"),
-                "NOVEL_MAX_RPM": os.environ.get("NOVEL_MAX_RPM", "60"),
-            }
+            "env": env_snap,
         }
 
     @app.put("/api/settings")
@@ -1189,6 +1301,7 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
                 cfg.enable_post_polish_reconciliation = bool(src["enable_post_polish_reconciliation"])
 
             repo.save_config(cfg)
+            _invalidate_chapter_caches(str(repo.root_dir))
 
             # Sync updated project metadata to Novel Bible if present
             try:
@@ -1427,6 +1540,7 @@ def run_web_server(
     dist_dir: Optional[Path] = None
 ) -> None:
     """Run the Nousetsu web server hosting the dashboard and trace sync API."""
+    load_env()
     server_app = create_app(dist_dir=dist_dir)
     url = f"http://{host}:{port}"
 

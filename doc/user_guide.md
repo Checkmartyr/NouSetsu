@@ -203,7 +203,23 @@ nousetsu learn-graph -p ./my_novel -a all
 
 # 15. Realignment of Chapter Numbering Collisions
 nousetsu realign-chapters -p ./my_novel -F Villainess_06
+
+# 16. Fast Chapter Queue & Project Scanner
+nousetsu scan --all-projects
+nousetsu scan -p ./my_novel -F Villainess_05
 ```
+
+### Chapter Queue Scanner (`nousetsu scan`)
+
+```bash
+nousetsu scan [OPTIONS]
+```
+
+| Flag | Shorthand | Default | Description |
+|:---|:---:|:---:|:---|
+| `--project-dir` | `-p` | `None` | Folder or name of novel project (resolves in `NOVEL_PROJECTS_DIR` or current directory) |
+| `--folder` / `--volume` | `-F` | `None` | Specific volume folder to scan within the project |
+| `--all-projects` | `-A` | `False` | Scan across all novel projects in `NOVEL_PROJECTS_DIR` with completion overview |
 
 ### Full `nousetsu batch` Flags
 

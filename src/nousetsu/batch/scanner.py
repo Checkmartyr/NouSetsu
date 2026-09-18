@@ -108,7 +108,7 @@ class ChapterScanner:
                 st = src_file.stat()
                 st_size = st.st_size
                 st_mtime = st.st_mtime
-            key = (str(src_file.resolve()), st_size, st_mtime)
+            key = (str(src_file), st_size, st_mtime)
             cached = _GLOBAL_SHA256_CACHE.get(key)
             if cached is not None:
                 return cached
@@ -146,6 +146,7 @@ class ChapterScanner:
         all_metadata: Optional[Dict[str, ChapterMetadata]] = None,
         parallel: bool = True,
         max_workers: Optional[int] = None,
+        compute_hashes: bool = False,
     ) -> List[ChapterTask]:
         """High-speed scan of an input directory, matching against metadata and flagging status.
         
@@ -153,8 +154,8 @@ class ChapterScanner:
         1. Fast OS directory stream reading via os.scandir (eliminates redundant stat syscalls).
         2. Pre-indexed output directory file existence set (O(1) lookups instead of N disk checks).
         3. Single read of ProjectMetadataDocument reused across all calls.
-        4. Parallel SHA-256 pre-computation for completed/resumable chapters.
-        5. Lazy SHA-256 computation: untranslated chapters avoid upfront hashing overhead.
+        4. Parallel SHA-256 pre-computation for completed/resumable chapters (only if compute_hashes=True).
+        5. Lazy SHA-256 computation: untranslated and UI-listed chapters avoid upfront hashing overhead.
         """
         input_path = Path(input_dir)
         output_path = Path(output_dir)
@@ -200,8 +201,8 @@ class ChapterScanner:
 
         out_parent_name = output_path.name
 
-        # 4. Parallel SHA-256 pre-computation for completed or resumable chapters
-        if parallel:
+        # 4. Parallel SHA-256 pre-computation for completed or resumable chapters (when explicitly requested)
+        if parallel and compute_hashes:
             entries_to_hash: List[Tuple[Path, int, float]] = []
             for filename, src_file, st in sorted_entries:
                 stem = src_file.stem
@@ -215,7 +216,7 @@ class ChapterScanner:
                         meta = self.repo.load_metadata(output_path / out_filename)
 
                 if meta is not None:
-                    key = (str(src_file.resolve()), st.st_size, st.st_mtime)
+                    key = (str(src_file), st.st_size, st.st_mtime)
                     if key not in _GLOBAL_SHA256_CACHE:
                         entries_to_hash.append((src_file, st.st_size, st.st_mtime))
 
@@ -273,22 +274,27 @@ class ChapterScanner:
             src_sha256 = ""
 
             if meta:
-                # Check SHA256 only when metadata exists to verify completion or resumption
-                src_sha256 = self.get_file_sha256(src_file, st_size=st.st_size, st_mtime=st.st_mtime)
-                if meta.checkpoint.status == StageStatus.COMPLETED and meta.source_sha256 == src_sha256 and out_exists:
+                if compute_hashes:
+                    src_sha256 = self.get_file_sha256(src_file, st_size=st.st_size, st_mtime=st.st_mtime)
+                    hash_matches = (meta.source_sha256 == src_sha256)
+                else:
+                    src_sha256 = ""
+                    hash_matches = True
+
+                if meta.checkpoint.status == StageStatus.COMPLETED and hash_matches and out_exists:
                     is_done = True
                 elif meta.checkpoint.status == StageStatus.FAILED:
                     is_failed = True
                     last_err = meta.checkpoint.last_error
-                    if meta.source_sha256 == src_sha256 and meta.checkpoint.is_resumable():
+                    if hash_matches and meta.checkpoint.is_resumable():
                         needs_resume = True
                         resume_stage = meta.checkpoint.last_completed_stage
                 elif meta.checkpoint.status == StageStatus.PAUSED:
                     is_paused = True
-                    if meta.source_sha256 == src_sha256 and meta.checkpoint.is_resumable():
+                    if hash_matches and meta.checkpoint.is_resumable():
                         needs_resume = True
                         resume_stage = meta.checkpoint.last_completed_stage
-                elif meta.source_sha256 == src_sha256 and meta.checkpoint.is_resumable():
+                elif hash_matches and meta.checkpoint.is_resumable():
                     needs_resume = True
                     resume_stage = meta.checkpoint.last_completed_stage
 
@@ -314,6 +320,7 @@ class ChapterScanner:
         folder: Optional[str] = None,
         parallel: bool = True,
         max_workers: Optional[int] = None,
+        compute_hashes: bool = False,
     ) -> List[ChapterTask]:
         """Scan and resolve chapter tasks for this project, supporting multi-folder and volume subdirectories.
         
@@ -337,7 +344,9 @@ class ChapterScanner:
             else:
                 raw_path = cfg.get_raw_path(self.repo.root_dir)
                 output_path = cfg.get_output_path(self.repo.root_dir)
-            return self.scan_directory(raw_path, output_path, parallel=parallel, max_workers=max_workers)
+            return self.scan_directory(
+                raw_path, output_path, parallel=parallel, max_workers=max_workers, compute_hashes=compute_hashes
+            )
 
         # Multi-volume scan: single I/O read of metadata document shared across all subfolders!
         all_metadata = self.repo.load_all_metadata()
@@ -395,7 +404,12 @@ class ChapterScanner:
 
         def _scan_pair(pair: Tuple[Path, Path]) -> List[ChapterTask]:
             return self.scan_directory(
-                pair[0], pair[1], all_metadata=all_metadata, parallel=parallel, max_workers=max_workers
+                pair[0],
+                pair[1],
+                all_metadata=all_metadata,
+                parallel=parallel,
+                max_workers=max_workers,
+                compute_hashes=compute_hashes,
             )
 
         if parallel and len(candidate_pairs) > 1:
@@ -409,7 +423,7 @@ class ChapterScanner:
         seen_files: Set[str] = set()
         for sub_tasks in sub_results:
             for st in sub_tasks:
-                f_key = str(st.source_file.resolve())
+                f_key = str(st.source_file)
                 if f_key not in seen_files:
                     all_tasks.append(st)
                     seen_files.add(f_key)
@@ -423,6 +437,7 @@ class ChapterScanner:
         folder: Optional[str] = None,
         parallel: bool = True,
         max_workers: Optional[int] = None,
+        compute_hashes: bool = False,
     ) -> Dict[str, List[ChapterTask]]:
         """Scan chapters across all novel projects located in NOVEL_PROJECTS_DIR or specified root.
 
@@ -454,7 +469,9 @@ class ChapterScanner:
             name, ppath = item
             try:
                 scanner = cls(ppath)
-                return name, scanner.scan_project(folder=folder, parallel=parallel, max_workers=max_workers)
+                return name, scanner.scan_project(
+                    folder=folder, parallel=parallel, max_workers=max_workers, compute_hashes=compute_hashes
+                )
             except Exception as e:
                 logger.warning("Error scanning project %s: %s", name, e)
                 return name, []

@@ -8,11 +8,18 @@ Your task is to analyze the source chapter text against the existing Novel Bible
 Identify which entities are NEW (not yet present in the existing Novel Bible) and propose canonical {target_lang} translations for them.
 
 ## STRICT LANGUAGE INTEGRITY DIRECTIVES:
-1. `original_name` (character) and `source` (term) MUST be the EXACT text as written in the raw {source_lang} source text (e.g. Japanese Kanji/Katakana/Hiragana, Chinese Hanzi, Korean Hangul). NEVER translate, romanize, or write in English/{target_lang}.
+1. `original_name` (character) and `source` (term) MUST be the EXACT text as written in the raw {source_lang} source text in its native script (e.g. Japanese Kanji/Katakana/Hiragana, Chinese Hanzi, Korean Hangul). NEVER translate, romanize, or write in English or {target_lang}.
 2. `name` (character) and `target` (term) MUST be localized canonical translations strictly in {target_lang} (e.g. Thai). NEVER leave in English or {source_lang}.
-3. `pronouns.source` MUST be in {source_lang} (e.g. 俺, 私, 彼女).
-4. `pronouns.target` MUST be in {target_lang} (e.g. ผม, ฉัน, เธอ, เขา).
-5. `voice` and `relationships` should be described in {target_lang} or English.
+3. `pronouns.source` MUST be in {source_lang} script (e.g. 俺, 私, 彼女). ABSOLUTELY NO romaji (e.g. 'watashi'), NO English.
+4. `pronouns.target` MUST be strictly in {target_lang} (e.g. ผม, ฉัน, เธอ, เขา). ABSOLUTELY NO pronunciation guides or romanization in parentheses (e.g. DO NOT write 'เธอ (thoe)').
+5. `voice` MUST be described strictly in {target_lang} (e.g. speech quirks, politeness level, tone in {target_lang}).
+6. `relationships`:
+   - All KEYS MUST be the canonical character name strictly in {target_lang} (e.g. 'เฟอร์ดิด เลกาเลีย', NEVER English 'Ferid Legalia' or Japanese 'フェルディッド').
+   - All VALUES MUST be described strictly in {target_lang} (e.g. 'บิดา', 'สหาย'). DO NOT include English translations in parentheses.
+7. `new_terms`:
+   - `source` MUST contain native {source_lang} script characters. NEVER emit words from {target_lang} or English into `source`.
+   - `target` MUST be strictly in {target_lang}.
+   - `notes` MUST be in English.
 {skills_section}
 {procedural_guidance}
 Respond strictly in valid JSON format:
@@ -23,18 +30,18 @@ Respond strictly in valid JSON format:
       "original_name": "Character name EXACTLY as written in the raw {source_lang} source text (e.g. Kanji/Katakana/Hangul/Hanzi), NEVER translated or romanized",
       "aliases": ["Alternative names or nicknames in {target_lang} or {source_lang}"],
       "gender": "male/female/neutral/unknown",
-      "pronouns": {{"source": "pronoun(s) in {source_lang} (e.g. 俺, 私)", "target": "canonical pronoun(s) in {target_lang} (e.g. ผม, ฉัน, เธอ)"}},
+      "pronouns": {{"source": "pronoun(s) in {source_lang} script (e.g. 俺, 私) - NO romaji, NO English", "target": "canonical pronoun(s) strictly in {target_lang} (e.g. ผม, ฉัน) - NO romanization in parens"}},
       "role": "protagonist/antagonist/supporting/minor",
-      "voice": "speech quirks, politeness level, tone in {target_lang}",
-      "relationships": {{"Character": "relationship in {target_lang}"}}
+      "voice": "speech quirks, politeness level, tone strictly in {target_lang}",
+      "relationships": {{"Canonical Character Name in {target_lang}": "relationship bond strictly in {target_lang}"}}
     }}
   ],
   "new_terms": [
     {{
-      "source": "Exact term as written in the raw {source_lang} source text, NEVER translated",
+      "source": "Exact term as written in the raw {source_lang} source text with {source_lang} script, NEVER translated",
       "target": "Canonical translated term strictly in {target_lang}",
       "category": "term/faction/location/skill/item/rank",
-      "notes": "contextual usage"
+      "notes": "Contextual usage notes in English"
     }}
   ],
   "active_terms_in_chapter": ["term1", "term2"]
@@ -194,47 +201,59 @@ Examine any provisional terms and characters extracted prior to translation agai
 ## STRICT LANGUAGE INTEGRITY RULES:
 - For characters: Confirm character names, roles, and any nicknames/titles used in the final {target_lang} translation.
   * `name` MUST be the final translated character name strictly in {target_lang}.
-  * `original_name` MUST remain the exact original name in {source_lang} (e.g. Japanese Kanji/Katakana). NEVER replace it with translated {target_lang} or romanized English!
+  * `original_name` MUST remain the exact original name in {source_lang} script (e.g. Japanese Kanji/Katakana, Chinese Hanzi, Korean Hangul). NEVER replace it with translated {target_lang} or romanized English!
   * If a character name's spelling was modified in prose, update `name` and record alternative address forms in `aliases`.
+  * `voice` MUST be described strictly in {target_lang}.
   * Crucially, observe interpersonal dialogue to extract and reconcile pronouns and relational address:
-    - Record general pronouns in `pronouns.source` ({source_lang}) and `pronouns.target` ({target_lang}).
-    - Record relational pronouns used between specific character pairs in `pronouns.relational` (e.g. {{"RelatedCharacter": "self_pronoun/addressee_pronoun in {target_lang}"}}).
-    - Update relationship dynamics in `relationships` (e.g. {{"RelatedCharacter": "partner/wife in {target_lang}"}}).
+    - `pronouns.source` MUST be in {source_lang} script (e.g. 私, 俺). NEVER use romaji or English.
+    - `pronouns.target` MUST be strictly in {target_lang} (e.g. ฉัน, ผม). NEVER include romanization or pronunciation guides in parentheses.
+    - `pronouns.relational`:
+      * ALL KEYS MUST be the related character's canonical name strictly in {target_lang} (e.g. 'เฟอร์ดิด เลกาเลีย', NEVER English 'Ferid Legalia' or Japanese 'フェルディッド').
+      * ALL VALUES MUST be in {target_lang} (e.g. 'ท่านพ่อ', 'คุณหนู').
+    - `relationships`:
+      * ALL KEYS MUST be the related character's canonical name strictly in {target_lang}. NEVER use English or {source_lang} names as keys!
+      * ALL VALUES MUST be described strictly in {target_lang} (e.g. 'บิดา', 'สหาย'). DO NOT include English in parentheses.
 - For terms:
-  * `source` MUST remain the exact term from the raw {source_lang} text. NEVER emit translated {target_lang} or English into `source`.
+  * `source` MUST remain the exact term from the raw {source_lang} text containing native {source_lang} script. NEVER emit translated {target_lang} or English into `source`.
   * `target` MUST be the final localized term strictly in {target_lang} actually used in prose.
+  * `notes` MUST be in English.
   * Exclude any false-positive terms that were not actually used or translated as specific lore.
+## INTERNAL MEMORY LANGUAGE RULE:
+All narrative memory fields — `synopsis`, `key_events`, `character_state_changes`, `arc_update` (title, core_conflict, synopsis, milestones), and `story_update` — MUST be written in **English**.
+These fields serve as internal rolling context for downstream agents, NOT end-user prose. English maximizes token efficiency and cross-model comprehension.
 {skills_section}
 {procedural_guidance}
+## ACTIVE CHARACTER ROSTER:
+{characters}
 {provisional_entities_section}
 
 Respond strictly in valid JSON format:
 {{
   "chapter_num": {chapter_num},
   "title": "{chapter_title}",
-  "synopsis": "Detailed 2-3 paragraph summary of plot events in {target_lang}...",
+  "synopsis": "Detailed 2-3 paragraph summary of plot events in English...",
   "key_events": [
-    "Event 1",
-    "Event 2"
+    "Event 1 in English",
+    "Event 2 in English"
   ],
   "character_state_changes": [
-    "Character status shift 1",
-    "Character status shift 2"
+    "Character status shift 1 in English",
+    "Character status shift 2 in English"
   ],
   "reconciled_characters": [
     {{
       "name": "Final translated character name strictly in {target_lang}",
       "original_name": "Original character name EXACTLY as written in raw {source_lang} text (e.g. Japanese Kanji/Katakana), NEVER translated or romanized",
-      "aliases": ["Nicknames or variants used in text"],
+      "aliases": ["Alternative names or nicknames in {target_lang} or {source_lang}"],
       "gender": "male/female/unspecified",
       "pronouns": {{
-        "source": "source pronouns in {source_lang}",
-        "target": "confirmed target pronouns in {target_lang} used in prose",
-        "relational": {{"RelatedCharacter": "self/addressee pronouns in {target_lang}"}}
+        "source": "source pronouns in {source_lang} script (e.g. 私, 俺) - NO romaji, NO English",
+        "target": "confirmed target pronouns strictly in {target_lang} (e.g. ฉัน, ผม) - NO romanization in parens",
+        "relational": {{"Canonical Character Name in {target_lang}": "self/addressee pronouns in {target_lang}"}}
       }},
       "role": "protagonist/antagonist/supporting/minor",
-      "voice": "Speech style or register in {target_lang}",
-      "relationships": {{"RelatedCharacter": "relationship bond in {target_lang}"}}
+      "voice": "Speech style or register strictly in {target_lang}",
+      "relationships": {{"Canonical Character Name in {target_lang}": "relationship bond strictly in {target_lang}"}}
     }}
   ],
   "reconciled_terms": [
@@ -242,19 +261,19 @@ Respond strictly in valid JSON format:
       "source": "Exact term from raw {source_lang} text, NEVER translated",
       "target": "Final localized term strictly in {target_lang} actually used in prose",
       "category": "term/item/skill/location/faction/rank",
-      "notes": "Contextual usage notes"
+      "notes": "Contextual usage notes in English"
     }}
   ],
   "arc_update": {{
-    "title": "Current Arc Title",
-    "core_conflict": "Central conflict or objective of this arc",
-    "synopsis": "Cumulative progression of the active arc so far",
+    "title": "Current Arc Title in English",
+    "core_conflict": "Central conflict or objective of this arc in English",
+    "synopsis": "Cumulative progression of the active arc so far in English",
     "milestones": [
-      "Milestone 1"
+      "Milestone 1 in English"
     ],
     "is_completed": false
   }},
-  "story_update": "Optional overarching summary of the whole story (updated if an arc completed or major turning point occurred, else null)"
+  "story_update": "Optional overarching summary of the whole story in English (updated if an arc completed or major turning point occurred, else null)"
 }}
 
 Chapter Number: {chapter_num}

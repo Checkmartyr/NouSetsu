@@ -248,7 +248,8 @@ def test_checkpoint_preservation_on_exception_and_resumption(tmp_path: Path):
 
     results = runner.run_batch(input_dir=input_dir, output_dir=output_dir)
 
-    assert len(results) == 0  # No completed chapters
+    assert len([r for r in results if r.checkpoint.status == StageStatus.COMPLETED]) == 0  # No completed chapters
+    assert len(results) == 1 and results[0].checkpoint.status == StageStatus.FAILED
 
     # Verify failed checkpoint saved into metadata.json
     all_meta = repo.load_all_metadata()
@@ -406,7 +407,8 @@ def test_failure_stage_bounding_and_artifact_isolation(tmp_path: Path):
     runner.workflow.run = MagicMock(side_effect=failing_workflow_run)
     results = runner.run_batch(input_dir=input_dir, output_dir=output_dir)
 
-    assert len(results) == 0
+    assert len([r for r in results if r.checkpoint.status == StageStatus.COMPLETED]) == 0
+    assert len(results) == 1 and results[0].checkpoint.status == StageStatus.FAILED
     all_meta = repo.load_all_metadata()
     failed_meta = all_meta["ch_01"]
 
@@ -451,7 +453,8 @@ def test_real_workflow_exception_preserves_state_and_resumes(tmp_path: Path):
 
     # Run batch: workflow.run is NOT mocked! Real LangGraph execution runs.
     first_results = runner.run_batch(input_dir=input_dir, output_dir=output_dir)
-    assert len(first_results) == 0  # Chapter failed
+    assert len([r for r in first_results if r.checkpoint.status == StageStatus.COMPLETED]) == 0  # Chapter failed
+    assert len(first_results) == 1 and first_results[0].checkpoint.status == StageStatus.FAILED
 
     # Verify checkpoint preserved by real workflow.current_stage and workflow.last_state
     all_meta = repo.load_all_metadata()

@@ -16,6 +16,7 @@ from nousetsu.models.metadata import (
     QualityAudit,
     StageArtifacts,
     StageStatus,
+    SubdividedBlock,
     TranslationStats,
 )
 from nousetsu.models.config import ProjectConfig
@@ -33,6 +34,7 @@ __all__ = [
     "StageStatus",
     "PipelineStage",
     "StageArtifacts",
+    "SubdividedBlock",
     "CheckpointData",
     "ErrorLogEntry",
     "ProjectMetadataDocument",

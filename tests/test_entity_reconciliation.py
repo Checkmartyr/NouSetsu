@@ -134,6 +134,56 @@ def test_chronicler_agent_injects_provisional_entities():
     assert agent.last_reconciled_terms[0].target == "Azure Thunder Blade"
 
 
+def test_chronicler_agent_injects_active_characters():
+    """Verify ChroniclerAgent injects active novel bible characters into the system prompt."""
+    agent = ChroniclerAgent(model_name="mock-model")
+
+    active_chars = [
+        CharacterProfile(
+            name="Charlotte",
+            original_name="シャルロット",
+            gender="female",
+            role="protagonist",
+            aliases=["Lotte"],
+            voice="polite and refined",
+            relationships={"Liam": "fiancé"}
+        )
+    ]
+
+    captured_messages = []
+    def fake_invoke(messages):
+        captured_messages.extend(messages)
+        return MagicMock(content=(
+            '{\n'
+            '  "chapter_num": 1,\n'
+            '  "title": "Chapter 1",\n'
+            '  "synopsis": "Charlotte attends the banquet.",\n'
+            '  "key_events": ["Attended banquet"],\n'
+            '  "character_state_changes": ["Charlotte arrived at the palace"]\n'
+            '}'
+        ))
+
+    mock_llm = MagicMock()
+    mock_llm.invoke.side_effect = fake_invoke
+    agent.llm = mock_llm
+
+    summary = agent.chronicle(
+        chapter_num=1,
+        chapter_title="Chapter 1",
+        translated_text="Charlotte stepped into the palace ballroom with quiet elegance.",
+        active_characters=active_chars
+    )
+
+    assert summary is not None
+    assert len(captured_messages) == 2
+    sys_prompt = captured_messages[0].content
+    assert "## ACTIVE CHARACTER ROSTER:" in sys_prompt
+    assert "Charlotte" in sys_prompt
+    assert "シャルロット" in sys_prompt
+    assert "fiancé" in sys_prompt
+    assert "polite and refined" in sys_prompt
+
+
 def test_chronicler_agent_assemble_metadata_preserves_reconciled():
     """Verify assemble_metadata records reconciled_characters and reconciled_terms in StageArtifacts."""
     agent = ChroniclerAgent(model_name="mock-model")

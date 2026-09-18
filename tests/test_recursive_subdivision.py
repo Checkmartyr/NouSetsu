@@ -6,10 +6,11 @@ import pytest
 from nousetsu.agents.critic import CritiqueAgent
 from nousetsu.agents.drafter import ContextAwareDrafterAgent
 from nousetsu.agents.extractor import EntityExtractorAgent
+from nousetsu.agents.polisher import PolishingAgent
 from nousetsu.graph.workflow import NovelTranslationWorkflow
 from nousetsu.models.bible import CharacterProfile, GlossaryItem, NovelBible
 from nousetsu.models.config import ProjectConfig
-from nousetsu.models.metadata import PipelineStage, QualityAudit, StageArtifacts, TranslationStats
+from nousetsu.models.metadata import PipelineStage, QualityAudit, StageArtifacts, SubdividedBlock, TranslationStats
 from nousetsu.models.state import TranslationState
 from nousetsu.utils.chunker import LineChunk
 from nousetsu.utils.translation_fallback import bisect_text, can_subdivide_text
@@ -529,3 +530,197 @@ class TestConfigAndWorkflowIntegration:
         assert final_state.metadata is not None
         assert final_state.metadata.stats.subdivisions_count == 2
         assert final_state.metadata.checkpoint.stage_artifacts.subdivisions_count == 2
+
+
+class TestPolisherRecursiveSubdivision:
+    """Tests for PolishingAgent recursive bisection and stateful subdivision pattern memory."""
+
+    def test_polisher_recursive_subdivision_on_safety_block(self):
+        polisher = PolishingAgent(
+            model_name="mock-model",
+            subdivision_min_lines=4,
+            subdivision_max_depth=2,
+        )
+
+        bible = NovelBible(title="Test Novel", source_language="Japanese", target_language="English")
+        clean_lines = [f"Safe draft line {i}." for i in range(1, 11)]
+        sensitive_lines = [f"Explicit sensitive line {i}." for i in range(1, 11)]
+        full_draft = "\n".join(clean_lines + sensitive_lines)
+
+        def mock_llm_invoke(messages):
+            prompt = messages[1].content
+            if "Explicit sensitive" in prompt:
+                raise RuntimeError("400 Bad Request: prohibited_content safety block")
+            resp = MagicMock()
+            resp.content = "Polished safe prose lines."
+            return resp
+
+        polisher.llm = MagicMock()
+        polisher.llm.invoke.side_effect = mock_llm_invoke
+
+        polished = polisher.polish(
+            draft_text=full_draft,
+            critique_notes="Polish natural flow.",
+            active_glossary=[],
+            bible=bible,
+        )
+
+        assert polisher.subdivisions_count >= 1
+        assert polisher.safety_fallbacks_used >= 1
+        assert "Polished safe prose lines." in polished
+        assert "Explicit sensitive line" in polished
+        assert len(polisher.last_subdivided_blocks) >= 2
+        assert any(b.is_sensitive for b in polisher.last_subdivided_blocks)
+        assert any(not b.is_sensitive for b in polisher.last_subdivided_blocks)
+
+    def test_polisher_consumes_stateful_subdivision_pattern(self):
+        polisher = PolishingAgent(model_name="mock-model")
+        bible = NovelBible(title="Test", source_language="Japanese", target_language="English")
+
+        blocks = [
+            SubdividedBlock(
+                block_index=0,
+                source_text="安全な原文",
+                draft_text="Safe draft text line 1.\nSafe draft text line 2.",
+                polished_text="",
+                is_sensitive=False,
+                fallback_used=False,
+            ),
+            SubdividedBlock(
+                block_index=1,
+                source_text="過激な原文",
+                draft_text="Explicit sensitive text line 1.\nExplicit sensitive text line 2.",
+                polished_text="",
+                is_sensitive=True,
+                fallback_used=True,
+            ),
+        ]
+
+        def mock_llm_invoke(messages):
+            prompt = messages[1].content
+            if "Explicit sensitive" in prompt:
+                raise RuntimeError("Should never be called for sensitive blocks!")
+            resp = MagicMock()
+            resp.content = "Polished safe text."
+            return resp
+
+        polisher.llm = MagicMock()
+        polisher.llm.invoke.side_effect = mock_llm_invoke
+
+        polished = polisher.polish(
+            draft_text="Safe draft text line 1.\nSafe draft text line 2.\n\nExplicit sensitive text line 1.\nExplicit sensitive text line 2.",
+            critique_notes="Enhance cadence.",
+            active_glossary=[],
+            bible=bible,
+            subdivided_blocks=blocks,
+        )
+
+        assert "Polished safe text." in polished
+        assert "Explicit sensitive text line 1." in polished
+        assert blocks[1].polished_text == blocks[1].draft_text
+        assert len(polisher.last_subdivided_blocks) == 2
+        assert polisher.last_subdivided_blocks[1].is_sensitive is True
+
+
+class TestCriticStatefulSubdivisionPattern:
+    """Tests for CritiqueAgent consuming stateful subdivision blocks."""
+
+    def test_critic_consumes_subdivided_blocks_pattern(self):
+        critic = CritiqueAgent(model_name="mock-model")
+        bible = NovelBible(title="Test", source_language="Japanese", target_language="English")
+
+        blocks = [
+            SubdividedBlock(
+                block_index=0,
+                source_text="安全な原文。\n通常の風景。",
+                draft_text="Safe draft line 1.\nSafe draft line 2.",
+                is_sensitive=False,
+                fallback_used=False,
+            ),
+            SubdividedBlock(
+                block_index=1,
+                source_text="過激な原文。\n規制対象。",
+                draft_text="Sensitive draft line 1.\nSensitive draft line 2.",
+                is_sensitive=True,
+                fallback_used=True,
+            ),
+        ]
+
+        def mock_invoke(messages):
+            prompt = messages[1].content
+            if "過激な原文" in prompt or "Sensitive draft" in prompt:
+                raise RuntimeError("Should not audit sensitive block directly!")
+            resp = MagicMock()
+            resp.content = '{"fidelity_score": 9.2, "style_score": 9.0, "glossary_compliance_pct": 100.0, "warnings": [], "critique_notes": "Good safe flow."}'
+            return resp
+
+        critic.llm = MagicMock()
+        critic.llm.invoke.side_effect = mock_invoke
+
+        audit, notes = critic.evaluate(
+            source_text="安全な原文。\n通常の風景。\n\n過激な原文。\n規制対象。",
+            draft_text="Safe draft line 1.\nSafe draft line 2.\n\nSensitive draft line 1.\nSensitive draft line 2.",
+            bible=bible,
+            active_characters=[],
+            active_glossary=[],
+            subdivided_blocks=blocks,
+        )
+
+        assert audit.passed is True
+        assert any("sensitive" in w.lower() and "block 1" in w.lower() for w in audit.warnings)
+        assert audit.fidelity_score == round((9.2 + 8.5) / 2.0, 1)
+
+
+class TestWorkflowSubdividedBlocksPropagation:
+    """Tests for end-to-end subdivision block propagation through NovelTranslationWorkflow."""
+
+    def test_workflow_propagates_subdivided_blocks(self, tmp_path: Path):
+        workflow = NovelTranslationWorkflow(
+            model_name="mock-model",
+            max_review_loops=1,
+        )
+
+        bible = NovelBible(title="Pattern Propagation", source_language="Japanese", target_language="English")
+        state = TranslationState(
+            chapter_id="ch_pattern_prop",
+            chapter_num=1,
+            source_file=str(tmp_path / "prop.txt"),
+            output_file=str(tmp_path / "prop.md"),
+            source_text="Safe text\n\nSensitive text",
+            novel_bible=bible
+        )
+
+        subdivided = [
+            SubdividedBlock(
+                block_index=0,
+                source_text="Safe text",
+                draft_text="Draft safe text",
+                polished_text="",
+                is_sensitive=False,
+                fallback_used=False,
+            ),
+            SubdividedBlock(
+                block_index=1,
+                source_text="Sensitive text",
+                draft_text="Draft sensitive text",
+                polished_text="",
+                is_sensitive=True,
+                fallback_used=True,
+            ),
+        ]
+
+        def mock_drafter(*args, **kwargs):
+            workflow.drafter.last_subdivided_blocks = list(subdivided)
+            workflow.drafter.subdivisions_count = 1
+            workflow.drafter.safety_fallbacks_used = 1
+            return "Draft safe text\n\nDraft sensitive text"
+
+        workflow.drafter.draft = MagicMock(side_effect=mock_drafter)
+
+        final_state = workflow.run(state)
+        assert final_state.current_stage == PipelineStage.CHRONICLING
+        assert len(final_state.subdivided_blocks) == 2
+        assert final_state.subdivided_blocks[1].is_sensitive is True
+        assert final_state.metadata is not None
+        assert final_state.metadata.checkpoint.stage_artifacts.subdivided_blocks is not None
+        assert len(final_state.metadata.checkpoint.stage_artifacts.subdivided_blocks) == 2

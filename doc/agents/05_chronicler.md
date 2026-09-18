@@ -53,14 +53,20 @@ def chronicle(
     translated_text: str,
     genre: Optional[str] = None,
     source_lang: Optional[str] = None,
+    target_lang: Optional[str] = None,
     bible: Optional[NovelBible] = None,
     rag_context: Optional[List[Any]] = None,
+    extracted_characters: Optional[List[CharacterProfile]] = None,
+    extracted_terms: Optional[List[GlossaryItem]] = None,
+    active_characters: Optional[List[CharacterProfile]] = None,
+    procedural_graph: Optional[ProceduralGraph] = None,
     prompt_tracker: Optional[Any] = None,
     **kwargs: Any
 ) -> ChapterSummary
 ```
+- **Active Character & Term Injection**: Injects scene-filtered characters (matching Drafter/Extractor filtering rules) and provisional extracted terms directly into the prompt context for narrative continuity and post-polish entity reconciliation.
 - **Attributes**: `self.prompt_tracker: Optional[Any] = None` stores the active tracker instance injected by `NovelTranslationWorkflow`.
-- **Returns**: Validated `ChapterSummary` model with synopsis, key plot events, character status changes, and optional arc/story updates.
+- **Returns**: Validated `ChapterSummary` model with synopsis, key plot events, character status changes, reconciled terms, and optional arc/story updates.
 
 ### `assemble_metadata()`
 Compiles execution telemetry and stage checkpoints:

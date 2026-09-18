@@ -1,9 +1,9 @@
 """NouSetsu - Agentic Document-Level Cross-Chapter Novel Translation System."""
 import sys
-from dotenv import load_dotenv
+from nousetsu.utils.env import load_env
 
-# Automatically load environment variables from .env if present
-load_dotenv()
+# Automatically load environment variables from central .env if present
+load_env()
 
 __version__ = "0.3.0"
 

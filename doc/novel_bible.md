@@ -249,4 +249,16 @@ Injecting 50 character profiles into an 80-line scene where only 2 characters ar
 * **Scene Presence Matching**: Supporting characters and villains are included only if their `original_name`, `name`, or known `aliases` are mentioned in the scene chunk or preceding sliding draft.
 * **Fallback Safety**: If no characters match, the top major characters are retained to ensure the model always has context.
 
+---
+
+## 🧹 Bible Language Integrity & Sanitizer Engine
+
+Over extended translation campaigns across multiple volumes, provisional entity discovery and automated reflection loops can introduce malformed entries into `bible.yaml` (such as source and target terms accidentally inverted, or Japanese Kanji saved into character translation fields).
+
+NouSetsu integrates an automated, zero-daemon integrity audit engine ([`src/nousetsu/storage/bible_sanitizer.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/storage/bible_sanitizer.py)) that executes every time `NovelRepository.save_bible()` is called:
+
+1. **Script Validation**: Tests character names, aliases, and glossary terms using Unicode script analysis (`is_translation_language_valid`) to ensure target terms conform to the configured target language.
+2. **Inverted Field Repair**: Detects reversed source/target pairs (e.g. source language text stored in the translated field and target language text in the original field) and swaps them into canonical position.
+3. **Corrupted Entry Pruning**: Drops empty, un-translated, or duplicate entries and cleans duplicate aliases from character cards, keeping `bible.yaml` clean and reliable.
+
 

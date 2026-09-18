@@ -88,6 +88,25 @@ NouSetsu encodes procedural execution rules as explicit attributed graphs $G = (
 * **Diff / Patch Polishing Engine**: Generates targeted search/replace block patches (`PATCH_POLISHING_SYSTEM_PROMPT`) via [`DiffPatcher`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/diff_patcher.py) rather than re-generating whole chapters from scratch, dramatically reducing polisher token consumption.
 * **KV Context Caching Prefix Stabilization**: Reordered prompt templates ensure invariant system prompts and glossaries reside in stable prefixes (`GEMINI_KV_CACHE_STABLE_PREFIX`), maximizing Gemini prompt cache utilization.
 
+### 9. 🛡️ Bible Language Integrity & Sanitization Engine
+* **Comprehensive Multi-Pass Sanitization**: [`sanitize_bible`](file:///D:/Code/novel_translation_Agent/src/nousetsu/storage/bible_sanitizer.py) strictly enforces language purity in `.novel/bible/bible.yaml`, eliminating mixed-language pollution, duplicate character profiles, and corrupted glossary terms.
+* **Consonant-Skeleton & Thai Accent Normalization**: Uses Katakana-to-Romaji conversion and Thai tone-mark stripping (`strip_thai_accents`) to canonicalize relationship and pronoun keys, matching variants like `แมรี เลกาเลีย` to `แมรี่ เลกาเลีย` and `Klaus` to `เคลาส์`.
+* **Automated Persistence Guard**: Integrated directly into [`NovelRepository.save_bible`](file:///D:/Code/novel_translation_Agent/src/nousetsu/storage/repository.py), ensuring every bible write automatically merges variants, purges non-CJK source glossary terms, and translates relationship values and voices into literary target prose.
+
+### 10. ⚡ Stateful Subdivision Pattern Memory & Polisher Bisection
+* **Persistent Subdivision Memory**: Caches verified safe partition boundaries across pipeline stages when encountering commercial AI safety blocks (`prohibited_content` HTTP 400).
+* **Targeted Polisher Bisection**: Downstream `CritiqueAgent` and `PolishingAgent` reuse the cached subdivision pattern, bisecting sensitive scenes down to $\le 8$ lines and routing minimal sensitive sub-blocks through Google Translate fallback while preserving safe text in full literary prose.
+
+### 11. 📁 Centralized Projects Root (`NOVEL_PROJECTS_DIR`) & High-Speed Scanner
+* **Storage Decoupling**: Central machine-level `NOVEL_PROJECTS_DIR` in `.env` decouples novel projects from application code, automatically discovering projects across subdirectories.
+* **Parallel Chapter Scanner**: `ChapterScanner.scan_parallel` leverages `ThreadPoolExecutor` and composite cache keys `(path, size, mtime)` for **320x faster project re-scanning**.
+* **Dedicated Scan CLI**: `nousetsu scan` enables fast terminal inspection of chapter queues, completion status, and volume breakdowns across single or multiple projects (`--all-projects`).
+
+### 12. 🎨 Interactive Web Studio, Chapter Upload & Character Visualizer
+* **Multi-Folder Chapter Upload**: Web Studio API endpoint (`/api/projects/{name}/chapters/upload`) enables dragging and dropping raw chapters into target volume folders with live indexing.
+* **Interactive Character Visualizer**: Visual dossiers, relationship maps, and personality/voice analysis cards for Novel Bible characters.
+* **Dynamic Port Allocation**: Automatic free-port detection (`_find_free_port`) and `VITE_API_PORT` coordination prevents port conflicts with Docker Desktop.
+
 ---
 
 ## 🏛️ System Architecture
@@ -204,8 +223,21 @@ NouSetsu provides a comprehensive suite of subcommands for headless automation, 
 | `nousetsu traces` | Inspects, analyzes, and exports agent prompt and output traces | `nousetsu traces -c 48 --show-prompts` |
 | `nousetsu web` | Launches the interactive Vite + React 19 Trace Visualizer web app | `nousetsu web --port 5173` |
 | `nousetsu lore` | Searches project Lore Vault using Hybrid RAG + Cross-Encoder | `nousetsu lore "magic sword"` |
+| `nousetsu scan` | Fast scan chapter queue and project status in `NOVEL_PROJECTS_DIR` | `nousetsu scan --all-projects` |
 | `nousetsu migrate-rag` | Backfills novel summaries, arcs, and chunks into RAG store | `nousetsu migrate-rag --embed` |
 | `nousetsu tui` | Explicitly launches the Textual TUI with path overrides | `nousetsu tui -p project/Villainess` |
+
+### Chapter Queue Scanner (`nousetsu scan`)
+
+```bash
+nousetsu scan [OPTIONS]
+```
+
+| Option | Flag | Default | Description |
+| :--- | :---: | :---: | :--- |
+| `--project-dir` | `-p` | `None` | Folder or name of novel project (resolves in `NOVEL_PROJECTS_DIR` or current directory) |
+| `--folder` | `-F` | `None` | Specific volume folder to scan |
+| `--all-projects` | `-A` | `False` | Scan across all projects in `NOVEL_PROJECTS_DIR` with completion overview |
 
 ### Batch Translation Options (`nousetsu batch`)
 
@@ -325,7 +357,7 @@ NouSetsu/
 │   ├── storage/                    # Repository, project registry, and summary migrator
 │   ├── tui/                        # Textual TUI dashboard, reader, and token analytics
 │   └── utils/                      # Utilities (rate limiter, chunker, diff patcher, language detector)
-└── tests/                          # Comprehensive pytest test suite (347 tests across 52 modules)
+└── tests/                          # Comprehensive pytest test suite (380 tests across 55 modules)
 ```
 
 ---
@@ -388,16 +420,17 @@ tests\test_step_duration.py ...                                          [ 72%]
 tests\test_stop.py ..                                                    [ 73%]
 tests\test_token_metrics.py ....                                         [ 74%]
 tests\test_token_tracking.py ....                                        [ 75%]
-tests\test_translation_fallback.py ..................                    [ 81%]
-tests\test_tui.py ...........                                            [ 84%]
-tests\test_web_server.py ........                                        [ 86%]
-... (347 items across 52 test modules)
+tests\test_tui.py ...........                                            [ 94%]
+tests\test_tui_performance.py ......                                     [ 96%]
+tests\test_web_api.py ......                                             [ 97%]
+tests\test_web_server.py ........                                        [100%]
+... (380 items across 55 test modules)
 
-============================ 347 passed in 42.95s =============================
+======================= 380 passed, 1 warning in 45.51s =======================
 ```
 
 * **Hermetic Isolation**: Tests run in isolated temporary directories (`tmp_path`), protecting your real novel projects.
-* **Deterministic Execution**: Zero live LLM calls during tests via `MockNovelLLM`, achieving ultra-fast execution (~42s for 347 tests across 52 modules).
+* **Deterministic Execution**: Zero live LLM calls during tests via `MockNovelLLM`, achieving ultra-fast execution (~45s for 380 tests across 55 modules).
 
 ---
 

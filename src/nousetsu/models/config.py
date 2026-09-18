@@ -10,7 +10,7 @@ class ProjectConfig(BaseModel):
     """Configuration settings for a novel translation project."""
 
     project_id: str = Field(default="default_project")
-    title: str = Field(default="Ascendance of a Bookworm")
+    title: str = Field(default="Untitle")
     source_language: str = Field(default="English")
     target_language: str = Field(default="Thai")
     raw_dir: str = Field(default="raw_chapters", description="Path to input raw chapter files")
@@ -149,5 +149,3 @@ class ProjectConfig(BaseModel):
         if env_val is not None:
             return env_val.strip().lower() in ("true", "1", "yes")
         return True
-
-

@@ -109,11 +109,38 @@ class NovelBible(BaseModel):
     archived_arcs: List[ArcSummary] = Field(default_factory=list, description="Concluded story arcs")
 
     def find_character(self, name_or_alias: str) -> Optional[CharacterProfile]:
+        if not name_or_alias or not str(name_or_alias).strip():
+            return None
+        target = str(name_or_alias).strip()
+        target_lower = target.lower()
+
+        # 1. Exact match on name, original_name, or aliases
         for char in self.characters:
-            if char.name.lower() == name_or_alias.lower() or char.original_name == name_or_alias:
+            if char.name.lower() == target_lower or char.original_name.lower() == target_lower:
                 return char
-            if any(alias.lower() == name_or_alias.lower() for alias in char.aliases):
+            if any(alias.lower() == target_lower for alias in char.aliases):
                 return char
+
+        # 2. Match Japanese/CJK name components (e.g. 'メアリィ' in 'メアリィ・レガリヤ')
+        for char in self.characters:
+            orig = char.original_name.strip()
+            if "・" in orig:
+                parts = [p.strip().lower() for p in orig.split("・") if p.strip()]
+                if target_lower in parts:
+                    return char
+            if " " in orig:
+                parts = [p.strip().lower() for p in orig.split() if p.strip()]
+                if target_lower in parts:
+                    return char
+
+        # 3. Match target language compound name components (e.g. given name prefix)
+        for char in self.characters:
+            c_name = char.name.strip()
+            if " " in c_name:
+                parts = [p.strip().lower() for p in c_name.split() if p.strip()]
+                if target_lower in parts:
+                    return char
+
         return None
 
     def find_term(self, source_term: str) -> Optional[GlossaryItem]:

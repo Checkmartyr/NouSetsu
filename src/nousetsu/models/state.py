@@ -2,7 +2,7 @@
 from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
 from nousetsu.models.bible import CharacterProfile, ChapterSummary, GlossaryItem, NovelBible
-from nousetsu.models.metadata import ChapterMetadata, PipelineStage, QualityAudit, StepTokenUsage
+from nousetsu.models.metadata import ChapterMetadata, PipelineStage, QualityAudit, StepTokenUsage, SubdividedBlock
 from nousetsu.models.trace import AgentPromptTrace
 from nousetsu.rag.models import SearchResult
 
@@ -48,5 +48,6 @@ class TranslationState(BaseModel):
     prompt_traces: List[AgentPromptTrace] = Field(default_factory=list, description="Historical log of all LLM prompt and output traces for this chapter")
     safety_fallbacks_used: int = Field(default=0, description="Number of sensitive scene safety fallbacks triggered")
     subdivisions_count: int = Field(default=0, description="Number of recursive subdivisions performed for sensitive scenes")
+    subdivided_blocks: List[SubdividedBlock] = Field(default_factory=list, description="Subdivided safe and sensitive blocks cached across stages")
     error: Optional[str] = None
 

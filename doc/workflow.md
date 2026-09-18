@@ -80,7 +80,7 @@ sequenceDiagram
             Workflow->>RAG: "hybrid_search(prior_lore_query, k=3)"
             RAG-->>Workflow: "chr_rag_hits (prior lore context)"
         end
-        Workflow->>Chronicler: "chronicle(chapter_num, chapter_title, best_polished_text, rag_context)"
+        Workflow->>Chronicler: "chronicle(chapter_num, chapter_title, best_polished_text, active_characters, extracted_terms, rag_context)"
         Chronicler->>Tracker: "record(stage=CHRONICLING, prompt, response, tokens)"
         Chronicler-->>Workflow: "new_chapter_summary (synopsis, events, state changes)"
         opt Hybrid RAG Enabled
@@ -93,6 +93,7 @@ sequenceDiagram
     end
 
     Workflow->>Repo: "update_bible_memory(characters, terms, summary)"
+    Repo->>Repo: "sanitize_bible(bible) (Language Integrity Validation)"
     Repo-->>Repo: "Atomically save .novel/bible/bible.yaml"
     Workflow->>Repo: "save_metadata(metadata, output_file)"
     Repo-->>Repo: "Atomically update .novel/metadata.json"
@@ -295,12 +296,17 @@ sequenceDiagram
          translated_text: str,
          genre: Optional[str] = None,
          source_lang: Optional[str] = None,
+         target_lang: Optional[str] = None,
          bible: Optional[NovelBible] = None,
          rag_context: Optional[List[Any]] = None,
+         extracted_characters: Optional[List[CharacterProfile]] = None,
+         extracted_terms: Optional[List[GlossaryItem]] = None,
+         active_characters: Optional[List[CharacterProfile]] = None,
+         procedural_graph: Optional[ProceduralGraph] = None,
          **kwargs: Any
      ) -> ChapterSummary:
      ```
-     * **Plain English**: Reads the finished translation and inbound lore ($k=3$), then writes a concise episodic synopsis recording major story events, arc progression, and character state changes.
+     * **Plain English**: Reads the finished translation, active scene characters (filtered identically to Drafter/Extractor), provisional extracted terms/characters, and inbound lore ($k=3$), then writes a concise episodic synopsis recording major story events, arc progression, character state changes, and reconciles provisional terms against the polished publication prose.
   2. **`assemble_metadata(...)`**:
      ```python
      def assemble_metadata(
@@ -421,4 +427,39 @@ flowchart TD
     ValGate -- Failed --> Rollback["Rollback to Current Graph<br/>Record in Rejection Memory"]
 ```
 * **Rejection Memory**: Records discarded candidate edits to ensure the refiner never repeats invalid modifications across generations.
+
+---
+
+## 🛡️ Stateful Subdivision Pattern Memory & Polisher Bisection
+
+When commercial AI providers return HTTP 400 safety exceptions (`prohibited_content`) during intense combat, cultivation breakthrough tribulation, or romantic intimacy scenes:
+
+1. **Recursive Bisection in Drafter (`ContextAwareDrafterAgent`)**:
+   - The drafter recursively subdivides the text (`bisect_text`) along natural structural boundaries (paragraphs, sentences, punctuation, or lines) down to minimal sensitive snippets ($\le 8$ lines or depth 4).
+   - Safe blocks are translated with full literary quality via the primary LLM.
+   - Minimal sensitive snippets are translated using Google Translate fallback (`translate_via_google`).
+   - Rather than discarding the subdivision structure, the drafter caches ordered `SubdividedBlock` instances in `TranslationState.subdivided_blocks` and `ChapterMetadata.subdivided_blocks`.
+
+2. **Stateful Pattern Memory in Polisher (`PolishingAgent`)**:
+   - Previous systems passed the concatenated draft to the polisher, causing the polisher to trip the same commercial safety block on the sensitive text during reflection review loops.
+   - NouSetsu equips `PolishingAgent` with stateful subdivision awareness (`subdivided_blocks`):
+     - For blocks marked `is_sensitive=True`, the polisher preserves the unpolished fallback draft text untouched, avoiding secondary safety exceptions.
+     - For safe blocks (`is_sensitive=False`), the polisher applies full prose refinement via `_polish_with_recursive_subdivision`.
+     - The refined safe segments and untouched sensitive segments are cleanly reassembled in original document order.
+
+---
+
+## 🧹 Novel Bible Language Integrity & Sanitizer Engine
+
+The Novel Bible (`bible.yaml`) is the persistent ground truth for character cards and domain terminology. Over multi-hundred chapter translations, provisional entity extraction and reflection review loops can inadvertently introduce cross-contaminated entries (e.g. Japanese Kanji in character translation fields, English text in Japanese original fields, or reversed key/value mappings).
+
+[`src/nousetsu/storage/bible_sanitizer.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/storage/bible_sanitizer.py) provides an automated, zero-daemon integrity audit executed automatically during `NovelRepository.save_bible()`:
+
+1. **Language Validation (`is_translation_language_valid`)**:
+   - Uses zero-dependency Unicode script analysis and `detect_language` to verify that character names and glossary terms conform to `source_language` and `target_language`.
+   - Distinguishes valid script ranges (CJK Unified Ideographs, Hiragana/Katakana, Hangul Syllables, Thai, Cyrillic, Latin).
+2. **Autonomous Correction & Pruning**:
+   - **Cross-Contamination Reversal**: Detects inverted fields where the source term was saved in the translation field and target term in the source field, swapping them into canonical position.
+   - **Corrupted Entry Pruning**: Strips entries where the translated term is identical to the source term or belongs to the wrong Unicode script block.
+   - **Deduplication**: Eliminates duplicate character aliases and redundant glossary keys.
 

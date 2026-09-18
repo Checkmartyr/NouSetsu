@@ -20,6 +20,7 @@ from nousetsu.models.metadata import (
     StageArtifacts,
     StageStatus,
     StepTokenUsage,
+    SubdividedBlock,
     TokenUsage,
     TranslationStats,
 )
@@ -94,6 +95,7 @@ class ChroniclerAgent:
         rag_context: Optional[List[Any]] = None,
         extracted_characters: Optional[List[CharacterProfile]] = None,
         extracted_terms: Optional[List[GlossaryItem]] = None,
+        active_characters: Optional[List[CharacterProfile]] = None,
         procedural_graph: Optional[ProceduralGraph] = None,
         **kwargs: Any
     ) -> ChapterSummary:
@@ -106,6 +108,32 @@ class ChroniclerAgent:
             genre=genre or "general"
         )
         skills_section = f"\n{skills_text}\n" if skills_text else ""
+
+        resolved_active_chars = active_characters if active_characters is not None else (bible.characters if bible else [])
+        eval_characters = filter_characters_for_scene(
+            characters=resolved_active_chars,
+            source_text="",
+            target_text=translated_text,
+            max_characters=15
+        )
+        char_lines = []
+        for c in eval_characters:
+            entry = f"- {c.name} ({c.original_name} / {c.gender} / {c.role}): Voice={c.voice}"
+            if c.pronouns and (c.pronouns.source or c.pronouns.target):
+                entry += f" | Pronouns: [Source: {c.pronouns.source or 'N/A'}] -> [Target: {c.pronouns.target or 'N/A'}]"
+            if c.pronouns and getattr(c.pronouns, "relational", None):
+                rel_entries = []
+                for other_c in eval_characters:
+                    if other_c.name != c.name and other_c.original_name != c.original_name:
+                        p_rel = c.pronouns.relational.get(other_c.name) or c.pronouns.relational.get(other_c.original_name)
+                        if p_rel:
+                            rel_entries.append(f"with {other_c.name}: {p_rel}")
+                if rel_entries:
+                    entry += f" | Relational: [{'; '.join(rel_entries)}]"
+            if c.relationships:
+                entry += f" | Relationships: {', '.join(f'{k}: {v}' for k, v in c.relationships.items())}"
+            char_lines.append(entry)
+        chars_str = "\n".join(char_lines) or "No explicit character cards registered."
 
         provisional_entities_section = ""
         if extracted_characters or extracted_terms:
@@ -150,6 +178,7 @@ class ChroniclerAgent:
             target_lang=resolved_tgt,
             skills_section=skills_section,
             procedural_guidance=procedural_section,
+            characters=chars_str,
             provisional_entities_section=provisional_entities_section,
             rag_context_section=rag_section
         )
@@ -298,7 +327,8 @@ class ChroniclerAgent:
         reconciled_characters: Optional[List[CharacterProfile]] = None,
         reconciled_terms: Optional[List[GlossaryItem]] = None,
         trace_file: Optional[str] = None,
-        prompt_trace_count: int = 0
+        prompt_trace_count: int = 0,
+        subdivided_blocks: Optional[List[SubdividedBlock]] = None
     ) -> ChapterMetadata:
         artifacts = StageArtifacts(
             extracted_terms=extracted_terms if extracted_terms is not None else [],
@@ -309,7 +339,8 @@ class ChroniclerAgent:
             critique_notes=critique_notes,
             polished_text=polished_text,
             safety_fallbacks_used=safety_fallbacks_used,
-            subdivisions_count=subdivisions_count
+            subdivisions_count=subdivisions_count,
+            subdivided_blocks=subdivided_blocks if subdivided_blocks is not None else []
         )
 
         checkpoint = CheckpointData(

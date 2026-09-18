@@ -13,6 +13,7 @@ from nousetsu.models.exceptions import BatchStoppedException
 from nousetsu.models.metadata import ChapterMetadata, CheckpointData, PipelineStage, StageArtifacts, StageStatus, TokenUsage
 from nousetsu.models.state import TranslationState
 from nousetsu.storage.repository import NovelRepository
+from nousetsu.utils.env import load_env
 from nousetsu.utils.language import detect_language
 from nousetsu.utils.rate_limiter import SlidingWindowRateLimiter
 
@@ -51,6 +52,7 @@ class BatchRunner:
         else:
             from nousetsu.storage.repository import resolve_project_dir
             self.repo = NovelRepository(resolve_project_dir(repository))
+        load_env(self.repo.root_dir)
         cfg = self.repo.load_config()
 
         # Resolve primary model
@@ -75,40 +77,40 @@ class BatchRunner:
             extractor_model
             or default_agent_model
             or getattr(cfg, "extractor_model", None)
-            or cfg_model
             or os.environ.get("NOVEL_EXTRACTOR_MODEL")
+            or cfg_model
             or resolved_model
         )
         resolved_drafter = (
             drafter_model
             or default_agent_model
             or getattr(cfg, "drafter_model", None)
-            or cfg_model
             or os.environ.get("NOVEL_DRAFTER_MODEL")
+            or cfg_model
             or resolved_model
         )
         resolved_critic = (
             critic_model
             or default_agent_model
             or getattr(cfg, "critic_model", None)
-            or cfg_model
             or os.environ.get("NOVEL_CRITIC_MODEL")
+            or cfg_model
             or "gemma-4-26b-a4b-it"
         )
         resolved_polisher = (
             polisher_model
             or default_agent_model
             or getattr(cfg, "polisher_model", None)
-            or cfg_model
             or os.environ.get("NOVEL_POLISHER_MODEL")
+            or cfg_model
             or resolved_model
         )
         resolved_chronicler = (
             chronicler_model
             or default_agent_model
             or getattr(cfg, "chronicler_model", None)
-            or cfg_model
             or os.environ.get("NOVEL_CHRONICLER_MODEL")
+            or cfg_model
             or "gemma-4-26b-a4b-it"
         )
 
@@ -415,6 +417,8 @@ class BatchRunner:
                 initial_state.safety_fallbacks_used = artifacts.safety_fallbacks_used
             if getattr(artifacts, "subdivisions_count", 0):
                 initial_state.subdivisions_count = artifacts.subdivisions_count
+            if getattr(artifacts, "subdivided_blocks", None):
+                initial_state.subdivided_blocks = artifacts.subdivided_blocks
 
         def _on_stage(st: PipelineStage, msg: str, pct: float):
             if stage_callback:
@@ -502,7 +506,8 @@ class BatchRunner:
                         critique_notes=critique_notes,
                         polished_text=polished_text,
                         safety_fallbacks_used=getattr(last_st, "safety_fallbacks_used", 0),
-                        subdivisions_count=getattr(last_st, "subdivisions_count", 0)
+                        subdivisions_count=getattr(last_st, "subdivisions_count", 0),
+                        subdivided_blocks=getattr(last_st, "subdivided_blocks", [])
                     )
                 )
             )
@@ -574,7 +579,8 @@ class BatchRunner:
                 critique_notes=saved_notes,
                 polished_text=saved_polish,
                 safety_fallbacks_used=getattr(last_st, "safety_fallbacks_used", 0),
-                subdivisions_count=getattr(last_st, "subdivisions_count", 0)
+                subdivisions_count=getattr(last_st, "subdivisions_count", 0),
+                subdivided_blocks=getattr(last_st, "subdivided_blocks", []) or existing_artifacts.subdivided_blocks
             )
             if completed_stage != PipelineStage.NONE:
                 failed_meta.checkpoint.last_completed_stage = completed_stage

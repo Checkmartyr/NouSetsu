@@ -134,7 +134,10 @@ class NovelTranslationWorkflow:
         self.polisher = PolishingAgent(
             model_name=self.polisher_model,
             fallback_model=self.fallback_model,
-            procedural_graph=polisher_pg
+            procedural_graph=polisher_pg,
+            enable_recursive_subdivision=self.safety_recursive_subdivision,
+            subdivision_min_lines=self.safety_subdivision_min_lines,
+            subdivision_max_depth=self.safety_subdivision_max_depth
         )
         self.drafter.polisher = self.polisher
         self.chronicler = ChroniclerAgent(
@@ -479,7 +482,8 @@ class NovelTranslationWorkflow:
             "active_skills": updated_skills,
             "step_token_records": updated_token_records,
             "safety_fallbacks_used": total_safety_used,
-            "subdivisions_count": total_subdivisions
+            "subdivisions_count": total_subdivisions,
+            "subdivided_blocks": list(getattr(self.drafter, "last_subdivided_blocks", []))
         }
 
     def _critique_step(self, state: TranslationState) -> Dict[str, Any]:
@@ -586,7 +590,8 @@ class NovelTranslationWorkflow:
             estimated_tokens=est_critique,
             stop_event=self.stop_event,
             prompt_tracker=self.prompt_tracker,
-            iteration=current_iter
+            iteration=current_iter,
+            subdivided_blocks=state.subdivided_blocks
         )
 
         # Best-candidate regression guard
@@ -791,7 +796,8 @@ class NovelTranslationWorkflow:
             stop_event=self.stop_event,
             prompt_tracker=self.prompt_tracker,
             iteration=display_iter,
-            use_patch=can_use_patch
+            use_patch=can_use_patch,
+            subdivided_blocks=state.subdivided_blocks
         )
 
         # Severe Truncation & Diff Marker Leak Guard:
@@ -843,13 +849,21 @@ class NovelTranslationWorkflow:
         total_safety_used = state.safety_fallbacks_used + pol_safety_used
         self.polisher.safety_fallbacks_used = 0
 
+        pol_subdivisions = getattr(self.polisher, "subdivisions_count", 0)
+        total_subdivisions = state.subdivisions_count + pol_subdivisions
+        self.polisher.subdivisions_count = 0
+
+        new_blocks = list(getattr(self.polisher, "last_subdivided_blocks", [])) or state.subdivided_blocks
+
         return {
             "current_stage": PipelineStage.POLISHING,
             "polished_text": polished,
             "best_polished_text": best_text,
             "active_skills": updated_skills,
             "step_token_records": updated_token_records,
-            "safety_fallbacks_used": total_safety_used
+            "safety_fallbacks_used": total_safety_used,
+            "subdivisions_count": total_subdivisions,
+            "subdivided_blocks": new_blocks
         }
 
     def _chronicle_step(self, state: TranslationState) -> Dict[str, Any]:
@@ -934,6 +948,7 @@ class NovelTranslationWorkflow:
             estimated_tokens=est_chronicle,
             stop_event=self.stop_event,
             prompt_tracker=self.prompt_tracker,
+            active_characters=state.active_characters,
             extracted_characters=state.extracted_characters if self.enable_post_polish_reconciliation else [],
             extracted_terms=state.extracted_terms if self.enable_post_polish_reconciliation else []
         )
@@ -1003,7 +1018,8 @@ class NovelTranslationWorkflow:
             reconciled_characters=reconciled_chars,
             reconciled_terms=reconciled_terms,
             trace_file=trace_file_path,
-            prompt_trace_count=prompt_trace_count
+            prompt_trace_count=prompt_trace_count,
+            subdivided_blocks=state.subdivided_blocks
         )
 
         updated_skills = dict(state.active_skills)

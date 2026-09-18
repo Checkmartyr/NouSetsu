@@ -23,7 +23,9 @@ from nousetsu.storage.repository import (
 )
 from nousetsu.tui.app import NovelAgentApp
 
-dotenv.load_dotenv()
+from nousetsu.utils.env import load_env
+
+load_env()
 
 if sys.platform == "win32":
     try:
@@ -937,6 +939,43 @@ def cmd_traces(args: argparse.Namespace) -> None:
         console.print("[dim]Tip: Add [bold]--show-prompts[/] or [bold]--show-outputs[/] to inspect full prompt and completion texts.[/]\n")
 
 
+def _find_free_port(start: int = 5174, max_tries: int = 20) -> int:
+    """Probe for a free TCP port starting at *start*, incrementing on conflict.
+
+    Performs both a **connect** check (is something already listening?) and a
+    **bind** check (can we claim it?).  Docker Desktop may listen on 0.0.0.0
+    while a 127.0.0.1 bind still succeeds — the connect check catches that.
+    """
+    import socket
+
+    def _port_available(port: int) -> bool:
+        # 1. Connect check — reject if anything already responds
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(0.15)
+                s.connect(("127.0.0.1", port))
+                return False  # Something is already listening
+        except (ConnectionRefusedError, TimeoutError, OSError):
+            pass  # Good — nothing is listening
+
+        # 2. Bind check — make sure we can actually claim it
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(("127.0.0.1", port))
+                return True
+        except OSError:
+            return False
+
+    for offset in range(max_tries):
+        candidate = start + offset
+        if _port_available(candidate):
+            return candidate
+    # Last resort: let the OS pick
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
 def cmd_web(args: argparse.Namespace) -> None:
     """Launch the Nousetsu Vite Trace Visualizer web app."""
     import subprocess
@@ -980,21 +1019,42 @@ def cmd_web(args: argparse.Namespace) -> None:
     active_p = reg.get_last_active_project() or resolve_project_dir(None)
 
     if dev_mode or not dist_dir.exists():
-        # Start API server on 5174 in background thread for Vite proxy
-        api_port = 5174
+        # Auto-detect a free port for the API backend (Docker may occupy 5174)
+        api_port = _find_free_port(start=5174)
+
+        # Write the chosen port to web/.api-port so Vite can read it dynamically
+        api_port_file = web_dir / ".api-port"
+        try:
+            api_port_file.write_text(str(api_port), encoding="utf-8")
+        except Exception:
+            pass
+
         t = threading.Thread(
             target=run_web_server,
             kwargs={"port": api_port, "host": "127.0.0.1", "open_browser": False, "dist_dir": dist_dir},
             daemon=True
         )
         t.start()
+        if api_port != 5174:
+            console.print(f"[bold yellow]Port 5174 in use — API backend bound to :{api_port}[/]")
         console.print(f"[bold green]Starting Vite dev server on[/] [cyan]{url}[/] (API backend on :{api_port}) nya~!")
         console.print(f"[dim]Active TUI Project: {active_p}[/]")
         webbrowser.open(url)
         try:
-            subprocess.run(["npm", "run", "dev", "--", "--port", str(port)], cwd=str(web_dir), shell=(sys.platform == "win32"))
+            # Pass the API port as an env variable for Vite to pick up
+            env = {**os.environ, "VITE_API_PORT": str(api_port)}
+            subprocess.run(
+                ["npm", "run", "dev", "--", "--port", str(port)],
+                cwd=str(web_dir), shell=(sys.platform == "win32"), env=env,
+            )
         except KeyboardInterrupt:
             console.print("\n[yellow]Dev server stopped.[/]")
+        finally:
+            # Clean up the port file
+            try:
+                api_port_file.unlink(missing_ok=True)
+            except Exception:
+                pass
     else:
         console.print(Panel.fit(
             f"[bold green]🐾 Nousetsu Trace Visualizer Running![/]\n\n"

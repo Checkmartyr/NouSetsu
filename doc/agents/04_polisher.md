@@ -60,6 +60,7 @@ def polish(
     rate_limiter: Optional[Any] = None,
     stop_event: Optional[Any] = None,
     prompt_tracker: Optional[Any] = None,
+    subdivided_blocks: Optional[List[SubdividedBlock]] = None,
     **kwargs: Any
 ) -> str
 ```
@@ -112,10 +113,11 @@ If the model produces prose that accidentally reverts to the source language (or
 - `detect_language(text)` detects the regression.
 - The polisher automatically discards the corrupt generation and retains `draft_text`, guaranteeing that the chapter remains 100% in the target language.
 
-### E. AI Safety Block Stripping Retry
-If Google AI safety filters trip on a sensitive scene during polishing:
-- First retry: Automatically strips the raw source text reference and retries polishing using only the already-drafted target text.
-- Fallback: If still blocked, logs a warning and safely returns the unmodified `draft_text`, allowing the pipeline to proceed without data loss.
+### E. Stateful Subdivision Pattern Memory & Polisher Bisection
+If commercial AI safety filters trip on a sensitive scene (combat, romance) during translation or polishing:
+- **Pattern Memory Ingestion**: Consumes `subdivided_blocks` produced by `ContextAwareDrafterAgent`. Any block flagged `is_sensitive=True` is preserved as-is using its fallback draft text without re-invoking the LLM, preventing recurring safety crashes.
+- **Recursive Polisher Bisection (`_polish_with_recursive_subdivision`)**: For unflagged blocks or new safety blocks encountered during polishing, the agent strips the source text reference and attempts prose refinement. If still blocked, it recursively bisects the draft text into minimal snippets, polishing safe halves while falling back to draft text on sensitive slices.
+- **Zero Data Loss**: Guarantees that neither initial translation nor multi-pass reflection loops fail or halt on sensitive scenes.
 
 ### F. Chapter Title & Header Preservation Guard
 To prevent stylistic polishing from stripping chapter headings (e.g. `บทที่ 11 - อวดดอกไม้` or `70\nChapter 11...`):

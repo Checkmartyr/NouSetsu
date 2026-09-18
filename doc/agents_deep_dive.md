@@ -15,8 +15,11 @@
 4. [Stage 3: Critique Agent (CritiqueAgent)](#4-stage-3-critique-agent-critiqueagent)
 5. [Stage 4: Polishing Agent (PolishingAgent)](#5-stage-4-polishing-agent-polishingagent)
 6. [Stage 5: Chronicler Agent (ChroniclerAgent)](#6-stage-5-chronicler-agent-chronicleragent)
+   - [6.4 Active Character Injection & Post-Polish Entity Reconciliation](#64-active-character-injection--post-polish-entity-reconciliation)
 7. [The Reflection Review Loop & Quality Gating](#7-the-reflection-review-loop--quality-gating)
 8. [Cross-Cutting Infrastructure: Routing, Rate Limiting & Fallback](#8-cross-cutting-infrastructure-routing-rate-limiting--fallback)
+   - [8.9 Stateful Subdivision Pattern Memory & Polisher Bisection](#89-stateful-subdivision-pattern-memory--polisher-bisection)
+   - [8.10 Novel Bible Language Integrity & Sanitizer Engine](#810-novel-bible-language-integrity--sanitizer-engine)
 9. [End-to-End Real-World Scenario Walkthrough](#9-end-to-end-real-world-scenario-walkthrough)
 
 ---
@@ -331,6 +334,12 @@ When translating long series (often hundreds of chapters), early chapters are lo
 * **Stage Artifacts**: Saves final polished text, raw draft, critique notes, and active characters.
 * **Checkpoint Status**: Sets `status = StageStatus.COMPLETED` and atomically writes the record into `.novel/metadata.json`.
 
+### 6.4 Active Character Injection & Post-Polish Entity Reconciliation
+To maintain airtight continuity between provisional extraction and final publication:
+1. **Scene-Filtered Character Cards**: `ChroniclerAgent` receives `active_characters` filtered dynamically for the current chapter (`filter_characters_for_scene`), providing the LLM with exact names, original spellings, voice registers, and relational pronouns.
+2. **Post-Polish Term Reconciliation**: Compares provisional Stage 1 extractions (`extracted_terms`, `extracted_characters`) against the polished prose, detecting when the Polishing Agent refined a name or term (e.g. provisional *"Blue Lightning Sword"* refined to *"Azure Thunder Blade"*).
+3. **Canonical Novel Bible Updates**: Automatically saves reconciled terms and updated character profiles into `NovelBible` without introducing phantom entries.
+
 ---
 
 ## 7. The Reflection Review Loop & Quality Gating
@@ -418,6 +427,18 @@ Provides complete transparency into LLM reasoning:
 ### 8.8 KV Context Caching Prefix Stabilization
 * Reorders high-entropy dynamic elements (such as sliding draft context or chapter numbers) to the tail of the prompt.
 * Preserves a static, unchanging system prompt prefix (`GEMINI_KV_CACHE_STABLE_PREFIX`) to maximize upstream Gemini context cache hit rates and lower inference costs.
+
+### 8.9 Stateful Subdivision Pattern Memory & Polisher Bisection
+When commercial AI providers return HTTP 400 safety exceptions (`prohibited_content`):
+* `ContextAwareDrafterAgent` bisects the text down to minimal sensitive snippets ($\le 8$ lines), using Google Translate fallback only on the sensitive snippet while translating the rest via LLM.
+* The resulting `SubdividedBlock` instances are preserved in state.
+* `PolishingAgent` (Stage 4) reuses this pattern memory: sensitive blocks keep their fallback draft text untouched, while safe blocks are polished via `_polish_with_recursive_subdivision`, preventing recurring safety crashes during reflection review loops.
+
+### 8.10 Novel Bible Language Integrity & Sanitizer Engine
+Executed during `save_bible()` via [`src/nousetsu/storage/bible_sanitizer.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/storage/bible_sanitizer.py):
+* Validates character cards and glossary items using Unicode script detection (`is_translation_language_valid`).
+* Reverses cross-contaminated fields (e.g. source and target terms accidentally swapped).
+* Discards corrupted entries and duplicate aliases, ensuring `bible.yaml` remains pristine across hundreds of chapters.
 
 ---
 

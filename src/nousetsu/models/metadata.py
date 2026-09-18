@@ -23,6 +23,16 @@ class PipelineStage(str, Enum):
     CHRONICLING = "chronicling"
 
 
+class SubdividedBlock(BaseModel):
+    """Represents a subdivided chunk or snippet produced during translation/polishing."""
+    block_index: int = 0
+    source_text: str = ""
+    draft_text: str = ""
+    polished_text: Optional[str] = None
+    is_sensitive: bool = False
+    fallback_used: bool = False
+
+
 class StageArtifacts(BaseModel):
     extracted_terms: List[GlossaryItem] = Field(default_factory=list)
     extracted_characters: List[CharacterProfile] = Field(default_factory=list)
@@ -33,6 +43,7 @@ class StageArtifacts(BaseModel):
     polished_text: Optional[str] = None
     safety_fallbacks_used: int = 0
     subdivisions_count: int = 0
+    subdivided_blocks: List[SubdividedBlock] = Field(default_factory=list)
 
 
 class ErrorLogEntry(BaseModel):

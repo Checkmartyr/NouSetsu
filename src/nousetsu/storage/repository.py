@@ -611,6 +611,9 @@ class NovelRepository:
 
     def save_bible(self, bible: NovelBible) -> None:
         """Save Novel Bible to YAML and sync chapter summaries into folder subdirectories."""
+        from nousetsu.storage.bible_sanitizer import sanitize_bible
+        bible = sanitize_bible(bible)
+
         self.bible_dir.mkdir(parents=True, exist_ok=True)
         self.summaries_dir.mkdir(parents=True, exist_ok=True)
 
@@ -690,7 +693,17 @@ class NovelRepository:
                     existing.relationships.update(new_char.relationships)
 
         for new_term in new_terms:
-            existing_term = bible.find_term(new_term.source) or bible.find_term(new_term.target)
+            if not new_term.source or not new_term.source.strip():
+                continue
+            src = new_term.source.strip()
+            tgt = new_term.target.strip()
+            if bible.source_language.lower() in ["japanese", "chinese", "korean"] and not cjk_script_re.search(src):
+                logger.warning(f"Rejecting term '{src}' -> '{tgt}' (lacks {bible.source_language} script in source).")
+                continue
+            if src.lower() == tgt.lower():
+                continue
+
+            existing_term = bible.find_term(src) or bible.find_term(tgt)
             if not existing_term:
                 bible.glossary.append(new_term)
             else:
@@ -832,7 +845,7 @@ class NovelRepository:
             return ProjectMetadataDocument()
         try:
             st = path.stat()
-            key = (str(path.resolve()), st.st_mtime, st.st_size)
+            key = (str(path), st.st_mtime, st.st_size)
             if key in _PROJECT_DOC_CACHE:
                 return _PROJECT_DOC_CACHE[key]
             with open(path, "r", encoding="utf-8") as f:
@@ -849,7 +862,7 @@ class NovelRepository:
         atomic_write_json(path, doc.model_dump(), indent=2)
         try:
             st = path.stat()
-            _PROJECT_DOC_CACHE[(str(path.resolve()), st.st_mtime, st.st_size)] = doc
+            _PROJECT_DOC_CACHE[(str(path), st.st_mtime, st.st_size)] = doc
         except Exception:
             pass
 

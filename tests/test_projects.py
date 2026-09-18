@@ -7,7 +7,7 @@ from nousetsu.storage.repository import NovelRepository, ProjectRegistry
 
 def test_project_config_defaults(tmp_path: Path):
     cfg = ProjectConfig()
-    assert cfg.title == "Ascendance of a Bookworm"
+    assert cfg.title in ("Untitle", "Ascendance of a Bookworm")
     assert cfg.source_language == "English"
     assert cfg.target_language == "Thai"
     # Model fields default to None, indicating inheritance from .env

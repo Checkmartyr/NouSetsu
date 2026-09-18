@@ -7,7 +7,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from nousetsu.agents.llm import extract_text_from_message, extract_usage_from_message, get_llm
 from nousetsu.graph.procedural import ProceduralGraph, get_default_drafter_graph
 from nousetsu.models.bible import CharacterProfile, ChapterSummary, GlossaryItem, NovelBible
-from nousetsu.models.metadata import TokenUsage
+from nousetsu.models.metadata import SubdividedBlock, TokenUsage
 from nousetsu.models.trace import PipelineStage
 from nousetsu.prompts.templates import DRAFTING_SYSTEM_PROMPT
 from nousetsu.skills.registry import SkillRegistry
@@ -77,6 +77,7 @@ class ContextAwareDrafterAgent:
         self.subdivision_min_lines: int = subdivision_min_lines
         self.subdivision_max_depth: int = subdivision_max_depth
         self.subdivisions_count: int = 0
+        self.last_subdivided_blocks: List[SubdividedBlock] = []
         self.prompt_tracker: Optional[Any] = None
 
     @property
@@ -220,6 +221,7 @@ class ContextAwareDrafterAgent:
             )
 
         self.last_usage = TokenUsage()
+        self.last_subdivided_blocks = []
         return self._draft_with_recursive_subdivision(
             chunk_text=source_text,
             preceding_context="",
@@ -254,6 +256,7 @@ class ContextAwareDrafterAgent:
         """Drafts novel chunks sequentially with sliding translation context for pronoun/voice continuity."""
         from nousetsu.utils.rate_limiter import estimate_tokens
 
+        self.last_subdivided_blocks = []
         drafted_parts = []
         prev_draft_tail = ""
         total_usage = TokenUsage()
@@ -488,7 +491,7 @@ class ContextAwareDrafterAgent:
         **kwargs: Any
     ) -> str:
         try:
-            return self._invoke_llm_draft(
+            drafted = self._invoke_llm_draft(
                 chunk_text=chunk_text,
                 preceding_context=preceding_context,
                 bible=bible,
@@ -502,6 +505,16 @@ class ContextAwareDrafterAgent:
                 depth=depth,
                 **kwargs
             )
+            self.last_subdivided_blocks.append(
+                SubdividedBlock(
+                    block_index=len(self.last_subdivided_blocks),
+                    source_text=chunk_text,
+                    draft_text=drafted,
+                    is_sensitive=False,
+                    fallback_used=False
+                )
+            )
+            return drafted
         except Exception as e:
             if not is_safety_block_exception(e):
                 raise
@@ -563,7 +576,7 @@ class ContextAwareDrafterAgent:
                 max_fallback=15
             )
             resolved_genre = genre or getattr(bible, "genre", "general")
-            return self._handle_safety_fallback(
+            fallback_draft = self._handle_safety_fallback(
                 source_chunk_text=chunk_text,
                 bible=bible,
                 active_glossary=eval_glossary,
@@ -571,6 +584,16 @@ class ContextAwareDrafterAgent:
                 polisher=polisher,
                 **kwargs
             )
+            self.last_subdivided_blocks.append(
+                SubdividedBlock(
+                    block_index=len(self.last_subdivided_blocks),
+                    source_text=chunk_text,
+                    draft_text=fallback_draft,
+                    is_sensitive=True,
+                    fallback_used=True
+                )
+            )
+            return fallback_draft
 
     def _draft_single_chunk(
         self,

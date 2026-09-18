@@ -307,6 +307,27 @@ NouSetsu tracks end-to-end token consumption and execution latency per pipeline 
     - `nousetsu learn-graph`: Offline self-evolution loop that analyzes diagnostic audit traces from `.novel/traces/`, detects repetitive failure modes or omissions, and synthesizes localized graph mutations.
 18. **Chapter Numbering Collision Realignment Engine**:
     - `nousetsu realign-chapters`: Detects and resolves chapter numbering gaps or collisions across volume folders (e.g. `Villainess_06`), relocates summaries, traces, and checkpoints safely, and synchronizes the local RAG knowledge store.
+19. **Stateful Subdivision Pattern Memory & Polisher Bisection Engine**:
+    - Extends recursive bisection (`_polish_with_recursive_subdivision`) to `PolishingAgent`, gracefully bisecting sensitive scenes and retaining draft text on minimal sensitive snippets.
+    - Introduces `SubdividedBlock` schema capturing leaf subdivision blocks (source text, draft text, polished text, sensitive flags, fallback flags).
+    - Persists subdivision pattern state across `TranslationState`, stage checkpoints (`StageArtifacts.subdivided_blocks`), and chapter metadata records.
+20. **Novel Bible Language Integrity & Sanitizer Engine**:
+    - [`sanitize_bible`](file:///D:/Code/novel_translation_Agent/src/nousetsu/storage/bible_sanitizer.py): Multi-pass sanitizer guaranteeing that `.novel/bible/bible.yaml` remains pristine and free from cross-language pollution.
+    - Employs iterative fixed-point character profile deduplication, resolving variant aliases, given-name subsets, and compound title prefixes.
+    - Consonant-skeleton Katakana-to-Romaji normalization and Thai tone-mark stripping (`strip_thai_accents`) to canonicalize relationship and pronoun keys against roster characters.
+    - Validates glossary source scripts, purging non-CJK entries masquerading as source terms.
+    - Automatically translates relationship values (including slash roles) and character voice descriptions into literary target prose.
+    - Normalizes and deduplicates active story arc milestones.
+    - Integrated directly into [`NovelRepository.save_bible`](file:///D:/Code/novel_translation_Agent/src/nousetsu/storage/repository.py) and `update_bible_memory`.
+21. **Centralized Projects Root (`NOVEL_PROJECTS_DIR`) & High-Speed Scanner**:
+    - Decouples project storage from code repository via `NOVEL_PROJECTS_DIR` in `.env` (with `./project` fallback).
+    - Features parallel chapter scanning (`ChapterScanner.scan_parallel` via `ThreadPoolExecutor`) with composite metadata cache keys `(path, size, mtime)` achieving **320x scan speedup**.
+    - Dedicated `nousetsu scan` CLI subcommand supporting `--all-projects` overview and per-volume filtering.
+22. **Web Studio Chapter Upload, Multi-Volume Accordions & Character Visualizer**:
+    - Extends Vite + React 19 web visualizer (`nousetsu web`) with `/api/projects/{name}/chapters/upload` for drag-and-drop volume chapter uploads.
+    - Studio sidebar supports multi-level folder accordions and `Folder > file.md` chapter hierarchy.
+    - Interactive **Character Visualizer** rendering character dossiers, personality/voice analysis, and relationship graphs.
+    - Automatic free port detection (`_find_free_port`) and `VITE_API_PORT` coordination.
 
 ---
 
@@ -321,10 +342,11 @@ uv sync
 # Query CLI version
 uv run nousetsu --version
 
-# Run complete test suite (347 tests across 52 modules in ~42s)
+# Run complete test suite (380 tests across 55 modules in ~45s)
 uv run pytest
 
 # Run specific test modules
+uv run pytest tests/test_bible_sanitizer.py
 uv run pytest tests/test_structured_output.py
 uv run pytest tests/test_critic_parsing.py
 uv run pytest tests/test_extractor_filtering.py
@@ -347,6 +369,10 @@ uv run pytest tests/test_prompt_tracker.py
 uv run pytest tests/test_web_server.py
 uv run pytest tests/test_rag_engine.py
 uv run pytest tests/test_procedural_graph.py
+
+# Fast scan chapter queues and project status in NOVEL_PROJECTS_DIR
+uv run nousetsu scan --all-projects
+uv run nousetsu scan -p project/Villainess -F Villainess_05
 
 # Launch the interactive Textual TUI dashboard (default behavior on bare 'nousetsu')
 uv run nousetsu
