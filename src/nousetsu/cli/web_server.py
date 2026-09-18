@@ -504,6 +504,47 @@ def _run_batch_worker(
         job.finish()
 
 
+# File stats in-memory cache for fast /api/chapters response
+_FILE_STATS_CACHE: Dict[Tuple[str, float, int], Tuple[int, int]] = {}
+
+
+def _get_raw_file_stats(file_path: Path) -> Tuple[int, int]:
+    """Return (line_count, word_count) cached by (path, mtime, size)."""
+    try:
+        if not file_path.exists():
+            return (0, 0)
+        st = file_path.stat()
+        key = (str(file_path.resolve()), st.st_mtime, st.st_size)
+        if key in _FILE_STATS_CACHE:
+            return _FILE_STATS_CACHE[key]
+        with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+            lines = f.readlines()
+            line_cnt = len(lines)
+            word_cnt = sum(len(l.split()) if l.isascii() else len(l.strip()) for l in lines)
+            _FILE_STATS_CACHE[key] = (line_cnt, word_cnt)
+            return (line_cnt, word_cnt)
+    except Exception:
+        return (0, 0)
+
+
+def _get_translated_word_count(file_path: Path) -> int:
+    """Return word count of output file cached by (path, mtime, size)."""
+    try:
+        if not file_path.exists():
+            return 0
+        st = file_path.stat()
+        key = (str(file_path.resolve()), st.st_mtime, st.st_size)
+        if key in _FILE_STATS_CACHE:
+            return _FILE_STATS_CACHE[key][1]
+        with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+            content = f.read()
+            words = len(content.split())
+            _FILE_STATS_CACHE[key] = (0, words)
+            return words
+    except Exception:
+        return 0
+
+
 # ============================================================================
 # FastAPI Application Factory
 # ============================================================================
@@ -673,25 +714,8 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
 
         results = []
         for t in tasks:
-            raw_lines = 0
-            raw_words = 0
-            if t.source_file.exists():
-                try:
-                    with open(t.source_file, "r", encoding="utf-8", errors="replace") as f:
-                        lines = f.readlines()
-                        raw_lines = len(lines)
-                        raw_words = sum(len(line.split()) if line.isascii() else len(line.strip()) for line in lines)
-                except Exception:
-                    pass
-
-            trans_words = 0
-            if t.output_file.exists():
-                try:
-                    with open(t.output_file, "r", encoding="utf-8", errors="replace") as f:
-                        content = f.read()
-                        trans_words = len(content.split())
-                except Exception:
-                    pass
+            raw_lines, raw_words = _get_raw_file_stats(t.source_file)
+            trans_words = _get_translated_word_count(t.output_file)
 
             if t.is_completed:
                 status_str = "COMPLETED"

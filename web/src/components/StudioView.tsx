@@ -35,7 +35,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
   logs,
 }) => {
   const [chapters, setChapters] = useState<ChapterItem[]>([]);
-  const [selectedChapterNum, setSelectedChapterNum] = useState<number | null>(null);
+  const [selectedChapter, setSelectedChapter] = useState<{ num: number; folder?: string | null } | null>(null);
   const [chapterContent, setChapterContent] = useState<ChapterContent | null>(null);
   const [loadingContent, setLoadingContent] = useState(false);
   const [status, setStatus] = useState<TranslationStatus | null>(null);
@@ -64,9 +64,15 @@ export const StudioView: React.FC<StudioViewProps> = ({
     setStatus(transStat);
 
     if (chList.length > 0) {
-      if (selectedChapterNum === null || !chList.some((c) => c.chapter_num === selectedChapterNum)) {
-        setSelectedChapterNum(chList[0].chapter_num);
-      }
+      setSelectedChapter((prev) => {
+        if (!prev || !chList.some((c) => c.chapter_num === prev.num && (c.folder || null) === (prev.folder || null))) {
+          return { num: chList[0].chapter_num, folder: chList[0].folder };
+        }
+        return prev;
+      });
+    } else {
+      setSelectedChapter(null);
+      setChapterContent(null);
     }
   };
 
@@ -81,12 +87,13 @@ export const StudioView: React.FC<StudioViewProps> = ({
 
   // Load selected chapter source & translation
   useEffect(() => {
-    if (selectedChapterNum === null || !activeProjectPath) return;
+    if (!selectedChapter || !activeProjectPath) {
+      setChapterContent(null);
+      return;
+    }
     let active = true;
     setLoadingContent(true);
-    const selectedChapObj = chapters.find((c) => c.chapter_num === selectedChapterNum);
-    const folderToFetch = selectedFolder !== 'all' ? selectedFolder : (selectedChapObj?.folder || undefined);
-    fetchChapterContent(selectedChapterNum, activeProjectPath, folderToFetch).then((content) => {
+    fetchChapterContent(selectedChapter.num, activeProjectPath, selectedChapter.folder || undefined).then((content) => {
       if (active) {
         setChapterContent(content);
         setLoadingContent(false);
@@ -95,7 +102,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
     return () => {
       active = false;
     };
-  }, [selectedChapterNum, activeProjectPath, chapters, selectedFolder]);
+  }, [selectedChapter, activeProjectPath]);
 
   // Scroll logs to bottom when updated
   useEffect(() => {
@@ -154,8 +161,13 @@ export const StudioView: React.FC<StudioViewProps> = ({
 
   useEffect(() => {
     if (filteredChapters.length > 0) {
-      if (selectedChapterNum === null || !filteredChapters.some((c) => c.chapter_num === selectedChapterNum)) {
-        setSelectedChapterNum(filteredChapters[0].chapter_num);
+      if (
+        selectedChapter === null ||
+        !filteredChapters.some(
+          (c) => c.chapter_num === selectedChapter.num && (c.folder || null) === (selectedChapter.folder || null)
+        )
+      ) {
+        setSelectedChapter({ num: filteredChapters[0].chapter_num, folder: filteredChapters[0].folder });
       }
     }
   }, [selectedFolder, filteredChapters]);
@@ -330,14 +342,16 @@ export const StudioView: React.FC<StudioViewProps> = ({
               </div>
             ) : (
               filteredChapters.map((ch) => {
-                const isSelected = ch.chapter_num === selectedChapterNum;
+                const isSelected =
+                  selectedChapter?.num === ch.chapter_num &&
+                  (selectedChapter?.folder || null) === (ch.folder || null);
                 const isRunningThis =
                   status?.is_running && status.active_chapter === ch.chapter_num;
 
                 return (
                   <div
                     key={`${ch.folder || 'root'}_${ch.chapter_num}`}
-                    onClick={() => setSelectedChapterNum(ch.chapter_num)}
+                    onClick={() => setSelectedChapter({ num: ch.chapter_num, folder: ch.folder })}
                     className={`p-3 cursor-pointer transition-all flex items-start justify-between gap-2 select-none ${
                       isSelected
                         ? 'bg-indigo-950/40 border-l-4 border-indigo-500'
@@ -418,7 +432,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
             <div className="flex items-center gap-3">
               <FileText className="w-4 h-4 text-indigo-400" />
               <span className="text-sm font-semibold text-slate-200">
-                Chapter {selectedChapterNum ?? '—'}:{' '}
+                Chapter {selectedChapter?.num ?? '—'}:{' '}
                 {chapterContent?.source_file ? chapterContent.source_file.split(/[\/\\]/).pop() : ''}
               </span>
             </div>
@@ -426,7 +440,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
             <div className="flex items-center gap-3">
               {(chapterContent?.has_translated || Boolean(chapterContent?.translated_text?.trim())) && (
                 <button
-                  onClick={() => selectedChapterNum && onNavigateToReader(selectedChapterNum)}
+                  onClick={() => selectedChapter && onNavigateToReader(selectedChapter.num)}
                   className="flex items-center gap-1.5 px-3 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-medium cursor-pointer transition-colors"
                 >
                   <BookOpen className="w-3.5 h-3.5" />
@@ -473,10 +487,10 @@ export const StudioView: React.FC<StudioViewProps> = ({
                       <Clock className="w-8 h-8 text-slate-600" />
                       <span>Not translated yet.</span>
                       <button
-                        onClick={() => selectedChapterNum && handleStart(selectedChapterNum)}
+                        onClick={() => selectedChapter && handleStart(selectedChapter.num)}
                         className="mt-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-medium cursor-pointer"
                       >
-                        Translate Chapter {selectedChapterNum}
+                        Translate Chapter {selectedChapter?.num ?? ''}
                       </button>
                     </div>
                   )}

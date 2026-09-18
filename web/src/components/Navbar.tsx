@@ -144,7 +144,11 @@ export const Navbar: React.FC<NavbarProps> = ({
             {activeProject && projects.length > 0 ? (
               <div className="flex items-center gap-1.5 max-w-[240px]">
                 <select
-                  value={activeProject.path}
+                  value={
+                    projects.find(
+                      (p) => p.path.replace(/\\/g, '/').toLowerCase() === activeProject.path.replace(/\\/g, '/').toLowerCase()
+                    )?.path || activeProject.path
+                  }
                   onChange={(e) => onSwitchProject(e.target.value)}
                   title={`Active Project: ${activeProject.title}\nPath: ${activeProject.path}`}
                   aria-label="Select active project"

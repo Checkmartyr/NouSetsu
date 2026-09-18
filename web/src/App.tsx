@@ -271,6 +271,12 @@ export const App: React.FC = () => {
 
   // Switch project
   const handleSwitchProject = async (targetPath: string) => {
+    const matched = projects.find(
+      (p) => p.path.replace(/\\/g, '/').toLowerCase() === targetPath.replace(/\\/g, '/').toLowerCase()
+    );
+    if (matched) {
+      setActiveProject(matched);
+    }
     const ok = await switchActiveProject(targetPath);
     if (ok) {
       await syncWithBackend(true);
@@ -436,6 +442,7 @@ export const App: React.FC = () => {
       <div className="flex-1 overflow-hidden">
         {activeWorkspace === 'studio' ? (
           <StudioView
+            key={activeProject?.path || 'studio'}
             activeProjectPath={activeProject?.path || null}
             activeProjectTitle={activeProject?.title || null}
             onNavigateToReader={(chapterNum) => {
@@ -446,17 +453,20 @@ export const App: React.FC = () => {
           />
         ) : activeWorkspace === 'reader' ? (
           <ReaderView
+            key={activeProject?.path || 'reader'}
             activeProjectPath={activeProject?.path || null}
             initialChapterNum={readerChapterNum}
             onBackToStudio={() => setActiveWorkspace('studio')}
           />
         ) : activeWorkspace === 'bible' ? (
           <BibleView
+            key={activeProject?.path || 'bible'}
             activeProjectPath={activeProject?.path || null}
             activeProjectTitle={activeProject?.title || null}
           />
         ) : activeWorkspace === 'settings' ? (
           <SettingsView
+            key={activeProject?.path || 'settings'}
             activeProjectPath={activeProject?.path || null}
             activeProjectTitle={activeProject?.title || null}
           />

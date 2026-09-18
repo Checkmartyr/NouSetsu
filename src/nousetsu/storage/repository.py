@@ -289,6 +289,10 @@ class ProjectRegistry:
         return results
 
 
+# In-memory mtime cache for project metadata documents
+_PROJECT_DOC_CACHE: Dict[Tuple[str, float, int], ProjectMetadataDocument] = {}
+
+
 class NovelRepository:
     """Manages file storage for a novel translation project."""
 
@@ -816,15 +820,27 @@ class NovelRepository:
         if not path.exists():
             return ProjectMetadataDocument()
         try:
+            st = path.stat()
+            key = (str(path.resolve()), st.st_mtime, st.st_size)
+            if key in _PROJECT_DOC_CACHE:
+                return _PROJECT_DOC_CACHE[key]
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                return ProjectMetadataDocument.model_validate(data)
+                doc = ProjectMetadataDocument.model_validate(data)
+                _PROJECT_DOC_CACHE[key] = doc
+                return doc
         except Exception:
             return ProjectMetadataDocument()
 
     def save_project_metadata_doc(self, doc: ProjectMetadataDocument) -> None:
         """Save the project-level metadata document to .novel/metadata.json."""
-        atomic_write_json(self.project_metadata_file_path(), doc.model_dump(), indent=2)
+        path = self.project_metadata_file_path()
+        atomic_write_json(path, doc.model_dump(), indent=2)
+        try:
+            st = path.stat()
+            _PROJECT_DOC_CACHE[(str(path.resolve()), st.st_mtime, st.st_size)] = doc
+        except Exception:
+            pass
 
     def load_all_metadata(self) -> Dict[str, ChapterMetadata]:
         """Return all chapter metadata for this project in a single fast read."""

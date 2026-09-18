@@ -26,12 +26,15 @@ class ChapterTask:
     folder: Optional[str] = None
 
 
+_GLOBAL_SHA256_CACHE: dict[tuple[str, int, float], str] = {}
+
+
 class ChapterScanner:
     """Discovers and prepares chapter translation tasks from folder."""
 
     def __init__(self, repository: NovelRepository):
         self.repo = repository
-        self._sha256_cache: dict[tuple[str, int, float], str] = {}
+        self._sha256_cache: dict[tuple[str, int, float], str] = _GLOBAL_SHA256_CACHE
 
     def get_file_sha256(self, src_file: Path) -> str:
         """Compute or retrieve cached SHA256 checksum based on file size and modification time."""
