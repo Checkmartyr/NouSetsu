@@ -344,65 +344,9 @@ def _load_project_traces(project_path: Path) -> List[Dict[str, Any]]:
 
 
 def _scan_project_tasks(repo: NovelRepository, folder: Optional[str] = None) -> List[ChapterTask]:
-    """Scan and resolve chapter tasks for a project and optional subfolder."""
-    cfg = repo.load_config()
+    """Scan and resolve chapter tasks for a project and optional subfolder using optimized scanner."""
     scanner = ChapterScanner(repo)
-
-    if folder and folder != "all":
-        # Check if the folder exists directly in repo.root_dir
-        folder_cand = repo.root_dir / folder
-        if folder_cand.exists() and folder_cand.is_dir():
-            raw_path = folder_cand
-            out_cand_th = repo.root_dir / f"{folder}_th"
-            out_cand_tr = repo.root_dir / f"{folder}_trans"
-            if out_cand_th.exists():
-                output_path = out_cand_th
-            elif out_cand_tr.exists():
-                output_path = out_cand_tr
-            else:
-                output_path = cfg.get_output_path(repo.root_dir)
-        else:
-            raw_path = cfg.get_raw_path(repo.root_dir)
-            output_path = cfg.get_output_path(repo.root_dir)
-        return scanner.scan_directory(raw_path, output_path)
-
-    # When folder is None or "all": scan primary path and discover all volume folders
-    raw_path = cfg.get_raw_path(repo.root_dir)
-    output_path = cfg.get_output_path(repo.root_dir)
-    primary_tasks = scanner.scan_directory(raw_path, output_path)
-
-    all_tasks = list(primary_tasks)
-    seen_files = {str(t.source_file.resolve()) for t in primary_tasks}
-
-    ignored_dir_names = {
-        "node_modules", "web", "src-tauri", "dist", ".git", ".novel", ".venv",
-        "__pycache__", "translated_chapters", "raw_chapters"
-    }
-
-    try:
-        for child in sorted(repo.root_dir.iterdir()):
-            if (
-                child.is_dir()
-                and not child.name.startswith(".")
-                and not child.name.endswith("_th")
-                and not child.name.endswith("_trans")
-                and child.name not in ignored_dir_names
-            ):
-                if child.resolve() != raw_path.resolve():
-                    has_chapters = any(f.suffix.lower() in (".txt", ".md") for f in child.iterdir() if f.is_file())
-                    if has_chapters:
-                        out_th = repo.root_dir / f"{child.name}_th"
-                        out_tr = repo.root_dir / f"{child.name}_trans"
-                        sub_out = out_th if out_th.exists() else (out_tr if out_tr.exists() else output_path)
-                        sub_tasks = scanner.scan_directory(child, sub_out)
-                        for st in sub_tasks:
-                            if str(st.source_file.resolve()) not in seen_files:
-                                all_tasks.append(st)
-                                seen_files.add(str(st.source_file.resolve()))
-    except Exception as e:
-        logger.warning("Error auto-discovering volume subfolders: %s", e)
-
-    return all_tasks
+    return scanner.scan_project(folder=folder)
 
 
 # ============================================================================

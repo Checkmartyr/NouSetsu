@@ -161,3 +161,29 @@ def test_web_api_projects_endpoints(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     # 4. POST /api/projects/create - Empty title error
     bad_res = client.post("/api/projects/create", json={"title": "   "})
     assert bad_res.status_code == 400
+
+
+def test_cmd_scan_cli(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Tests nousetsu scan CLI command for single project and --all-projects."""
+    import argparse
+    from nousetsu.cli.app import cmd_scan
+
+    reg_dir = tmp_path / "reg"
+    monkeypatch.setenv("NOVEL_REGISTRY_DIR", str(reg_dir))
+    projects_root = get_projects_root_dir()
+
+    # Create project with chapters
+    p1 = projects_root / "ScanNovel"
+    repo1 = NovelRepository(p1)
+    repo1.initialize_project(title="Scan Test Novel")
+    (p1 / "raw_chapters" / "0001.txt").write_text("Ch 1 text", encoding="utf-8")
+    (p1 / "raw_chapters" / "0002.txt").write_text("Ch 2 text", encoding="utf-8")
+
+    # 1. Scan single project
+    args_single = argparse.Namespace(project_dir="ScanNovel", folder=None, all_projects=False)
+    cmd_scan(args_single)
+
+    # 2. Scan all projects in NOVEL_PROJECTS_DIR
+    args_all = argparse.Namespace(project_dir=None, folder=None, all_projects=True)
+    cmd_scan(args_all)
+

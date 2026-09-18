@@ -11,7 +11,7 @@ from nousetsu.batch.runner import BatchRunner
 from nousetsu.batch.scanner import ChapterScanner, ChapterTask
 from nousetsu.models.config import ProjectConfig
 from nousetsu.models.metadata import PipelineStage, StageStatus
-from nousetsu.storage.repository import NovelRepository, ProjectRegistry
+from nousetsu.storage.repository import NovelRepository, ProjectRegistry, resolve_project_dir
 from nousetsu.tui.widgets.bible_editor import NovelBibleModal
 from nousetsu.tui.widgets.checkpoint_inspector import CheckpointInspectorWidget
 from nousetsu.tui.widgets.folder_select_modal import FolderSelectModal
@@ -133,16 +133,16 @@ class NovelAgentApp(App):
         self.registry = ProjectRegistry()
 
         if project_dir is not None and str(project_dir) != ".":
-            self.project_dir = Path(project_dir).expanduser().resolve()
+            self.project_dir = resolve_project_dir(project_dir)
         else:
             if not os.environ.get("PYTEST_CURRENT_TEST"):
                 last_proj = self.registry.get_last_active_project()
                 if last_proj:
                     self.project_dir = last_proj
                 else:
-                    self.project_dir = Path(project_dir or ".").expanduser().resolve()
+                    self.project_dir = resolve_project_dir(project_dir)
             else:
-                self.project_dir = Path(project_dir or ".").expanduser().resolve()
+                self.project_dir = resolve_project_dir(project_dir)
 
         self.repo = NovelRepository(self.project_dir)
         cfg = self.repo.load_config()

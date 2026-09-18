@@ -148,6 +148,96 @@ def cmd_batch(args: argparse.Namespace) -> None:
             pass
 
 
+def cmd_scan(args: argparse.Namespace) -> None:
+    """Scan and display chapter tasks and statistics for projects in NOVEL_PROJECTS_DIR or local."""
+    from rich.table import Table
+    from nousetsu.batch.scanner import ChapterScanner
+    from nousetsu.storage.repository import get_projects_root_dir
+
+    all_projects = getattr(args, "all_projects", False)
+    folder = getattr(args, "folder", None)
+
+    if all_projects:
+        projects_root = get_projects_root_dir()
+        all_tasks_by_proj = ChapterScanner.scan_all_projects(projects_root, folder=folder)
+
+        if not all_tasks_by_proj:
+            console.print(f"[yellow]No novel projects discovered inside projects root: {projects_root}[/]")
+            return
+
+        table = Table(title=f"Novel Projects Overview ({projects_root.name}/)", border_style="cyan")
+        table.add_column("Project", style="bold green")
+        table.add_column("Total Ch", justify="right", style="bold")
+        table.add_column("Done", justify="right", style="green")
+        table.add_column("Paused", justify="right", style="yellow")
+        table.add_column("Failed", justify="right", style="red")
+        table.add_column("Pending", justify="right", style="dim")
+
+        for p_name, tasks in sorted(all_tasks_by_proj.items()):
+            done = sum(1 for t in tasks if t.is_completed)
+            paused = sum(1 for t in tasks if t.is_paused or t.needs_resume)
+            failed = sum(1 for t in tasks if t.is_failed)
+            pending = sum(1 for t in tasks if not t.is_completed and not t.is_paused and not t.needs_resume and not t.is_failed)
+            table.add_row(
+                p_name,
+                str(len(tasks)),
+                str(done),
+                str(paused),
+                str(failed),
+                str(pending),
+            )
+
+        console.print(table)
+        return
+
+    project_dir = getattr(args, "project_dir", None)
+    scanner = ChapterScanner(project_dir)
+    cfg = scanner.repo.load_config()
+    tasks = scanner.scan_project(folder=folder)
+
+    if not tasks:
+        console.print(f"[yellow]No chapter files found in project '{cfg.title}' ({scanner.repo.root_dir.name}).[/]")
+        return
+
+    table = Table(
+        title=f"Chapter Queue: {cfg.title} [{scanner.repo.root_dir.name}] ({len(tasks)} chapters)",
+        border_style="cyan"
+    )
+    table.add_column("Ch #", justify="right", style="bold cyan", width=6)
+    table.add_column("File Name", style="white")
+    table.add_column("Volume / Folder", style="magenta")
+    table.add_column("Status", style="bold")
+    table.add_column("Output File", style="dim")
+
+    for t in tasks:
+        if t.is_completed:
+            status_style = "[green]COMPLETED[/]"
+        elif t.is_failed:
+            status_style = "[red]FAILED[/]"
+        elif t.is_paused or t.needs_resume:
+            stage_txt = f":{t.resume_stage.value.upper()}" if t.resume_stage else ""
+            status_style = f"[yellow]PAUSED{stage_txt}[/]"
+        else:
+            status_style = "[dim]PENDING[/]"
+
+        table.add_row(
+            str(t.chapter_num),
+            t.source_file.name,
+            t.folder or "raw_chapters",
+            status_style,
+            t.output_file.name if t.output_file.exists() else "-"
+        )
+
+    console.print(table)
+    done_count = sum(1 for t in tasks if t.is_completed)
+    paused_count = sum(1 for t in tasks if t.is_paused or t.needs_resume)
+    console.print(
+        f"[dim]Summary:[/] [green]{done_count} completed[/], "
+        f"[yellow]{paused_count} paused[/], "
+        f"{len(tasks) - done_count - paused_count} pending.\n"
+    )
+
+
 def cmd_skills(args: argparse.Namespace) -> None:
     from rich.table import Table
     from nousetsu.skills.registry import SkillRegistry
@@ -968,6 +1058,12 @@ def main() -> None:
     p_batch.add_argument("--filter-extractor", action=argparse.BooleanOptionalAction, default=None, help="Enable or disable per-chunk character/glossary filtering for Entity Extractor")
     p_batch.add_argument("--reconcile-terms", action=argparse.BooleanOptionalAction, default=None, help="Enable post-polish term and character reconciliation via Chronicler Agent (default: True)")
 
+    # scan
+    p_scan = subparsers.add_parser("scan", help="Fast scan chapter queue and project status in NOVEL_PROJECTS_DIR")
+    p_scan.add_argument("--project-dir", "-p", default=None, help="Folder or name of novel project (resolves in NOVEL_PROJECTS_DIR or current directory)")
+    p_scan.add_argument("--folder", "-F", default=None, help="Specific volume folder to scan")
+    p_scan.add_argument("--all-projects", "-A", action="store_true", help="Scan across all projects in NOVEL_PROJECTS_DIR")
+
     # skills
     p_skills = subparsers.add_parser("skills", help="List registered agent domain skills and active capabilities")
     p_skills.add_argument("--agent", "-a", default=None, help="Filter by agent (extractor, drafter, critic, polisher, chronicler)")
@@ -1067,6 +1163,8 @@ def main() -> None:
         cmd_init(args)
     elif args.command == "batch":
         cmd_batch(args)
+    elif args.command == "scan":
+        cmd_scan(args)
     elif args.command == "traces":
         cmd_traces(args)
     elif args.command == "web":

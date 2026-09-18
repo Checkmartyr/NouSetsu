@@ -46,8 +46,12 @@ class BatchRunner:
         enable_post_polish_reconciliation: Optional[bool] = None,
         console: Optional[Console] = None
     ):
-        self.repo = repository
-        cfg = repository.load_config()
+        if isinstance(repository, NovelRepository):
+            self.repo = repository
+        else:
+            from nousetsu.storage.repository import resolve_project_dir
+            self.repo = NovelRepository(resolve_project_dir(repository))
+        cfg = self.repo.load_config()
 
         # Resolve primary model
         env_model = os.environ.get("NOVEL_MODEL") or os.environ.get("DEFAULT_MODEL")
