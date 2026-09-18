@@ -25,6 +25,7 @@ export const App: React.FC = () => {
   // Navigation & Workspace State
   const [activeWorkspace, setActiveWorkspace] = useState<WorkspaceTab>('studio');
   const [readerChapterNum, setReaderChapterNum] = useState<number | null>(null);
+  const [readerFolder, setReaderFolder] = useState<string | null>(null);
 
   // Real-time Event Logs from SSE
   const [logs, setLogs] = useState<string[]>([]);
@@ -445,8 +446,9 @@ export const App: React.FC = () => {
             key={activeProject?.path || 'studio'}
             activeProjectPath={activeProject?.path || null}
             activeProjectTitle={activeProject?.title || null}
-            onNavigateToReader={(chapterNum) => {
+            onNavigateToReader={(chapterNum, folder) => {
               setReaderChapterNum(chapterNum);
+              setReaderFolder(folder || null);
               setActiveWorkspace('reader');
             }}
             logs={logs}
@@ -456,6 +458,7 @@ export const App: React.FC = () => {
             key={activeProject?.path || 'reader'}
             activeProjectPath={activeProject?.path || null}
             initialChapterNum={readerChapterNum}
+            initialFolder={readerFolder}
             onBackToStudio={() => setActiveWorkspace('studio')}
           />
         ) : activeWorkspace === 'bible' ? (

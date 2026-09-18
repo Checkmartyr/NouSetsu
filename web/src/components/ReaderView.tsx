@@ -15,6 +15,7 @@ import { fetchChapters, fetchChapterContent } from '../services/dashboardApi';
 interface ReaderViewProps {
   activeProjectPath: string | null;
   initialChapterNum?: number | null;
+  initialFolder?: string | null;
   onBackToStudio: () => void;
 }
 
@@ -24,10 +25,12 @@ type FontSize = 'sm' | 'base' | 'lg' | 'xl';
 export const ReaderView: React.FC<ReaderViewProps> = ({
   activeProjectPath,
   initialChapterNum,
+  initialFolder,
   onBackToStudio,
 }) => {
   const [chapters, setChapters] = useState<ChapterItem[]>([]);
   const [currentChapterNum, setCurrentChapterNum] = useState<number>(initialChapterNum || 1);
+  const [currentFolder, setCurrentFolder] = useState<string | null>(initialFolder || null);
   const [content, setContent] = useState<ChapterContent | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -41,35 +44,69 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
     fetchChapters(activeProjectPath).then((list) => {
       setChapters(list);
       if (list.length > 0) {
-        if (!initialChapterNum || !list.some((c) => c.chapter_num === currentChapterNum)) {
-          // Default to first completed / translated chapter or first chapter
-          const firstCompleted = list.find((c) => c.is_completed || c.translated_exists);
-          setCurrentChapterNum(firstCompleted ? firstCompleted.chapter_num : list[0].chapter_num);
+        if (
+          !initialChapterNum ||
+          !list.some(
+            (c) =>
+              c.chapter_num === currentChapterNum &&
+              (initialFolder ? c.folder === initialFolder : true)
+          )
+        ) {
+          const matching = initialFolder
+            ? list.find((c) => c.folder === initialFolder && (c.is_completed || c.translated_exists))
+            : null;
+          const firstCompleted = matching || list.find((c) => c.is_completed || c.translated_exists);
+          const target =
+            firstCompleted ||
+            (initialFolder ? list.find((c) => c.folder === initialFolder) : null) ||
+            list[0];
+          setCurrentChapterNum(target.chapter_num);
+          setCurrentFolder(target.folder || null);
         }
       }
     });
-  }, [activeProjectPath, initialChapterNum]);
+  }, [activeProjectPath, initialChapterNum, initialFolder]);
 
   useEffect(() => {
     if (!activeProjectPath || !currentChapterNum) return;
     setLoading(true);
-    const curChap = chapters.find((c) => c.chapter_num === currentChapterNum);
-    fetchChapterContent(currentChapterNum, activeProjectPath, curChap?.folder || undefined).then((res) => {
-      setContent(res);
-      setLoading(false);
-    });
-  }, [currentChapterNum, activeProjectPath, chapters]);
+    const curChap =
+      chapters.find(
+        (c) =>
+          c.chapter_num === currentChapterNum &&
+          (currentFolder ? c.folder === currentFolder : true)
+      ) || chapters.find((c) => c.chapter_num === currentChapterNum);
 
-  const currentIndex = chapters.findIndex((c) => c.chapter_num === currentChapterNum);
+    fetchChapterContent(currentChapterNum, activeProjectPath, curChap?.folder || undefined).then(
+      (res) => {
+        setContent(res);
+        setLoading(false);
+      }
+    );
+  }, [currentChapterNum, currentFolder, activeProjectPath, chapters]);
+
+  const currentIndex = chapters.findIndex(
+    (c) =>
+      c.chapter_num === currentChapterNum &&
+      (currentFolder ? c.folder === currentFolder : true)
+  );
   const hasPrev = currentIndex > 0;
   const hasNext = currentIndex >= 0 && currentIndex < chapters.length - 1;
 
   const handlePrev = () => {
-    if (hasPrev) setCurrentChapterNum(chapters[currentIndex - 1].chapter_num);
+    if (hasPrev) {
+      const prevCh = chapters[currentIndex - 1];
+      setCurrentChapterNum(prevCh.chapter_num);
+      setCurrentFolder(prevCh.folder || null);
+    }
   };
 
   const handleNext = () => {
-    if (hasNext) setCurrentChapterNum(chapters[currentIndex + 1].chapter_num);
+    if (hasNext) {
+      const nextCh = chapters[currentIndex + 1];
+      setCurrentChapterNum(nextCh.chapter_num);
+      setCurrentFolder(nextCh.folder || null);
+    }
   };
 
   // Theme styling configurations
@@ -122,14 +159,20 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
           <div className="flex items-center gap-2">
             <BookOpen className="w-4 h-4 text-indigo-400" />
             <select
-              value={currentChapterNum}
-              onChange={(e) => setCurrentChapterNum(Number(e.target.value))}
+              value={`${currentFolder || ''}::${currentChapterNum}`}
+              onChange={(e) => {
+                const val = e.target.value;
+                const [f, numStr] = val.split('::');
+                setCurrentFolder(f || null);
+                setCurrentChapterNum(Number(numStr));
+              }}
               aria-label="Select chapter to read"
               className={`text-sm font-semibold rounded-lg px-2.5 py-1 border cursor-pointer focus:outline-none ${curTheme.bg} ${curTheme.border} ${curTheme.text}`}
             >
               {chapters.map((c) => (
-                <option key={c.chapter_num} value={c.chapter_num}>
-                  Chapter {c.chapter_num.toString().padStart(3, '0')} - {c.title} {c.is_completed ? '✓' : ''}
+                <option key={`${c.folder || ''}::${c.chapter_num}`} value={`${c.folder || ''}::${c.chapter_num}`}>
+                  {c.folder ? `${c.folder} > ` : ''}
+                  {c.output_file_name || (c.file_name ? c.file_name.replace(/\.[^/.]+$/, '.md') : `${c.title}.md`)} {c.is_completed ? '✓' : ''}
                 </option>
               ))}
             </select>

@@ -4,6 +4,7 @@ export interface ChapterItem {
   chapter_num: number;
   title: string;
   file_name: string;
+  output_file_name?: string;
   folder: string | null;
   status: 'COMPLETED' | 'FAILED' | 'PAUSED' | 'RESUME' | 'PENDING';
   current_stage: string;
@@ -26,6 +27,7 @@ export interface ChapterContent {
   folder: string | null;
   source_file: string;
   output_file: string;
+  output_file_name?: string;
   source_text: string;
   translated_text: string;
   has_source: boolean;
