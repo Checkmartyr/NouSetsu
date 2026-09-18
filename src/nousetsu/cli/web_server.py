@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 import http.server
 import json
 import logging
@@ -608,21 +609,27 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
         active_meta["is_active"] = True
 
         discovered = registry.list_projects()
-        projects = []
-        seen = set()
-
-        projects.append(active_meta)
-        seen.add(str(active_p.resolve()))
+        discovered_paths = []
+        seen = {str(active_p.resolve())}
 
         for d in discovered:
             p_str = d.get("path")
             if p_str and p_str not in seen:
                 p = Path(p_str)
                 if p.exists() and (p / ".novel").exists():
-                    meta = _get_project_meta(p)
-                    meta["is_active"] = (str(p.resolve()) == str(active_p.resolve()))
-                    projects.append(meta)
+                    discovered_paths.append(p)
                     seen.add(str(p.resolve()))
+
+        if len(discovered_paths) > 1:
+            with ThreadPoolExecutor(max_workers=min(8, len(discovered_paths))) as executor:
+                other_projects = list(executor.map(_get_project_meta, discovered_paths))
+        else:
+            other_projects = [_get_project_meta(p) for p in discovered_paths]
+
+        for meta in other_projects:
+            meta["is_active"] = (str(active_p.resolve()) == meta["path"])
+
+        projects = [active_meta] + other_projects
 
         return {
             "active_project": active_meta,
@@ -684,12 +691,16 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
         registry = ProjectRegistry()
         active_p = registry.get_last_active_project() or resolve_project_dir(None)
         discovered = registry.list_projects()
-        projects = []
-        for d in discovered:
-            p = Path(d["path"])
-            meta = _get_project_meta(p)
-            meta["is_active"] = (str(p.resolve()) == str(active_p.resolve()))
-            projects.append(meta)
+        valid_paths = [Path(d["path"]) for d in discovered if d.get("path") and Path(d["path"]).exists()]
+
+        if len(valid_paths) > 1:
+            with ThreadPoolExecutor(max_workers=min(8, len(valid_paths))) as executor:
+                projects = list(executor.map(_get_project_meta, valid_paths))
+        else:
+            projects = [_get_project_meta(p) for p in valid_paths]
+
+        for meta in projects:
+            meta["is_active"] = bool(active_p and meta["path"] == str(active_p.resolve()))
 
         return {
             "projects_dir": str(get_projects_root_dir()),
@@ -734,11 +745,18 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
         repo = _resolve_repo(project_path)
         tasks = _scan_project_tasks(repo, folder=folder)
 
-        results = []
-        for t in tasks:
-            raw_lines, raw_words = _get_raw_file_stats(t.source_file)
-            trans_words = _get_translated_word_count(t.output_file)
+        def _calc_task_stats(t: ChapterTask) -> Tuple[int, int, int]:
+            return (*_get_raw_file_stats(t.source_file), _get_translated_word_count(t.output_file))
 
+        if len(tasks) > 8:
+            workers = min(16, (os.cpu_count() or 2) * 2, len(tasks))
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+                stats_list = list(executor.map(_calc_task_stats, tasks))
+        else:
+            stats_list = [_calc_task_stats(t) for t in tasks]
+
+        results = []
+        for t, (raw_lines, raw_words, trans_words) in zip(tasks, stats_list):
             if t.is_completed:
                 status_str = "COMPLETED"
             elif t.is_failed:

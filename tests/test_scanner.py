@@ -173,3 +173,56 @@ def test_scanner_speed_and_lazy_sha256(tmp_path: Path):
     assert t._source_sha256 == sha
 
 
+def test_scanner_parallel_parity_and_speed(tmp_path: Path):
+    """Verify that parallel scanning produces identical results to sequential scanning across multi-volumes."""
+    repo = NovelRepository(tmp_path)
+    repo.initialize_project(title="Parity Novel")
+    raw_dir = tmp_path / "raw_chapters"
+    out_dir = tmp_path / "translated_chapters"
+
+    # Create raw chapters in primary folder
+    for i in range(1, 11):
+        (raw_dir / f"{i:04d}.txt").write_text(f"Primary chapter {i}", encoding="utf-8")
+
+    # Create multi-volume folders
+    for vol in ["Volume_02", "Volume_03"]:
+        vol_dir = tmp_path / vol
+        vol_dir.mkdir()
+        for i in range(1, 11):
+            (vol_dir / f"{i:04d}.txt").write_text(f"{vol} chapter {i}", encoding="utf-8")
+
+    scanner = ChapterScanner(repo)
+
+    # Scan with parallel=True vs parallel=False
+    tasks_par = scanner.scan_project(parallel=True)
+    tasks_seq = scanner.scan_project(parallel=False)
+
+    assert len(tasks_par) == 30
+    assert len(tasks_seq) == 30
+
+    for tp, ts in zip(tasks_par, tasks_seq):
+        assert tp.chapter_num == ts.chapter_num
+        assert tp.source_file == ts.source_file
+        assert tp.output_file == ts.output_file
+        assert tp.is_completed == ts.is_completed
+        assert tp.folder == ts.folder
+
+    # Verify scan_all_projects parallel parity with isolated test root
+    isolated_root = tmp_path / "all_novels"
+    p1 = isolated_root / "Novel_Alpha"
+    p2 = isolated_root / "Novel_Beta"
+    repo1 = NovelRepository(p1)
+    repo1.initialize_project(title="Alpha")
+    (p1 / "raw_chapters" / "0001.txt").write_text("Alpha Ch 1", encoding="utf-8")
+    repo2 = NovelRepository(p2)
+    repo2.initialize_project(title="Beta")
+    (p2 / "raw_chapters" / "0001.txt").write_text("Beta Ch 1", encoding="utf-8")
+
+    all_par = ChapterScanner.scan_all_projects(projects_root=isolated_root, parallel=True)
+    all_seq = ChapterScanner.scan_all_projects(projects_root=isolated_root, parallel=False)
+    assert set(all_par.keys()) == set(all_seq.keys())
+    for proj_name in all_par:
+        assert len(all_par[proj_name]) == len(all_seq[proj_name])
+
+
+
