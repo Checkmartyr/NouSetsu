@@ -1200,6 +1200,105 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
         load_env(repo.root_dir)
         cfg = repo.load_config()
         env_snap = get_env_snapshot()
+        effective_extractor = cfg.get_agent_model("extractor")
+        effective_drafter = cfg.get_agent_model("drafter")
+        effective_critic = cfg.get_agent_model("critic")
+        effective_polisher = cfg.get_agent_model("polisher")
+        effective_chronicler = cfg.get_agent_model("chronicler")
+        effective_primary = cfg.get_model_name()
+        effective_fallback = cfg.get_fallback_model()
+
+        env_default_model = os.environ.get("NOVEL_MODEL") or os.environ.get("DEFAULT_MODEL") or "gemini-3.1-flash-lite"
+        env_fallback_model = os.environ.get("NOVEL_FALLBACK_MODEL") or "gemini-3.5-flash-lite"
+        env_extractor = os.environ.get("NOVEL_EXTRACTOR_MODEL") or env_default_model
+        env_drafter = os.environ.get("NOVEL_DRAFTER_MODEL") or env_default_model
+        env_critic = os.environ.get("NOVEL_CRITIC_MODEL") or "gemma-4-26b-a4b-it"
+        env_polisher = os.environ.get("NOVEL_POLISHER_MODEL") or env_default_model
+        env_chronicler = os.environ.get("NOVEL_CHRONICLER_MODEL") or "gemma-4-26b-a4b-it"
+
+        env_presets = {
+            "model_name": env_default_model,
+            "fallback_model": env_fallback_model,
+            "extractor_model": env_extractor,
+            "drafter_model": env_drafter,
+            "critic_model": env_critic,
+            "polisher_model": env_polisher,
+            "chronicler_model": env_chronicler,
+        }
+
+        available_presets = [
+            {
+                "id": "env_current",
+                "name": "Current .env Defaults",
+                "description": "Models loaded directly from your machine's .env file",
+                "models": env_presets,
+            },
+            {
+                "id": "balanced_standard",
+                "name": "Standard Production (Recommended)",
+                "description": "Flash-Lite for Drafter/Polisher, Gemma 4 for Critic/Chronicler",
+                "models": {
+                    "model_name": "gemini-3.1-flash-lite",
+                    "fallback_model": "gemini-3.5-flash-lite",
+                    "extractor_model": "gemini-3.1-flash-lite",
+                    "drafter_model": "gemini-3.5-flash-lite",
+                    "critic_model": "gemma-4-26b-a4b-it",
+                    "polisher_model": "gemini-3.5-flash-lite",
+                    "chronicler_model": "gemma-4-26b-a4b-it",
+                },
+            },
+            {
+                "id": "flash_lite_speed",
+                "name": "Frugal & Fast (100% Flash-Lite)",
+                "description": "Lowest token cost and highest throughput across all 5 agents",
+                "models": {
+                    "model_name": "gemini-3.1-flash-lite",
+                    "fallback_model": "gemini-3.5-flash-lite",
+                    "extractor_model": "gemini-3.1-flash-lite",
+                    "drafter_model": "gemini-3.1-flash-lite",
+                    "critic_model": "gemini-3.1-flash-lite",
+                    "polisher_model": "gemini-3.1-flash-lite",
+                    "chronicler_model": "gemini-3.1-flash-lite",
+                },
+            },
+            {
+                "id": "pro_high_fidelity",
+                "name": "Premium Quality (Gemini 3 Pro)",
+                "description": "Gemini 3.1 Pro for drafting & polishing, Gemma 4 for auditing",
+                "models": {
+                    "model_name": "gemini-3.1-flash-lite",
+                    "fallback_model": "gemini-3.5-flash-lite",
+                    "extractor_model": "gemini-3.1-flash-lite",
+                    "drafter_model": "gemini-3.1-pro",
+                    "critic_model": "gemma-4-26b-a4b-it",
+                    "polisher_model": "gemini-3.1-pro",
+                    "chronicler_model": "gemma-4-26b-a4b-it",
+                },
+            },
+            {
+                "id": "gemma_reasoning",
+                "name": "Gemma Deep Reasoning Focus",
+                "description": "Gemma 4 31B for line-by-line critique and nuance detection",
+                "models": {
+                    "model_name": "gemini-3.1-flash-lite",
+                    "fallback_model": "gemini-3.5-flash-lite",
+                    "extractor_model": "gemini-3.1-flash-lite",
+                    "drafter_model": "gemini-3.5-flash-lite",
+                    "critic_model": "gemma-4-31b-it",
+                    "polisher_model": "gemini-3.5-flash-lite",
+                    "chronicler_model": "gemma-4-26b-a4b-it",
+                },
+            },
+        ]
+
+        model_catalog = [
+            "gemini-3.1-flash-lite",
+            "gemini-3.5-flash-lite",
+            "gemini-3.1-pro",
+            "gemma-4-26b-a4b-it",
+            "gemma-4-31b-it",
+        ]
+
         return {
             "title": cfg.title,
             "genre": cfg.genre,
@@ -1215,8 +1314,16 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
             "critic_model": cfg.critic_model or "",
             "polisher_model": cfg.polisher_model or "",
             "chronicler_model": cfg.chronicler_model or "",
-            "effective_model_name": cfg.get_model_name(),
-            "effective_fallback_model": cfg.get_fallback_model(),
+            "effective_model_name": effective_primary,
+            "effective_fallback_model": effective_fallback,
+            "effective_extractor_model": effective_extractor,
+            "effective_drafter_model": effective_drafter,
+            "effective_critic_model": effective_critic,
+            "effective_polisher_model": effective_polisher,
+            "effective_chronicler_model": effective_chronicler,
+            "env_presets": env_presets,
+            "available_presets": available_presets,
+            "model_catalog": model_catalog,
             "max_review_loops": cfg.max_review_loops,
             "quality_threshold": cfg.quality_threshold,
             "chunk_threshold_lines": cfg.chunk_threshold_lines,

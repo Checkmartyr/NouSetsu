@@ -7,7 +7,12 @@ import {
   Save,
   Check,
   Folder,
-  Sliders
+  Sliders,
+  Download,
+  RotateCcw,
+  Bot,
+  Sparkles,
+  X,
 } from 'lucide-react';
 import { ProjectSettings } from '../types/dashboard';
 import { fetchSettings, updateSettings } from '../services/dashboardApi';
@@ -44,6 +49,54 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   useEffect(() => {
     loadSettingsData();
   }, [activeProjectPath]);
+
+  const handleLoadEnvPresets = () => {
+    if (!settings) return;
+    const envPres = settings.env_presets || {};
+    setSettings({
+      ...settings,
+      model_name: envPres.model_name || settings.env?.NOVEL_MODEL || 'gemini-3.1-flash-lite',
+      fallback_model: envPres.fallback_model || settings.env?.NOVEL_FALLBACK_MODEL || 'gemini-3.5-flash-lite',
+      extractor_model: envPres.extractor_model || 'gemini-3.1-flash-lite',
+      drafter_model: envPres.drafter_model || 'gemini-3.5-flash-lite',
+      critic_model: envPres.critic_model || 'gemma-4-26b-a4b-it',
+      polisher_model: envPres.polisher_model || 'gemini-3.5-flash-lite',
+      chronicler_model: envPres.chronicler_model || 'gemma-4-26b-a4b-it',
+    });
+    showToast('Loaded model presets from .env into form!');
+  };
+
+  const handleApplyPreset = (presetId: string) => {
+    if (!settings || !presetId) return;
+    const preset = settings.available_presets?.find((p) => p.id === presetId);
+    if (!preset) return;
+    setSettings({
+      ...settings,
+      model_name: preset.models.model_name ?? settings.model_name,
+      fallback_model: preset.models.fallback_model ?? settings.fallback_model,
+      extractor_model: preset.models.extractor_model ?? settings.extractor_model,
+      drafter_model: preset.models.drafter_model ?? settings.drafter_model,
+      critic_model: preset.models.critic_model ?? settings.critic_model,
+      polisher_model: preset.models.polisher_model ?? settings.polisher_model,
+      chronicler_model: preset.models.chronicler_model ?? settings.chronicler_model,
+    });
+    showToast(`Applied preset: ${preset.name}`);
+  };
+
+  const handleClearOverrides = () => {
+    if (!settings) return;
+    setSettings({
+      ...settings,
+      model_name: '',
+      fallback_model: '',
+      extractor_model: '',
+      drafter_model: '',
+      critic_model: '',
+      polisher_model: '',
+      chronicler_model: '',
+    });
+    showToast('Cleared all project model overrides (inheriting 100% from .env)');
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -159,50 +212,477 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </div>
             </div>
 
-            {/* Section 2: Model Cascade Configuration */}
-            <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-4">
-              <div className="flex items-center gap-2 border-b border-slate-800/80 pb-3">
-                <Cpu className="w-4 h-4 text-purple-400" />
-                <h2 className="text-sm font-bold text-slate-200">
-                  Model Precedence & Fallback Cascade
-                </h2>
+            {/* Section 2: Multi-Agent Model Routing & Presets */}
+            <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-4">
+                <div className="flex items-center gap-2">
+                  <Cpu className="w-5 h-5 text-purple-400" />
+                  <div>
+                    <h2 className="text-sm font-bold text-slate-200">
+                      Multi-Agent Model Routing & Fallback Cascade
+                    </h2>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Configure specialized LLMs per pipeline stage or load presets based on your .env configuration.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Presets Toolbar */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* Preset Selector Dropdown */}
+                  <select
+                    onChange={(e) => {
+                      handleApplyPreset(e.target.value);
+                      e.target.value = '';
+                    }}
+                    defaultValue=""
+                    className="bg-slate-950 border border-slate-700/80 hover:border-slate-600 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer"
+                  >
+                    <option value="" disabled>
+                      ⚡ Apply Preset Profile...
+                    </option>
+                    {settings.available_presets?.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* Load .env Presets Quick Button */}
+                  <button
+                    type="button"
+                    onClick={handleLoadEnvPresets}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 hover:border-purple-500/50 rounded-lg text-xs font-medium cursor-pointer transition-all shadow-sm"
+                    title="Load model defaults configured in your machine's .env file into the form"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    Load .env Presets
+                  </button>
+
+                  {/* Clear All Overrides Button */}
+                  <button
+                    type="button"
+                    onClick={handleClearOverrides}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg text-xs font-medium cursor-pointer transition-all"
+                    title="Clear all project overrides so all agents inherit dynamically from .env"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    Clear Overrides
+                  </button>
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 text-xs">
-                <div>
-                  <label className="block text-slate-400 mb-1">
-                    Primary Production Model
-                  </label>
-                  <input
-                    type="text"
-                    value={settings.model_name || ''}
-                    onChange={(e) =>
-                      setSettings({ ...settings, model_name: e.target.value })
-                    }
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
-                    placeholder={settings.env?.NOVEL_MODEL || 'Inherit from .env (e.g. gemini-3.1-flash-lite)'}
-                  />
-                  <span className="text-[10px] text-slate-500 mt-1 block">
-                    Override for this novel, or leave blank to inherit from .env ({settings.env?.NOVEL_MODEL || 'gemini-3.1-flash-lite'}).
+              {/* Datalist for Model Autocomplete Suggestions */}
+              <datalist id="model-suggestions">
+                {(
+                  settings.model_catalog || [
+                    'gemini-3.1-flash-lite',
+                    'gemini-3.5-flash-lite',
+                    'gemini-3.1-pro',
+                    'gemma-4-26b-a4b-it',
+                    'gemma-4-31b-it',
+                  ]
+                ).map((m) => (
+                  <option key={m} value={m} />
+                ))}
+              </datalist>
+
+              {/* Subsection A: Global Primary & Fallback Pipeline Models */}
+              <div>
+                <div className="flex items-center gap-1.5 mb-2.5">
+                  <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300">
+                    Global Pipeline Models
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                  {/* Primary Production Model */}
+                  <div className="bg-slate-950/40 border border-slate-800/80 rounded-lg p-3 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="font-semibold text-slate-300">
+                        Default Production Model
+                      </label>
+                      {settings.model_name && (
+                        <button
+                          type="button"
+                          onClick={() => setSettings({ ...settings, model_name: '' })}
+                          className="text-[10px] text-slate-500 hover:text-slate-300 flex items-center gap-0.5"
+                        >
+                          <X className="w-3 h-3" /> Clear
+                        </button>
+                      )}
+                    </div>
+                    <input
+                      type="text"
+                      list="model-suggestions"
+                      value={settings.model_name || ''}
+                      onChange={(e) =>
+                        setSettings({ ...settings, model_name: e.target.value })
+                      }
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
+                      placeholder={
+                        settings.env_presets?.model_name ||
+                        settings.env?.NOVEL_MODEL ||
+                        'gemini-3.1-flash-lite'
+                      }
+                    />
+                    <div className="flex items-center justify-between text-[10px] text-slate-500">
+                      <span>
+                        Active:{' '}
+                        <strong className="text-slate-400 font-mono">
+                          {settings.model_name ||
+                            settings.effective_model_name ||
+                            settings.env_presets?.model_name ||
+                            'gemini-3.1-flash-lite'}
+                        </strong>
+                      </span>
+                      {settings.model_name ? (
+                        <span className="text-purple-400 font-medium">Project Override</span>
+                      ) : (
+                        <span className="text-emerald-400 font-medium">Inheriting from .env</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 429 / Safety Fallback Model */}
+                  <div className="bg-slate-950/40 border border-slate-800/80 rounded-lg p-3 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="font-semibold text-slate-300">
+                        Global 429 / Safety Fallback
+                      </label>
+                      {settings.fallback_model && (
+                        <button
+                          type="button"
+                          onClick={() => setSettings({ ...settings, fallback_model: '' })}
+                          className="text-[10px] text-slate-500 hover:text-slate-300 flex items-center gap-0.5"
+                        >
+                          <X className="w-3 h-3" /> Clear
+                        </button>
+                      )}
+                    </div>
+                    <input
+                      type="text"
+                      list="model-suggestions"
+                      value={settings.fallback_model || ''}
+                      onChange={(e) =>
+                        setSettings({ ...settings, fallback_model: e.target.value })
+                      }
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
+                      placeholder={
+                        settings.env_presets?.fallback_model ||
+                        settings.env?.NOVEL_FALLBACK_MODEL ||
+                        'gemini-3.5-flash-lite'
+                      }
+                    />
+                    <div className="flex items-center justify-between text-[10px] text-slate-500">
+                      <span>
+                        Active:{' '}
+                        <strong className="text-slate-400 font-mono">
+                          {settings.fallback_model ||
+                            settings.effective_fallback_model ||
+                            settings.env_presets?.fallback_model ||
+                            'gemini-3.5-flash-lite'}
+                        </strong>
+                      </span>
+                      {settings.fallback_model ? (
+                        <span className="text-purple-400 font-medium">Project Override</span>
+                      ) : (
+                        <span className="text-emerald-400 font-medium">Inheriting from .env</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Subsection B: Specialized 5-Agent Routing Matrix */}
+              <div>
+                <div className="flex items-center gap-1.5 mb-2.5">
+                  <Bot className="w-3.5 h-3.5 text-purple-400" />
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300">
+                    Specialized Agent Routing (LangGraph Pipeline)
                   </span>
                 </div>
 
-                <div>
-                  <label className="block text-slate-400 mb-1">
-                    429 / Safety Fallback Model
-                  </label>
-                  <input
-                    type="text"
-                    value={settings.fallback_model || ''}
-                    onChange={(e) =>
-                      setSettings({ ...settings, fallback_model: e.target.value })
-                    }
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
-                    placeholder={settings.env?.NOVEL_FALLBACK_MODEL || 'Inherit from .env (e.g. gemini-3.5-flash-lite)'}
-                  />
-                  <span className="text-[10px] text-slate-500 mt-1 block">
-                    Override fallback for this novel, or leave blank to inherit ({settings.env?.NOVEL_FALLBACK_MODEL || 'gemini-3.5-flash-lite'}).
-                  </span>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                  {/* Stage 1: Entity Extractor */}
+                  <div className="bg-slate-950/40 border border-slate-800/80 rounded-lg p-3 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className="px-1.5 py-0.5 bg-blue-500/10 text-blue-400 rounded text-[10px] font-semibold">
+                          Stage 1
+                        </span>
+                        <label className="font-semibold text-slate-200">
+                          Entity Extractor Agent
+                        </label>
+                      </div>
+                      {settings.extractor_model && (
+                        <button
+                          type="button"
+                          onClick={() => setSettings({ ...settings, extractor_model: '' })}
+                          className="text-[10px] text-slate-500 hover:text-slate-300 flex items-center gap-0.5"
+                        >
+                          <X className="w-3 h-3" /> Clear
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-slate-400">
+                      The Detective: Discovers unknown characters, realms, and terms before drafting.
+                    </p>
+                    <input
+                      type="text"
+                      list="model-suggestions"
+                      value={settings.extractor_model || ''}
+                      onChange={(e) =>
+                        setSettings({ ...settings, extractor_model: e.target.value })
+                      }
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
+                      placeholder={
+                        settings.env_presets?.extractor_model ||
+                        settings.effective_extractor_model ||
+                        'gemini-3.1-flash-lite'
+                      }
+                    />
+                    <div className="flex items-center justify-between text-[10px] text-slate-500">
+                      <span>
+                        Active:{' '}
+                        <strong className="text-slate-400 font-mono">
+                          {settings.extractor_model ||
+                            settings.effective_extractor_model ||
+                            settings.env_presets?.extractor_model ||
+                            'gemini-3.1-flash-lite'}
+                        </strong>
+                      </span>
+                      {settings.extractor_model ? (
+                        <span className="text-purple-400 font-medium">Project Override</span>
+                      ) : (
+                        <span className="text-emerald-400 font-medium">Inheriting from .env</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Stage 2: Context-Aware Drafter */}
+                  <div className="bg-slate-950/40 border border-slate-800/80 rounded-lg p-3 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className="px-1.5 py-0.5 bg-indigo-500/10 text-indigo-400 rounded text-[10px] font-semibold">
+                          Stage 2
+                        </span>
+                        <label className="font-semibold text-slate-200">
+                          Context-Aware Drafter Agent
+                        </label>
+                      </div>
+                      {settings.drafter_model && (
+                        <button
+                          type="button"
+                          onClick={() => setSettings({ ...settings, drafter_model: '' })}
+                          className="text-[10px] text-slate-500 hover:text-slate-300 flex items-center gap-0.5"
+                        >
+                          <X className="w-3 h-3" /> Clear
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-slate-400">
+                      The Wordsmith: Produces first translation draft and resolves zero-anaphora.
+                    </p>
+                    <input
+                      type="text"
+                      list="model-suggestions"
+                      value={settings.drafter_model || ''}
+                      onChange={(e) =>
+                        setSettings({ ...settings, drafter_model: e.target.value })
+                      }
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
+                      placeholder={
+                        settings.env_presets?.drafter_model ||
+                        settings.effective_drafter_model ||
+                        'gemini-3.5-flash-lite'
+                      }
+                    />
+                    <div className="flex items-center justify-between text-[10px] text-slate-500">
+                      <span>
+                        Active:{' '}
+                        <strong className="text-slate-400 font-mono">
+                          {settings.drafter_model ||
+                            settings.effective_drafter_model ||
+                            settings.env_presets?.drafter_model ||
+                            'gemini-3.5-flash-lite'}
+                        </strong>
+                      </span>
+                      {settings.drafter_model ? (
+                        <span className="text-purple-400 font-medium">Project Override</span>
+                      ) : (
+                        <span className="text-emerald-400 font-medium">Inheriting from .env</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Stage 3: Critique Agent */}
+                  <div className="bg-slate-950/40 border border-slate-800/80 rounded-lg p-3 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className="px-1.5 py-0.5 bg-amber-500/10 text-amber-400 rounded text-[10px] font-semibold">
+                          Stage 3
+                        </span>
+                        <label className="font-semibold text-slate-200">
+                          Critique Agent & Quality Auditor
+                        </label>
+                      </div>
+                      {settings.critic_model && (
+                        <button
+                          type="button"
+                          onClick={() => setSettings({ ...settings, critic_model: '' })}
+                          className="text-[10px] text-slate-500 hover:text-slate-300 flex items-center gap-0.5"
+                        >
+                          <X className="w-3 h-3" /> Clear
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-slate-400">
+                      The Inspector: Line-by-line fidelity and style scoring (0–10) against source text.
+                    </p>
+                    <input
+                      type="text"
+                      list="model-suggestions"
+                      value={settings.critic_model || ''}
+                      onChange={(e) =>
+                        setSettings({ ...settings, critic_model: e.target.value })
+                      }
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
+                      placeholder={
+                        settings.env_presets?.critic_model ||
+                        settings.effective_critic_model ||
+                        'gemma-4-26b-a4b-it'
+                      }
+                    />
+                    <div className="flex items-center justify-between text-[10px] text-slate-500">
+                      <span>
+                        Active:{' '}
+                        <strong className="text-slate-400 font-mono">
+                          {settings.critic_model ||
+                            settings.effective_critic_model ||
+                            settings.env_presets?.critic_model ||
+                            'gemma-4-26b-a4b-it'}
+                        </strong>
+                      </span>
+                      {settings.critic_model ? (
+                        <span className="text-purple-400 font-medium">Project Override</span>
+                      ) : (
+                        <span className="text-emerald-400 font-medium">Inheriting from .env</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Stage 4: Polishing Agent */}
+                  <div className="bg-slate-950/40 border border-slate-800/80 rounded-lg p-3 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className="px-1.5 py-0.5 bg-pink-500/10 text-pink-400 rounded text-[10px] font-semibold">
+                          Stage 4
+                        </span>
+                        <label className="font-semibold text-slate-200">
+                          Prose Polishing Agent
+                        </label>
+                      </div>
+                      {settings.polisher_model && (
+                        <button
+                          type="button"
+                          onClick={() => setSettings({ ...settings, polisher_model: '' })}
+                          className="text-[10px] text-slate-500 hover:text-slate-300 flex items-center gap-0.5"
+                        >
+                          <X className="w-3 h-3" /> Clear
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-slate-400">
+                      The Stylist: Rewrites prose into publication-grade English with Diff/Patch optimization.
+                    </p>
+                    <input
+                      type="text"
+                      list="model-suggestions"
+                      value={settings.polisher_model || ''}
+                      onChange={(e) =>
+                        setSettings({ ...settings, polisher_model: e.target.value })
+                      }
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
+                      placeholder={
+                        settings.env_presets?.polisher_model ||
+                        settings.effective_polisher_model ||
+                        'gemini-3.5-flash-lite'
+                      }
+                    />
+                    <div className="flex items-center justify-between text-[10px] text-slate-500">
+                      <span>
+                        Active:{' '}
+                        <strong className="text-slate-400 font-mono">
+                          {settings.polisher_model ||
+                            settings.effective_polisher_model ||
+                            settings.env_presets?.polisher_model ||
+                            'gemini-3.5-flash-lite'}
+                        </strong>
+                      </span>
+                      {settings.polisher_model ? (
+                        <span className="text-purple-400 font-medium">Project Override</span>
+                      ) : (
+                        <span className="text-emerald-400 font-medium">Inheriting from .env</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Stage 5: Chronicler Agent */}
+                  <div className="bg-slate-950/40 border border-slate-800/80 rounded-lg p-3 space-y-1.5 md:col-span-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className="px-1.5 py-0.5 bg-emerald-500/10 text-emerald-400 rounded text-[10px] font-semibold">
+                          Stage 5
+                        </span>
+                        <label className="font-semibold text-slate-200">
+                          Chronicler Lore Memory Agent
+                        </label>
+                      </div>
+                      {settings.chronicler_model && (
+                        <button
+                          type="button"
+                          onClick={() => setSettings({ ...settings, chronicler_model: '' })}
+                          className="text-[10px] text-slate-500 hover:text-slate-300 flex items-center gap-0.5"
+                        >
+                          <X className="w-3 h-3" /> Clear
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-slate-400">
+                      The Memory Keeper: Synthesizes 3-tier narrative memory, arc summaries, and reconciles terms.
+                    </p>
+                    <input
+                      type="text"
+                      list="model-suggestions"
+                      value={settings.chronicler_model || ''}
+                      onChange={(e) =>
+                        setSettings({ ...settings, chronicler_model: e.target.value })
+                      }
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
+                      placeholder={
+                        settings.env_presets?.chronicler_model ||
+                        settings.effective_chronicler_model ||
+                        'gemma-4-26b-a4b-it'
+                      }
+                    />
+                    <div className="flex items-center justify-between text-[10px] text-slate-500">
+                      <span>
+                        Active:{' '}
+                        <strong className="text-slate-400 font-mono">
+                          {settings.chronicler_model ||
+                            settings.effective_chronicler_model ||
+                            settings.env_presets?.chronicler_model ||
+                            'gemma-4-26b-a4b-it'}
+                        </strong>
+                      </span>
+                      {settings.chronicler_model ? (
+                        <span className="text-purple-400 font-medium">Project Override</span>
+                      ) : (
+                        <span className="text-emerald-400 font-medium">Inheriting from .env</span>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

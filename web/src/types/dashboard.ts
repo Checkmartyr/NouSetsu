@@ -91,6 +91,22 @@ export interface BibleData {
   archived_arcs?: BibleArc[];
 }
 
+export interface ModelPreset {
+  id: string;
+  name: string;
+  description: string;
+  models: {
+    model_name?: string;
+    fallback_model?: string;
+    extractor_model?: string;
+    drafter_model?: string;
+    critic_model?: string;
+    polisher_model?: string;
+    chronicler_model?: string;
+    [key: string]: string | undefined;
+  };
+}
+
 export interface ProjectSettings {
   title?: string;
   genre?: string;
@@ -100,6 +116,21 @@ export interface ProjectSettings {
   translated_dir?: string;
   model_name?: string;
   fallback_model?: string;
+  extractor_model?: string;
+  drafter_model?: string;
+  critic_model?: string;
+  polisher_model?: string;
+  chronicler_model?: string;
+  effective_model_name?: string;
+  effective_fallback_model?: string;
+  effective_extractor_model?: string;
+  effective_drafter_model?: string;
+  effective_critic_model?: string;
+  effective_polisher_model?: string;
+  effective_chronicler_model?: string;
+  env_presets?: Record<string, string>;
+  available_presets?: ModelPreset[];
+  model_catalog?: string[];
   max_review_loops?: number;
   quality_threshold?: number;
   chunk_threshold_lines?: number;

@@ -121,9 +121,18 @@ def test_settings_endpoints(client: TestClient, web_test_repo: NovelRepository):
     data = res.json()
     assert "config" in data
     assert "env" in data
+    assert "env_presets" in data
+    assert "available_presets" in data
+    assert "model_catalog" in data
+    assert len(data["available_presets"]) >= 4
     assert data["title"] == "Web Test Novel"
+    assert "effective_extractor_model" in data
+    assert "effective_drafter_model" in data
+    assert "effective_critic_model" in data
+    assert "effective_polisher_model" in data
+    assert "effective_chronicler_model" in data
 
-    # 2. PUT /api/settings with top-level fields (like UI sends)
+    # 2. PUT /api/settings with top-level fields (including multi-agent routing)
     payload = {
         "title": "Renamed Test Novel",
         "genre": "isekai",
@@ -131,6 +140,11 @@ def test_settings_endpoints(client: TestClient, web_test_repo: NovelRepository):
         "target_language": "English",
         "model_name": "test-gemini-pro",
         "fallback_model": "test-gemini-flash",
+        "extractor_model": "test-extractor-model",
+        "drafter_model": "test-drafter-model",
+        "critic_model": "test-critic-model",
+        "polisher_model": "test-polisher-model",
+        "chronicler_model": "test-chronicler-model",
         "max_review_loops": 4,
         "quality_threshold": 9.2,
         "chunk_threshold_lines": 100,
@@ -149,6 +163,11 @@ def test_settings_endpoints(client: TestClient, web_test_repo: NovelRepository):
     assert cfg_disk.target_language == "English"
     assert cfg_disk.model_name == "test-gemini-pro"
     assert cfg_disk.fallback_model == "test-gemini-flash"
+    assert cfg_disk.extractor_model == "test-extractor-model"
+    assert cfg_disk.drafter_model == "test-drafter-model"
+    assert cfg_disk.critic_model == "test-critic-model"
+    assert cfg_disk.polisher_model == "test-polisher-model"
+    assert cfg_disk.chronicler_model == "test-chronicler-model"
     assert cfg_disk.max_review_loops == 4
     assert cfg_disk.quality_threshold == 9.2
     assert cfg_disk.chunk_threshold_lines == 100
@@ -169,9 +188,28 @@ def test_settings_endpoints(client: TestClient, web_test_repo: NovelRepository):
     assert data2["title"] == "Renamed Test Novel"
     assert data2["genre"] == "isekai"
     assert data2["model_name"] == "test-gemini-pro"
+    assert data2["extractor_model"] == "test-extractor-model"
+    assert data2["effective_extractor_model"] == "test-extractor-model"
     assert data2["max_review_loops"] == 4
 
-    # 6. Verify payload with nested config (backward compatibility)
+    # 6. Verify clearing overrides back to .env defaults with empty strings
+    clear_payload = {
+        "extractor_model": "",
+        "drafter_model": "",
+        "critic_model": "",
+        "polisher_model": "",
+        "chronicler_model": "",
+    }
+    res_clear = client.put(f"/api/settings?project_path={proj_param}", json=clear_payload)
+    assert res_clear.status_code == 200
+    cfg_cleared = web_test_repo.load_config()
+    assert cfg_cleared.extractor_model is None
+    assert cfg_cleared.drafter_model is None
+    assert cfg_cleared.critic_model is None
+    assert cfg_cleared.polisher_model is None
+    assert cfg_cleared.chronicler_model is None
+
+    # 7. Verify payload with nested config (backward compatibility)
     res_put2 = client.put(f"/api/settings?project_path={proj_param}", json={"config": {"max_review_loops": 2}})
     assert res_put2.status_code == 200
     assert web_test_repo.load_config().max_review_loops == 2
