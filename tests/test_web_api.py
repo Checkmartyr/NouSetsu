@@ -138,6 +138,7 @@ def test_settings_endpoints(client: TestClient, web_test_repo: NovelRepository):
         "genre": "isekai",
         "source_language": "Japanese",
         "target_language": "English",
+        "project_id": "custom_test_project",
         "model_name": "test-gemini-pro",
         "fallback_model": "test-gemini-flash",
         "extractor_model": "test-extractor-model",
@@ -145,6 +146,23 @@ def test_settings_endpoints(client: TestClient, web_test_repo: NovelRepository):
         "critic_model": "test-critic-model",
         "polisher_model": "test-polisher-model",
         "chronicler_model": "test-chronicler-model",
+        "use_interactions_api": False,
+        "auto_update_bible": False,
+        "max_tpm": 40000,
+        "max_rpm": 80,
+        "cross_folder_summaries": True,
+        "safety_recursive_subdivision": True,
+        "safety_subdivision_min_lines": 12,
+        "safety_subdivision_max_depth": 5,
+        "enable_rag": True,
+        "rag_top_k": 4,
+        "rag_embedding_model": "test-embedding-model",
+        "enable_rag_reranker": True,
+        "rag_reranker_model": "test-reranker-model",
+        "filter_scene_characters": True,
+        "filter_extractor_entities": False,
+        "enable_patch_polishing": True,
+        "enable_post_polish_reconciliation": True,
         "max_review_loops": 4,
         "quality_threshold": 9.2,
         "chunk_threshold_lines": 100,
@@ -161,6 +179,7 @@ def test_settings_endpoints(client: TestClient, web_test_repo: NovelRepository):
     assert cfg_disk.genre == "isekai"
     assert cfg_disk.source_language == "Japanese"
     assert cfg_disk.target_language == "English"
+    assert cfg_disk.project_id == "custom_test_project"
     assert cfg_disk.model_name == "test-gemini-pro"
     assert cfg_disk.fallback_model == "test-gemini-flash"
     assert cfg_disk.extractor_model == "test-extractor-model"
@@ -168,6 +187,23 @@ def test_settings_endpoints(client: TestClient, web_test_repo: NovelRepository):
     assert cfg_disk.critic_model == "test-critic-model"
     assert cfg_disk.polisher_model == "test-polisher-model"
     assert cfg_disk.chronicler_model == "test-chronicler-model"
+    assert cfg_disk.use_interactions_api is False
+    assert cfg_disk.auto_update_bible is False
+    assert cfg_disk.max_tpm == 40000
+    assert cfg_disk.max_rpm == 80
+    assert cfg_disk.cross_folder_summaries is True
+    assert cfg_disk.safety_recursive_subdivision is True
+    assert cfg_disk.safety_subdivision_min_lines == 12
+    assert cfg_disk.safety_subdivision_max_depth == 5
+    assert cfg_disk.enable_rag is True
+    assert cfg_disk.rag_top_k == 4
+    assert cfg_disk.rag_embedding_model == "test-embedding-model"
+    assert cfg_disk.enable_rag_reranker is True
+    assert cfg_disk.rag_reranker_model == "test-reranker-model"
+    assert cfg_disk.filter_scene_characters is True
+    assert cfg_disk.filter_extractor_entities is False
+    assert cfg_disk.enable_patch_polishing is True
+    assert cfg_disk.enable_post_polish_reconciliation is True
     assert cfg_disk.max_review_loops == 4
     assert cfg_disk.quality_threshold == 9.2
     assert cfg_disk.chunk_threshold_lines == 100
@@ -187,6 +223,13 @@ def test_settings_endpoints(client: TestClient, web_test_repo: NovelRepository):
     data2 = res_get2.json()
     assert data2["title"] == "Renamed Test Novel"
     assert data2["genre"] == "isekai"
+    assert data2["project_id"] == "custom_test_project"
+    assert data2["use_interactions_api"] is False
+    assert data2["auto_update_bible"] is False
+    assert data2["max_tpm"] == 40000
+    assert data2["max_rpm"] == 80
+    assert data2["rag_top_k"] == 4
+    assert data2["rag_embedding_model"] == "test-embedding-model"
     assert data2["model_name"] == "test-gemini-pro"
     assert data2["extractor_model"] == "test-extractor-model"
     assert data2["effective_extractor_model"] == "test-extractor-model"

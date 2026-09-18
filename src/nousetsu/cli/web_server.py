@@ -1331,8 +1331,21 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
             "target_chunk_lines": cfg.target_chunk_lines,
             "chunk_overlap_lines": cfg.chunk_overlap_lines,
             "enable_chunking": cfg.enable_chunking,
+            "project_id": cfg.project_id,
+            "created_at": cfg.created_at,
+            "use_interactions_api": cfg.use_interactions_api,
+            "auto_update_bible": cfg.auto_update_bible,
+            "max_tpm": cfg.max_tpm,
+            "max_rpm": cfg.max_rpm,
+            "cross_folder_summaries": cfg.cross_folder_summaries,
+            "safety_recursive_subdivision": cfg.safety_recursive_subdivision,
+            "safety_subdivision_min_lines": cfg.safety_subdivision_min_lines,
+            "safety_subdivision_max_depth": cfg.safety_subdivision_max_depth,
             "enable_rag": cfg.enable_rag,
             "rag_top_k": cfg.rag_top_k,
+            "rag_embedding_model": cfg.rag_embedding_model or "",
+            "enable_rag_reranker": cfg.enable_rag_reranker,
+            "rag_reranker_model": cfg.rag_reranker_model or "",
             "filter_scene_characters": cfg.filter_scene_characters,
             "filter_extractor_entities": cfg.filter_extractor_entities,
             "enable_patch_polishing": cfg.enable_patch_polishing,
@@ -1362,6 +1375,8 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
                 cfg.source_language = str(src["source_language"]).strip()
             if "target_language" in src and src["target_language"] is not None:
                 cfg.target_language = str(src["target_language"]).strip()
+            if "project_id" in src and src["project_id"] is not None:
+                cfg.project_id = str(src["project_id"]).strip()
             if "raw_dir" in src and src["raw_dir"] is not None:
                 cfg.raw_dir = str(src["raw_dir"]).strip()
             if "translated_dir" in src and src["translated_dir"] is not None:
@@ -1379,6 +1394,23 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
                 if m_field in src:
                     val = str(src[m_field]).strip() if src[m_field] is not None else ""
                     setattr(cfg, m_field, val if val else None)
+
+            if "use_interactions_api" in src and src["use_interactions_api"] is not None:
+                cfg.use_interactions_api = bool(src["use_interactions_api"])
+            if "auto_update_bible" in src and src["auto_update_bible"] is not None:
+                cfg.auto_update_bible = bool(src["auto_update_bible"])
+            if "max_tpm" in src and src["max_tpm"] is not None:
+                cfg.max_tpm = int(src["max_tpm"])
+            if "max_rpm" in src and src["max_rpm"] is not None:
+                cfg.max_rpm = int(src["max_rpm"])
+            if "cross_folder_summaries" in src and src["cross_folder_summaries"] is not None:
+                cfg.cross_folder_summaries = bool(src["cross_folder_summaries"])
+            if "safety_recursive_subdivision" in src and src["safety_recursive_subdivision"] is not None:
+                cfg.safety_recursive_subdivision = bool(src["safety_recursive_subdivision"])
+            if "safety_subdivision_min_lines" in src and src["safety_subdivision_min_lines"] is not None:
+                cfg.safety_subdivision_min_lines = int(src["safety_subdivision_min_lines"])
+            if "safety_subdivision_max_depth" in src and src["safety_subdivision_max_depth"] is not None:
+                cfg.safety_subdivision_max_depth = int(src["safety_subdivision_max_depth"])
 
             if "max_review_loops" in src and src["max_review_loops"] is not None:
                 cfg.max_review_loops = int(src["max_review_loops"])
@@ -1398,6 +1430,14 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
                 cfg.enable_rag = bool(src["enable_rag"])
             if "rag_top_k" in src and src["rag_top_k"] is not None:
                 cfg.rag_top_k = int(src["rag_top_k"])
+            if "rag_embedding_model" in src:
+                val = str(src["rag_embedding_model"]).strip() if src["rag_embedding_model"] is not None else ""
+                cfg.rag_embedding_model = val if val else None
+            if "enable_rag_reranker" in src and src["enable_rag_reranker"] is not None:
+                cfg.enable_rag_reranker = bool(src["enable_rag_reranker"])
+            if "rag_reranker_model" in src:
+                val = str(src["rag_reranker_model"]).strip() if src["rag_reranker_model"] is not None else ""
+                cfg.rag_reranker_model = val if val else None
             if "filter_scene_characters" in src and src["filter_scene_characters"] is not None:
                 cfg.filter_scene_characters = bool(src["filter_scene_characters"])
             if "filter_extractor_entities" in src:

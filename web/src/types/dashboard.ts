@@ -108,12 +108,20 @@ export interface ModelPreset {
 }
 
 export interface ProjectSettings {
+  // General & Project Metadata
+  project_id?: string;
   title?: string;
   genre?: string;
   source_language?: string;
   target_language?: string;
+  created_at?: string;
+
+  // Workspace Paths
   raw_dir?: string;
+  output_dir?: string;
   translated_dir?: string;
+
+  // Model Routing & Cascades
   model_name?: string;
   fallback_model?: string;
   extractor_model?: string;
@@ -121,6 +129,9 @@ export interface ProjectSettings {
   critic_model?: string;
   polisher_model?: string;
   chronicler_model?: string;
+  use_interactions_api?: boolean;
+
+  // Presets & Catalogs
   effective_model_name?: string;
   effective_fallback_model?: string;
   effective_extractor_model?: string;
@@ -131,11 +142,42 @@ export interface ProjectSettings {
   env_presets?: Record<string, string>;
   available_presets?: ModelPreset[];
   model_catalog?: string[];
+
+  // Reflection Review & Polishing
   max_review_loops?: number;
   quality_threshold?: number;
+  enable_patch_polishing?: boolean;
+
+  // Semantic Chunking
+  enable_chunking?: boolean;
   chunk_threshold_lines?: number | '';
   chunk_size_lines?: number | '';
+  target_chunk_lines?: number | '';
   chunk_overlap_lines?: number | '';
+
+  // Memory, Bible & Multi-Folder
+  auto_update_bible?: boolean;
+  cross_folder_summaries?: boolean;
+  filter_scene_characters?: boolean;
+  filter_extractor_entities?: boolean | null;
+  enable_post_polish_reconciliation?: boolean;
+
+  // Episodic Lore & Hybrid RAG (Tier 4)
+  enable_rag?: boolean;
+  rag_top_k?: number;
+  rag_embedding_model?: string;
+  enable_rag_reranker?: boolean;
+  rag_reranker_model?: string;
+
+  // AI Safety & Subdivision
+  safety_recursive_subdivision?: boolean;
+  safety_subdivision_min_lines?: number | '';
+  safety_subdivision_max_depth?: number | '';
+
+  // Rate Limiting & Quotas
+  max_tpm?: number | '';
+  max_rpm?: number | '';
+
   [key: string]: any;
 }
 
