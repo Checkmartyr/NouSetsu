@@ -1,12 +1,12 @@
 ---
 name: doc-updater
 description: >-
-  Systematically audits, synchronizes, and updates project documentation (README.md, AGENTS.md, docs/ guides, API references, CLI manuals, architecture diagrams, CHANGELOG.md) to match the latest codebase changes, git diffs, APIs, and CLI commands. Triggers when the user asks to "update document to latest version of code", "sync docs", "refresh documentation", "update README", or "align docs with code".
+  Systematically audits, synchronizes, and updates project documentation (README.md, AGENTS.md, docs/ guides, API references, CLI manuals, architecture diagrams, CHANGELOG.md) to match the latest codebase changes by comparing the current branch against main. Triggers when the user asks to "update document to latest version of code", "sync docs", "refresh documentation", "update README", or "align docs with code".
 ---
 
 # Documentation Updater Skill (`doc-updater`)
 
-This skill provides an automated, rigorous, multi-phase procedure to inspect recent codebase commits, diffs, CLI subcommands, model configurations, and architecture diagrams, and synchronize all project documentation so that it accurately reflects the latest version of the code.
+This skill provides an automated, rigorous, multi-phase procedure to compare the current feature branch against `main`, identify all code changes (new files, modified modules, deleted components), and synchronize all project documentation so that it accurately reflects the latest version of the code.
 
 ---
 
@@ -14,24 +14,28 @@ This skill provides an automated, rigorous, multi-phase procedure to inspect rec
 
 Activate this skill when:
 - The user requests: *"update document to latest version of code"*, *"sync docs"*, *"update documentation"*, *"align docs with code"*, or *"refresh README and AGENTS.md"*.
-- Major features, new pipeline agents, procedural graphs, or new CLI subcommands/options have been merged into the codebase.
+- Major features, new pipeline agents, procedural graphs, or new CLI subcommands/options have been added on the current branch.
+- A feature branch is ready for merge/PR into `main`.
 - A release or version tag is being prepared.
 
 ---
 
-## 2. Pre-Flight Drift Audit
+## 2. Pre-Flight Branch Diff Audit
 
-Before modifying any documentation files, run the included drift detection helper:
+Before modifying any documentation files, run the branch-aware drift detection helper:
 
 ```powershell
 .\.venv\Scripts\python.exe .agents/skills/doc-updater/scripts/check_doc_drift.py
 ```
 
-This script automatically scans:
-1. **Registered CLI Subcommands & Options**: Detects any CLI commands in `src/nousetsu/cli/app.py` missing from documentation.
-2. **Current Test Count**: Runs the pytest test collector to get exact test and module counts (e.g. `347 tests across 52 modules`).
-3. **Recent Commits**: Highlights recent changes from `git log` that may introduce undocumented features.
-4. **Local Link Validity**: Identifies broken `file://` and relative markdown links across all documentation files.
+This script automatically:
+1. **Detects the current branch** and the merge base against `main`.
+2. **Generates a full branch diff summary** (`git diff main...HEAD --stat`) showing all files added, modified, or deleted since diverging from `main`.
+3. **Categorizes changed files** by subsystem (agents, cli, prompts, storage, web, tests, etc.) and maps them to affected documentation targets.
+4. **Scans CLI subcommands & options** registered in the codebase vs. documented in README/AGENTS/docs.
+5. **Counts total tests** via pytest collector for accurate test count references.
+6. **Validates internal file:// links** across all documentation files.
+7. **Produces an actionable change manifest** listing exactly which documentation files need updating and why.
 
 ---
 
@@ -39,24 +43,32 @@ This script automatically scans:
 
 Follow this 5-phase procedure systematically:
 
-### Phase 1: Codebase Drift & Git Diff Analysis
-1. Inspect recent git commits and diffs since the last documented commit:
+### Phase 1: Branch Diff Analysis & Change Categorization
+1. Identify the merge base and generate the full diff:
    ```powershell
-   git log -n 10 --oneline
-   git diff --stat HEAD~5 HEAD
+   git merge-base main HEAD
+   git diff main...HEAD --stat
+   git diff main...HEAD --name-status
+   git log main..HEAD --oneline
    ```
-2. Identify:
-   - New CLI subcommands, arguments, or flags in `src/nousetsu/cli/app.py`.
-   - Pipeline changes in `src/nousetsu/graph/workflow.py` or agent classes in `src/nousetsu/agents/`.
-   - New subsystems, engines, or algorithms (e.g. Procedural Graphs, Diff/Patch Polishing, RAG Cross-Encoder).
-   - New environment variables in `.env.example` or configuration models.
+2. Review the **Change Manifest** from the drift script output, which categorizes changes into:
+   - **Pipeline / Agents**: Modified agent classes, new skills, prompt changes.
+   - **CLI / Configuration**: New subcommands, options, environment variables.
+   - **Storage / Models**: Schema changes, new Pydantic models, migration utilities.
+   - **Web / TUI**: Dashboard redesigns, new components, API endpoint changes.
+   - **Utils / Engines**: New algorithms, rate limiter changes, diff patcher updates.
+   - **Tests**: New test files, test count growth.
+3. For each changed source file, **read the actual diff** to understand the semantic change:
+   ```powershell
+   git diff main...HEAD -- path/to/changed/file.py
+   ```
 
 ### Phase 2: Documentation Target Mapping
-Consult [references/doc_inventory_matrix.md](./references/doc_inventory_matrix.md) to determine which documentation files correspond to the modified code:
+Consult [references/doc_inventory_matrix.md](./references/doc_inventory_matrix.md) and the **Change Manifest** to determine which documentation files must be updated:
 
 - **Root Docs**:
   - `README.md`: User quickstart, CLI command overview, feature matrix, installation, test counts.
-  - `AGENTS.md`: Operational handbook, layered architecture, Mermaid diagrams, agent roles, memory tiers, model cascade.
+  - `AGENTS.md`: Operational handbook, layered architecture, Mermaid diagrams, agent roles, memory tiers, model cascade, performance features.
   - `CHANGELOG.md`: Structured release log under `[Unreleased]` (Keep a Changelog format).
 - **Subsystem Deep Dives (`doc/`)**:
   - `doc/architecture.md`: System components, rate limiter, safety bisection, fallback chain.
@@ -67,13 +79,16 @@ Consult [references/doc_inventory_matrix.md](./references/doc_inventory_matrix.m
   - `doc/hybrid_rag.md`: SQLite FTS5, vector search, cross-encoder reranking.
 
 ### Phase 3: Core Architecture & Diagram Synchronization
-1. **Mermaid Diagrams**: Update state and sequence diagrams to reflect new pipeline nodes, edges, and transitions:
+1. **Read each changed source file** to understand the actual implementation:
+   - For new modules: Read the full file to understand its purpose and API.
+   - For modified modules: Read the diff to understand what changed.
+2. **Mermaid Diagrams**: Update state and sequence diagrams to reflect new pipeline nodes, edges, and transitions:
    - Ensure all node labels with brackets or parentheses are double-quoted (`["..."]`).
    - Adhere to supported Mermaid diagram types (`graph TD`, `graph LR`, `stateDiagram-v2`, `sequenceDiagram`).
-2. **Five Pipeline Agents Table**:
+3. **Five Pipeline Agents Table**:
    - Verify agent roles, classes, production models, fallback models, and source file links match code.
-3. **Engine Highlights**:
-   - Add concise architectural descriptions for newly introduced algorithms or subsystems.
+4. **Engine Highlights**:
+   - For each new algorithm, engine, or subsystem added on the branch, add a concise numbered entry under Section 7 of `AGENTS.md`.
 
 ### Phase 4: CLI & Configuration Reference Synchronization
 1. **CLI Commands & Flags**:
@@ -82,14 +97,15 @@ Consult [references/doc_inventory_matrix.md](./references/doc_inventory_matrix.m
 2. **Environment Cascade**:
    - Verify `.env.example` lists all active variables, and `AGENTS.md` / `README.md` describe the 4-tier precedence cascade accurately.
 3. **Test Counts**:
-   - Update test suite metrics (e.g. "347 tests across 52 modules") across `README.md` and `AGENTS.md`.
+   - Update test suite metrics (e.g. "398 tests across 54 modules") across `README.md` and `AGENTS.md` using the exact values from the drift script.
 
 ### Phase 5: Changelog & Release Notes
 1. Add an entry under `[Unreleased]` in `CHANGELOG.md`:
-   - `### Added`: New CLI commands, agent skills, procedural graphs, offline evolution.
+   - `### Added`: New CLI commands, agent skills, engines, subsystems added on this branch.
    - `### Changed`: Model default updates, prompt enhancements, test speedups.
    - `### Fixed`: Bug fixes, schema validations, encoding guards.
-2. Adhere to [references/documentation_standards.md](./references/documentation_standards.md) for formatting rules, alert callouts, and clickable `file://` links.
+2. Use the **branch commit log** (`git log main..HEAD --oneline`) as the source of truth for changelog entries.
+3. Adhere to [references/documentation_standards.md](./references/documentation_standards.md) for formatting rules, alert callouts, and clickable `file://` links.
 
 ---
 
