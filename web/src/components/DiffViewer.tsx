@@ -44,18 +44,18 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({ currentTrace, allTraces 
   });
 
   return (
-    <div className="flex flex-col h-full space-y-4">
+    <div className="flex flex-col h-full space-y-3 font-sans">
       {/* Diff Controls Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800">
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-[#3f3a36]">
         <div className="flex items-center gap-3">
           {/* Source selection */}
           <div className="flex items-center gap-1.5">
-            <span className="text-xs text-slate-400 font-medium">From:</span>
+            <span className="text-xs text-[#857d75] font-mono">From:</span>
             <select
               value={sourceTraceId}
               onChange={(e) => setSourceTraceId(e.target.value)}
               aria-label="Select source trace for diff"
-              className="bg-slate-950 border border-slate-800 rounded-md px-2.5 py-1 text-xs text-slate-200"
+              className="bg-[#24201d] border border-[#3f3a36] rounded-[3px] px-2 py-1 text-xs text-[#f7f5f0] focus:outline-none focus:border-[#b0a89f] font-mono"
             >
               {allTraces.map((t) => (
                 <option key={t.trace_id} value={t.trace_id}>
@@ -65,16 +65,16 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({ currentTrace, allTraces 
             </select>
           </div>
 
-          <ArrowRight className="w-3.5 h-3.5 text-slate-500" />
+          <ArrowRight className="w-3.5 h-3.5 text-[#857d75]" />
 
           {/* Target selection */}
           <div className="flex items-center gap-1.5">
-            <span className="text-xs text-slate-400 font-medium">To:</span>
+            <span className="text-xs text-[#857d75] font-mono">To:</span>
             <select
               value={targetTraceId}
               onChange={(e) => setTargetTraceId(e.target.value)}
               aria-label="Select target trace for diff"
-              className="bg-slate-950 border border-slate-800 rounded-md px-2.5 py-1 text-xs text-slate-200"
+              className="bg-[#24201d] border border-[#3f3a36] rounded-[3px] px-2 py-1 text-xs text-[#f7f5f0] focus:outline-none focus:border-[#b0a89f] font-mono"
             >
               {allTraces.map((t) => (
                 <option key={t.trace_id} value={t.trace_id}>
@@ -86,26 +86,26 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({ currentTrace, allTraces 
         </div>
 
         {/* Change stats */}
-        <div className="flex items-center gap-3 text-xs">
-          <span className="text-emerald-400 font-semibold bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded">
+        <div className="flex items-center gap-2.5 text-xs font-mono">
+          <span className="text-[#7fa678] font-semibold bg-[#272f26] border border-[#7fa678]/40 px-2 py-0.5 rounded-[2px]">
             +{additions} words
           </span>
-          <span className="text-red-400 font-semibold bg-red-500/10 border border-red-500/20 px-2 py-0.5 rounded">
+          <span className="text-[#cf6659] font-semibold bg-[#382522] border border-[#cf6659]/40 px-2 py-0.5 rounded-[2px]">
             -{deletions} words
           </span>
 
           {/* View mode toggle */}
-          <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-lg border border-slate-800">
+          <div className="flex items-center gap-0.5 bg-[#24201d] p-0.5 rounded-[3px] border border-[#3f3a36]">
             <button
               onClick={() => setDiffMode('inline')}
-              className={`p-1 rounded ${diffMode === 'inline' ? 'bg-indigo-600 text-white' : 'text-slate-400'}`}
+              className={`p-1 rounded-[2px] transition-colors ${diffMode === 'inline' ? 'bg-[#f7f5f0] text-[#2b2622]' : 'text-[#857d75] hover:text-[#f7f5f0]'}`}
               title="Inline Unified Diff"
             >
               <AlignJustify className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={() => setDiffMode('split')}
-              className={`p-1 rounded ${diffMode === 'split' ? 'bg-indigo-600 text-white' : 'text-slate-400'}`}
+              className={`p-1 rounded-[2px] transition-colors ${diffMode === 'split' ? 'bg-[#f7f5f0] text-[#2b2622]' : 'text-[#857d75] hover:text-[#f7f5f0]'}`}
               title="Side-by-Side Diff"
             >
               <Columns className="w-3.5 h-3.5" />
@@ -115,7 +115,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({ currentTrace, allTraces 
           {/* Granularity */}
           <button
             onClick={() => setGranularity(granularity === 'words' ? 'lines' : 'words')}
-            className="text-[11px] px-2 py-1 bg-slate-800 hover:bg-slate-750 text-slate-300 rounded border border-slate-700"
+            className="text-[11px] px-2 py-1 bg-[#383330] hover:bg-[#3f3a36] text-[#f7f5f0] rounded-[3px] border border-[#3f3a36] transition-colors font-mono"
           >
             By {granularity}
           </button>
@@ -125,13 +125,13 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({ currentTrace, allTraces 
       {/* Diff Rendering Body */}
       <div className="flex-1 overflow-y-auto">
         {diffMode === 'inline' ? (
-          <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-6 font-serif-prose text-slate-200 text-base leading-loose whitespace-pre-wrap">
+          <div className="bg-[#24201d] border border-[#3f3a36] rounded-[4px] p-5 font-serif text-[#f7f5f0] text-base leading-loose whitespace-pre-wrap">
             {diffParts.map((part, index) => {
               if (part.added) {
                 return (
                   <span
                     key={index}
-                    className="bg-emerald-500/20 text-emerald-300 border-b-2 border-emerald-500 px-1 py-0.5 rounded font-medium"
+                    className="bg-[#272f26] text-[#a5c49f] border-b border-[#7fa678] px-0.5 rounded-[2px] font-medium"
                   >
                     {part.value}
                   </span>
@@ -141,7 +141,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({ currentTrace, allTraces 
                 return (
                   <span
                     key={index}
-                    className="bg-red-500/20 text-red-400 line-through opacity-70 px-1 py-0.5 rounded"
+                    className="bg-[#382522] text-[#e67b73] line-through opacity-75 px-0.5 rounded-[2px]"
                   >
                     {part.value}
                   </span>
@@ -152,23 +152,23 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({ currentTrace, allTraces 
           </div>
         ) : (
           /* Side by side view */
-          <div className="grid lg:grid-cols-2 gap-4 h-full">
+          <div className="grid lg:grid-cols-2 gap-3 h-full">
             {/* Left side: Source */}
-            <div className="flex flex-col bg-slate-900/70 border border-slate-800 rounded-xl overflow-hidden">
-              <div className="px-4 py-2 bg-slate-850 border-b border-slate-800 text-xs font-semibold text-slate-300">
+            <div className="flex flex-col bg-[#24201d] border border-[#3f3a36] rounded-[4px] overflow-hidden">
+              <div className="px-3 py-2 bg-[#2b2622] border-b border-[#3f3a36] text-xs font-semibold text-[#f7f5f0] font-mono">
                 Original Draft: {sourceTrace?.agent} ({sourceTrace?.stage})
               </div>
-              <div className="p-4 overflow-y-auto font-serif-prose text-slate-300 text-sm leading-relaxed whitespace-pre-wrap">
+              <div className="p-4 overflow-y-auto font-serif text-[#b0a89f] text-sm leading-relaxed whitespace-pre-wrap">
                 {textA || '<Empty>'}
               </div>
             </div>
 
             {/* Right side: Target */}
-            <div className="flex flex-col bg-slate-900/70 border border-slate-800 rounded-xl overflow-hidden">
-              <div className="px-4 py-2 bg-slate-850 border-b border-slate-800 text-xs font-semibold text-slate-300">
+            <div className="flex flex-col bg-[#24201d] border border-[#3f3a36] rounded-[4px] overflow-hidden">
+              <div className="px-3 py-2 bg-[#2b2622] border-b border-[#3f3a36] text-xs font-semibold text-[#f7f5f0] font-mono">
                 Polished Output: {targetTrace?.agent} ({targetTrace?.stage})
               </div>
-              <div className="p-4 overflow-y-auto font-serif-prose text-slate-300 text-sm leading-relaxed whitespace-pre-wrap">
+              <div className="p-4 overflow-y-auto font-serif text-[#f7f5f0] text-sm leading-relaxed whitespace-pre-wrap">
                 {textB || '<Empty>'}
               </div>
             </div>

@@ -270,3 +270,37 @@ def test_cmd_web_panel_renders(sample_web_project):
     )
     console.print(panel)
 
+
+def test_chapter_metadata_duration_and_token_properties():
+    """Verify ChapterMetadata provides direct duration_seconds and total_token_usage properties."""
+    from nousetsu.models.metadata import ChapterMetadata, TranslationStats
+
+    meta = ChapterMetadata(
+        chapter_id="ch_001",
+        chapter_num=1,
+        source_file="0001.txt",
+        source_sha256="abc",
+        output_file="0001.md",
+        stats=TranslationStats(
+            duration_seconds=12.34,
+            prompt_tokens=150,
+            completion_tokens=80,
+            thought_tokens=20,
+            cached_tokens=50,
+            total_tokens=250,
+        )
+    )
+
+    # Both properties must be accessible directly without AttributeError
+    assert meta.duration_seconds == 12.34
+    assert meta.total_token_usage.input_tokens == 150
+    assert meta.total_token_usage.output_tokens == 80
+    assert meta.total_token_usage.thought_tokens == 20
+    assert meta.total_token_usage.cached_tokens == 50
+    assert meta.total_token_usage.total_tokens == 250
+
+    dumped = meta.total_token_usage.model_dump()
+    assert dumped["input_tokens"] == 150
+    assert dumped["total_tokens"] == 250
+
+

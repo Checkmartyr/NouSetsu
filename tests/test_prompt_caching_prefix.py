@@ -69,11 +69,13 @@ def test_polishing_and_patch_prompt_prefix_alignment():
             source_lang="Japanese",
             critique_notes="Smooth rhythm",
             glossary="- Katana -> Katana",
+            characters="[Characters]",
             skills_section="[Skill: Prose]",
             procedural_guidance="[PG Step 4]"
         )
         assert formatted.index("elite novelist") < formatted.index("Active Glossary:")
-        assert formatted.index("Active Glossary:") < formatted.index("Critique Notes:")
+        assert formatted.index("Active Glossary:") < formatted.index("Active Characters:")
+        assert formatted.index("Active Characters:") < formatted.index("Critique Notes:")
 
 
 def test_chronicler_prompt_prefix_alignment():

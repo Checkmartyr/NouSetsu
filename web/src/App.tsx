@@ -393,7 +393,7 @@ export const App: React.FC = () => {
   }, [activeWorkspace]);
 
   return (
-    <div className="flex flex-col h-screen bg-slate-950 text-slate-100 overflow-hidden font-sans relative">
+    <div className="flex flex-col h-screen bg-[#2b2622] text-[#f7f5f0] overflow-hidden font-sans relative">
       {/* Top Navigation */}
       <Navbar
         activeTab={activeWorkspace}
@@ -417,7 +417,7 @@ export const App: React.FC = () => {
 
       {/* Sync Toast */}
       {syncToast && (
-        <div className="fixed top-20 right-6 z-50 bg-indigo-900/90 text-indigo-100 border border-indigo-500/50 backdrop-blur px-4 py-2 rounded-xl text-xs font-medium shadow-xl flex items-center gap-2 animate-fade-in pointer-events-none">
+        <div className="fixed top-16 right-6 z-50 bg-[#383330] text-[#f7f5f0] border border-[#3f3a36] px-3.5 py-2 rounded-[4px] text-xs font-medium shadow-md flex items-center gap-2 animate-fade-in pointer-events-none">
           <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
           <span>{syncToast}</span>
         </div>
@@ -425,14 +425,14 @@ export const App: React.FC = () => {
 
       {/* Error Banner */}
       {errorMessage && (
-        <div className="bg-red-500/20 border-b border-red-500/30 px-4 py-2 text-red-300 text-xs flex items-center justify-between shrink-0">
+        <div className="bg-rose-950/40 border-b border-rose-900/50 px-4 py-2 text-rose-200 text-xs flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
-            <AlertCircle className="w-4 h-4" />
+            <AlertCircle className="w-4 h-4 text-rose-400" />
             <span>{errorMessage}</span>
           </div>
           <button
             onClick={() => setErrorMessage(null)}
-            className="text-slate-400 hover:text-white"
+            className="text-[#aea69c] hover:text-[#f7f5f0] cursor-pointer"
           >
             ✕
           </button>
@@ -497,11 +497,11 @@ export const App: React.FC = () => {
                   onTabChange={setActiveDetailTab}
                 />
               ) : (
-                <div className="flex-1 flex flex-col items-center justify-center p-8 text-slate-500 text-sm space-y-3">
+                <div className="flex-1 flex flex-col items-center justify-center p-8 text-[#aea69c] text-xs space-y-3">
                   <p>No traces recorded for this chapter yet.</p>
                   <button
                     onClick={handleLoadDemo}
-                    className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                    className="btn-primary flex items-center gap-1.5"
                   >
                     <Sparkles className="w-3.5 h-3.5" />
                     <span>Load Demo Traces</span>
@@ -515,13 +515,13 @@ export const App: React.FC = () => {
 
       {/* Drag & Drop Overlay */}
       {isDraggingOver && (
-        <div className="fixed inset-0 z-50 bg-indigo-950/80 backdrop-blur-sm flex flex-col items-center justify-center pointer-events-none border-4 border-dashed border-indigo-500 m-4 rounded-2xl">
-          <UploadCloud className="w-16 h-16 text-indigo-400 animate-bounce mb-4" />
-          <h3 className="text-xl font-bold text-white mb-1">
+        <div className="fixed inset-0 z-50 bg-[#2b2622]/90 backdrop-blur-sm flex flex-col items-center justify-center pointer-events-none border-2 border-dashed border-[#c9c0ad] m-4 rounded-[6px]">
+          <UploadCloud className="w-12 h-12 text-[#f7f5f0] animate-bounce mb-3" />
+          <h3 className="text-base font-normal tracking-tight text-[#f7f5f0] mb-1">
             Drop Trace Files Here (=^･ω･^=)
           </h3>
-          <p className="text-sm text-indigo-300">
-            Drop chapter_XXXX.json or chapter_XXXX.jsonl to inspect traces!
+          <p className="text-xs text-[#aea69c]">
+            Drop chapter_XXXX.json or chapter_XXXX.jsonl to inspect traces
           </p>
         </div>
       )}

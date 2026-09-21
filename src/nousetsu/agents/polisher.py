@@ -7,11 +7,13 @@ from typing import Any, Callable, List, Optional
 from langchain_core.messages import HumanMessage, SystemMessage
 from nousetsu.agents.llm import extract_text_from_message, extract_usage_from_message, get_llm
 from nousetsu.graph.procedural import ProceduralGraph, get_default_polisher_graph
-from nousetsu.models.bible import GlossaryItem, NovelBible
+from nousetsu.models.bible import CharacterProfile, GlossaryItem, NovelBible
 from nousetsu.models.metadata import SubdividedBlock, TokenUsage
 from nousetsu.models.trace import PipelineStage
+from nousetsu.prompts.character_formatter import format_character_roster
 from nousetsu.prompts.templates import PATCH_POLISHING_SYSTEM_PROMPT, POLISHING_SYSTEM_PROMPT
 from nousetsu.skills.registry import SkillRegistry
+from nousetsu.utils.character_filter import filter_characters_for_scene
 from nousetsu.utils.diff_patcher import apply_search_replace_patches, is_patch_format
 from nousetsu.utils.glossary_filter import filter_glossary_for_scene
 from nousetsu.utils.language import detect_language
@@ -168,6 +170,7 @@ class PolishingAgent:
         iteration: int = 1,
         procedural_graph: Optional[ProceduralGraph] = None,
         prompt_tracker: Optional[Any] = None,
+        active_characters: Optional[List[CharacterProfile]] = None,
         **kwargs: Any
     ) -> str:
         eval_glossary = filter_glossary_for_scene(
@@ -178,6 +181,21 @@ class PolishingAgent:
             max_fallback=15
         )
         gloss_str = "\n".join([f"- {g.source} -> {g.target}" for g in eval_glossary]) or "None"
+
+        resolved_chars = active_characters if active_characters is not None else (bible.characters if bible else [])
+        eval_characters = filter_characters_for_scene(
+            characters=resolved_chars,
+            source_text=source_text or "",
+            target_text=draft_text,
+            fallback_on_empty=True,
+            max_characters=15
+        )
+        chars_str = format_character_roster(
+            characters=eval_characters,
+            context_characters=eval_characters,
+            agent_role="polisher",
+            empty_fallback="None",
+        )
 
         resolved_genre = genre or getattr(bible, "genre", "general")
         skills_text = SkillRegistry.get_instance().build_prompt_section(
@@ -198,6 +216,7 @@ class PolishingAgent:
             source_lang=bible.source_language,
             critique_notes=critique_notes or "Preserve meaning and enhance natural rhythm.",
             glossary=gloss_str,
+            characters=chars_str,
             skills_section=skills_section,
             procedural_guidance=procedural_section
         )
@@ -469,10 +488,13 @@ class PolishingAgent:
         stop_event: Optional[Any] = None,
         procedural_graph: Optional[ProceduralGraph] = None,
         subdivided_blocks: Optional[List[SubdividedBlock]] = None,
+        active_characters: Optional[List[CharacterProfile]] = None,
         **kwargs: Any
     ) -> str:
         self.last_subdivided_blocks = []
         polish_kwargs = dict(kwargs)
+        if active_characters is not None:
+            polish_kwargs["active_characters"] = active_characters
         iteration_val = polish_kwargs.pop("iteration", 1)
 
         # 1. Check for Stateful Subdivision Pattern from Drafter

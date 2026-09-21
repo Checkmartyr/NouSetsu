@@ -19,6 +19,7 @@ def test_polishing_prompt_target_language_directive():
         source_lang="English",
         critique_notes="Make it smoother",
         glossary="None",
+        characters="None",
         skills_section="",
         procedural_guidance=""
     )

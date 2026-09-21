@@ -284,98 +284,98 @@ export const BibleView: React.FC<BibleViewProps> = ({
   });
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-slate-950 text-slate-100">
+    <div className="flex flex-col h-full overflow-hidden bg-[#2b2622] text-[#f7f5f0]">
       {/* Toast Notification */}
       {toast && (
-        <div className="fixed top-20 right-8 z-50 px-4 py-2 bg-emerald-600 text-white rounded-lg shadow-xl text-sm font-medium flex items-center gap-2">
-          <Check className="w-4 h-4" />
-          {toast}
+        <div className="fixed top-16 right-8 z-50 px-3.5 py-1.5 bg-[#383330] text-[#f7f5f0] border border-[#3f3a36] rounded-[4px] shadow-lg text-xs font-medium flex items-center gap-2">
+          <Check className="w-4 h-4 text-emerald-400" />
+          <span>{toast}</span>
         </div>
       )}
 
       {/* Header & Subnav */}
-      <div className="bg-slate-900/80 border-b border-slate-800 px-6 py-4 flex flex-wrap items-center justify-between gap-4">
+      <div className="bg-[#2b2622] border-b border-[#3f3a36] px-6 py-3 flex flex-wrap items-center justify-between gap-4 shrink-0">
         <div>
           <div className="flex items-center gap-2">
-            <BookMarked className="w-5 h-5 text-indigo-400" />
-            <h1 className="text-xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
+            <BookMarked className="w-4 h-4 text-[#dad2c1]" />
+            <h1 className="text-base font-medium tracking-[-0.3px] text-[#f7f5f0]">
               Novel Bible: {bible?.title || activeProjectTitle || 'Series Memory'}
             </h1>
             {bible?.genre && (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-medium">
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded-[2px] bg-[#383330] text-[#dad2c1] border border-[#3f3a36]">
                 {bible.genre}
               </span>
             )}
           </div>
-          <p className="text-xs text-slate-400 mt-1">
-            Canonical terminology, character profiles, voice registers & narrative lore.
+          <p className="text-xs text-[#aea69c] mt-0.5">
+            Canonical terminology, character profiles, voice registers & narrative lore
           </p>
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
+        <div className="flex items-center gap-0.5 bg-[#2b2622] p-0.5 rounded-[4px] border border-[#3f3a36]">
           <button
             onClick={() => setActiveTab('characters')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-[3px] text-xs transition-colors cursor-pointer ${
               activeTab === 'characters'
-                ? 'bg-indigo-600 text-white shadow'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'bg-[#383330] text-[#f7f5f0] border border-[#544d47] font-medium'
+                : 'text-[#c9c0ad] hover:text-[#f7f5f0] hover:bg-[#383330]/50'
             }`}
           >
             <Users className="w-3.5 h-3.5" />
-            Characters ({bible?.characters?.length ?? 0})
+            <span>Characters ({bible?.characters?.length ?? 0})</span>
           </button>
           <button
             onClick={() => setActiveTab('visualizer')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-[3px] text-xs transition-colors cursor-pointer ${
               activeTab === 'visualizer'
-                ? 'bg-indigo-600 text-white shadow'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'bg-[#383330] text-[#f7f5f0] border border-[#544d47] font-medium'
+                : 'text-[#c9c0ad] hover:text-[#f7f5f0] hover:bg-[#383330]/50'
             }`}
           >
-            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-            Visualizer
+            <Sparkles className="w-3.5 h-3.5 text-[#dad2c1]" />
+            <span>Visualizer</span>
           </button>
           <button
             onClick={() => setActiveTab('glossary')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-[3px] text-xs transition-colors cursor-pointer ${
               activeTab === 'glossary'
-                ? 'bg-indigo-600 text-white shadow'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'bg-[#383330] text-[#f7f5f0] border border-[#544d47] font-medium'
+                : 'text-[#c9c0ad] hover:text-[#f7f5f0] hover:bg-[#383330]/50'
             }`}
           >
             <BookOpen className="w-3.5 h-3.5" />
-            Glossary ({bible?.glossary?.length ?? 0})
+            <span>Glossary ({bible?.glossary?.length ?? 0})</span>
           </button>
           <button
             onClick={() => setActiveTab('memory')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-[3px] text-xs transition-colors cursor-pointer ${
               activeTab === 'memory'
-                ? 'bg-indigo-600 text-white shadow'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'bg-[#383330] text-[#f7f5f0] border border-[#544d47] font-medium'
+                : 'text-[#c9c0ad] hover:text-[#f7f5f0] hover:bg-[#383330]/50'
             }`}
           >
             <Layers className="w-3.5 h-3.5" />
-            Narrative Memory
+            <span>Narrative Memory</span>
           </button>
           <button
             onClick={() => setActiveTab('raw')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-[3px] text-xs transition-colors cursor-pointer ${
               activeTab === 'raw'
-                ? 'bg-indigo-600 text-white shadow'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'bg-[#383330] text-[#f7f5f0] border border-[#544d47] font-medium'
+                : 'text-[#c9c0ad] hover:text-[#f7f5f0] hover:bg-[#383330]/50'
             }`}
           >
             <Code className="w-3.5 h-3.5" />
-            Raw YAML
+            <span>Raw YAML</span>
           </button>
         </div>
       </div>
 
       {/* Main Tab Content */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto p-6 bg-[#2b2622]">
         {loading ? (
-          <div className="text-center py-20 text-slate-500">Loading Bible data...</div>
+          <div className="text-center py-20 text-[#aea69c] text-xs font-mono">Loading Bible data...</div>
         ) : activeTab === 'visualizer' ? (
           /* CHARACTER VISUALIZER VIEW */
           <div className="h-full -m-6 flex flex-col overflow-hidden">
@@ -392,22 +392,22 @@ export const BibleView: React.FC<BibleViewProps> = ({
           <div className="space-y-4">
             <div className="flex items-center justify-between gap-4">
               <div className="relative flex-1 max-w-md">
-                <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-500" />
+                <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-[#aea69c]" />
                 <input
                   type="text"
                   placeholder="Search characters by name or role..."
                   value={searchChar}
                   onChange={(e) => setSearchChar(e.target.value)}
-                  className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-900 border border-slate-800 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                  className="input-text w-full pl-9 pr-3 py-1.5 text-xs"
                 />
               </div>
 
               <button
                 onClick={openAddCharModal}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold shadow cursor-pointer transition-colors"
+                className="btn-primary text-xs flex items-center gap-1.5"
               >
-                <Plus className="w-4 h-4" />
-                Add Character
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Character</span>
               </button>
             </div>
 
@@ -415,13 +415,13 @@ export const BibleView: React.FC<BibleViewProps> = ({
               {filteredChars.map((c, i) => (
                 <div
                   key={i}
-                  className="bg-slate-900/60 border border-slate-800 hover:border-slate-700 rounded-xl p-4 flex flex-col justify-between transition-all"
+                  className="bg-[#383330] border border-[#3f3a36] hover:border-[#544d47] rounded-[4px] p-4 flex flex-col justify-between transition-colors"
                 >
                   <div>
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <h2 className="text-base font-bold text-slate-100">{c.name}</h2>
-                        <span className="text-xs text-indigo-400 font-mono">
+                        <h2 className="text-sm font-medium text-[#f7f5f0]">{c.name}</h2>
+                        <span className="text-xs text-[#aea69c] font-mono">
                           {c.original_name}
                         </span>
                       </div>
@@ -434,7 +434,7 @@ export const BibleView: React.FC<BibleViewProps> = ({
                           }}
                           title="Visualize Character Sheet & Network"
                           aria-label={`Visualize ${c.name}`}
-                          className="p-1 text-slate-400 hover:text-amber-400 cursor-pointer transition-colors"
+                          className="p-1 text-[#aea69c] hover:text-[#f7f5f0] cursor-pointer transition-colors"
                         >
                           <Eye className="w-3.5 h-3.5" />
                         </button>
@@ -442,7 +442,7 @@ export const BibleView: React.FC<BibleViewProps> = ({
                           onClick={() => openEditCharModal(c, i)}
                           title="Edit"
                           aria-label={`Edit ${c.name}`}
-                          className="p-1 text-slate-400 hover:text-indigo-400 cursor-pointer transition-colors"
+                          className="p-1 text-[#aea69c] hover:text-[#f7f5f0] cursor-pointer transition-colors"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
@@ -450,44 +450,44 @@ export const BibleView: React.FC<BibleViewProps> = ({
                           onClick={() => deleteChar(i)}
                           title="Delete"
                           aria-label={`Delete ${c.name}`}
-                          className="p-1 text-slate-400 hover:text-rose-400 cursor-pointer transition-colors"
+                          className="p-1 text-[#aea69c] hover:text-rose-400 cursor-pointer transition-colors"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap gap-1.5 mt-2">
+                    <div className="flex flex-wrap gap-1 mt-2">
                       {c.gender && (
-                        <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">
+                        <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-[2px] bg-[#2b2622] text-[#aea69c] border border-[#3f3a36]">
                           {c.gender}
                         </span>
                       )}
                       {c.role && (
-                        <span className="text-[10px] px-2 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20">
+                        <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-[2px] bg-[#2b2622] text-[#dad2c1] border border-[#3f3a36]">
                           {c.role}
                         </span>
                       )}
                       {c.power_level && (
-                        <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                        <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-[2px] bg-[#2b2622] text-amber-300 border border-amber-800/40">
                           {c.power_level}
                         </span>
                       )}
                       {c.relationships && Object.keys(c.relationships).length > 0 && (
-                        <span className="text-[10px] px-2 py-0.5 rounded bg-pink-500/10 text-pink-300 border border-pink-500/20">
+                        <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-[2px] bg-[#2b2622] text-[#c9c0ad] border border-[#3f3a36]">
                           {Object.keys(c.relationships).length} links
                         </span>
                       )}
                     </div>
 
                     {(c.speaking_style || c.voice) && (
-                      <p className="text-xs text-slate-400 mt-2 italic">
+                      <p className="text-xs text-[#aea69c] mt-2 italic">
                         &ldquo;{c.speaking_style || c.voice}&rdquo;
                       </p>
                     )}
 
                     {c.summary && (
-                      <p className="text-xs text-slate-300 mt-2 line-clamp-3">
+                      <p className="text-xs text-[#dad2c1] mt-2 line-clamp-3">
                         {c.summary}
                       </p>
                     )}
@@ -502,20 +502,20 @@ export const BibleView: React.FC<BibleViewProps> = ({
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-3 flex-1 max-w-lg">
                 <div className="relative flex-1">
-                  <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-500" />
+                  <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-[#aea69c]" />
                   <input
                     type="text"
                     placeholder="Search terms or translations..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-900 border border-slate-800 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                    className="input-text w-full pl-9 pr-3 py-1.5 text-xs"
                   />
                 </div>
                 <select
                   value={termCategoryFilter}
                   onChange={(e) => setTermCategoryFilter(e.target.value)}
                   aria-label="Filter glossary by category"
-                  className="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-indigo-500"
+                  className="bg-[#383330] border border-[#3f3a36] rounded-[3px] px-2.5 py-1.5 text-xs text-[#f7f5f0] focus:outline-none focus:border-[#dad2c1]"
                 >
                   <option value="all">All Categories</option>
                   {categories.map((cat) => (
@@ -528,17 +528,17 @@ export const BibleView: React.FC<BibleViewProps> = ({
 
               <button
                 onClick={openAddTermModal}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold shadow cursor-pointer transition-colors"
+                className="btn-primary text-xs flex items-center gap-1.5"
               >
-                <Plus className="w-4 h-4" />
-                Add Term
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Term</span>
               </button>
             </div>
 
-            <div className="border border-slate-800 rounded-xl overflow-hidden bg-slate-900/40">
+            <div className="border border-[#3f3a36] rounded-[4px] overflow-hidden bg-[#383330]">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="bg-slate-900/80 border-b border-slate-800 text-slate-400 font-semibold uppercase tracking-wider">
+                  <tr className="bg-[#2b2622] border-b border-[#3f3a36] text-[#dad2c1] font-mono text-[11px] uppercase tracking-wider">
                     <th className="p-3">Source Term</th>
                     <th className="p-3">Standard Translation</th>
                     <th className="p-3">Category</th>
@@ -546,35 +546,35 @@ export const BibleView: React.FC<BibleViewProps> = ({
                     <th className="p-3 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/60">
+                <tbody className="divide-y divide-[#3f3a36]">
                   {filteredGlossary.map((t, i) => (
-                    <tr key={i} className="hover:bg-slate-900/60 transition-colors">
-                      <td className="p-3 font-medium text-slate-200 font-mono">
+                    <tr key={i} className="hover:bg-[#2b2622]/40 transition-colors">
+                      <td className="p-3 font-medium text-[#f7f5f0] font-mono">
                         {t.source || t.term}
                       </td>
-                      <td className="p-3 text-emerald-400 font-semibold">
+                      <td className="p-3 text-emerald-400 font-medium font-mono">
                         {t.target || t.translation}
                       </td>
                       <td className="p-3">
-                        <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px] uppercase">
+                        <span className="px-1.5 py-0.2 rounded-[2px] bg-[#2b2622] text-[#aea69c] border border-[#3f3a36] text-[10px] font-mono uppercase">
                           {t.category || 'term'}
                         </span>
                       </td>
-                      <td className="p-3 text-slate-400 max-w-xs truncate">
+                      <td className="p-3 text-[#c9c0ad] max-w-xs truncate">
                         {t.notes || '—'}
                       </td>
                       <td className="p-3 text-right">
                         <div className="flex items-center justify-end gap-1">
                           <button
                             onClick={() => openEditTermModal(t, i)}
-                            className="p-1 text-slate-400 hover:text-indigo-400 cursor-pointer"
+                            className="p-1 text-[#aea69c] hover:text-[#f7f5f0] cursor-pointer"
                             aria-label={`Edit term ${t.source || t.term}`}
                           >
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={() => deleteTerm(i)}
-                            className="p-1 text-slate-400 hover:text-rose-400 cursor-pointer"
+                            className="p-1 text-[#aea69c] hover:text-rose-400 cursor-pointer"
                             aria-label={`Delete term ${t.source || t.term}`}
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -591,18 +591,18 @@ export const BibleView: React.FC<BibleViewProps> = ({
           /* NARRATIVE MEMORY VIEW */
           <div className="space-y-6 max-w-4xl">
             {/* Macro Story Summary */}
-            <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-5">
+            <div className="bg-[#383330] border border-[#3f3a36] rounded-[4px] p-5">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-purple-400" />
-                  <h3 className="font-semibold text-slate-200 text-sm">
+                  <Sparkles className="w-4 h-4 text-[#dad2c1]" />
+                  <h3 className="font-medium text-[#f7f5f0] text-sm">
                     Macro Narrative Context (Whole Story Summary)
                   </h3>
                 </div>
                 <button
                   onClick={() => bible && handleSaveBible(bible)}
                   disabled={saving}
-                  className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-medium cursor-pointer"
+                  className="btn-primary text-xs"
                 >
                   Save Summary
                 </button>
@@ -613,31 +613,31 @@ export const BibleView: React.FC<BibleViewProps> = ({
                   bible && setBible({ ...bible, whole_story_summary: e.target.value })
                 }
                 rows={8}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-xs text-slate-200 leading-relaxed font-mono focus:outline-none focus:border-indigo-500"
+                className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-3 text-xs text-[#dad2c1] leading-relaxed font-mono focus:outline-none focus:border-[#dad2c1]"
                 placeholder="Overarching summary of the entire series maintained by the Chronicler Agent..."
               />
             </div>
 
             {/* Meso Story Arcs */}
-            <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-5">
-              <h3 className="font-semibold text-slate-200 text-sm mb-3">
+            <div className="bg-[#383330] border border-[#3f3a36] rounded-[4px] p-5">
+              <h3 className="font-medium text-[#f7f5f0] text-sm mb-3">
                 Archived Story Arcs ({bible?.archived_arcs?.length ?? 0})
               </h3>
               {bible?.archived_arcs && bible.archived_arcs.length > 0 ? (
                 <div className="space-y-3">
                   {bible.archived_arcs.map((arc, i) => (
-                    <div key={i} className="p-3 bg-slate-950 border border-slate-800 rounded-lg">
-                      <div className="font-semibold text-xs text-indigo-300">
+                    <div key={i} className="p-3 bg-[#24201d] border border-[#3f3a36] rounded-[3px]">
+                      <div className="font-medium text-xs text-[#f7f5f0]">
                         Arc #{arc.arc_number ?? i + 1}: {arc.arc_title || 'Untitled Arc'}
                       </div>
-                      <div className="text-xs text-slate-400 mt-1 leading-relaxed">
+                      <div className="text-xs text-[#c9c0ad] mt-1 leading-relaxed">
                         {arc.summary}
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="text-xs text-slate-500 italic">
+                <div className="text-xs text-[#aea69c] italic">
                   No completed story arcs archived yet. ChroniclerAgent archives story arcs automatically upon resolution.
                 </div>
               )}
@@ -647,16 +647,16 @@ export const BibleView: React.FC<BibleViewProps> = ({
           /* RAW YAML VIEW */
           <div className="h-full flex flex-col space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-400">
-                Directly edit <code className="text-indigo-300">.novel/bible/bible.yaml</code>.
+              <span className="text-xs text-[#aea69c]">
+                Directly edit <code className="text-[#dad2c1] font-mono">.novel/bible/bible.yaml</code>.
               </span>
               <button
                 onClick={handleSaveRawYaml}
                 disabled={saving}
-                className="flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold cursor-pointer shadow"
+                className="btn-primary text-xs flex items-center gap-1.5"
               >
                 <Save className="w-3.5 h-3.5" />
-                {saving ? 'Saving...' : 'Save YAML'}
+                <span>{saving ? 'Saving...' : 'Save YAML'}</span>
               </button>
             </div>
 
@@ -664,7 +664,7 @@ export const BibleView: React.FC<BibleViewProps> = ({
               value={rawYaml}
               onChange={(e) => setRawYaml(e.target.value)}
               disabled={loadingRaw}
-              className="flex-1 w-full bg-slate-950 border border-slate-800 rounded-xl p-4 font-mono text-xs text-slate-200 leading-normal focus:outline-none focus:border-indigo-500 selection:bg-indigo-500/30"
+              className="flex-1 w-full bg-[#24201d] border border-[#3f3a36] rounded-[4px] p-4 font-mono text-xs text-[#dad2c1] leading-normal focus:outline-none focus:border-[#dad2c1]"
               placeholder="Loading raw bible.yaml..."
             />
           </div>
@@ -673,107 +673,107 @@ export const BibleView: React.FC<BibleViewProps> = ({
 
       {/* Character Edit/Add Modal */}
       {isCharModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-[#2b2622] border border-[#3f3a36] rounded-[6px] max-w-lg w-full p-6 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-slate-100">
+              <h2 className="text-sm font-medium text-[#f7f5f0]">
                 {editingCharIndex !== null ? 'Edit Character' : 'Add Character'}
               </h2>
               <button
                 onClick={() => setIsCharModalOpen(false)}
-                className="text-slate-400 hover:text-slate-200"
+                className="text-[#aea69c] hover:text-[#f7f5f0] cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
             <div className="grid grid-cols-2 gap-3 text-xs">
               <div>
-                <label className="block text-slate-400 mb-1">English Name *</label>
+                <label className="block text-[#aea69c] mb-1">English Name *</label>
                 <input
                   type="text"
                   value={charForm.name}
                   onChange={(e) => setCharForm({ ...charForm, name: e.target.value })}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200"
+                  className="input-text w-full"
                   placeholder="e.g. Eleanor"
                 />
               </div>
               <div>
-                <label className="block text-slate-400 mb-1">Original Name *</label>
+                <label className="block text-[#aea69c] mb-1">Original Name *</label>
                 <input
                   type="text"
                   value={charForm.original_name}
                   onChange={(e) =>
                     setCharForm({ ...charForm, original_name: e.target.value })
                   }
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200"
+                  className="input-text w-full font-mono"
                   placeholder="e.g. エレノア"
                 />
               </div>
               <div>
-                <label className="block text-slate-400 mb-1">Gender</label>
+                <label className="block text-[#aea69c] mb-1">Gender</label>
                 <input
                   type="text"
                   value={charForm.gender || ''}
                   onChange={(e) => setCharForm({ ...charForm, gender: e.target.value })}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200"
+                  className="input-text w-full"
                   placeholder="female, male, unknown"
                 />
               </div>
               <div>
-                <label className="block text-slate-400 mb-1">Role</label>
+                <label className="block text-[#aea69c] mb-1">Role</label>
                 <input
                   type="text"
                   value={charForm.role || ''}
                   onChange={(e) => setCharForm({ ...charForm, role: e.target.value })}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200"
+                  className="input-text w-full"
                   placeholder="Protagonist, Rival, Villainess"
                 />
               </div>
               <div className="col-span-2">
-                <label className="block text-slate-400 mb-1">Aliases & Nicknames (comma-separated)</label>
+                <label className="block text-[#aea69c] mb-1">Aliases & Nicknames (comma-separated)</label>
                 <input
                   type="text"
                   value={aliasesInput}
                   onChange={(e) => setAliasesInput(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200"
+                  className="input-text w-full"
                   placeholder="e.g. Black Beast, Sword Sovereign, Saintess"
                 />
               </div>
               <div>
-                <label className="block text-slate-400 mb-1">Power Level / Realm</label>
+                <label className="block text-[#aea69c] mb-1">Power Level / Realm</label>
                 <input
                   type="text"
                   value={charForm.power_level || ''}
                   onChange={(e) => setCharForm({ ...charForm, power_level: e.target.value })}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200"
+                  className="input-text w-full"
                   placeholder="e.g. Level 99, Core Formation"
                 />
               </div>
               <div>
-                <label className="block text-slate-400 mb-1">Status</label>
+                <label className="block text-[#aea69c] mb-1">Status</label>
                 <input
                   type="text"
                   value={charForm.status || ''}
                   onChange={(e) => setCharForm({ ...charForm, status: e.target.value })}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200"
+                  className="input-text w-full"
                   placeholder="e.g. Active, Injured, Deceased"
                 />
               </div>
               <div className="col-span-2">
-                <label className="block text-slate-400 mb-1">
+                <label className="block text-[#aea69c] mb-1">
                   Relationships (Target: relation, comma-separated)
                 </label>
                 <input
                   type="text"
                   value={relationshipsInput}
                   onChange={(e) => setRelationshipsInput(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200"
+                  className="input-text w-full"
                   placeholder="e.g. Elena: sister, Gabriel: rival, Demon King: enemy"
                 />
               </div>
               <div className="col-span-2">
-                <label className="block text-slate-400 mb-1">Speaking Style / Voice</label>
+                <label className="block text-[#aea69c] mb-1">Speaking Style / Voice</label>
                 <input
                   type="text"
                   value={charForm.speaking_style || charForm.voice || ''}
@@ -784,17 +784,17 @@ export const BibleView: React.FC<BibleViewProps> = ({
                       voice: e.target.value,
                     })
                   }
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200"
+                  className="input-text w-full"
                   placeholder="e.g. haughty noblewoman, playful catgirl, calm elder"
                 />
               </div>
               <div className="col-span-2">
-                <label className="block text-slate-400 mb-1">Summary & Lore</label>
+                <label className="block text-[#aea69c] mb-1">Summary & Lore</label>
                 <textarea
                   value={charForm.summary || ''}
                   onChange={(e) => setCharForm({ ...charForm, summary: e.target.value })}
                   rows={3}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200"
+                  className="input-text w-full leading-relaxed"
                   placeholder="Key background information, personality traits, and secrets..."
                 />
               </div>
@@ -803,15 +803,15 @@ export const BibleView: React.FC<BibleViewProps> = ({
             <div className="flex justify-end gap-2 pt-2">
               <button
                 onClick={() => setIsCharModalOpen(false)}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium cursor-pointer"
+                className="btn-secondary text-xs"
               >
                 Cancel
               </button>
               <button
                 onClick={saveCharModal}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold cursor-pointer"
+                className="btn-primary text-xs"
               >
-                Save
+                Save Character
               </button>
             </div>
           </div>
@@ -820,23 +820,23 @@ export const BibleView: React.FC<BibleViewProps> = ({
 
       {/* Term Edit/Add Modal */}
       {isTermModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-[#2b2622] border border-[#3f3a36] rounded-[6px] max-w-md w-full p-6 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-slate-100">
+              <h2 className="text-sm font-medium text-[#f7f5f0]">
                 {editingTermIndex !== null ? 'Edit Glossary Term' : 'Add Glossary Term'}
               </h2>
               <button
                 onClick={() => setIsTermModalOpen(false)}
-                className="text-slate-400 hover:text-slate-200"
+                className="text-[#aea69c] hover:text-[#f7f5f0] cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
             <div className="space-y-3 text-xs">
               <div>
-                <label className="block text-slate-400 mb-1">Source Term *</label>
+                <label className="block text-[#aea69c] mb-1">Source Term *</label>
                 <input
                   type="text"
                   value={termForm.term || termForm.source || ''}
@@ -847,12 +847,12 @@ export const BibleView: React.FC<BibleViewProps> = ({
                       source: e.target.value,
                     })
                   }
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 font-mono"
+                  className="input-text w-full font-mono"
                   placeholder="e.g. 聖剣"
                 />
               </div>
               <div>
-                <label className="block text-slate-400 mb-1">Standard Translation *</label>
+                <label className="block text-[#aea69c] mb-1">Standard Translation *</label>
                 <input
                   type="text"
                   value={termForm.translation || termForm.target || ''}
@@ -863,27 +863,27 @@ export const BibleView: React.FC<BibleViewProps> = ({
                       target: e.target.value,
                     })
                   }
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200"
+                  className="input-text w-full font-medium"
                   placeholder="e.g. Holy Sword"
                 />
               </div>
               <div>
-                <label className="block text-slate-400 mb-1">Category</label>
+                <label className="block text-[#aea69c] mb-1">Category</label>
                 <input
                   type="text"
                   value={termForm.category || ''}
                   onChange={(e) => setTermForm({ ...termForm, category: e.target.value })}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200"
+                  className="input-text w-full"
                   placeholder="weapon, place, title, skill, artifact"
                 />
               </div>
               <div>
-                <label className="block text-slate-400 mb-1">Notes</label>
+                <label className="block text-[#aea69c] mb-1">Notes</label>
                 <input
                   type="text"
                   value={termForm.notes || ''}
                   onChange={(e) => setTermForm({ ...termForm, notes: e.target.value })}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200"
+                  className="input-text w-full"
                   placeholder="Usage context or nuances..."
                 />
               </div>
@@ -892,15 +892,15 @@ export const BibleView: React.FC<BibleViewProps> = ({
             <div className="flex justify-end gap-2 pt-2">
               <button
                 onClick={() => setIsTermModalOpen(false)}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium cursor-pointer"
+                className="btn-secondary text-xs"
               >
                 Cancel
               </button>
               <button
                 onClick={saveTermModal}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold cursor-pointer"
+                className="btn-primary text-xs"
               >
-                Save
+                Save Term
               </button>
             </div>
           </div>

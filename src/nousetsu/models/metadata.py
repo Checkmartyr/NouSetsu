@@ -185,6 +185,24 @@ class ChapterMetadata(BaseModel):
     trace_file: Optional[str] = Field(default=None, description="Relative path to prompt/output trace document")
     prompt_trace_count: int = Field(default=0, description="Total number of LLM interactions recorded for this chapter")
 
+    @property
+    def duration_seconds(self) -> float:
+        """Total chapter translation duration in seconds."""
+        return self.stats.duration_seconds if self.stats else 0.0
+
+    @property
+    def total_token_usage(self) -> TokenUsage:
+        """Cumulative chapter token usage metrics."""
+        if not self.stats:
+            return TokenUsage()
+        return TokenUsage(
+            input_tokens=self.stats.prompt_tokens,
+            output_tokens=self.stats.completion_tokens,
+            thought_tokens=self.stats.thought_tokens,
+            cached_tokens=self.stats.cached_tokens,
+            total_tokens=self.stats.total_tokens,
+        )
+
 
 class ProjectMetadataDocument(BaseModel):
     """Consolidated project-level metadata document (.novel/metadata.json)."""

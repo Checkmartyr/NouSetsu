@@ -128,3 +128,114 @@ def test_multi_paragraph_with_blank_lines_and_trailing_whitespace():
     assert "Polished paragraph two." in result
     assert "Paragraph three unchanged." in result
 
+
+def test_canonicalize_quote_matching():
+    """SEARCH block uses 「」brackets but draft text uses ASCII double quotes."""
+    original = (
+        '"นั่นสินะคะ"\n'
+        '\n'
+        'เธอพยักหน้ารับ\n'
+    )
+    patch = (
+        '<<<<<<< SEARCH\n'
+        '\u300cนั่นสินะคะ\u300d\n'
+        '=======\n'
+        '"นั่นล่ะสิคะ"\n'
+        '>>>>>>>'
+    )
+    result, applied, failed = apply_search_replace_patches(original, patch)
+    assert applied == 1
+    assert failed == 0
+    assert 'นั่นล่ะสิคะ' in result
+
+
+def test_canonicalize_fullwidth_punctuation():
+    """SEARCH block uses fullwidth ？ and ！ but draft has ASCII ? and !."""
+    original = 'เธอถามว่า "จริงหรือ?" เขาตอบ "ใช่!"\n'
+    patch = (
+        '<<<<<<< SEARCH\n'
+        'เธอถามว่า "จริงหรือ\uff1f" เขาตอบ "ใช่\uff01"\n'
+        '=======\n'
+        'เธอถามขึ้นว่า "จริงหรือ?" เขาตอบ "ใช่!"\n'
+        '>>>>>>>'
+    )
+    result, applied, failed = apply_search_replace_patches(original, patch)
+    assert applied == 1
+    assert failed == 0
+    assert 'เธอถามขึ้นว่า' in result
+
+
+def test_canonicalize_ellipsis_normalization():
+    """SEARCH block uses … (U+2026) but draft text uses ... (three dots)."""
+    original = 'เธอลังเลอยู่สักครู่... แล้วก็พูดออกมา\n'
+    patch = (
+        '<<<<<<< SEARCH\n'
+        'เธอลังเลอยู่สักครู่\u2026 แล้วก็พูดออกมา\n'
+        '=======\n'
+        'เธอลังเลอยู่ชั่วขณะ... แล้วเอ่ยขึ้น\n'
+        '>>>>>>>'
+    )
+    result, applied, failed = apply_search_replace_patches(original, patch)
+    assert applied == 1
+    assert failed == 0
+    assert 'เธอลังเลอยู่ชั่วขณะ' in result
+
+
+def test_source_language_search_block_skipped():
+    """SEARCH block containing Japanese source text should be skipped."""
+    original = 'The hero drew his sword and charged forward.\n'
+    patch = (
+        '<<<<<<< SEARCH\n'
+        '意を決してしゃべるサフィナに、思わず横やりを入れてしまう私。'
+        'だって、名前なんて覚えたくもなかったから、'
+        'それほどに私の彼に対する印象は最悪なのだ。\n'
+        '=======\n'
+        "Safina spoke with determination, but I couldn't help interrupting.\n"
+        '>>>>>>>'
+    )
+    result, applied, failed = apply_search_replace_patches(original, patch)
+    assert applied == 0
+    assert failed == 1
+    assert result == original  # Original text unchanged
+
+
+def test_mixed_quote_styles_multiline():
+    """Multi-line SEARCH with CJK brackets and fullwidth ? while draft uses ASCII."""
+    original = (
+        '"คุณเป็นใคร?" เธอถาม\n'
+        '\n'
+        '"ฉันเป็นอัศวิน" เขาตอบ\n'
+    )
+    patch = (
+        '<<<<<<< SEARCH\n'
+        '\u300cคุณเป็นใคร\uff1f\u300d เธอถาม\n'
+        '\n'
+        '\u300cฉันเป็นอัศวิน\u300d เขาตอบ\n'
+        '=======\n'
+        '"คุณเป็นใครกันแน่?" เธอถามขึ้น\n'
+        '\n'
+        '"ข้าคืออัศวิน" เขาตอบอย่างหนักแน่น\n'
+        '>>>>>>>'
+    )
+    result, applied, failed = apply_search_replace_patches(original, patch)
+    assert applied == 1
+    assert failed == 0
+    assert 'คุณเป็นใครกันแน่?' in result
+    assert 'ข้าคืออัศวิน' in result
+
+
+def test_canonicalize_typographic_quotes_english():
+    """SEARCH block uses typographic \u201ccurly\u201d quotes but draft has straight quotes."""
+    original = 'He said "I will protect you" with conviction.\n'
+    patch = (
+        '<<<<<<< SEARCH\n'
+        'He said \u201cI will protect you\u201d with conviction.\n'
+        '=======\n'
+        'He declared "I shall protect you" with unwavering resolve.\n'
+        '>>>>>>>'
+    )
+    result, applied, failed = apply_search_replace_patches(original, patch)
+    assert applied == 1
+    assert failed == 0
+    assert 'He declared' in result
+

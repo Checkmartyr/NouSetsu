@@ -201,10 +201,16 @@ export function connectSSE(onEvent: (eventName: string, data: any) => void): () 
   const eventTypes = [
     'job_started',
     'chapter_started',
+    'stage_start',
     'stage_progress',
     'chapter_finished',
+    'chapter_completed',
     'job_finished',
+    'batch_completed',
+    'batch_stopped',
+    'batch_error',
     'log',
+    'log_message',
     'heartbeat',
   ];
 

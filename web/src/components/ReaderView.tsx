@@ -112,11 +112,11 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
   // Theme styling configurations
   const themeClasses: Record<ReaderTheme, { bg: string; text: string; subtext: string; border: string; header: string }> = {
     dark: {
-      bg: 'bg-slate-950',
-      text: 'text-slate-100',
-      subtext: 'text-slate-400',
-      border: 'border-slate-800',
-      header: 'bg-slate-900/80 border-slate-800',
+      bg: 'bg-[#2b2622]',
+      text: 'text-[#dad2c1]',
+      subtext: 'text-[#aea69c]',
+      border: 'border-[#3f3a36]',
+      header: 'bg-[#2b2622] border-b border-[#3f3a36]',
     },
     sepia: {
       bg: 'bg-[#f4ecd8]',
@@ -146,18 +146,18 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
   return (
     <div className={`flex flex-col h-full overflow-hidden transition-colors ${curTheme.bg} ${curTheme.text}`}>
       {/* Top Header Controls */}
-      <div className={`px-6 py-3 border-b flex items-center justify-between gap-4 backdrop-blur shrink-0 ${curTheme.header}`}>
+      <div className={`px-6 py-2.5 border-b flex items-center justify-between gap-4 shrink-0 ${curTheme.header}`}>
         <div className="flex items-center gap-3">
           <button
             onClick={onBackToStudio}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border cursor-pointer transition-colors ${curTheme.border} ${curTheme.subtext} hover:${curTheme.text}`}
+            className={`btn-secondary text-xs px-2.5 py-1 flex items-center gap-1.5`}
           >
             <ArrowLeft className="w-3.5 h-3.5" />
-            Back to Studio
+            <span>Studio</span>
           </button>
 
           <div className="flex items-center gap-2">
-            <BookOpen className="w-4 h-4 text-indigo-400" />
+            <BookOpen className="w-4 h-4 text-[#aea69c]" />
             <select
               value={`${currentFolder || ''}::${currentChapterNum}`}
               onChange={(e) => {
@@ -167,7 +167,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
                 setCurrentChapterNum(Number(numStr));
               }}
               aria-label="Select chapter to read"
-              className={`text-sm font-semibold rounded-lg px-2.5 py-1 border cursor-pointer focus:outline-none ${curTheme.bg} ${curTheme.border} ${curTheme.text}`}
+              className={`text-xs font-medium rounded-[3px] px-2.5 py-1 border cursor-pointer focus:outline-none ${curTheme.bg} ${curTheme.border} ${curTheme.text}`}
             >
               {chapters.map((c) => (
                 <option key={`${c.folder || ''}::${c.chapter_num}`} value={`${c.folder || ''}::${c.chapter_num}`}>
@@ -185,61 +185,61 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
             onClick={handlePrev}
             disabled={!hasPrev}
             aria-label="Previous Chapter"
-            className={`p-1.5 rounded-lg border cursor-pointer disabled:opacity-30 transition-opacity ${curTheme.border}`}
+            className={`p-1 rounded-[3px] border cursor-pointer disabled:opacity-30 transition-opacity ${curTheme.border}`}
           >
-            <ChevronLeft className="w-4 h-4" />
+            <ChevronLeft className="w-3.5 h-3.5" />
           </button>
-          <span className={`text-xs font-medium ${curTheme.subtext}`}>
-            {currentIndex >= 0 ? `${currentIndex + 1} of ${chapters.length}` : ''}
+          <span className={`text-xs font-mono ${curTheme.subtext}`}>
+            {currentIndex >= 0 ? `${currentIndex + 1} / ${chapters.length}` : ''}
           </span>
           <button
             onClick={handleNext}
             disabled={!hasNext}
             aria-label="Next Chapter"
-            className={`p-1.5 rounded-lg border cursor-pointer disabled:opacity-30 transition-opacity ${curTheme.border}`}
+            className={`p-1 rounded-[3px] border cursor-pointer disabled:opacity-30 transition-opacity ${curTheme.border}`}
           >
-            <ChevronRight className="w-4 h-4" />
+            <ChevronRight className="w-3.5 h-3.5" />
           </button>
         </div>
 
         {/* Right: Typography & Theme Controls */}
         <div className="flex items-center gap-3">
           {/* Theme Switcher */}
-          <div className={`flex items-center rounded-lg border p-0.5 ${curTheme.border}`}>
+          <div className={`flex items-center rounded-[3px] border p-0.5 ${curTheme.border}`}>
             <button
               onClick={() => setTheme('dark')}
-              title="Dark Theme"
-              className={`p-1.5 rounded cursor-pointer ${theme === 'dark' ? 'bg-slate-800 text-indigo-400' : 'text-slate-400'}`}
+              title="Dark Warm Canvas Theme"
+              className={`p-1 rounded-[2px] cursor-pointer ${theme === 'dark' ? 'bg-[#383330] text-[#f7f5f0]' : curTheme.subtext}`}
             >
-              <Moon className="w-3.5 h-3.5" />
+              <Moon className="w-3 h-3" />
             </button>
             <button
               onClick={() => setTheme('sepia')}
               title="Sepia Theme"
-              className={`p-1.5 rounded cursor-pointer ${theme === 'sepia' ? 'bg-[#dfd3bc] text-[#433422]' : 'text-slate-400'}`}
+              className={`p-1 rounded-[2px] cursor-pointer ${theme === 'sepia' ? 'bg-[#dfd3bc] text-[#433422]' : curTheme.subtext}`}
             >
-              <Coffee className="w-3.5 h-3.5" />
+              <Coffee className="w-3 h-3" />
             </button>
             <button
               onClick={() => setTheme('light')}
               title="Light Theme"
-              className={`p-1.5 rounded cursor-pointer ${theme === 'light' ? 'bg-neutral-200 text-neutral-900' : 'text-slate-400'}`}
+              className={`p-1 rounded-[2px] cursor-pointer ${theme === 'light' ? 'bg-neutral-200 text-neutral-900' : curTheme.subtext}`}
             >
-              <Sun className="w-3.5 h-3.5" />
+              <Sun className="w-3 h-3" />
             </button>
           </div>
 
           {/* Font Size */}
-          <div className={`flex items-center rounded-lg border p-0.5 text-xs font-bold ${curTheme.border}`}>
+          <div className={`flex items-center rounded-[3px] border p-0.5 text-xs font-mono ${curTheme.border}`}>
             {(['sm', 'base', 'lg', 'xl'] as FontSize[]).map((sz) => (
               <button
                 key={sz}
                 onClick={() => setFontSize(sz)}
-                className={`px-2 py-0.5 rounded uppercase cursor-pointer ${
+                className={`px-1.5 py-0.5 rounded-[2px] uppercase cursor-pointer text-[10px] ${
                   fontSize === sz
                     ? theme === 'dark'
-                      ? 'bg-indigo-600 text-white'
-                      : 'bg-neutral-300 text-black'
+                      ? 'bg-[#383330] text-[#f7f5f0] font-semibold'
+                      : 'bg-neutral-300 text-black font-semibold'
                     : curTheme.subtext
                 }`}
               >
@@ -252,13 +252,13 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
           <button
             onClick={() => setShowOriginalPeek(!showOriginalPeek)}
             title="Toggle original source text split drawer"
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium cursor-pointer transition-colors ${
+            className={`flex items-center gap-1.5 px-2 py-1 rounded-[3px] border text-xs font-medium cursor-pointer transition-colors ${
               showOriginalPeek
-                ? 'bg-indigo-600/20 text-indigo-400 border-indigo-500/40'
+                ? 'bg-[#383330] text-[#f7f5f0] border-[#544d47]'
                 : `${curTheme.border} ${curTheme.subtext}`
             }`}
           >
-            <Eye className="w-3.5 h-3.5" />
+            <Eye className="w-3 h-3" />
             <span>Raw</span>
           </button>
         </div>
@@ -279,12 +279,12 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
               </article>
             ) : (
               <div className="text-center py-20 space-y-4">
-                <div className="text-lg font-medium opacity-60">
+                <div className="text-base font-normal text-[#aea69c]">
                   Chapter {currentChapterNum} has not been translated yet.
                 </div>
                 <button
                   onClick={onBackToStudio}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium"
+                  className="btn-primary text-xs"
                 >
                   Return to Studio to Translate
                 </button>

@@ -8,6 +8,8 @@ from nousetsu.prompts.templates import (
     PATCH_POLISHING_SYSTEM_PROMPT,
 )
 
+from nousetsu.prompts.character_formatter import format_character_roster
+
 __all__ = [
     "EXTRACTION_SYSTEM_PROMPT",
     "DRAFTING_SYSTEM_PROMPT",
@@ -15,4 +17,5 @@ __all__ = [
     "POLISHING_SYSTEM_PROMPT",
     "PATCH_POLISHING_SYSTEM_PROMPT",
     "CHRONICLER_SYSTEM_PROMPT",
+    "format_character_roster",
 ]

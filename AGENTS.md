@@ -280,7 +280,7 @@ NouSetsu tracks end-to-end token consumption and execution latency per pipeline 
     - Integrated with Vite + React 19 + TypeScript web trace visualizer (`nousetsu web`) with real-time TUI sync via `W` hotkey.
 13. **Script-Aware Word Boundary & Scene-Level Entity/Glossary Filtering**:
     - Script-aware regex matching ensures CJK ideographs match without Latin `\b` word boundaries while ASCII terms enforce `\b` to prevent false substring matches.
-    - Dynamically filters character rosters and known glossary items per scene chunk across `ContextAwareDrafterAgent` (Drafter), `CritiqueAgent` (Critic), and `EntityExtractorAgent` (Extractor).
+    - Dynamically filters character rosters and known glossary items per scene chunk across `ContextAwareDrafterAgent` (Drafter), `CritiqueAgent` (Critic), `EntityExtractorAgent` (Extractor), and `PolishingAgent` (Polisher).
     - Extractor filtering utilizes `max_characters=0` (preserving all matching scene characters without the 15-character dialogue cap) and `fallback_on_empty=False` (preventing synthetic dummy terms from entering extraction context).
     - Fully configurable via the 4-tier cascade: CLI flag (`--filter-extractor` / `--no-filter-extractor`), `ProjectConfig.filter_extractor_entities`, environment variable `NOVEL_FILTER_EXTRACTOR_ENTITIES`, or built-in default (`True`).
 14. **High-Performance TUI Subsystem & Memoized Rendering**:
@@ -328,6 +328,10 @@ NouSetsu tracks end-to-end token consumption and execution latency per pipeline 
     - Studio sidebar supports multi-level folder accordions and `Folder > file.md` chapter hierarchy.
     - Interactive **Character Visualizer** rendering character dossiers, personality/voice analysis, and relationship graphs.
     - Automatic free port detection (`_find_free_port`) and `VITE_API_PORT` coordination.
+23. **Unified Hierarchical Character Roster Formatter** ([`src/nousetsu/prompts/character_formatter.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/prompts/character_formatter.py)):
+    - Formats character rosters across all five pipeline agents into an indented, multi-level hierarchical markdown structure.
+    - Structures character identity headers (`- **{name}** ({original_name} | {gender} | {role})`), voice & tone, zero-anaphora pronoun mappings (`[Source: {src}] -> [Target: {tgt}]`), relational address pairings (`- with {other_character}: {term}`), social relationships, and aliases into clear, scannable cards.
+    - Tailors presentation by agent role (e.g. compact identity cards without relational forms for `EntityExtractorAgent`, expected pronoun rules for `CritiqueAgent`, zero-anaphora resolution cards for `ContextAwareDrafterAgent` and `PolishingAgent`).
 
 ---
 

@@ -40,65 +40,65 @@ export const TraceDetail: React.FC<TraceDetailProps> = ({
   });
 
   return (
-    <main className="flex-1 flex flex-col bg-slate-950/60 overflow-hidden">
+    <main className="flex-1 flex flex-col bg-[#2b2622] overflow-hidden">
       {/* Detail Header / Metadata Ribbon */}
-      <div className="bg-slate-900/80 border-b border-slate-800 px-6 py-3.5">
+      <div className="bg-[#2b2622] border-b border-[#3f3a36] px-6 py-3 shrink-0">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <span className="text-sm font-bold uppercase tracking-wider text-slate-100 bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-mono px-2 py-0.5 rounded-[2px] bg-[#383330] text-[#f7f5f0] border border-[#3f3a36]">
               {trace.agent}
             </span>
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 capitalize">
+            <span className="text-xs font-mono px-2 py-0.5 rounded-[2px] bg-[#383330] text-[#dad2c1] border border-[#3f3a36] capitalize">
               {trace.stage}
             </span>
             {trace.iteration > 1 && (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20">
-                Iteration {trace.iteration}
+              <span className="text-xs font-mono px-1.5 py-0.5 rounded-[2px] bg-[#383330] text-[#aea69c] border border-[#3f3a36]">
+                Pass {trace.iteration}
               </span>
             )}
             {trace.total_chunks > 1 && (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">
+              <span className="text-xs font-mono px-1.5 py-0.5 rounded-[2px] bg-[#383330] text-[#aea69c] border border-[#3f3a36]">
                 Chunk {trace.chunk_index}/{trace.total_chunks}
               </span>
             )}
           </div>
 
-          <div className="flex items-center gap-3 text-xs text-slate-400">
+          <div className="flex items-center gap-2.5 text-xs text-[#aea69c] font-mono">
             <div className="flex items-center gap-1">
-              <Calendar className="w-3.5 h-3.5 text-slate-500" />
+              <Calendar className="w-3.5 h-3.5 text-[#aea69c]" />
               <span>{formattedDate}</span>
             </div>
-            <div className="flex items-center gap-1 font-mono text-[11px] text-slate-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
+            <div className="px-2 py-0.5 rounded-[2px] bg-[#383330] border border-[#3f3a36] text-[#dad2c1] text-[11px]">
               {trace.model}
             </div>
             <div className="flex items-center gap-1">
-              <Clock className="w-3.5 h-3.5 text-slate-500" />
+              <Clock className="w-3.5 h-3.5 text-[#aea69c]" />
               <span>{trace.duration_seconds.toFixed(2)}s</span>
             </div>
             <div className="flex items-center gap-1">
-              <Cpu className="w-3.5 h-3.5 text-slate-500" />
+              <Cpu className="w-3.5 h-3.5 text-[#aea69c]" />
               <span>{(trace.token_usage?.total_tokens || 0).toLocaleString()} tok</span>
               {trace.token_usage?.cached_tokens > 0 && (
-                <span className="text-cyan-400 text-[10px] font-semibold bg-cyan-950/80 border border-cyan-800/60 px-1.5 py-0.5 rounded ml-1">
-                  ⚡ {trace.token_usage.cached_tokens.toLocaleString()} cached
+                <span className="text-cyan-300 text-[10px] font-semibold bg-[#24201d] border border-[#3f3a36] px-1.5 py-0.2 rounded ml-1">
+                  ⚡ {trace.token_usage.cached_tokens.toLocaleString()}
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-1 font-mono text-[11px] text-amber-300 bg-amber-950/50 border border-amber-800/50 px-2 py-0.5 rounded">
-              <Coins className="w-3 h-3 text-amber-400" />
+            <div className="flex items-center gap-1 text-[#f7f5f0] bg-[#383330] border border-[#3f3a36] px-2 py-0.5 rounded-[2px] text-[11px]">
+              <Coins className="w-3 h-3 text-[#f7f5f0]" />
               <span>{calculateCost(trace.token_usage || {}, trace.model || 'unknown').formattedTotal}</span>
             </div>
           </div>
         </div>
 
         {/* Tab Selection */}
-        <div className="flex items-center gap-2 mt-3 pt-2 border-t border-slate-800/80">
+        <div className="flex items-center gap-1 mt-2.5 pt-2 border-t border-[#3f3a36]">
           <button
             onClick={() => handleTabSelect('output')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-[3px] text-xs transition-colors cursor-pointer ${
               activeTab === 'output'
-                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                ? 'bg-[#383330] text-[#f7f5f0] border border-[#544d47] font-medium'
+                : 'text-[#c9c0ad] hover:text-[#f7f5f0] hover:bg-[#383330]/50'
             }`}
           >
             <FileText className="w-3.5 h-3.5" />
@@ -107,22 +107,22 @@ export const TraceDetail: React.FC<TraceDetailProps> = ({
 
           <button
             onClick={() => handleTabSelect('prompts')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-[3px] text-xs transition-colors cursor-pointer ${
               activeTab === 'prompts'
-                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                ? 'bg-[#383330] text-[#f7f5f0] border border-[#544d47] font-medium'
+                : 'text-[#c9c0ad] hover:text-[#f7f5f0] hover:bg-[#383330]/50'
             }`}
           >
             <Terminal className="w-3.5 h-3.5" />
-            <span>Prompts (System & User)</span>
+            <span>Prompts</span>
           </button>
 
           <button
             onClick={() => handleTabSelect('diff')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-[3px] text-xs transition-colors cursor-pointer ${
               activeTab === 'diff'
-                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                ? 'bg-[#383330] text-[#f7f5f0] border border-[#544d47] font-medium'
+                : 'text-[#c9c0ad] hover:text-[#f7f5f0] hover:bg-[#383330]/50'
             }`}
           >
             <GitCompare className="w-3.5 h-3.5" />
@@ -131,10 +131,10 @@ export const TraceDetail: React.FC<TraceDetailProps> = ({
 
           <button
             onClick={() => handleTabSelect('analytics')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-[3px] text-xs transition-colors cursor-pointer ${
               activeTab === 'analytics'
-                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                ? 'bg-[#383330] text-[#f7f5f0] border border-[#544d47] font-medium'
+                : 'text-[#c9c0ad] hover:text-[#f7f5f0] hover:bg-[#383330]/50'
             }`}
           >
             <BarChart3 className="w-3.5 h-3.5" />
@@ -143,14 +143,14 @@ export const TraceDetail: React.FC<TraceDetailProps> = ({
 
           <button
             onClick={() => handleTabSelect('raw')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ml-auto ${
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-[3px] text-xs transition-colors cursor-pointer ml-auto ${
               activeTab === 'raw'
-                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                ? 'bg-[#383330] text-[#f7f5f0] border border-[#544d47] font-medium'
+                : 'text-[#c9c0ad] hover:text-[#f7f5f0] hover:bg-[#383330]/50'
             }`}
           >
             <Code className="w-3.5 h-3.5" />
-            <span>Raw Trace JSON</span>
+            <span>Raw JSON</span>
           </button>
         </div>
       </div>
@@ -166,7 +166,7 @@ export const TraceDetail: React.FC<TraceDetailProps> = ({
           <TokenAnalytics currentTrace={trace} chapterDoc={chapterDoc} />
         )}
         {activeTab === 'raw' && (
-          <div className="h-full bg-slate-900/60 border border-slate-800 rounded-xl p-4 overflow-y-auto font-mono text-xs text-indigo-300">
+          <div className="h-full bg-[#24201d] border border-[#3f3a36] rounded-[4px] p-4 overflow-y-auto font-mono text-xs text-[#dad2c1]">
             <pre>{JSON.stringify(trace, null, 2)}</pre>
           </div>
         )}

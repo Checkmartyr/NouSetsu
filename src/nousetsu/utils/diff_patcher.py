@@ -9,6 +9,57 @@ from typing import Tuple
 
 logger = logging.getLogger(__name__)
 
+# Punctuation canonicalization table for matching drift between LLM output and draft text
+_CANON_TABLE = str.maketrans({
+    # CJK corner brackets → ASCII double quotes
+    '\u300c': '"', '\u300d': '"',  # 「 」
+    '\u300e': '"', '\u300f': '"',  # 『 』
+    # Typographic quotes → ASCII double quotes
+    '\u201c': '"', '\u201d': '"',  # " "
+    '\u2018': "'", '\u2019': "'",  # ' '
+    # Fullwidth punctuation → ASCII
+    '\uff1f': '?', '\uff01': '!', '\uff1a': ':', '\uff0c': ',',
+    '\uff0e': '.', '\uff1b': ';',
+    # Ellipsis variants → dot (caller compares canonicalized forms on both sides)
+    '\u2026': '.', '\u2025': '.',  # … ‥
+    # Fullwidth space → ASCII space
+    '\u3000': ' ',
+    # Non-breaking space → ASCII space
+    '\u00a0': ' ',
+})
+_CANON_REMOVE = re.compile(r'[\u200b\ufeff]')  # Zero-width chars to strip
+
+# CJK Unified Ideographs + Hiragana + Katakana ranges for source language detection
+_CJK_KANA_RE = re.compile(
+    r'[\u3040-\u309f\u30a0-\u30ff\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]'
+)
+
+
+def _canonicalize_text(text: str) -> str:
+    """Normalize quotes, fullwidth punctuation, and whitespace for fuzzy matching.
+
+    This allows matching between text containing 「...」 and "...",
+    ？ and ?, … and ..., etc.
+    """
+    result = text.translate(_CANON_TABLE)
+    result = _CANON_REMOVE.sub('', result)
+    return result
+
+
+def _is_source_language_block(text: str, threshold: float = 0.3) -> bool:
+    """Detect if a search block is dominated by CJK/Kana characters.
+
+    Returns True if more than ``threshold`` fraction of non-whitespace characters
+    are CJK ideographs, Hiragana, or Katakana — indicating the search block
+    contains untranslated source language text rather than the target translation.
+    """
+    non_ws = re.sub(r'\s', '', text)
+    if len(non_ws) < 5:
+        return False
+    cjk_count = len(_CJK_KANA_RE.findall(non_ws))
+    return (cjk_count / len(non_ws)) > threshold
+
+
 SEARCH_REPLACE_PATTERN = re.compile(
     r"<<<<<<<\s*SEARCH\s*\r?\n(.*?)\r?\n=======\s*\r?\n(.*?)\r?\n>>>>>>>",
     re.DOTALL
@@ -132,6 +183,15 @@ def apply_search_replace_patches(
         search_block = match.group(1)
         replace_block = match.group(2)
 
+        # 0. Source language guard: skip blocks containing untranslated source text
+        if _is_source_language_block(search_block):
+            logger.warning(
+                f"Skipping search block dominated by source language characters: "
+                f"{search_block[:80]!r}..."
+            )
+            failed += 1
+            continue
+
         # 1. Exact string match
         if search_block in current_text:
             current_text = current_text.replace(search_block, replace_block, 1)
@@ -144,6 +204,39 @@ def apply_search_replace_patches(
             current_text = current_text.replace(stripped_search, replace_block.strip(), 1)
             applied += 1
             continue
+
+        # 2.5. Canonicalized punctuation-agnostic match
+        #   Handles 「」↔"", ？↔?, ！↔!, …↔..., fullwidth↔ASCII drift
+        canon_search = _canonicalize_text(search_block.strip())
+        if canon_search:
+            canon_current = _canonicalize_text(current_text)
+            pos = canon_current.find(canon_search)
+            if pos >= 0:
+                # Build index mapping: canonical char index -> original char index
+                # _canonicalize_text does 1:1 char replacements via translate()
+                # and removes zero-width chars, so we map by skipping removed chars.
+                orig_positions = []
+                for oi, ch in enumerate(current_text):
+                    canon_ch = _canonicalize_text(ch)
+                    if canon_ch:  # Non-removed character
+                        orig_positions.append(oi)
+                if pos + len(canon_search) <= len(orig_positions):
+                    real_start = orig_positions[pos]
+                    real_end = (
+                        orig_positions[pos + len(canon_search)]
+                        if pos + len(canon_search) < len(orig_positions)
+                        else len(current_text)
+                    )
+                    current_text = (
+                        current_text[:real_start]
+                        + replace_block.strip()
+                        + current_text[real_end:]
+                    )
+                    applied += 1
+                    logger.debug(
+                        "Matched search block via canonical punctuation normalization"
+                    )
+                    continue
 
         # 3. Line-based multi-tier matching
         orig_lines = current_text.splitlines()

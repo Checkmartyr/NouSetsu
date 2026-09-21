@@ -81,9 +81,9 @@ def test_extractor_filtering_enabled():
     prompt = captured_sys_prompt[0]
 
     # Elise should be present (text match)
-    assert "エリーゼ -> Elise" in prompt
+    assert "Elise" in prompt and "エリーゼ" in prompt
     # Bob should be present (core role: protagonist)
-    assert "ボブ -> Bob" in prompt
+    assert "Bob" in prompt and "ボブ" in prompt
     # Extra characters should NOT be present (filtered out!)
     assert "エキストラ_01" not in prompt
     assert "エキストラ_15" not in prompt
@@ -153,7 +153,7 @@ def test_extractor_filtering_no_truncation():
     prompt = captured_sys_prompt[0]
     # Verify all 25 nobles are retained (not capped at 15)
     for i in range(25):
-        assert f"貴族_{i:02d} -> Noble_{i:02d}" in prompt
+        assert f"Noble_{i:02d}" in prompt and f"貴族_{i:02d}" in prompt
 
 
 def test_extractor_filtering_empty_fallback():

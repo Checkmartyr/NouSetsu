@@ -158,6 +158,9 @@ Output ONLY the final polished chapter text in clean markdown format written ent
 Active Glossary:
 {glossary}
 
+Active Characters:
+{characters}
+
 Critique Notes:
 {critique_notes}
 """
@@ -172,18 +175,24 @@ Instead of rewriting the entire chapter, output ONLY the specific sentence or pa
 [Refined text in {target_lang}]
 >>>>>>>
 
-## RULES:
-1. Search block MUST match text from the draft exactly.
-2. You can output multiple SEARCH/REPLACE blocks in sequence to polish different parts of the chapter.
-3. Only include sections that need changes. Do not include unchanged paragraphs.
-4. If no changes are needed, output: NO_CHANGES_NEEDED
-5. All replacement text MUST be 100% in {target_lang}.
-6. PRESERVE CHAPTER HEADINGS: Never remove chapter titles or headings.
+## CRITICAL SEARCH/REPLACE DIRECTIVES:
+1. The SEARCH block MUST contain text strictly copied VERBATIM from the Draft Translation in {target_lang}.
+2. NEVER copy text from the Original Source Text ({source_lang}) into the SEARCH block! The Original Source Text is provided strictly for reference.
+3. Both SEARCH and REPLACE blocks MUST be in {target_lang}. Any SEARCH block containing {source_lang} cannot be matched and will be discarded.
+4. Include enough surrounding context in {target_lang} (e.g. the full sentence or dialogue quote) so the SEARCH block matches uniquely in the draft.
+5. You can output multiple SEARCH/REPLACE blocks in sequence to polish different parts of the chapter.
+6. Only include sections that need changes. Do not include unchanged paragraphs.
+7. If no changes are needed, output: NO_CHANGES_NEEDED
+8. All replacement text MUST be 100% in {target_lang}.
+9. PRESERVE CHAPTER HEADINGS: Never remove chapter titles or headings.
 {skills_section}
 {procedural_guidance}
 
 Active Glossary:
 {glossary}
+
+Active Characters:
+{characters}
 
 Critique Notes:
 {critique_notes}

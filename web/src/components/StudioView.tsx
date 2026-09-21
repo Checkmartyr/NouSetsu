@@ -326,35 +326,35 @@ export const StudioView: React.FC<StudioViewProps> = ({
       <div
         key={`${ch.folder || 'root'}_${ch.chapter_num}`}
         onClick={() => setSelectedChapter({ num: ch.chapter_num, folder: ch.folder })}
-        className={`p-3 cursor-pointer transition-all flex items-start justify-between gap-2 select-none group/item ${
-          inFolder ? 'pl-5 pr-3 bg-slate-950/20' : 'px-3'
+        className={`p-3 cursor-pointer transition-colors flex items-start justify-between gap-2 select-none group/item ${
+          inFolder ? 'pl-5 pr-3 bg-[#2b2622]/40' : 'px-3'
         } ${
           isSelected
-            ? 'bg-indigo-950/50 border-l-4 border-indigo-500 shadow-sm'
-            : 'hover:bg-slate-900/60 border-l-4 border-transparent'
+            ? 'bg-[#383330] border-l-2 border-[#f7f5f0]'
+            : 'hover:bg-[#383330]/50 border-l-2 border-transparent'
         }`}
       >
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5 min-w-0">
             {inFolder && (
-              <span className="text-slate-500 text-xs font-mono select-none shrink-0">&gt;</span>
+              <span className="text-[#aea69c] text-xs font-mono select-none shrink-0">&gt;</span>
             )}
             <span
               className={`text-xs font-mono font-medium truncate ${
-                isSelected ? 'text-indigo-200 font-semibold' : 'text-slate-200'
+                isSelected ? 'text-[#f7f5f0] font-semibold' : 'text-[#dad2c1]'
               }`}
               title={mdFileName}
             >
               {mdFileName}
             </span>
             {!inFolder && ch.folder && (
-              <span className="text-[10px] px-1.5 py-0.2 bg-slate-800 text-slate-400 rounded shrink-0">
+              <span className="text-[10px] font-mono px-1.5 py-0.2 bg-[#383330] text-[#aea69c] border border-[#3f3a36] rounded-[2px] shrink-0">
                 {ch.folder}
               </span>
             )}
           </div>
-          <div className="flex items-center gap-2 mt-1.5 text-[11px] text-slate-400">
-            <span className="text-slate-500">Ch.{ch.chapter_num}</span>
+          <div className="flex items-center gap-2 mt-1.5 text-[11px] text-[#aea69c]">
+            <span className="font-mono">Ch.{ch.chapter_num}</span>
             <span>&bull;</span>
             <span>{ch.raw_lines} lines</span>
             {ch.translated_words > 0 && (
@@ -368,7 +368,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
             {ch.quality_audit?.fidelity_score && (
               <>
                 <span>&bull;</span>
-                <span className="text-amber-400 font-medium">
+                <span className="text-amber-300 font-medium">
                   ★ {ch.quality_audit.fidelity_score.toFixed(1)}
                 </span>
               </>
@@ -378,23 +378,23 @@ export const StudioView: React.FC<StudioViewProps> = ({
 
         <div className="flex flex-col items-end shrink-0 gap-1">
           {isRunningThis ? (
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 animate-pulse">
+            <span className="px-1.5 py-0.5 rounded-[2px] text-[10px] font-mono font-medium bg-[#383330] text-amber-300 border border-amber-800/40 animate-pulse">
               RUNNING
             </span>
           ) : ch.is_completed ? (
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <span className="px-1.5 py-0.5 rounded-[2px] text-[10px] font-mono font-medium bg-[#383330] text-emerald-400 border border-emerald-800/40">
               DONE
             </span>
           ) : ch.status === 'PAUSED' || ch.status === 'RESUME' ? (
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+            <span className="px-1.5 py-0.5 rounded-[2px] text-[10px] font-mono font-medium bg-[#383330] text-amber-400 border border-amber-800/40">
               PAUSED
             </span>
           ) : ch.status === 'FAILED' ? (
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20">
+            <span className="px-1.5 py-0.5 rounded-[2px] text-[10px] font-mono font-medium bg-[#383330] text-rose-400 border border-rose-800/40">
               FAILED
             </span>
           ) : (
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-800 text-slate-500">
+            <span className="px-1.5 py-0.5 rounded-[2px] text-[10px] font-mono font-medium bg-[#2b2622] text-[#aea69c] border border-[#3f3a36]">
               WAIT
             </span>
           )}
@@ -406,7 +406,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
                 handleStart(ch.chapter_num, ch.folder || undefined);
               }}
               title="Translate only this chapter"
-              className="opacity-0 group-hover/item:opacity-100 hover:opacity-100 text-[10px] text-indigo-400 hover:text-indigo-300 transition-opacity"
+              className="opacity-0 group-hover/item:opacity-100 hover:opacity-100 text-[10px] text-[#f7f5f0] hover:underline cursor-pointer transition-opacity font-mono"
             >
               Run ▶
             </button>
@@ -425,27 +425,27 @@ export const StudioView: React.FC<StudioViewProps> = ({
   ];
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-slate-950 text-slate-100">
+    <div className="flex flex-col h-full overflow-hidden bg-[#2b2622] text-[#f7f5f0]">
       {/* Top Banner: Translation Controls & Active Pipeline */}
-      <div className="bg-slate-900/80 border-b border-slate-800/80 px-6 py-4 flex flex-wrap items-center justify-between gap-4">
+      <div className="bg-[#2b2622] border-b border-[#3f3a36] px-6 py-3 flex flex-wrap items-center justify-between gap-4">
         {/* Left: Project Title & Quick Stats */}
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-xl font-bold bg-gradient-to-r from-indigo-400 via-purple-300 to-pink-400 bg-clip-text text-transparent">
+            <span className="text-base font-medium tracking-[-0.3px] text-[#f7f5f0]">
               {activeProjectTitle || 'Novel Studio'}
             </span>
             {status?.is_running ? (
-              <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 animate-pulse">
-                <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+              <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-[2px] text-xs font-mono font-medium bg-[#383330] text-emerald-300 border border-emerald-800/40 animate-pulse">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
                 RUNNING (Ch.{status.active_chapter ?? '?'})
               </span>
             ) : (
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-800 text-slate-400 border border-slate-700">
+              <span className="px-2 py-0.5 rounded-[2px] text-xs font-mono font-medium bg-[#383330] text-[#aea69c] border border-[#3f3a36]">
                 IDLE
               </span>
             )}
           </div>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-[#aea69c] mt-0.5 font-normal">
             {chapters.length} total chapters &bull;{' '}
             {chapters.filter((c) => c.is_completed).length} translated &bull;{' '}
             {chapters.filter((c) => c.status === 'PAUSED' || c.status === 'RESUME').length} paused
@@ -453,7 +453,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
         </div>
 
         {/* Center: Realtime Pipeline Stages */}
-        <div className="flex items-center gap-1.5 bg-slate-950/70 px-3 py-2 rounded-xl border border-slate-800 shadow-inner">
+        <div className="flex items-center gap-1 bg-[#2b2622] px-1.5 py-1 rounded-[4px] border border-[#3f3a36]">
           {stages.map((st) => {
             const isActive =
               status?.is_running &&
@@ -461,13 +461,13 @@ export const StudioView: React.FC<StudioViewProps> = ({
             return (
               <div
                 key={st.key}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
+                className={`px-2.5 py-1 rounded-[3px] text-xs font-mono transition-colors flex items-center gap-1.5 ${
                   isActive
-                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/30 scale-105 ring-1 ring-indigo-400'
-                    : 'bg-slate-900 text-slate-400 border border-slate-800/80'
+                    ? 'bg-[#f7f5f0] text-[#2b2622] font-semibold'
+                    : 'bg-[#383330] text-[#c9c0ad] border border-[#3f3a36]'
                 }`}
               >
-                {isActive && <Sparkles className="w-3 h-3 animate-spin text-pink-300" />}
+                {isActive && <Sparkles className="w-3 h-3 text-[#2b2622]" />}
                 <span>{st.label}</span>
               </div>
             );
@@ -478,8 +478,8 @@ export const StudioView: React.FC<StudioViewProps> = ({
         <div className="flex items-center gap-2">
           {/* Translation Options: Limit & Force */}
           {!status?.is_running && (
-            <div className="hidden sm:flex items-center gap-2 bg-slate-950 px-2.5 py-1.5 rounded-lg border border-slate-800 text-xs">
-              <label className="text-slate-400">Limit:</label>
+            <div className="hidden sm:flex items-center gap-2 bg-[#383330] px-2.5 py-1 rounded-[3px] border border-[#3f3a36] text-xs">
+              <label className="text-[#aea69c]">Limit:</label>
               <input
                 type="number"
                 min={1}
@@ -488,14 +488,14 @@ export const StudioView: React.FC<StudioViewProps> = ({
                 onChange={(e) =>
                   setLimitCount(e.target.value ? parseInt(e.target.value, 10) : undefined)
                 }
-                className="w-12 bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-slate-200 text-xs focus:outline-none focus:border-indigo-500"
+                className="w-12 bg-[#2b2622] border border-[#3f3a36] rounded-[2px] px-1.5 py-0.5 text-[#f7f5f0] text-xs font-mono focus:outline-none focus:border-[#dad2c1]"
               />
-              <label className="flex items-center gap-1 text-slate-400 cursor-pointer ml-1">
+              <label className="flex items-center gap-1 text-[#aea69c] cursor-pointer ml-1">
                 <input
                   type="checkbox"
                   checked={forceRetranslate}
                   onChange={(e) => setForceRetranslate(e.target.checked)}
-                  className="rounded accent-indigo-600 cursor-pointer"
+                  className="rounded-[2px] accent-[#f7f5f0] cursor-pointer"
                 />
                 <span>Force</span>
               </label>
@@ -505,37 +505,37 @@ export const StudioView: React.FC<StudioViewProps> = ({
           {status?.is_running ? (
             <button
               onClick={handleStop}
-              className="flex items-center gap-2 px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-sm font-semibold shadow-lg shadow-rose-600/20 transition-all cursor-pointer"
+              className="btn-secondary text-rose-300 border-rose-900/50 hover:bg-rose-950/40 flex items-center gap-1.5 text-xs px-3 py-1.5"
             >
-              <Square className="w-4 h-4 fill-white" />
-              Stop Translation
+              <Square className="w-3.5 h-3.5 fill-rose-300" />
+              <span>Stop Translation</span>
             </button>
           ) : (
             <button
               onClick={() => handleStart()}
               disabled={isStarting}
-              className="flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-lg text-sm font-semibold shadow-lg shadow-indigo-600/20 transition-all cursor-pointer disabled:opacity-50"
+              className="btn-primary flex items-center gap-1.5 text-xs px-3.5 py-1.5"
             >
-              <Play className="w-4 h-4 fill-white" />
-              {isStarting ? 'Starting...' : 'Translate Batch'}
+              <Play className="w-3.5 h-3.5 fill-[#2b2622]" />
+              <span>{isStarting ? 'Starting...' : 'Translate Batch'}</span>
             </button>
           )}
 
           <button
             onClick={() => setIsUploadModalOpen(true)}
             title="Upload chapter files"
-            className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-sm font-semibold shadow-sm transition-all cursor-pointer"
+            className="btn-secondary flex items-center gap-1.5 text-xs px-3 py-1.5"
           >
-            <Upload className="w-4 h-4 text-indigo-400" />
+            <Upload className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Upload</span>
           </button>
 
           <button
             onClick={refreshData}
             title="Refresh chapter list"
-            className="p-2 text-slate-400 hover:text-slate-200 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-lg cursor-pointer transition-colors"
+            className="btn-secondary p-1.5 text-xs"
           >
-            <RefreshCw className="w-4 h-4" />
+            <RefreshCw className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>
@@ -543,17 +543,17 @@ export const StudioView: React.FC<StudioViewProps> = ({
       {/* Main Studio Grid: Left Sidebar (Chapters) & Right Viewer (Dual Text) */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left Column: Chapter Queue & Filters */}
-        <div className="w-96 border-r border-slate-800/80 bg-slate-900/40 flex flex-col shrink-0">
+        <div className="w-96 border-r border-[#3f3a36] bg-[#2b2622] flex flex-col shrink-0">
           {/* Filter Bar */}
-          <div className="p-3 border-b border-slate-800/80 space-y-2">
+          <div className="p-3 border-b border-[#3f3a36] space-y-2">
             <div className="relative">
-              <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-500" />
+              <Search className="w-3.5 h-3.5 absolute left-2.5 top-2 text-[#aea69c]" />
               <input
                 type="text"
                 placeholder="Search chapter..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-950 border border-slate-800 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                className="input-text w-full pl-8 pr-2.5 py-1 text-xs font-mono"
               />
             </div>
 
@@ -561,7 +561,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs text-slate-300 focus:outline-none focus:border-indigo-500"
+                className="flex-1 bg-[#383330] border border-[#3f3a36] rounded-[3px] px-2 py-1 text-xs text-[#f7f5f0] focus:outline-none focus:border-[#dad2c1]"
               >
                 <option value="all">All Statuses</option>
                 <option value="completed">Completed</option>
@@ -574,7 +574,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
                 <select
                   value={selectedFolder}
                   onChange={(e) => setSelectedFolder(e.target.value)}
-                  className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs text-slate-300 focus:outline-none focus:border-indigo-500"
+                  className="flex-1 bg-[#383330] border border-[#3f3a36] rounded-[3px] px-2 py-1 text-xs text-[#f7f5f0] focus:outline-none focus:border-[#dad2c1]"
                 >
                   <option value="all">All Volumes</option>
                   {folders.map((f) => (
@@ -589,26 +589,26 @@ export const StudioView: React.FC<StudioViewProps> = ({
 
           {/* Folder Hierarchy Toolbar (When multiple subfolders exist and viewing All) */}
           {hasMultipleFolders && selectedFolder === 'all' && (
-            <div className="px-3 py-1.5 bg-slate-950/60 border-b border-slate-800/60 flex items-center justify-between text-xs text-slate-400 select-none">
+            <div className="px-3 py-1.5 bg-[#2b2622] border-b border-[#3f3a36] flex items-center justify-between text-xs text-[#aea69c] select-none">
               <div className="flex items-center gap-1.5">
-                <Folder className="w-3.5 h-3.5 text-amber-400" />
-                <span className="font-semibold text-slate-300">{folderGroups.length} Volumes</span>
-                <span className="text-[11px] text-slate-500">({filteredChapters.length} ch)</span>
+                <Folder className="w-3.5 h-3.5 text-[#dad2c1]" />
+                <span className="font-medium text-[#f7f5f0]">{folderGroups.length} Volumes</span>
+                <span className="text-[11px] text-[#aea69c] font-mono">({filteredChapters.length} ch)</span>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 font-mono text-[11px]">
                 <button
                   type="button"
                   onClick={expandAllFolders}
-                  className="text-[10px] text-indigo-400 hover:text-indigo-300 transition-colors cursor-pointer"
+                  className="text-[#dad2c1] hover:text-[#f7f5f0] transition-colors cursor-pointer"
                   title="Expand all folder dropdowns"
                 >
                   Expand All
                 </button>
-                <span className="text-slate-600">&bull;</span>
+                <span className="text-[#3f3a36]">&bull;</span>
                 <button
                   type="button"
                   onClick={collapseAllFolders}
-                  className="text-[10px] text-slate-400 hover:text-slate-300 transition-colors cursor-pointer"
+                  className="text-[#aea69c] hover:text-[#f7f5f0] transition-colors cursor-pointer"
                   title="Collapse all folder dropdowns"
                 >
                   Collapse All
@@ -618,10 +618,10 @@ export const StudioView: React.FC<StudioViewProps> = ({
           )}
 
           {/* Chapter Task List */}
-          <div className="flex-1 overflow-y-auto divide-y divide-slate-800/50">
+          <div className="flex-1 overflow-y-auto divide-y divide-[#3f3a36]/50">
             {filteredChapters.length === 0 ? (
-              <div className="p-8 text-center text-xs text-slate-500 flex flex-col items-center justify-center gap-3">
-                <FileText className="w-8 h-8 text-slate-600" />
+              <div className="p-8 text-center text-xs text-[#aea69c] flex flex-col items-center justify-center gap-3">
+                <FileText className="w-8 h-8 text-[#aea69c]" />
                 <p>
                   {chapters.length === 0
                     ? 'No chapters found in this project yet.'
@@ -630,53 +630,53 @@ export const StudioView: React.FC<StudioViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsUploadModalOpen(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-semibold cursor-pointer transition-colors"
+                  className="btn-primary text-xs"
                 >
                   <Upload className="w-3.5 h-3.5" />
                   <span>Upload Chapters</span>
                 </button>
               </div>
             ) : hasMultipleFolders && selectedFolder === 'all' ? (
-              <div className="divide-y divide-slate-800/60">
+              <div className="divide-y divide-[#3f3a36]">
                 {folderGroups.map((group) => {
                   const isOpen = isFolderOpen(group.key);
                   return (
-                    <div key={group.key} className="bg-slate-900/10">
+                    <div key={group.key} className="bg-[#2b2622]">
                       {/* Folder Dropdown Header */}
                       <div
                         onClick={() => toggleFolder(group.key)}
-                        className="w-full px-3 py-2 bg-slate-950/80 hover:bg-slate-900 border-y border-slate-800/80 flex items-center justify-between cursor-pointer select-none transition-colors sticky top-0 z-10 backdrop-blur group"
+                        className="w-full px-3 py-2 bg-[#383330] hover:bg-[#423c38] border-y border-[#3f3a36] flex items-center justify-between cursor-pointer select-none transition-colors sticky top-0 z-10"
                       >
                         <div className="flex items-center gap-2 min-w-0">
                           {isOpen ? (
-                            <ChevronDown className="w-3.5 h-3.5 text-indigo-400 shrink-0 transition-transform" />
+                            <ChevronDown className="w-3.5 h-3.5 text-[#f7f5f0] shrink-0" />
                           ) : (
-                            <ChevronRight className="w-3.5 h-3.5 text-slate-500 shrink-0 transition-transform" />
+                            <ChevronRight className="w-3.5 h-3.5 text-[#aea69c] shrink-0" />
                           )}
                           {isOpen ? (
-                            <FolderOpen className="w-4 h-4 text-amber-400 shrink-0" />
+                            <FolderOpen className="w-4 h-4 text-[#dad2c1] shrink-0" />
                           ) : (
-                            <Folder className="w-4 h-4 text-amber-500/80 shrink-0" />
+                            <Folder className="w-4 h-4 text-[#aea69c] shrink-0" />
                           )}
                           <span
-                            className="font-semibold text-xs text-slate-200 truncate"
+                            className="font-medium text-xs text-[#f7f5f0] truncate"
                             title={group.label}
                           >
                             {group.label}
                           </span>
-                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-800/90 text-slate-400 border border-slate-700/50">
+                          <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-[2px] bg-[#2b2622] text-[#aea69c] border border-[#3f3a36]">
                             {group.chapters.length}
                           </span>
                         </div>
 
                         <div className="flex items-center gap-2 shrink-0">
-                          <span className="text-[10px] font-mono text-slate-400">
+                          <span className="text-[10px] font-mono text-[#aea69c]">
                             <span
                               className={
                                 group.completedCount === group.chapters.length &&
                                 group.chapters.length > 0
                                   ? 'text-emerald-400 font-semibold'
-                                  : 'text-slate-300'
+                                  : 'text-[#dad2c1]'
                               }
                             >
                               {group.completedCount}
@@ -685,8 +685,8 @@ export const StudioView: React.FC<StudioViewProps> = ({
                           </span>
 
                           {group.hasRunning && (
-                            <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.2 bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded animate-pulse">
-                              <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+                            <span className="flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.2 bg-[#2b2622] text-amber-300 border border-amber-800/40 rounded-[2px] animate-pulse">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
                               Active
                             </span>
                           )}
@@ -699,9 +699,9 @@ export const StudioView: React.FC<StudioViewProps> = ({
                                 handleStart(undefined, group.folder || undefined);
                               }}
                               title={`Translate all pending chapters in ${group.label}`}
-                              className="opacity-0 group-hover:opacity-100 px-1.5 py-0.5 text-[10px] bg-indigo-600/30 hover:bg-indigo-600/60 text-indigo-200 border border-indigo-500/40 rounded transition-opacity flex items-center gap-1 cursor-pointer"
+                              className="px-1.5 py-0.5 text-[10px] font-mono bg-[#2b2622] hover:bg-[#383330] text-[#f7f5f0] border border-[#3f3a36] rounded-[2px] transition-colors flex items-center gap-1 cursor-pointer"
                             >
-                              <Play className="w-2.5 h-2.5 fill-indigo-200" />
+                              <Play className="w-2.5 h-2.5 fill-[#f7f5f0]" />
                               <span>Run</span>
                             </button>
                           )}
@@ -710,7 +710,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
 
                       {/* Dropdown Items (Chapters) */}
                       {isOpen && (
-                        <div className="divide-y divide-slate-800/40">
+                        <div className="divide-y divide-[#3f3a36]/40">
                           {group.chapters.map((ch) => renderChapterRow(ch, true))}
                         </div>
                       )}
@@ -719,7 +719,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
                 })}
               </div>
             ) : (
-              <div className="divide-y divide-slate-800/50">
+              <div className="divide-y divide-[#3f3a36]/50">
                 {filteredChapters.map((ch) => renderChapterRow(ch, false))}
               </div>
             )}
@@ -727,21 +727,21 @@ export const StudioView: React.FC<StudioViewProps> = ({
         </div>
 
         {/* Right Column: Dual Source / Target Comparison Reader */}
-        <div className="flex-1 flex flex-col overflow-hidden bg-slate-950">
+        <div className="flex-1 flex flex-col overflow-hidden bg-[#2b2622]">
           {/* Subheader */}
-          <div className="px-6 py-2.5 border-b border-slate-800/80 flex items-center justify-between bg-slate-900/30">
-            <div className="flex items-center gap-3 min-w-0">
-              <FileText className="w-4 h-4 text-indigo-400 shrink-0" />
-              <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-200 truncate">
+          <div className="px-6 py-2 border-b border-[#3f3a36] flex items-center justify-between bg-[#383330]/30">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <FileText className="w-4 h-4 text-[#aea69c] shrink-0" />
+              <div className="flex items-center gap-1.5 text-xs font-medium text-[#f7f5f0] truncate">
                 {selectedChapter?.folder && (
-                  <span className="text-amber-400 font-mono text-xs flex items-center gap-1 shrink-0">
+                  <span className="text-[#dad2c1] font-mono text-xs flex items-center gap-1 shrink-0">
                     <Folder className="w-3.5 h-3.5" />
                     {selectedChapter.folder} &gt;
                   </span>
                 )}
                 <span className="truncate">
                   Chapter {selectedChapter?.num ?? '—'}:{' '}
-                  <span className="font-mono text-xs text-slate-300">
+                  <span className="font-mono text-xs text-[#aea69c]">
                     {chapterContent?.output_file_name ||
                       (chapterContent?.output_file
                         ? chapterContent.output_file.split(/[\/\\]/).pop()
@@ -760,10 +760,10 @@ export const StudioView: React.FC<StudioViewProps> = ({
                     selectedChapter &&
                     onNavigateToReader(selectedChapter.num, selectedChapter.folder)
                   }
-                  className="flex items-center gap-1.5 px-3 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-medium cursor-pointer transition-colors"
+                  className="btn-secondary text-xs px-2.5 py-1 flex items-center gap-1.5"
                 >
                   <BookOpen className="w-3.5 h-3.5" />
-                  Read in Reader Mode
+                  <span>Reader Mode</span>
                 </button>
               )}
             </div>
@@ -771,43 +771,43 @@ export const StudioView: React.FC<StudioViewProps> = ({
 
           {/* Dual Column Content Body */}
           {loadingContent ? (
-            <div className="flex-1 flex items-center justify-center text-slate-500 text-sm">
+            <div className="flex-1 flex items-center justify-center text-[#aea69c] text-xs font-mono">
               Loading chapter content...
             </div>
           ) : (
-            <div className="flex-1 grid grid-cols-2 divide-x divide-slate-800/80 overflow-hidden">
+            <div className="flex-1 grid grid-cols-2 divide-x divide-[#3f3a36] overflow-hidden">
               {/* Left: Original Source */}
               <div className="flex flex-col h-full overflow-hidden">
-                <div className="px-4 py-2 bg-slate-900/60 text-xs font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-800">
+                <div className="px-4 py-2 bg-[#383330] text-xs font-mono text-[#dad2c1] uppercase tracking-wider border-b border-[#3f3a36]">
                   Raw Source Text
                 </div>
-                <div className="flex-1 p-6 overflow-y-auto font-mono text-sm leading-relaxed text-slate-300 whitespace-pre-wrap selection:bg-indigo-500/30">
+                <div className="flex-1 p-6 overflow-y-auto font-mono text-[13px] leading-relaxed text-[#c9c0ad] whitespace-pre-wrap bg-[#24201d]">
                   {chapterContent?.source_text || (
-                    <span className="text-slate-600 italic">No source file found.</span>
+                    <span className="text-[#aea69c] italic">No source file found.</span>
                   )}
                 </div>
               </div>
 
               {/* Right: Translated Target */}
-              <div className="flex flex-col h-full overflow-hidden bg-slate-900/10">
-                <div className="px-4 py-2 bg-slate-900/60 text-xs font-semibold text-emerald-400 uppercase tracking-wider border-b border-slate-800 flex items-center justify-between">
+              <div className="flex flex-col h-full overflow-hidden bg-[#2b2622]">
+                <div className="px-4 py-2 bg-[#383330] text-xs font-mono text-[#f7f5f0] uppercase tracking-wider border-b border-[#3f3a36] flex items-center justify-between">
                   <span>Literary English Translation</span>
                   {(chapterContent?.has_translated || Boolean(chapterContent?.translated_text?.trim())) && (
-                    <span className="text-[11px] text-slate-400 font-normal">
+                    <span className="text-[10px] text-[#aea69c] font-mono">
                       Publication Draft
                     </span>
                   )}
                 </div>
-                <div className="flex-1 p-6 overflow-y-auto text-sm leading-relaxed text-slate-200 whitespace-pre-wrap selection:bg-emerald-500/30">
+                <div className="flex-1 p-6 overflow-y-auto text-sm leading-relaxed text-[#dad2c1] whitespace-pre-wrap">
                   {chapterContent?.translated_text?.trim() ? (
                     chapterContent.translated_text
                   ) : (
-                    <div className="h-full flex flex-col items-center justify-center text-slate-500 text-sm gap-2">
-                      <Clock className="w-8 h-8 text-slate-600" />
+                    <div className="h-full flex flex-col items-center justify-center text-[#aea69c] text-xs gap-2">
+                      <Clock className="w-6 h-6 text-[#aea69c]" />
                       <span>Not translated yet.</span>
                       <button
                         onClick={() => selectedChapter && handleStart(selectedChapter.num)}
-                        className="mt-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-medium cursor-pointer"
+                        className="btn-primary text-xs mt-2"
                       >
                         Translate Chapter {selectedChapter?.num ?? ''}
                       </button>
@@ -821,38 +821,38 @@ export const StudioView: React.FC<StudioViewProps> = ({
       </div>
 
       {/* Bottom Collapsible Event Log Drawer */}
-      <div className="border-t border-slate-800 bg-slate-900/90 backdrop-blur shrink-0 transition-all">
+      <div className="border-t border-[#3f3a36] bg-[#2b2622] shrink-0 transition-all">
         <button
           onClick={() => setIsLogDrawerOpen(!isLogDrawerOpen)}
-          className="w-full px-4 py-2 flex items-center justify-between text-xs font-mono text-slate-400 hover:text-slate-200 cursor-pointer transition-colors"
+          className="w-full px-4 py-2 flex items-center justify-between text-xs font-mono text-[#aea69c] hover:text-[#f7f5f0] cursor-pointer transition-colors"
         >
           <div className="flex items-center gap-2">
-            <Terminal className="w-3.5 h-3.5 text-indigo-400" />
-            <span className="font-semibold text-slate-300">Live Pipeline Event Stream</span>
+            <Terminal className="w-3.5 h-3.5 text-[#dad2c1]" />
+            <span className="font-medium text-[#f7f5f0]">Pipeline Event Stream</span>
             {logs.length > 0 && (
-              <span className="px-1.5 py-0.2 bg-slate-800 text-[10px] text-slate-400 rounded">
+              <span className="px-1.5 py-0.2 bg-[#383330] text-[10px] text-[#dad2c1] rounded-[2px] border border-[#3f3a36]">
                 {logs.length} events
               </span>
             )}
             {status?.last_log && (
-              <span className="text-slate-500 truncate max-w-xl font-normal">
+              <span className="text-[#aea69c] truncate max-w-xl font-normal">
                 &bull; {status.last_log}
               </span>
             )}
           </div>
           <div className="flex items-center gap-1">
             {isLogDrawerOpen ? (
-              <ChevronDown className="w-4 h-4" />
+              <ChevronDown className="w-4 h-4 text-[#f7f5f0]" />
             ) : (
-              <ChevronUp className="w-4 h-4" />
+              <ChevronUp className="w-4 h-4 text-[#aea69c]" />
             )}
           </div>
         </button>
 
         {isLogDrawerOpen && (
-          <div className="h-44 p-3 bg-black/80 font-mono text-xs text-emerald-400/90 overflow-y-auto space-y-1 border-t border-slate-800/80">
+          <div className="h-44 p-3 bg-[#24201d] font-mono text-xs text-[#c9c0ad] overflow-y-auto space-y-1 border-t border-[#3f3a36]">
             {logs.length === 0 ? (
-              <div className="text-slate-600 italic">No events streamed yet.</div>
+              <div className="text-[#aea69c] italic">No events streamed yet.</div>
             ) : (
               logs.map((lg, i) => (
                 <div key={i} className="leading-snug">

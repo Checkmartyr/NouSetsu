@@ -786,6 +786,7 @@ class NovelTranslationWorkflow:
             draft_text=base_text,
             critique_notes=state.critique_notes,
             active_glossary=state.active_glossary,
+            active_characters=state.active_characters,
             bible=state.novel_bible,
             genre=state.genre,
             source_text=state.source_text,

@@ -4,6 +4,9 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
+import stat
+import sys
 import time
 from typing import Any, Dict, List, Optional, Tuple
 import yaml
@@ -14,22 +17,62 @@ from nousetsu.models.trace import ChapterTraceDocument
 from nousetsu.utils.language import detect_language_from_dir
 
 
-def atomic_write_file(file_path: Path, content: str, encoding: str = "utf-8") -> None:
-    """Atomically write text content using a temporary file and atomic rename."""
+def atomic_write_file(
+    file_path: Path,
+    content: str,
+    encoding: str = "utf-8",
+    max_retries: int = 6,
+    initial_delay: float = 0.05
+) -> None:
+    """Atomically write text content using a temporary file and atomic rename,
+
+    with Windows file-locking retry backoff and fallback copy.
+    """
     path = Path(file_path).resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = path.with_name(f"{path.name}.tmp_{os.getpid()}_{time.time_ns()}")
     try:
         with open(tmp_path, "w", encoding=encoding) as f:
             f.write(content)
-        os.replace(tmp_path, path)
-    except Exception:
+
+        delay = initial_delay
+        last_err: Optional[Exception] = None
+        for attempt in range(max_retries):
+            try:
+                if path.exists() and sys.platform == "win32":
+                    try:
+                        os.chmod(path, stat.S_IWRITE | stat.S_IREAD)
+                    except Exception:
+                        pass
+                os.replace(tmp_path, path)
+                return
+            except PermissionError as pe:
+                last_err = pe
+                if attempt < max_retries - 1:
+                    time.sleep(delay)
+                    delay *= 2
+                else:
+                    # Final fallback on Windows: if atomic replace is blocked by open readers,
+                    # copy file contents in place and remove temporary file
+                    try:
+                        with open(path, "w", encoding=encoding) as df:
+                            df.write(content)
+                        if tmp_path.exists():
+                            try:
+                                tmp_path.unlink()
+                            except Exception:
+                                pass
+                        return
+                    except Exception:
+                        pass
+        if last_err:
+            raise last_err
+    finally:
         if tmp_path.exists():
             try:
                 tmp_path.unlink()
             except Exception:
                 pass
-        raise
 
 
 def atomic_write_json(file_path: Path, data: Any, indent: int = 2) -> None:
@@ -537,8 +580,17 @@ class NovelRepository:
         if not path.exists():
             return self.initialize_project()
 
-        with open(path, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f) or {}
+        data = None
+        for attempt in range(4):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = yaml.safe_load(f) or {}
+                break
+            except (PermissionError, yaml.YAMLError):
+                if attempt < 3:
+                    time.sleep(0.05 * (attempt + 1))
+                else:
+                    raise
 
         # Load chapter summaries with folder scoping
         summaries: List[ChapterSummary] = []

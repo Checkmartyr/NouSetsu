@@ -505,6 +505,11 @@ def _run_batch_worker(
                 "message": msg,
                 "timestamp": time.time(),
             })
+            event_bus.publish_sync("log", {
+                "level": "INFO",
+                "message": msg,
+                "timestamp": time.time(),
+            })
 
         tasks = _scan_project_tasks(repo, folder=folder)
         if chapter_num is not None:
@@ -524,13 +529,15 @@ def _run_batch_worker(
             job.active_folder = task.folder
             job.active_stage = "EXTRACTION"
 
-            event_bus.publish_sync("stage_start", {
+            start_payload = {
                 "chapter_num": task.chapter_num,
                 "folder": task.folder,
                 "title": task.source_file.stem,
                 "total_chapters": len(tasks),
                 "index": idx,
-            })
+            }
+            event_bus.publish_sync("stage_start", start_payload)
+            event_bus.publish_sync("chapter_started", start_payload)
 
             try:
                 meta = runner.run_chapter(
@@ -545,18 +552,24 @@ def _run_batch_worker(
             if meta and meta.checkpoint and meta.checkpoint.status == StageStatus.COMPLETED:
                 completed_count += 1
                 audit_dict = meta.quality_audit.model_dump() if meta.quality_audit else {}
-                event_bus.publish_sync("chapter_completed", {
+                duration_val = meta.duration_seconds
+                tokens_dict = meta.total_token_usage.model_dump()
+                event_payload = {
                     "chapter_num": task.chapter_num,
                     "folder": task.folder,
-                    "duration": meta.duration_seconds,
-                    "tokens": meta.total_token_usage.model_dump() if meta.total_token_usage else {},
+                    "duration": duration_val,
+                    "tokens": tokens_dict,
                     "audit": audit_dict,
-                })
+                }
+                event_bus.publish_sync("chapter_completed", event_payload)
+                event_bus.publish_sync("chapter_finished", event_payload)
 
         if stop_event.is_set():
             event_bus.publish_sync("batch_stopped", {"message": "Batch translation safely paused by user."})
+            event_bus.publish_sync("job_finished", {"message": "Batch translation safely paused by user.", "status": "stopped"})
         else:
             event_bus.publish_sync("batch_completed", {"completed_chapters": completed_count})
+            event_bus.publish_sync("job_finished", {"completed_chapters": completed_count, "status": "completed"})
 
     except Exception as e:
         logger.exception("Batch worker failed: %s", e)

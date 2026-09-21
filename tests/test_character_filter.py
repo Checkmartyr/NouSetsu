@@ -252,8 +252,8 @@ def test_character_pronouns_in_drafter_and_critic_prompts():
     )
     sys_prompt_drafter = mock_llm.invoke.call_args[0][0][0].content
     assert "[Source: she/her, I] -> [Target: เธอ, ฉัน]" in sys_prompt_drafter
-    assert "Relational: [with Amelia: หนู/พี่]" in sys_prompt_drafter
-    assert "Relational: [with Ifia: พี่/เธอ]" in sys_prompt_drafter
+    assert "with Amelia: หนู/พี่" in sys_prompt_drafter
+    assert "with Ifia: พี่/เธอ" in sys_prompt_drafter
 
     # 2. Critic prompt includes pronouns and relational mappings
     critic = CritiqueAgent()
@@ -272,7 +272,8 @@ def test_character_pronouns_in_drafter_and_critic_prompts():
         active_glossary=[]
     )
     sys_prompt_critic = mock_critic_llm.invoke.call_args[0][0][0].content
-    assert "[Pronouns: she/her, I -> เธอ, ฉัน]" in sys_prompt_critic
-    assert "[Relational: with Amelia: หนู/พี่]" in sys_prompt_critic
+    assert "[Source: she/her, I] -> [Target: เธอ, ฉัน]" in sys_prompt_critic
+    assert "with Amelia: หนู/พี่" in sys_prompt_critic
+    assert "with Ifia: พี่/เธอ" in sys_prompt_critic
 
 

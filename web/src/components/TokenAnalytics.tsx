@@ -23,65 +23,65 @@ const STAGE_AGENT_INFO: Record<
   extraction: {
     name: 'Entity Extractor',
     role: 'Entity Detective',
-    color: 'text-amber-400',
-    border: 'border-amber-500/30',
-    bg: 'bg-amber-500/10',
+    color: 'text-[#d9a05b]',
+    border: 'border-[#3f3a36]',
+    bg: 'bg-[#24201d]',
   },
   drafting: {
     name: 'Context-Aware Drafter',
     role: 'Wordsmith',
-    color: 'text-blue-400',
-    border: 'border-blue-500/30',
-    bg: 'bg-blue-500/10',
+    color: 'text-[#8b9bb4]',
+    border: 'border-[#3f3a36]',
+    bg: 'bg-[#24201d]',
   },
   critique: {
     name: 'Critique Agent',
     role: 'Inspector',
-    color: 'text-purple-400',
-    border: 'border-purple-500/30',
-    bg: 'bg-purple-500/10',
+    color: 'text-[#b0a89f]',
+    border: 'border-[#3f3a36]',
+    bg: 'bg-[#24201d]',
   },
   polishing: {
     name: 'Polishing Agent',
     role: 'Prose Stylist',
-    color: 'text-emerald-400',
-    border: 'border-emerald-500/30',
-    bg: 'bg-emerald-500/10',
+    color: 'text-[#7fa678]',
+    border: 'border-[#3f3a36]',
+    bg: 'bg-[#24201d]',
   },
   chronicling: {
     name: 'Chronicler Agent',
     role: 'Memory Keeper',
-    color: 'text-rose-400',
-    border: 'border-rose-500/30',
-    bg: 'bg-rose-500/10',
+    color: 'text-[#cf6659]',
+    border: 'border-[#3f3a36]',
+    bg: 'bg-[#24201d]',
   },
 };
 
 const PROVIDER_COLORS: Record<string, { badge: string; text: string; dot: string }> = {
   'Google Gemini': {
-    badge: 'bg-blue-500/10 border-blue-500/30 text-blue-300',
-    text: 'text-blue-400',
-    dot: 'bg-blue-400',
+    badge: 'bg-[#383330] border-[#3f3a36] text-[#8b9bb4]',
+    text: 'text-[#8b9bb4]',
+    dot: 'bg-[#8b9bb4]',
   },
   'Google Gemma': {
-    badge: 'bg-purple-500/10 border-purple-500/30 text-purple-300',
-    text: 'text-purple-400',
-    dot: 'bg-purple-400',
+    badge: 'bg-[#383330] border-[#3f3a36] text-[#b0a89f]',
+    text: 'text-[#b0a89f]',
+    dot: 'bg-[#b0a89f]',
   },
   OpenAI: {
-    badge: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300',
-    text: 'text-emerald-400',
-    dot: 'bg-emerald-400',
+    badge: 'bg-[#383330] border-[#3f3a36] text-[#7fa678]',
+    text: 'text-[#7fa678]',
+    dot: 'bg-[#7fa678]',
   },
   Anthropic: {
-    badge: 'bg-amber-500/10 border-amber-500/30 text-amber-300',
-    text: 'text-amber-400',
-    dot: 'bg-amber-400',
+    badge: 'bg-[#383330] border-[#3f3a36] text-[#d9a05b]',
+    text: 'text-[#d9a05b]',
+    dot: 'bg-[#d9a05b]',
   },
   'Local Mock': {
-    badge: 'bg-slate-800 border-slate-700 text-slate-400',
-    text: 'text-slate-400',
-    dot: 'bg-slate-500',
+    badge: 'bg-[#383330] border-[#3f3a36] text-[#857d75]',
+    text: 'text-[#857d75]',
+    dot: 'bg-[#857d75]',
   },
 };
 
@@ -185,28 +185,32 @@ export const TokenAnalytics: React.FC<TokenAnalyticsProps> = ({ currentTrace, ch
       };
     }
     const sm = stageMetricsMap[st];
-    sm.interactionCount += 1;
+    const tu = t.token_usage || {
+      input_tokens: 0,
+      cached_tokens: 0,
+      output_tokens: 0,
+      thought_tokens: 0,
+      total_tokens: 0,
+    };
+    sm.inputTokens += tu.input_tokens || 0;
+    sm.cachedTokens += tu.cached_tokens || 0;
+    sm.outputTokens += tu.output_tokens || 0;
+    sm.thoughtTokens += tu.thought_tokens || 0;
+    sm.totalTokens += tu.total_tokens || 0;
     sm.durationSeconds += t.duration_seconds || 0;
+    sm.interactionCount += 1;
     if (t.model && !sm.models.includes(t.model)) {
       sm.models.push(t.model);
     }
-    if (t.token_usage) {
-      sm.inputTokens += t.token_usage.input_tokens || 0;
-      sm.cachedTokens += t.token_usage.cached_tokens || 0;
-      sm.outputTokens += t.token_usage.output_tokens || 0;
-      sm.thoughtTokens += t.token_usage.thought_tokens || 0;
-      sm.totalTokens += t.token_usage.total_tokens || 0;
-
-      const tCost = calculateCost(t.token_usage, t.model || 'unknown');
-      sm.cost += tCost.totalCost;
-    }
+    const costInfo = calculateCost(tu, t.model || 'unknown');
+    sm.cost += costInfo.totalCost;
 
     // 2. Model aggregation
-    const modelKey = t.model || 'unknown';
-    if (!modelMetricsMap[modelKey]) {
-      const pricing = getModelPricing(modelKey);
-      modelMetricsMap[modelKey] = {
-        model: modelKey,
+    const mName = t.model || 'unknown';
+    if (!modelMetricsMap[mName]) {
+      const pricing = getModelPricing(mName);
+      modelMetricsMap[mName] = {
+        model: mName,
         provider: pricing.provider,
         pricing,
         callCount: 0,
@@ -229,22 +233,20 @@ export const TokenAnalytics: React.FC<TokenAnalyticsProps> = ({ currentTrace, ch
         stages: [],
       };
     }
-    const mm = modelMetricsMap[modelKey];
+    const mm = modelMetricsMap[mName];
     mm.callCount += 1;
+    mm.inputTokens += tu.input_tokens || 0;
+    mm.cachedTokens += tu.cached_tokens || 0;
+    mm.outputTokens += tu.output_tokens || 0;
+    mm.thoughtTokens += tu.thought_tokens || 0;
+    mm.totalTokens += tu.total_tokens || 0;
     mm.durationSeconds += t.duration_seconds || 0;
     if (t.stage && !mm.stages.includes(t.stage)) {
       mm.stages.push(t.stage);
     }
-    if (t.token_usage) {
-      mm.inputTokens += t.token_usage.input_tokens || 0;
-      mm.cachedTokens += t.token_usage.cached_tokens || 0;
-      mm.outputTokens += t.token_usage.output_tokens || 0;
-      mm.thoughtTokens += t.token_usage.thought_tokens || 0;
-      mm.totalTokens += t.token_usage.total_tokens || 0;
-    }
   });
 
-  // Calculate costs per model
+  // Calculate total costs per model
   Object.values(modelMetricsMap).forEach((mm) => {
     mm.cost = calculateCost(
       {
@@ -274,116 +276,116 @@ export const TokenAnalytics: React.FC<TokenAnalyticsProps> = ({ currentTrace, ch
   });
 
   return (
-    <div className="space-y-6 overflow-y-auto max-h-full pr-2">
+    <div className="space-y-4 overflow-y-auto max-h-full pr-1 font-sans">
       {/* Chapter Overview Cards */}
       <div>
-        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center justify-between">
-          <span className="flex items-center gap-2">
-            <Layers className="w-4 h-4 text-indigo-400" />
-            <span>Chapter-Wide Performance & Token Allocation</span>
+        <div className="text-xs font-bold uppercase tracking-wider text-[#857d75] mb-2.5 flex items-center justify-between font-mono">
+          <span className="flex items-center gap-1.5 text-[#f7f5f0]">
+            <Layers className="w-3.5 h-3.5 text-[#b0a89f]" />
+            <span>Chapter Performance & Allocation</span>
           </span>
-          <span className="text-[11px] font-mono text-slate-500 font-normal">
-            Total Spend: <span className="text-amber-400 font-semibold">{formatCost(chapterTotalCost)}</span>
+          <span className="text-[11px] font-mono text-[#857d75] font-normal">
+            Total Spend: <span className="text-[#d9a05b] font-semibold">{formatCost(chapterTotalCost)}</span>
           </span>
-        </h4>
+        </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
           {/* Total Tokens */}
-          <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800">
-            <div className="flex items-center gap-1.5 text-slate-400 text-xs mb-1">
-              <Cpu className="w-3.5 h-3.5 text-indigo-400" />
+          <div className="p-3 rounded-[4px] bg-[#383330] border border-[#3f3a36]">
+            <div className="flex items-center gap-1.5 text-[#857d75] text-xs mb-1 font-mono">
+              <Cpu className="w-3.5 h-3.5 text-[#b0a89f]" />
               <span>Total Tokens</span>
             </div>
-            <div className="text-xl font-bold text-slate-100">
+            <div className="text-lg font-bold text-[#f7f5f0] font-mono">
               {chTokens.total_tokens.toLocaleString()}
             </div>
-            <div className="text-[11px] text-slate-500 mt-1">
-              across {chapterDoc.total_interactions} interactions
+            <div className="text-[10px] text-[#857d75] mt-1 font-mono">
+              {chapterDoc.total_interactions} interactions
             </div>
           </div>
 
           {/* Input Tokens */}
-          <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800">
-            <div className="flex items-center gap-1.5 text-slate-400 text-xs mb-1">
-              <span className="w-2 h-2 rounded-full bg-blue-400"></span>
+          <div className="p-3 rounded-[4px] bg-[#383330] border border-[#3f3a36]">
+            <div className="flex items-center gap-1.5 text-[#857d75] text-xs mb-1 font-mono">
+              <span className="w-1.5 h-1.5 rounded-[1px] bg-[#8b9bb4]"></span>
               <span>Input Tokens</span>
             </div>
-            <div className="text-xl font-bold text-blue-400">
+            <div className="text-lg font-bold text-[#8b9bb4] font-mono">
               {chTokens.input_tokens.toLocaleString()}
             </div>
-            <div className="text-[11px] text-slate-500 mt-1">
-              {chTokens.total_tokens > 0 ? Math.round((chTokens.input_tokens / chTokens.total_tokens) * 100) : 0}% of chapter
+            <div className="text-[10px] text-[#857d75] mt-1 font-mono">
+              {chTokens.total_tokens > 0 ? Math.round((chTokens.input_tokens / chTokens.total_tokens) * 100) : 0}% chapter
             </div>
           </div>
 
           {/* Cached Tokens (KV Cache) */}
-          <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 relative overflow-hidden">
-            <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
+          <div className="p-3 rounded-[4px] bg-[#383330] border border-[#3f3a36] relative">
+            <div className="flex items-center justify-between text-[#857d75] text-xs mb-1 font-mono">
               <div className="flex items-center gap-1.5">
-                <Zap className="w-3.5 h-3.5 text-cyan-400" />
-                <span className="text-cyan-300 font-medium">Cached Tokens</span>
+                <Zap className="w-3.5 h-3.5 text-[#d9a05b]" />
+                <span className="text-[#d9a05b]">Cached</span>
               </div>
-              <span className="text-[10px] font-semibold text-cyan-400 bg-cyan-950/80 border border-cyan-800/60 px-1.5 py-0.5 rounded">
-                ⚡ KV Hit
+              <span className="text-[9px] font-mono text-[#d9a05b] bg-[#24201d] border border-[#3f3a36] px-1 py-0.2 rounded-[2px]">
+                KV
               </span>
             </div>
-            <div className="text-xl font-bold text-cyan-300">
+            <div className="text-lg font-bold text-[#d9a05b] font-mono">
               {chTokens.cached_tokens.toLocaleString()}
             </div>
-            <div className="text-[11px] text-cyan-500 mt-1">
-              {cacheHitRate}% cache hit rate
+            <div className="text-[10px] text-[#857d75] mt-1 font-mono">
+              {cacheHitRate}% hit rate
             </div>
           </div>
 
           {/* Output Tokens */}
-          <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800">
-            <div className="flex items-center gap-1.5 text-slate-400 text-xs mb-1">
-              <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+          <div className="p-3 rounded-[4px] bg-[#383330] border border-[#3f3a36]">
+            <div className="flex items-center gap-1.5 text-[#857d75] text-xs mb-1 font-mono">
+              <span className="w-1.5 h-1.5 rounded-[1px] bg-[#7fa678]"></span>
               <span>Output Tokens</span>
             </div>
-            <div className="text-xl font-bold text-emerald-400">
+            <div className="text-lg font-bold text-[#7fa678] font-mono">
               {chTokens.output_tokens.toLocaleString()}
             </div>
-            <div className="text-[11px] text-slate-500 mt-1">
-              {chTokens.total_tokens > 0 ? Math.round((chTokens.output_tokens / chTokens.total_tokens) * 100) : 0}% of chapter
+            <div className="text-[10px] text-[#857d75] mt-1 font-mono">
+              {chTokens.total_tokens > 0 ? Math.round((chTokens.output_tokens / chTokens.total_tokens) * 100) : 0}% chapter
             </div>
           </div>
 
           {/* Latency & Speed */}
-          <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800">
-            <div className="flex items-center gap-1.5 text-slate-400 text-xs mb-1">
-              <Zap className="w-3.5 h-3.5 text-amber-400" />
+          <div className="p-3 rounded-[4px] bg-[#383330] border border-[#3f3a36]">
+            <div className="flex items-center gap-1.5 text-[#857d75] text-xs mb-1 font-mono">
+              <Zap className="w-3.5 h-3.5 text-[#d9a05b]" />
               <span>Throughput</span>
             </div>
-            <div className="text-xl font-bold text-slate-100">
-              {chTps.toLocaleString()} <span className="text-xs text-slate-400 font-normal">tok/s</span>
+            <div className="text-lg font-bold text-[#f7f5f0] font-mono">
+              {chTps.toLocaleString()} <span className="text-[10px] text-[#857d75] font-normal">tok/s</span>
             </div>
-            <div className="text-[11px] text-slate-500 mt-1">
-              {chapterDoc.total_duration_seconds.toFixed(1)}s total runtime
+            <div className="text-[10px] text-[#857d75] mt-1 font-mono">
+              {chapterDoc.total_duration_seconds.toFixed(1)}s total
             </div>
           </div>
 
           {/* Est. Chapter Cost */}
-          <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 relative overflow-hidden">
-            <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
+          <div className="p-3 rounded-[4px] bg-[#383330] border border-[#3f3a36] relative">
+            <div className="flex items-center justify-between text-[#857d75] text-xs mb-1 font-mono">
               <div className="flex items-center gap-1.5">
-                <Coins className="w-3.5 h-3.5 text-amber-400" />
-                <span className="text-amber-300 font-medium">Est. Cost</span>
+                <Coins className="w-3.5 h-3.5 text-[#d9a05b]" />
+                <span className="text-[#d9a05b]">Cost</span>
               </div>
               {chapterTotalSavings > 0 && (
-                <span className="text-[10px] font-semibold text-cyan-400 bg-cyan-950/80 border border-cyan-800/60 px-1.5 py-0.5 rounded">
-                  ⚡ Saved
+                <span className="text-[9px] font-mono text-[#7fa678] bg-[#24201d] border border-[#3f3a36] px-1 py-0.2 rounded-[2px]">
+                  Saved
                 </span>
               )}
             </div>
-            <div className="text-xl font-bold text-amber-300">
+            <div className="text-lg font-bold text-[#d9a05b] font-mono">
               {formatCost(chapterTotalCost)}
             </div>
-            <div className="text-[11px] text-slate-500 mt-1 truncate" title={chapterTotalSavings > 0 ? `Saved ${formatCost(chapterTotalSavings)} via KV Cache` : `Across ${modelEntries.length} models`}>
+            <div className="text-[10px] text-[#857d75] mt-1 truncate font-mono">
               {chapterTotalSavings > 0 ? (
-                <span className="text-cyan-400 font-medium">-{formatCost(chapterTotalSavings)} KV save</span>
+                <span className="text-[#7fa678]">-{formatCost(chapterTotalSavings)} KV</span>
               ) : (
-                `Across ${modelEntries.length} ${modelEntries.length === 1 ? 'model' : 'models'}`
+                `${modelEntries.length} models`
               )}
             </div>
           </div>
@@ -391,36 +393,35 @@ export const TokenAnalytics: React.FC<TokenAnalyticsProps> = ({ currentTrace, ch
       </div>
 
       {/* Model Consumption & Cost Breakdown Section */}
-      <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-800/80">
+      <div className="p-3.5 rounded-[4px] bg-[#383330] border border-[#3f3a36] space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-[#3f3a36]">
           <div className="flex items-center gap-2">
-            <Coins className="w-4 h-4 text-amber-400" />
-            <span className="text-xs font-semibold text-slate-200">Model Consumption & Token Cost</span>
-            <span className="text-[11px] text-slate-500">(API Pricing Rates, Token Breakdown & Estimated Spend)</span>
+            <Coins className="w-3.5 h-3.5 text-[#d9a05b]" />
+            <span className="text-xs font-semibold text-[#f7f5f0]">Model Consumption & Token Cost</span>
           </div>
 
           {/* Total Chapter Spend & KV Savings Badges */}
-          <div className="flex items-center gap-2 text-xs">
+          <div className="flex items-center gap-2 text-xs font-mono">
             {chapterTotalSavings > 0 && (
-              <span className="flex items-center gap-1 text-[11px] font-medium text-cyan-300 bg-cyan-950/80 border border-cyan-800/60 px-2.5 py-1 rounded-md">
-                <Zap className="w-3 h-3 text-cyan-400" />
-                <span>⚡ Saved {formatCost(chapterTotalSavings)} via KV Cache</span>
+              <span className="flex items-center gap-1 text-[11px] text-[#7fa678] bg-[#24201d] border border-[#3f3a36] px-2 py-0.5 rounded-[2px]">
+                <Zap className="w-3 h-3 text-[#7fa678]" />
+                <span>Saved {formatCost(chapterTotalSavings)}</span>
               </span>
             )}
-            <span className="flex items-center gap-1 text-xs font-bold text-amber-300 bg-amber-950/80 border border-amber-800/60 px-2.5 py-1 rounded-md">
-              <Coins className="w-3.5 h-3.5 text-amber-400" />
+            <span className="flex items-center gap-1 text-xs font-bold text-[#d9a05b] bg-[#24201d] border border-[#3f3a36] px-2 py-0.5 rounded-[2px]">
+              <Coins className="w-3 h-3 text-[#d9a05b]" />
               <span>Chapter Total: {formatCost(chapterTotalCost)}</span>
             </span>
           </div>
         </div>
 
         {/* Model Cards Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
           {modelEntries.map((mm) => {
             const providerStyle = PROVIDER_COLORS[mm.provider] || {
-              badge: 'bg-indigo-500/10 border-indigo-500/30 text-indigo-300',
-              text: 'text-indigo-400',
-              dot: 'bg-indigo-400',
+              badge: 'bg-[#24201d] border-[#3f3a36] text-[#b0a89f]',
+              text: 'text-[#b0a89f]',
+              dot: 'bg-[#b0a89f]',
             };
 
             const freshInput = Math.max(0, mm.inputTokens - mm.cachedTokens);
@@ -442,57 +443,57 @@ export const TokenAnalytics: React.FC<TokenAnalyticsProps> = ({ currentTrace, ch
             return (
               <div
                 key={mm.model}
-                className="p-4 rounded-xl bg-slate-950/70 border border-slate-800 space-y-3 hover:border-slate-700 transition-colors"
+                className="p-3 rounded-[3px] bg-[#2b2622] border border-[#3f3a36] space-y-2.5"
               >
                 {/* Header */}
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <span className="font-mono text-sm font-bold text-slate-100">
+                    <span className="font-mono text-xs font-bold text-[#f7f5f0]">
                       {mm.model}
                     </span>
                     <span
-                      className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded border ${providerStyle.badge}`}
+                      className={`text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.2 rounded-[2px] border ${providerStyle.badge}`}
                     >
                       {mm.provider}
                     </span>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-mono">
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-[2px] bg-[#24201d] border border-[#3f3a36] text-[#857d75] font-mono">
                       {mm.callCount} {mm.callCount === 1 ? 'call' : 'calls'}
                     </span>
                   </div>
 
                   {/* Cost Highlight */}
                   <div className="text-right">
-                    <div className="text-sm font-bold text-amber-400 font-mono flex items-center gap-1 justify-end">
-                      <Coins className="w-3.5 h-3.5 text-amber-400" />
+                    <div className="text-xs font-bold text-[#d9a05b] font-mono flex items-center gap-1 justify-end">
+                      <Coins className="w-3 h-3 text-[#d9a05b]" />
                       <span>{mm.cost.formattedTotal}</span>
                     </div>
-                    <div className="text-[10px] text-slate-500">
-                      {modelCostPct}% of chapter cost
+                    <div className="text-[10px] text-[#857d75] font-mono">
+                      {modelCostPct}% chapter
                     </div>
                   </div>
                 </div>
 
                 {/* Model Tier Description */}
                 {mm.pricing.description && (
-                  <div className="text-[11px] text-slate-400/90 italic flex items-center gap-1.5">
-                    <span className="w-1 h-1 rounded-full bg-slate-500"></span>
+                  <div className="text-[11px] text-[#857d75] italic flex items-center gap-1.5">
+                    <span className="w-1 h-1 rounded-[1px] bg-[#857d75]"></span>
                     <span>{mm.pricing.description}</span>
                   </div>
                 )}
 
                 {/* Rates & Stages info */}
-                <div className="flex flex-wrap items-center justify-between text-[11px] gap-2 text-slate-400">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-slate-500 text-[10px]">Used in:</span>
+                <div className="flex flex-wrap items-center justify-between text-[11px] gap-2 text-[#857d75]">
+                  <div className="flex items-center gap-1 flex-wrap">
+                    <span className="text-[#857d75] text-[10px]">Stages:</span>
                     {mm.stages.map((st) => {
                       const stInfo = STAGE_AGENT_INFO[st];
                       return (
                         <span
                           key={st}
-                          className={`text-[10px] font-medium px-1.5 py-0.5 rounded border ${
+                          className={`text-[9px] font-mono px-1.5 py-0.2 rounded-[2px] border ${
                             stInfo
                               ? `${stInfo.bg} ${stInfo.border} ${stInfo.color}`
-                              : 'bg-slate-800 border-slate-700 text-slate-400'
+                              : 'bg-[#24201d] border-[#3f3a36] text-[#857d75]'
                           }`}
                         >
                           {stInfo ? stInfo.name : st}
@@ -501,7 +502,7 @@ export const TokenAnalytics: React.FC<TokenAnalyticsProps> = ({ currentTrace, ch
                     })}
                   </div>
 
-                  <div className="flex items-center gap-2 text-[10px] text-slate-400 font-mono">
+                  <div className="flex items-center gap-1.5 text-[10px] text-[#857d75] font-mono">
                     <span>${mm.pricing.inputPerMillion}/M In</span>
                     <span>·</span>
                     <span>${mm.pricing.cachedInputPerMillion}/M KV</span>
@@ -511,31 +512,31 @@ export const TokenAnalytics: React.FC<TokenAnalyticsProps> = ({ currentTrace, ch
                 </div>
 
                 {/* Token Distribution Stacked Bar */}
-                <div className="w-full bg-slate-900 rounded-full h-2.5 overflow-hidden flex shadow-inner">
+                <div className="w-full bg-[#24201d] rounded-[2px] h-2 overflow-hidden flex border border-[#3f3a36]">
                   {freshPct > 0 && (
                     <div
-                      className="h-full bg-blue-500 hover:brightness-110 transition-all"
+                      className="h-full bg-[#8b9bb4]"
                       style={{ width: `${freshPct}%` }}
-                      title={`Input (Uncached): ${freshInput.toLocaleString()} tok (${freshPct.toFixed(1)}%)`}
+                      title={`Input: ${freshInput.toLocaleString()} tok (${freshPct.toFixed(1)}%)`}
                     />
                   )}
                   {cachedPct > 0 && (
                     <div
-                      className="h-full bg-cyan-400 hover:brightness-110 transition-all"
+                      className="h-full bg-[#d9a05b]"
                       style={{ width: `${cachedPct}%` }}
-                      title={`Cached KV Tokens: ${cached.toLocaleString()} tok (${cachedPct.toFixed(1)}%, ${modelCacheHitRate}% hit)`}
+                      title={`KV Cache: ${cached.toLocaleString()} tok (${cachedPct.toFixed(1)}%, ${modelCacheHitRate}% hit)`}
                     />
                   )}
                   {thoughtPct > 0 && (
                     <div
-                      className="h-full bg-purple-500 hover:brightness-110 transition-all"
+                      className="h-full bg-[#b0a89f]"
                       style={{ width: `${thoughtPct}%` }}
-                      title={`Thought / Reasoning: ${thought.toLocaleString()} tok (${thoughtPct.toFixed(1)}%)`}
+                      title={`Reasoning: ${thought.toLocaleString()} tok (${thoughtPct.toFixed(1)}%)`}
                     />
                   )}
                   {outputPct > 0 && (
                     <div
-                      className="h-full bg-emerald-500 hover:brightness-110 transition-all"
+                      className="h-full bg-[#7fa678]"
                       style={{ width: `${outputPct}%` }}
                       title={`Output: ${output.toLocaleString()} tok (${outputPct.toFixed(1)}%)`}
                     />
@@ -543,89 +544,48 @@ export const TokenAnalytics: React.FC<TokenAnalyticsProps> = ({ currentTrace, ch
                 </div>
 
                 {/* Cost & Token Breakdown Chips */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-0.5">
                   {/* Input Chip */}
-                  <div className="p-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-xs">
-                    <div className="flex items-center justify-between text-blue-400 text-[10px] mb-0.5">
-                      <span className="flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
-                        Input Prompt
-                      </span>
-                      <span className="font-mono font-semibold">
-                        {formatMicroCost(mm.cost.freshInputCost)}
-                      </span>
+                  <div className="p-1.5 rounded-[3px] bg-[#24201d] border border-[#3f3a36] text-xs font-mono">
+                    <div className="flex items-center justify-between text-[#8b9bb4] text-[10px] mb-0.5">
+                      <span>Input</span>
+                      <span className="font-semibold">{formatMicroCost(mm.cost.freshInputCost)}</span>
                     </div>
-                    <div className="font-mono font-bold text-blue-200 text-xs">
-                      {freshInput.toLocaleString()}{' '}
-                      <span className="text-[10px] text-blue-400/80 font-normal">tok</span>
+                    <div className="font-bold text-[#f7f5f0] text-xs">
+                      {freshInput.toLocaleString()} <span className="text-[10px] text-[#857d75] font-normal">tok</span>
                     </div>
                   </div>
 
                   {/* Cached Chip */}
-                  <div
-                    className={`p-2 rounded-lg border text-xs ${
-                      mm.cachedTokens > 0
-                        ? 'bg-cyan-500/15 border-cyan-500/40 text-cyan-200'
-                        : 'bg-slate-900 border-slate-800 text-slate-500'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between text-[10px] mb-0.5">
-                      <span className="flex items-center gap-1 text-cyan-300">
-                        <span
-                          className={`w-1.5 h-1.5 rounded-full ${
-                            mm.cachedTokens > 0 ? 'bg-cyan-400 animate-pulse' : 'bg-slate-600'
-                          }`}
-                        ></span>
-                        ⚡ KV Cached
-                      </span>
-                      <span className="font-mono font-semibold text-cyan-300">
-                        {formatMicroCost(mm.cost.cachedInputCost)}
-                      </span>
+                  <div className="p-1.5 rounded-[3px] bg-[#24201d] border border-[#3f3a36] text-xs font-mono">
+                    <div className="flex items-center justify-between text-[#d9a05b] text-[10px] mb-0.5">
+                      <span>KV Cache</span>
+                      <span className="font-semibold">{formatMicroCost(mm.cost.cachedInputCost)}</span>
                     </div>
-                    <div className="font-mono font-bold text-xs flex items-baseline justify-between">
-                      <span>
-                        {mm.cachedTokens.toLocaleString()}{' '}
-                        <span className="text-[10px] font-normal">tok</span>
-                      </span>
-                      {mm.cost.savingsFromCache > 0 && (
-                        <span className="text-[10px] text-cyan-400 font-medium font-sans">
-                          (saved {formatMicroCost(mm.cost.savingsFromCache)})
-                        </span>
-                      )}
+                    <div className="font-bold text-[#f7f5f0] text-xs">
+                      {mm.cachedTokens.toLocaleString()} <span className="text-[10px] text-[#857d75] font-normal">tok</span>
                     </div>
                   </div>
 
                   {/* Thought Chip */}
-                  <div className="p-2 rounded-lg bg-purple-500/10 border border-purple-500/20 text-xs">
-                    <div className="flex items-center justify-between text-purple-400 text-[10px] mb-0.5">
-                      <span className="flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
-                        Reasoning
-                      </span>
-                      <span className="font-mono font-semibold">
-                        {formatMicroCost(mm.cost.thoughtCost)}
-                      </span>
+                  <div className="p-1.5 rounded-[3px] bg-[#24201d] border border-[#3f3a36] text-xs font-mono">
+                    <div className="flex items-center justify-between text-[#b0a89f] text-[10px] mb-0.5">
+                      <span>Reasoning</span>
+                      <span className="font-semibold">{formatMicroCost(mm.cost.thoughtCost)}</span>
                     </div>
-                    <div className="font-mono font-bold text-purple-200 text-xs">
-                      {mm.thoughtTokens.toLocaleString()}{' '}
-                      <span className="text-[10px] text-purple-400/80 font-normal">tok</span>
+                    <div className="font-bold text-[#f7f5f0] text-xs">
+                      {mm.thoughtTokens.toLocaleString()} <span className="text-[10px] text-[#857d75] font-normal">tok</span>
                     </div>
                   </div>
 
                   {/* Output Chip */}
-                  <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs">
-                    <div className="flex items-center justify-between text-emerald-400 text-[10px] mb-0.5">
-                      <span className="flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                        Output Compl
-                      </span>
-                      <span className="font-mono font-semibold">
-                        {formatMicroCost(mm.cost.outputCost)}
-                      </span>
+                  <div className="p-1.5 rounded-[3px] bg-[#24201d] border border-[#3f3a36] text-xs font-mono">
+                    <div className="flex items-center justify-between text-[#7fa678] text-[10px] mb-0.5">
+                      <span>Output</span>
+                      <span className="font-semibold">{formatMicroCost(mm.cost.outputCost)}</span>
                     </div>
-                    <div className="font-mono font-bold text-emerald-200 text-xs">
-                      {mm.outputTokens.toLocaleString()}{' '}
-                      <span className="text-[10px] text-emerald-400/80 font-normal">tok</span>
+                    <div className="font-bold text-[#f7f5f0] text-xs">
+                      {mm.outputTokens.toLocaleString()} <span className="text-[10px] text-[#857d75] font-normal">tok</span>
                     </div>
                   </div>
                 </div>
@@ -636,45 +596,42 @@ export const TokenAnalytics: React.FC<TokenAnalyticsProps> = ({ currentTrace, ch
       </div>
 
       {/* Stage Breakdown Bar */}
-      <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-800/80">
+      <div className="p-3.5 rounded-[4px] bg-[#383330] border border-[#3f3a36] space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-[#3f3a36]">
           <div className="flex items-center gap-2">
-            <BarChart2 className="w-4 h-4 text-purple-400" />
-            <span className="text-xs font-semibold text-slate-200">Stage Token Distribution</span>
-            <span className="text-[11px] text-slate-500">(Input · Cached · Output per Agent)</span>
+            <BarChart2 className="w-3.5 h-3.5 text-[#b0a89f]" />
+            <span className="text-xs font-semibold text-[#f7f5f0]">Stage Token Distribution</span>
           </div>
 
           {/* Color Legend */}
-          <div className="flex items-center gap-3 text-[11px] text-slate-400">
+          <div className="flex items-center gap-3 text-[10px] text-[#857d75] font-mono">
             <div className="flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded-sm bg-blue-500"></span>
+              <span className="w-2 h-2 rounded-[1px] bg-[#8b9bb4]"></span>
               <span>Input</span>
             </div>
             <div className="flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded-sm bg-cyan-400"></span>
-              <span className="text-cyan-300 font-medium flex items-center gap-0.5">
-                ⚡ Cached
-              </span>
+              <span className="w-2 h-2 rounded-[1px] bg-[#d9a05b]"></span>
+              <span>Cached</span>
             </div>
             <div className="flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded-sm bg-purple-500"></span>
+              <span className="w-2 h-2 rounded-[1px] bg-[#b0a89f]"></span>
               <span>Thought</span>
             </div>
             <div className="flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500"></span>
+              <span className="w-2 h-2 rounded-[1px] bg-[#7fa678]"></span>
               <span>Output</span>
             </div>
           </div>
         </div>
 
-        <div className="space-y-3">
+        <div className="space-y-2">
           {stageEntries.map((sm) => {
             const info = STAGE_AGENT_INFO[sm.stage] || {
               name: sm.agent,
               role: 'Agent',
-              color: 'text-slate-300',
-              border: 'border-slate-700',
-              bg: 'bg-slate-800',
+              color: 'text-[#f7f5f0]',
+              border: 'border-[#3f3a36]',
+              bg: 'bg-[#24201d]',
             };
 
             const freshInput = Math.max(0, sm.inputTokens - sm.cachedTokens);
@@ -694,114 +651,99 @@ export const TokenAnalytics: React.FC<TokenAnalyticsProps> = ({ currentTrace, ch
               sm.inputTokens > 0 ? Math.round((sm.cachedTokens / sm.inputTokens) * 100) : 0;
 
             return (
-              <div key={sm.stage} className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-2">
+              <div key={sm.stage} className="p-2.5 rounded-[3px] bg-[#2b2622] border border-[#3f3a36] space-y-1.5">
                 {/* Stage Header */}
                 <div className="flex flex-wrap items-center justify-between text-xs gap-2">
                   <div className="flex items-center gap-2">
-                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${info.bg} ${info.border} ${info.color}`}>
+                    <span className={`text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.2 rounded-[2px] border ${info.bg} ${info.border} ${info.color}`}>
                       {info.name}
                     </span>
-                    <span className="capitalize font-semibold text-slate-200">
+                    <span className="capitalize font-semibold text-[#f7f5f0]">
                       {sm.stage}
                     </span>
-                    <span className="text-[11px] text-slate-500">
+                    <span className="text-[11px] text-[#857d75]">
                       ({info.role})
                     </span>
                     {sm.interactionCount > 1 && (
-                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 font-mono">
+                      <span className="text-[9px] px-1.5 py-0.2 rounded-[2px] bg-[#24201d] border border-[#3f3a36] text-[#857d75] font-mono">
                         {sm.interactionCount} calls
-                      </span>
-                    )}
-                    {sm.models.length > 0 && (
-                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-900 border border-slate-800 text-slate-400 font-mono">
-                        {sm.models.join(', ')}
                       </span>
                     )}
                   </div>
 
-                  <div className="flex items-center gap-3 text-[11px]">
-                    <span className="text-slate-400">{sm.durationSeconds.toFixed(1)}s</span>
-                    <span className="font-semibold text-slate-200">
+                  <div className="flex items-center gap-2 text-[11px] font-mono">
+                    <span className="text-[#857d75]">{sm.durationSeconds.toFixed(1)}s</span>
+                    <span className="font-semibold text-[#f7f5f0]">
                       {sm.totalTokens.toLocaleString()} tok
-                      <span className="text-slate-500 font-normal ml-1">({stageChapterPct}% of chapter)</span>
+                      <span className="text-[#857d75] font-normal ml-1">({stageChapterPct}%)</span>
                     </span>
-                    <span className="font-mono font-bold text-amber-400 bg-amber-950/40 border border-amber-800/40 px-1.5 py-0.5 rounded text-[10px]">
+                    <span className="font-bold text-[#d9a05b] bg-[#24201d] border border-[#3f3a36] px-1.5 py-0.2 rounded-[2px] text-[10px]">
                       {formatCost(sm.cost)}
                     </span>
                   </div>
                 </div>
 
                 {/* Multi-Segment Stacked Bar */}
-                <div className="w-full bg-slate-900 rounded-full h-3 overflow-hidden flex shadow-inner">
+                <div className="w-full bg-[#24201d] rounded-[2px] h-2 overflow-hidden flex border border-[#3f3a36]">
                   {freshPct > 0 && (
                     <div
-                      className="h-full bg-blue-500 hover:brightness-110 transition-all"
+                      className="h-full bg-[#8b9bb4]"
                       style={{ width: `${freshPct}%` }}
-                      title={`Input (Uncached): ${freshInput.toLocaleString()} tok (${freshPct.toFixed(1)}%)`}
+                      title={`Input: ${freshInput.toLocaleString()} tok`}
                     />
                   )}
                   {cachedPct > 0 && (
                     <div
-                      className="h-full bg-cyan-400 hover:brightness-110 transition-all relative overflow-hidden"
+                      className="h-full bg-[#d9a05b]"
                       style={{ width: `${cachedPct}%` }}
-                      title={`Cached KV Tokens: ${cached.toLocaleString()} tok (${cachedPct.toFixed(1)}% of stage, ${stageCacheHitRate}% cache hit)`}
+                      title={`KV Cached: ${cached.toLocaleString()} tok (${stageCacheHitRate}% hit)`}
                     />
                   )}
                   {thoughtPct > 0 && (
                     <div
-                      className="h-full bg-purple-500 hover:brightness-110 transition-all"
+                      className="h-full bg-[#b0a89f]"
                       style={{ width: `${thoughtPct}%` }}
-                      title={`Thought / Reasoning: ${thought.toLocaleString()} tok (${thoughtPct.toFixed(1)}%)`}
+                      title={`Reasoning: ${thought.toLocaleString()} tok`}
                     />
                   )}
                   {outputPct > 0 && (
                     <div
-                      className="h-full bg-emerald-500 hover:brightness-110 transition-all"
+                      className="h-full bg-[#7fa678]"
                       style={{ width: `${outputPct}%` }}
-                      title={`Output: ${output.toLocaleString()} tok (${outputPct.toFixed(1)}%)`}
+                      title={`Output: ${output.toLocaleString()} tok`}
                     />
                   )}
                 </div>
 
                 {/* Token Category Breakdown Chips */}
-                <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px]">
+                <div className="flex flex-wrap items-center gap-2 pt-0.5 text-[10px] font-mono">
                   {/* Input */}
-                  <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-blue-500/10 border border-blue-500/20 text-blue-300">
-                    <span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
-                    <span>Input:</span>
-                    <span className="font-mono font-semibold text-blue-200">{sm.inputTokens.toLocaleString()}</span>
+                  <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-[2px] bg-[#24201d] border border-[#3f3a36] text-[#8b9bb4]">
+                    <span>In:</span>
+                    <span className="font-bold text-[#f7f5f0]">{sm.inputTokens.toLocaleString()}</span>
                   </div>
 
                   {/* Cached */}
-                  <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md border ${
-                    sm.cachedTokens > 0
-                      ? 'bg-cyan-500/15 border-cyan-500/40 text-cyan-200 shadow-sm shadow-cyan-500/10'
-                      : 'bg-slate-900 border-slate-800 text-slate-500'
-                  }`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${sm.cachedTokens > 0 ? 'bg-cyan-400 animate-pulse' : 'bg-slate-600'}`}></span>
-                    <span className="flex items-center gap-0.5">
-                      ⚡ Cached:
-                    </span>
-                    <span className="font-mono font-semibold">{sm.cachedTokens.toLocaleString()}</span>
+                  <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-[2px] bg-[#24201d] border border-[#3f3a36] text-[#d9a05b]">
+                    <span>KV:</span>
+                    <span className="font-bold text-[#f7f5f0]">{sm.cachedTokens.toLocaleString()}</span>
                     {sm.cachedTokens > 0 && (
-                      <span className="text-[10px] text-cyan-400/90 font-medium">({stageCacheHitRate}% hit)</span>
+                      <span className="text-[#857d75]">({stageCacheHitRate}%)</span>
                     )}
                   </div>
 
-                  {/* Thought (only if present) */}
+                  {/* Thought */}
                   {sm.thoughtTokens > 0 && (
-                    <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-purple-500/10 border border-purple-500/20 text-purple-300">
-                      <span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
-                      <span>Thought:</span>
-                      <span className="font-mono font-semibold text-purple-200">{sm.thoughtTokens.toLocaleString()}</span>
+                    <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-[2px] bg-[#24201d] border border-[#3f3a36] text-[#b0a89f]">
+                      <span>Th:</span>
+                      <span className="font-bold text-[#f7f5f0]">{sm.thoughtTokens.toLocaleString()}</span>
                     </div>
                   )}
 
                   {/* Output */}
-                  <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-300">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                    <span>Output:</span>
-                    <span className="font-mono font-semibold text-emerald-200">{sm.outputTokens.toLocaleString()}</span>
+                  <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-[2px] bg-[#24201d] border border-[#3f3a36] text-[#7fa678]">
+                    <span>Out:</span>
+                    <span className="font-bold text-[#f7f5f0]">{sm.outputTokens.toLocaleString()}</span>
                   </div>
                 </div>
               </div>
@@ -811,113 +753,107 @@ export const TokenAnalytics: React.FC<TokenAnalyticsProps> = ({ currentTrace, ch
       </div>
 
       {/* Current Interaction Detail Gauge */}
-      <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 space-y-3">
-        <h5 className="text-xs font-semibold text-slate-300 flex items-center justify-between">
+      <div className="p-3.5 rounded-[4px] bg-[#383330] border border-[#3f3a36] space-y-2.5">
+        <div className="text-xs font-semibold text-[#f7f5f0] flex items-center justify-between">
           <span className="flex items-center gap-2">
-            <PieChart className="w-4 h-4 text-emerald-400" />
+            <PieChart className="w-3.5 h-3.5 text-[#b0a89f]" />
             Selected Interaction: {currentTrace.agent} ({currentTrace.stage})
           </span>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 font-mono">
             {trTokens.cached_tokens > 0 && (
-              <span className="text-[10px] font-semibold text-cyan-400 bg-cyan-950/60 border border-cyan-800/60 px-2 py-0.5 rounded-full flex items-center gap-1">
-                ⚡ {trCacheHitRate}% Cache Hit
+              <span className="text-[10px] text-[#d9a05b] bg-[#24201d] border border-[#3f3a36] px-1.5 py-0.2 rounded-[2px]">
+                {trCacheHitRate}% KV Hit
               </span>
             )}
-            <span className="text-[11px] text-slate-400">{trTokens.total_tokens.toLocaleString()} Total Tokens</span>
-            <span className="text-xs font-bold text-amber-400 font-mono bg-amber-950/60 border border-amber-800/60 px-2 py-0.5 rounded-full flex items-center gap-1">
-              <Coins className="w-3 h-3 text-amber-400" />
+            <span className="text-[11px] text-[#857d75]">{trTokens.total_tokens.toLocaleString()} tok</span>
+            <span className="text-xs font-bold text-[#d9a05b] bg-[#24201d] border border-[#3f3a36] px-2 py-0.5 rounded-[2px] flex items-center gap-1">
+              <Coins className="w-3 h-3 text-[#d9a05b]" />
               {trCost.formattedTotal}
             </span>
           </div>
-        </h5>
+        </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 text-xs">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-xs font-mono">
           {/* Input */}
-          <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800">
-            <div className="flex items-center justify-between text-slate-400 text-[11px]">
-              <span>Input Tokens</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+          <div className="p-2 rounded-[3px] bg-[#24201d] border border-[#3f3a36]">
+            <div className="flex items-center justify-between text-[#857d75] text-[10px]">
+              <span>Input</span>
+              <span className="w-1.5 h-1.5 rounded-[1px] bg-[#8b9bb4]"></span>
             </div>
-            <div className="text-base font-bold text-blue-400 mt-0.5">
+            <div className="text-sm font-bold text-[#8b9bb4] mt-0.5">
               {trTokens.input_tokens.toLocaleString()}
             </div>
-            <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+            <div className="text-[10px] text-[#857d75] mt-0.5">
               {formatMicroCost(trCost.freshInputCost)}
             </div>
           </div>
 
           {/* Cached */}
-          <div className={`p-2.5 rounded-lg border ${
-            trTokens.cached_tokens > 0
-              ? 'bg-cyan-950/30 border-cyan-500/30 text-cyan-300'
-              : 'bg-slate-950 border-slate-800 text-slate-400'
-          }`}>
-            <div className="flex items-center justify-between text-[11px]">
-              <span className="flex items-center gap-1 text-cyan-400 font-medium">
-                ⚡ Cached
-              </span>
-              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+          <div className="p-2 rounded-[3px] bg-[#24201d] border border-[#3f3a36]">
+            <div className="flex items-center justify-between text-[10px]">
+              <span className="text-[#d9a05b]">Cached</span>
+              <span className="w-1.5 h-1.5 rounded-[1px] bg-[#d9a05b]"></span>
             </div>
-            <div className="text-base font-bold text-cyan-300 mt-0.5">
+            <div className="text-sm font-bold text-[#d9a05b] mt-0.5">
               {trTokens.cached_tokens.toLocaleString()}
             </div>
-            <div className="text-[10px] text-cyan-500 font-mono mt-0.5">
+            <div className="text-[10px] text-[#857d75] mt-0.5">
               {formatMicroCost(trCost.cachedInputCost)}
             </div>
           </div>
 
           {/* Output */}
-          <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800">
-            <div className="flex items-center justify-between text-slate-400 text-[11px]">
-              <span>Output Tokens</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+          <div className="p-2 rounded-[3px] bg-[#24201d] border border-[#3f3a36]">
+            <div className="flex items-center justify-between text-[#857d75] text-[10px]">
+              <span>Output</span>
+              <span className="w-1.5 h-1.5 rounded-[1px] bg-[#7fa678]"></span>
             </div>
-            <div className="text-base font-bold text-emerald-400 mt-0.5">
+            <div className="text-sm font-bold text-[#7fa678] mt-0.5">
               {trTokens.output_tokens.toLocaleString()}
             </div>
-            <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+            <div className="text-[10px] text-[#857d75] mt-0.5">
               {formatMicroCost(trCost.outputCost)}
             </div>
           </div>
 
           {/* Thought */}
-          <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800">
-            <div className="flex items-center justify-between text-slate-400 text-[11px]">
-              <span>Thought Tokens</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
+          <div className="p-2 rounded-[3px] bg-[#24201d] border border-[#3f3a36]">
+            <div className="flex items-center justify-between text-[#857d75] text-[10px]">
+              <span>Thought</span>
+              <span className="w-1.5 h-1.5 rounded-[1px] bg-[#b0a89f]"></span>
             </div>
-            <div className="text-base font-bold text-purple-400 mt-0.5">
+            <div className="text-sm font-bold text-[#b0a89f] mt-0.5">
               {trTokens.thought_tokens.toLocaleString()}
             </div>
-            <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+            <div className="text-[10px] text-[#857d75] mt-0.5">
               {formatMicroCost(trCost.thoughtCost)}
             </div>
           </div>
 
           {/* Duration & Speed */}
-          <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800">
-            <div className="flex items-center justify-between text-slate-400 text-[11px]">
+          <div className="p-2 rounded-[3px] bg-[#24201d] border border-[#3f3a36]">
+            <div className="flex items-center justify-between text-[#857d75] text-[10px]">
               <span>Duration</span>
-              <Zap className="w-3 h-3 text-amber-400" />
+              <Zap className="w-3 h-3 text-[#d9a05b]" />
             </div>
-            <div className="text-base font-bold text-amber-400 mt-0.5">
+            <div className="text-sm font-bold text-[#d9a05b] mt-0.5">
               {currentTrace.duration_seconds.toFixed(2)}s
             </div>
-            <div className="text-[10px] text-slate-500 mt-0.5">
+            <div className="text-[10px] text-[#857d75] mt-0.5">
               {trTps} tok/s
             </div>
           </div>
 
           {/* Est. Cost */}
-          <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800">
-            <div className="flex items-center justify-between text-slate-400 text-[11px]">
+          <div className="p-2 rounded-[3px] bg-[#24201d] border border-[#3f3a36]">
+            <div className="flex items-center justify-between text-[#857d75] text-[10px]">
               <span>Est. Cost</span>
-              <Coins className="w-3 h-3 text-amber-400" />
+              <Coins className="w-3 h-3 text-[#d9a05b]" />
             </div>
-            <div className="text-base font-bold text-amber-400 mt-0.5 font-mono">
+            <div className="text-sm font-bold text-[#d9a05b] mt-0.5">
               {trCost.formattedTotal}
             </div>
-            <div className="text-[10px] text-slate-500 font-mono truncate mt-0.5" title={currentTrace.model}>
+            <div className="text-[10px] text-[#857d75] truncate mt-0.5" title={currentTrace.model}>
               {currentTrace.model}
             </div>
           </div>
@@ -925,7 +861,7 @@ export const TokenAnalytics: React.FC<TokenAnalyticsProps> = ({ currentTrace, ch
 
         {/* Selected Interaction Stacked Bar */}
         {trTokens.total_tokens > 0 && (
-          <div className="pt-1">
+          <div className="pt-0.5">
             {(() => {
               const trFresh = Math.max(0, trTokens.input_tokens - trTokens.cached_tokens);
               const trCached = trTokens.cached_tokens;
@@ -939,18 +875,18 @@ export const TokenAnalytics: React.FC<TokenAnalyticsProps> = ({ currentTrace, ch
               const trOutputPct = (trOutput / trTot) * 100;
 
               return (
-                <div className="w-full bg-slate-950 rounded-full h-2 overflow-hidden flex shadow-inner">
+                <div className="w-full bg-[#24201d] rounded-[2px] h-1.5 overflow-hidden flex border border-[#3f3a36]">
                   {trFreshPct > 0 && (
-                    <div className="h-full bg-blue-500" style={{ width: `${trFreshPct}%` }} title={`Input: ${trFresh.toLocaleString()}`} />
+                    <div className="h-full bg-[#8b9bb4]" style={{ width: `${trFreshPct}%` }} title={`Input: ${trFresh.toLocaleString()}`} />
                   )}
                   {trCachedPct > 0 && (
-                    <div className="h-full bg-cyan-400" style={{ width: `${trCachedPct}%` }} title={`Cached: ${trCached.toLocaleString()}`} />
+                    <div className="h-full bg-[#d9a05b]" style={{ width: `${trCachedPct}%` }} title={`Cached: ${trCached.toLocaleString()}`} />
                   )}
                   {trThoughtPct > 0 && (
-                    <div className="h-full bg-purple-500" style={{ width: `${trThoughtPct}%` }} title={`Thought: ${trThought.toLocaleString()}`} />
+                    <div className="h-full bg-[#b0a89f]" style={{ width: `${trThoughtPct}%` }} title={`Thought: ${trThought.toLocaleString()}`} />
                   )}
                   {trOutputPct > 0 && (
-                    <div className="h-full bg-emerald-500" style={{ width: `${trOutputPct}%` }} title={`Output: ${trOutput.toLocaleString()}`} />
+                    <div className="h-full bg-[#7fa678]" style={{ width: `${trOutputPct}%` }} title={`Output: ${trOutput.toLocaleString()}`} />
                   )}
                 </div>
               );

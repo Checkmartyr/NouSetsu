@@ -9,6 +9,7 @@ from nousetsu.graph.procedural import ProceduralGraph, get_default_drafter_graph
 from nousetsu.models.bible import CharacterProfile, ChapterSummary, GlossaryItem, NovelBible
 from nousetsu.models.metadata import SubdividedBlock, TokenUsage
 from nousetsu.models.trace import PipelineStage
+from nousetsu.prompts.character_formatter import format_character_roster
 from nousetsu.prompts.templates import DRAFTING_SYSTEM_PROMPT
 from nousetsu.skills.registry import SkillRegistry
 from nousetsu.utils.character_filter import filter_characters_for_scene
@@ -336,22 +337,11 @@ class ContextAwareDrafterAgent:
             target_text=preceding_context,
             max_characters=15
         )
-        char_lines = []
-        for c in eval_characters:
-            entry = f"- {c.name} ({c.original_name} / {c.gender} / {c.role}): Voice={c.voice}"
-            if c.pronouns and (c.pronouns.source or c.pronouns.target):
-                entry += f" | Pronouns: [Source: {c.pronouns.source or 'N/A'}] -> [Target: {c.pronouns.target or 'N/A'}]"
-            if c.pronouns and getattr(c.pronouns, "relational", None):
-                rel_entries = []
-                for other_c in eval_characters:
-                    if other_c.name != c.name and other_c.original_name != c.original_name:
-                        p_rel = c.pronouns.relational.get(other_c.name) or c.pronouns.relational.get(other_c.original_name)
-                        if p_rel:
-                            rel_entries.append(f"with {other_c.name}: {p_rel}")
-                if rel_entries:
-                    entry += f" | Relational: [{'; '.join(rel_entries)}]"
-            char_lines.append(entry)
-        chars_str = "\n".join(char_lines) or "No explicit character cards registered."
+        chars_str = format_character_roster(
+            characters=eval_characters,
+            context_characters=eval_characters,
+            agent_role="drafter",
+        )
 
         eval_glossary = filter_glossary_for_scene(
             glossary=active_glossary,

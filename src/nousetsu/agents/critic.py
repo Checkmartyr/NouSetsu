@@ -12,6 +12,7 @@ from nousetsu.models.bible import CharacterProfile, GlossaryItem, NovelBible
 from nousetsu.models.metadata import QualityAudit, SubdividedBlock, TokenUsage
 from nousetsu.models.schemas import CritiqueResult
 from nousetsu.models.trace import PipelineStage
+from nousetsu.prompts.character_formatter import format_character_roster
 from nousetsu.prompts.templates import CRITIQUE_SYSTEM_PROMPT
 from nousetsu.skills.registry import SkillRegistry
 from nousetsu.utils.character_filter import filter_characters_for_scene
@@ -175,22 +176,12 @@ class CritiqueAgent:
             target_text=draft_text,
             max_characters=15
         )
-        critic_char_lines = []
-        for c in eval_characters:
-            line = f"- {c.name} ({c.original_name}, {c.gender}, voice: {c.voice})"
-            if c.pronouns and (c.pronouns.source or c.pronouns.target):
-                line += f" [Pronouns: {c.pronouns.source or 'N/A'} -> {c.pronouns.target or 'N/A'}]"
-            if c.pronouns and getattr(c.pronouns, "relational", None):
-                rel_entries = []
-                for other_c in eval_characters:
-                    if other_c.name != c.name and other_c.original_name != c.original_name:
-                        p_rel = c.pronouns.relational.get(other_c.name) or c.pronouns.relational.get(other_c.original_name)
-                        if p_rel:
-                            rel_entries.append(f"with {other_c.name}: {p_rel}")
-                if rel_entries:
-                    line += f" [Relational: {'; '.join(rel_entries)}]"
-            critic_char_lines.append(line)
-        chars_str = "\n".join(critic_char_lines) or "None"
+        chars_str = format_character_roster(
+            characters=eval_characters,
+            context_characters=eval_characters,
+            agent_role="critic",
+            empty_fallback="None",
+        )
         gloss_str = "\n".join([f"- {g.source} -> {g.target}" for g in eval_glossary]) or "None"
 
         resolved_genre = genre or getattr(bible, "genre", "general")

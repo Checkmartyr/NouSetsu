@@ -64,13 +64,13 @@ const ToggleSwitch: React.FC<ToggleSwitchProps> = ({ checked, onChange, disabled
     aria-checked={checked}
     disabled={disabled}
     onClick={() => !disabled && onChange(!checked)}
-    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed ${
-      checked ? 'bg-indigo-600' : 'bg-slate-800'
+    className={`relative inline-flex h-4 w-8 shrink-0 cursor-pointer rounded-full transition-colors duration-150 ease-in-out focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed ${
+      checked ? 'bg-[#f7f5f0]' : 'bg-[#383330] border border-[#3f3a36]'
     }`}
   >
     <span
-      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
-        checked ? 'translate-x-4' : 'translate-x-0'
+      className={`pointer-events-none inline-block h-3 w-3 transform rounded-full transition duration-150 ease-in-out ${
+        checked ? 'bg-[#2b2622] translate-x-4' : 'bg-[#aea69c] translate-x-0.5'
       }`}
     />
   </button>
@@ -248,40 +248,40 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const showAll = activeTab === 'all';
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-slate-950 text-slate-100">
+    <div className="flex flex-col h-full overflow-hidden bg-[#2b2622] text-[#f7f5f0]">
       {/* Toast Notification */}
       {toast && (
-        <div className="fixed top-20 right-8 z-50 px-4 py-2 bg-emerald-600 text-white rounded-lg shadow-xl text-sm font-medium flex items-center gap-2 animate-fade-in">
-          <Check className="w-4 h-4" />
-          {toast}
+        <div className="fixed top-16 right-8 z-50 px-3.5 py-1.5 bg-[#383330] text-[#f7f5f0] border border-[#3f3a36] rounded-[4px] shadow-lg text-xs font-medium flex items-center gap-2 animate-fade-in">
+          <Check className="w-4 h-4 text-emerald-400" />
+          <span>{toast}</span>
         </div>
       )}
 
       {/* Header Bar */}
-      <div className="bg-slate-900/80 border-b border-slate-800 px-6 py-3.5 flex items-center justify-between shrink-0">
+      <div className="bg-[#2b2622] border-b border-[#3f3a36] px-6 py-3 flex items-center justify-between shrink-0">
         <div>
           <div className="flex items-center gap-2">
-            <Settings className="w-5 h-5 text-indigo-400" />
-            <h1 className="text-xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
+            <Settings className="w-4 h-4 text-[#dad2c1]" />
+            <h1 className="text-base font-medium tracking-[-0.3px] text-[#f7f5f0]">
               Project Settings: {settings?.title || activeProjectTitle}
             </h1>
           </div>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Manage full <code className="text-slate-300 font-mono">.novel/config.yaml</code> settings across all pipeline subsystems.
+          <p className="text-xs text-[#aea69c] mt-0.5">
+            Manage <code className="text-[#dad2c1] font-mono">.novel/config.yaml</code> settings across all pipeline subsystems
           </p>
         </div>
 
         <div className="flex items-center gap-3">
-          <span className="hidden sm:inline-block text-[11px] text-slate-500 font-mono">
-            Press <kbd className="px-1.5 py-0.5 bg-slate-800 rounded text-slate-400">Ctrl+S</kbd> to save
+          <span className="hidden sm:inline-block text-[11px] text-[#aea69c] font-mono">
+            Press <kbd className="px-1.5 py-0.5 bg-[#383330] border border-[#3f3a36] rounded-[2px] text-[#dad2c1]">Ctrl+S</kbd> to save
           </span>
           <button
             onClick={() => handleSave()}
             disabled={saving || !settings}
-            className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold cursor-pointer shadow-lg shadow-indigo-500/20 transition-all disabled:opacity-50"
+            className="btn-primary text-xs flex items-center gap-1.5"
           >
-            <Save className="w-4 h-4" />
-            {saving ? 'Saving...' : 'Save Settings'}
+            <Save className="w-3.5 h-3.5" />
+            <span>{saving ? 'Saving...' : 'Save Settings'}</span>
           </button>
         </div>
       </div>
@@ -289,22 +289,22 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       {/* Main 2-Column Layout */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left Sidebar: Settings Groups */}
-        <aside className="w-64 bg-slate-900/40 border-r border-slate-800 flex flex-col shrink-0">
+        <aside className="w-64 bg-[#2b2622] border-r border-[#3f3a36] flex flex-col shrink-0">
           {/* Quick Search */}
-          <div className="p-3 border-b border-slate-800/80">
+          <div className="p-3 border-b border-[#3f3a36]">
             <div className="relative">
-              <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-2.5" />
+              <Search className="w-3.5 h-3.5 text-[#aea69c] absolute left-2.5 top-2" />
               <input
                 type="text"
                 value={categorySearch}
                 onChange={(e) => setCategorySearch(e.target.value)}
                 placeholder="Search settings..."
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-8 pr-2.5 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-indigo-500 placeholder:text-slate-600"
+                className="input-text w-full pl-8 pr-2.5 py-1 text-xs"
               />
               {categorySearch && (
                 <button
                   onClick={() => setCategorySearch('')}
-                  className="absolute right-2.5 top-2.5 text-slate-500 hover:text-slate-300"
+                  className="absolute right-2.5 top-2 text-[#aea69c] hover:text-[#f7f5f0]"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
@@ -313,7 +313,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
 
           {/* Navigation Category List */}
-          <div className="flex-1 overflow-y-auto p-2 space-y-1">
+          <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
             {filteredCategories.map((cat) => {
               const Icon = cat.icon;
               const isActive = activeTab === cat.id;
@@ -321,22 +321,22 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <button
                   key={cat.id}
                   onClick={() => setActiveTab(cat.id)}
-                  className={`w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center gap-2.5 group cursor-pointer ${
+                  className={`w-full text-left px-2.5 py-1.5 rounded-[3px] transition-colors flex items-center gap-2 group cursor-pointer ${
                     isActive
-                      ? 'bg-indigo-600/15 border border-indigo-500/30 text-white'
-                      : 'hover:bg-slate-800/60 text-slate-400 hover:text-slate-200 border border-transparent'
+                      ? 'bg-[#383330] text-[#f7f5f0] border-l-2 border-[#f7f5f0] font-medium'
+                      : 'hover:bg-[#383330]/50 text-[#c9c0ad] hover:text-[#f7f5f0] border-l-2 border-transparent'
                   }`}
                 >
                   <Icon
-                    className={`w-4 h-4 shrink-0 transition-colors ${
-                      isActive ? 'text-indigo-400' : 'text-slate-500 group-hover:text-slate-300'
+                    className={`w-3.5 h-3.5 shrink-0 transition-colors ${
+                      isActive ? 'text-[#f7f5f0]' : 'text-[#aea69c] group-hover:text-[#dad2c1]'
                     }`}
                   />
                   <div className="flex-1 min-w-0">
-                    <div className={`text-xs font-semibold truncate ${isActive ? 'text-indigo-200' : ''}`}>
+                    <div className="text-xs truncate">
                       {cat.name}
                     </div>
-                    <div className="text-[10px] text-slate-500 truncate">{cat.shortDesc}</div>
+                    <div className="text-[10px] text-[#aea69c] truncate">{cat.shortDesc}</div>
                   </div>
                 </button>
               );
@@ -344,23 +344,23 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
 
           {/* Sidebar Footer info */}
-          <div className="p-3 border-t border-slate-800/80 bg-slate-950/40 text-[11px] text-slate-500 flex items-center justify-between">
+          <div className="p-3 border-t border-[#3f3a36] bg-[#2b2622] text-[11px] text-[#aea69c] flex items-center justify-between">
             <span>Project ID:</span>
-            <span className="font-mono text-slate-400 truncate max-w-[120px]">
+            <span className="font-mono text-[#dad2c1] truncate max-w-[120px]">
               {settings?.project_id || 'default_project'}
             </span>
           </div>
         </aside>
 
         {/* Right Content Area: Form Panes */}
-        <main className="flex-1 overflow-y-auto p-6 flex justify-center bg-slate-950">
+        <main className="flex-1 overflow-y-auto p-6 flex justify-center bg-[#2b2622]">
           {loading || !settings ? (
             <div className="text-center py-20 text-slate-500">Loading settings...</div>
           ) : (
             <form onSubmit={handleSave} className="max-w-4xl w-full space-y-6 pb-16">
               {/* Group 1: General Novel Information */}
               {(showAll || activeTab === 'general') && (
-                <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-4">
+                <div className="bg-[#383330] border border-[#3f3a36] rounded-[4px] p-5 space-y-4">
                   <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
                     <div className="flex items-center gap-2">
                       <Sliders className="w-4 h-4 text-indigo-400" />
@@ -380,7 +380,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         type="text"
                         value={settings.title || ''}
                         onChange={(e) => setSettings({ ...settings, title: e.target.value })}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-200 focus:outline-none focus:border-indigo-500"
+                        className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2.5 text-slate-200 focus:outline-none focus:border-indigo-500"
                         placeholder="Ascendance of a Bookworm"
                       />
                     </div>
@@ -391,7 +391,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         type="text"
                         value={settings.genre || ''}
                         onChange={(e) => setSettings({ ...settings, genre: e.target.value })}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-200 focus:outline-none focus:border-indigo-500"
+                        className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2.5 text-slate-200 focus:outline-none focus:border-indigo-500"
                         placeholder="isekai, xianxia, litrpg, romance..."
                       />
                     </div>
@@ -402,7 +402,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         type="text"
                         value={settings.source_language || ''}
                         onChange={(e) => setSettings({ ...settings, source_language: e.target.value })}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-200 focus:outline-none focus:border-indigo-500"
+                        className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2.5 text-slate-200 focus:outline-none focus:border-indigo-500"
                         placeholder="Japanese, Chinese, Korean, English..."
                       />
                     </div>
@@ -413,7 +413,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         type="text"
                         value={settings.target_language || ''}
                         onChange={(e) => setSettings({ ...settings, target_language: e.target.value })}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-200 focus:outline-none focus:border-indigo-500"
+                        className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2.5 text-slate-200 focus:outline-none focus:border-indigo-500"
                         placeholder="English, Thai, French, Spanish..."
                       />
                     </div>
@@ -424,7 +424,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         type="text"
                         value={settings.project_id || ''}
                         onChange={(e) => setSettings({ ...settings, project_id: e.target.value })}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-400 font-mono text-xs focus:outline-none focus:border-indigo-500"
+                        className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-400 font-mono text-xs focus:outline-none focus:border-indigo-500"
                         placeholder="default_project"
                       />
                       <p className="text-[10px] text-slate-500 mt-1">
@@ -437,7 +437,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
               {/* Group 2: Multi-Agent Model Routing & Presets */}
               {(showAll || activeTab === 'models') && (
-                <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-5">
+                <div className="bg-[#383330] border border-[#3f3a36] rounded-[4px] p-5 space-y-5">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-4">
                     <div className="flex items-center gap-2">
                       <Cpu className="w-5 h-5 text-purple-400" />
@@ -518,7 +518,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         list="model-suggestions"
                         value={settings.model_name || ''}
                         onChange={(e) => setSettings({ ...settings, model_name: e.target.value })}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
+                        className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
                         placeholder={settings.env_presets?.model_name || 'gemini-3.1-flash-lite'}
                       />
                       <div className="text-[10px] text-slate-500 flex justify-between">
@@ -559,7 +559,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         list="model-suggestions"
                         value={settings.fallback_model || ''}
                         onChange={(e) => setSettings({ ...settings, fallback_model: e.target.value })}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
+                        className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
                         placeholder={settings.env_presets?.fallback_model || 'gemini-3.5-flash-lite'}
                       />
                       <div className="text-[10px] text-slate-500 flex justify-between">
@@ -626,7 +626,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                           list="model-suggestions"
                           value={settings.extractor_model || ''}
                           onChange={(e) => setSettings({ ...settings, extractor_model: e.target.value })}
-                          className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
+                          className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
                           placeholder={settings.env_presets?.extractor_model || settings.effective_extractor_model || 'gemini-3.1-flash-lite'}
                         />
                         <div className="flex items-center justify-between text-[10px] text-slate-500">
@@ -671,7 +671,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                           list="model-suggestions"
                           value={settings.drafter_model || ''}
                           onChange={(e) => setSettings({ ...settings, drafter_model: e.target.value })}
-                          className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
+                          className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
                           placeholder={settings.env_presets?.drafter_model || settings.effective_drafter_model || 'gemini-3.5-flash-lite'}
                         />
                         <div className="flex items-center justify-between text-[10px] text-slate-500">
@@ -716,7 +716,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                           list="model-suggestions"
                           value={settings.critic_model || ''}
                           onChange={(e) => setSettings({ ...settings, critic_model: e.target.value })}
-                          className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
+                          className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
                           placeholder={settings.env_presets?.critic_model || settings.effective_critic_model || 'gemma-4-26b-a4b-it'}
                         />
                         <div className="flex items-center justify-between text-[10px] text-slate-500">
@@ -761,7 +761,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                           list="model-suggestions"
                           value={settings.polisher_model || ''}
                           onChange={(e) => setSettings({ ...settings, polisher_model: e.target.value })}
-                          className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
+                          className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
                           placeholder={settings.env_presets?.polisher_model || settings.effective_polisher_model || 'gemini-3.5-flash-lite'}
                         />
                         <div className="flex items-center justify-between text-[10px] text-slate-500">
@@ -806,7 +806,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                           list="model-suggestions"
                           value={settings.chronicler_model || ''}
                           onChange={(e) => setSettings({ ...settings, chronicler_model: e.target.value })}
-                          className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
+                          className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
                           placeholder={settings.env_presets?.chronicler_model || settings.effective_chronicler_model || 'gemma-4-26b-a4b-it'}
                         />
                         <div className="flex items-center justify-between text-[10px] text-slate-500">
@@ -830,7 +830,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
               {/* Group 3: Reflection Review & Quality Controls */}
               {(showAll || activeTab === 'review') && (
-                <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-5">
+                <div className="bg-[#383330] border border-[#3f3a36] rounded-[4px] p-5 space-y-5">
                   <div className="flex items-center gap-2 border-b border-slate-800/80 pb-3">
                     <RefreshCw className="w-4 h-4 text-amber-400" />
                     <h2 className="text-sm font-bold text-slate-200">
@@ -908,7 +908,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
               {/* Group 4: Semantic Chunking Parameters */}
               {(showAll || activeTab === 'chunking') && (
-                <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-4">
+                <div className="bg-[#383330] border border-[#3f3a36] rounded-[4px] p-5 space-y-4">
                   <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
                     <div className="flex items-center gap-2">
                       <Layers className="w-4 h-4 text-pink-400" />
@@ -955,7 +955,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                             setSettings({ ...settings, chunk_threshold_lines: 85 });
                           }
                         }}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
+                        className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
                       />
                       <span className="text-[10px] text-slate-500">Minimum non-empty lines to trigger chunking</span>
                     </div>
@@ -983,7 +983,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                             setSettings({ ...settings, chunk_size_lines: 70 });
                           }
                         }}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
+                        className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
                       />
                       <span className="text-[10px] text-slate-500">Target line count per chunk</span>
                     </div>
@@ -1013,7 +1013,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                             setSettings({ ...settings, chunk_overlap_lines: 3 });
                           }
                         }}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
+                        className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
                       />
                       <span className="text-[10px] text-slate-500">Preceding context lines passed forward</span>
                     </div>
@@ -1023,7 +1023,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
               {/* Group 5: Narrative Memory & Novel Bible */}
               {(showAll || activeTab === 'memory') && (
-                <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-4">
+                <div className="bg-[#383330] border border-[#3f3a36] rounded-[4px] p-5 space-y-4">
                   <div className="flex items-center gap-2 border-b border-slate-800/80 pb-3">
                     <BookMarked className="w-4 h-4 text-emerald-400" />
                     <h2 className="text-sm font-bold text-slate-200">
@@ -1107,7 +1107,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
               {/* Group 6: Episodic Lore & Hybrid RAG (Tier 4) */}
               {(showAll || activeTab === 'rag') && (
-                <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-4">
+                <div className="bg-[#383330] border border-[#3f3a36] rounded-[4px] p-5 space-y-4">
                   <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
                     <div className="flex items-center gap-2">
                       <Sparkles className="w-4 h-4 text-cyan-400" />
@@ -1145,7 +1145,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                             rag_top_k: parseInt(e.target.value, 10) || 2,
                           })
                         }
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
+                        className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
                       />
                       <span className="text-[10px] text-slate-500">Historical lore snippets retrieved per chapter (1–10)</span>
                     </div>
@@ -1157,7 +1157,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         value={settings.rag_embedding_model || ''}
                         onChange={(e) => setSettings({ ...settings, rag_embedding_model: e.target.value })}
                         placeholder="text-multilingual-embedding-002"
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
+                        className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
                       />
                       <span className="text-[10px] text-slate-500">Leave blank for default (text-multilingual-embedding-002)</span>
                     </div>
@@ -1183,7 +1183,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         value={settings.rag_reranker_model || ''}
                         onChange={(e) => setSettings({ ...settings, rag_reranker_model: e.target.value })}
                         placeholder="gemini-3.5-flash-lite"
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
+                        className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
                       />
                       <span className="text-[10px] text-slate-500">Leave blank for default (gemini-3.5-flash-lite)</span>
                     </div>
@@ -1193,7 +1193,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
               {/* Group 7: AI Safety & Bisection Engine */}
               {(showAll || activeTab === 'safety') && (
-                <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-4">
+                <div className="bg-[#383330] border border-[#3f3a36] rounded-[4px] p-5 space-y-4">
                   <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
                     <div className="flex items-center gap-2">
                       <ShieldAlert className="w-4 h-4 text-orange-400" />
@@ -1240,7 +1240,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                             setSettings({ ...settings, safety_subdivision_min_lines: 8 });
                           }
                         }}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
+                        className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
                       />
                       <span className="text-[10px] text-slate-500">Minimum line threshold before falling back to Google Translate bypass</span>
                     </div>
@@ -1271,7 +1271,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                             setSettings({ ...settings, safety_subdivision_max_depth: 4 });
                           }
                         }}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
+                        className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
                       />
                       <span className="text-[10px] text-slate-500">Maximum bisection recursion tree depth (default: 4)</span>
                     </div>
@@ -1281,7 +1281,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
               {/* Group 8: Rate Limiting & Quota Guard */}
               {(showAll || activeTab === 'ratelimit') && (
-                <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-4">
+                <div className="bg-[#383330] border border-[#3f3a36] rounded-[4px] p-5 space-y-4">
                   <div className="flex items-center gap-2 border-b border-slate-800/80 pb-3">
                     <Zap className="w-4 h-4 text-yellow-400" />
                     <h2 className="text-sm font-bold text-slate-200">
@@ -1322,7 +1322,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                             setSettings({ ...settings, max_tpm: 32000 });
                           }
                         }}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
+                        className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
                       />
                       <span className="text-[10px] text-slate-500">60-second sliding window TPM limit (default: 32,000)</span>
                     </div>
@@ -1352,7 +1352,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                             setSettings({ ...settings, max_rpm: 60 });
                           }
                         }}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
+                        className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
                       />
                       <span className="text-[10px] text-slate-500">60-second sliding window RPM limit (default: 60)</span>
                     </div>
@@ -1362,7 +1362,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
               {/* Group 9: Directory Paths */}
               {(showAll || activeTab === 'paths') && (
-                <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-4">
+                <div className="bg-[#383330] border border-[#3f3a36] rounded-[4px] p-5 space-y-4">
                   <div className="flex items-center gap-2 border-b border-slate-800/80 pb-3">
                     <Folder className="w-4 h-4 text-emerald-400" />
                     <h2 className="text-sm font-bold text-slate-200">Workspace Directory Paths</h2>
@@ -1377,7 +1377,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         type="text"
                         value={settings.raw_dir || ''}
                         onChange={(e) => setSettings({ ...settings, raw_dir: e.target.value })}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-indigo-500"
+                        className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 focus:outline-none focus:border-indigo-500"
                         placeholder="raw_chapters"
                       />
                       <span className="text-[10px] text-slate-500 font-sans">Folder where raw novel text files are stored</span>
@@ -1397,7 +1397,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                             output_dir: e.target.value,
                           })
                         }
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-indigo-500"
+                        className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 focus:outline-none focus:border-indigo-500"
                         placeholder="translated_chapters"
                       />
                       <span className="text-[10px] text-slate-500 font-sans">Folder where finished markdown translations are exported</span>
