@@ -707,6 +707,12 @@ class NovelRepository:
         for new_char in new_characters:
             existing = bible.find_character(new_char.name) or bible.find_character(new_char.original_name)
             if not existing:
+                # Auto-register source compound components as aliases
+                if new_char.original_name:
+                    for part in re.split(r"[・·\s/_\-]+", new_char.original_name):
+                        p_clean = part.strip()
+                        if len(p_clean) >= 2 and p_clean.lower() not in [a.lower() for a in new_char.aliases]:
+                            new_char.aliases.append(p_clean)
                 bible.characters.append(new_char)
             else:
                 # Evolve original_name only if existing is empty/Latin and new has true source script
@@ -715,6 +721,16 @@ class NovelRepository:
                     or (not cjk_script_re.search(existing.original_name) and cjk_script_re.search(new_char.original_name))
                 ):
                     existing.original_name = new_char.original_name
+                # If new_char has a name variation, register as alias
+                if new_char.name and new_char.name.strip().lower() != existing.name.strip().lower():
+                    if new_char.name.strip().lower() not in [a.lower() for a in existing.aliases]:
+                        existing.aliases.append(new_char.name.strip())
+                # Auto-register source compound components as aliases on existing character
+                if existing.original_name:
+                    for part in re.split(r"[・·\s/_\-]+", existing.original_name):
+                        p_clean = part.strip()
+                        if len(p_clean) >= 2 and p_clean.lower() not in [a.lower() for a in existing.aliases]:
+                            existing.aliases.append(p_clean)
                 # Merge new aliases deduplicated
                 for alias in new_char.aliases:
                     if alias and alias.lower() not in [a.lower() for a in existing.aliases]:

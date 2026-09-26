@@ -277,3 +277,37 @@ def test_character_pronouns_in_drafter_and_critic_prompts():
     assert "with Ifia: พี่/เธอ" in sys_prompt_critic
 
 
+def test_filter_by_compound_original_name_parts():
+    """Verify that characters with compound names (e.g. 'サフィナ・カルシャナ') match when text only has given name."""
+    chars = [
+        CharacterProfile(name="Safina Kalshana", original_name="サフィナ・カルシャナ", role="supporting"),
+        CharacterProfile(name="Karlis Yensho", original_name="カーリス・イェンチョ", role="supporting"),
+        CharacterProfile(name="Aries Legalia", original_name="アリエス・レガリヤ", role="supporting"),
+        CharacterProfile(name="Random Guard", original_name="名無しの衛兵", role="supporting"),
+    ]
+    # Source text only has given names separated from their family names
+    source_text = "サフィナは震えながら言った。「カーリス先輩、大丈夫でしょうか……？」"
+    filtered = filter_characters_for_scene(chars, source_text=source_text, fallback_on_empty=False, max_characters=0)
+
+    names = [c.name for c in filtered]
+    assert "Safina Kalshana" in names
+    assert "Karlis Yensho" in names
+    assert "Aries Legalia" not in names
+    assert "Random Guard" not in names
+
+
+def test_filter_by_alias_in_target_text():
+    """Verify that character aliases (e.g. 'ซาฟิน่า') match in target text."""
+    chars = [
+        CharacterProfile(name="ซาฟิน่า คาลชาน่า", original_name="サフィナ・カルシャナ", aliases=["ซาฟิน่า"], role="supporting"),
+        CharacterProfile(name="นายทหารนิรนาม", original_name="名無しの衛兵", role="supporting"),
+    ]
+    target_text = "ซาฟิน่าเดินเข้ามาในห้องด้วยความประหม่า"
+    filtered = filter_characters_for_scene(chars, target_text=target_text, fallback_on_empty=False, max_characters=0)
+
+    names = [c.name for c in filtered]
+    assert "ซาฟิน่า คาลชาน่า" in names
+    assert "นายทหารนิรนาม" not in names
+
+
+

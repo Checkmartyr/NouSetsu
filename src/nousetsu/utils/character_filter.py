@@ -1,4 +1,4 @@
-"""Per-scene and per-chunk character roster filter utility."""
+import re
 from typing import List, Optional, Set
 from nousetsu.models.bible import CharacterProfile
 
@@ -68,6 +68,15 @@ def filter_characters_for_scene(
         if orig and orig in search_corpus:
             has_text_mention = True
 
+        # Check CJK / compound components of original_name (e.g. "サフィナ" from "サフィナ・カルシャナ")
+        if not has_text_mention and orig and any(delim in orig for delim in ("・", "·", " ", "　", "/", "_", "-")):
+            orig_parts = re.split(r"[・·\s/_\-]+", orig)
+            for part in orig_parts:
+                part_clean = part.strip()
+                if len(part_clean) >= 2 and part_clean in search_corpus:
+                    has_text_mention = True
+                    break
+
         name = (c.name or "").strip().lower()
         if not has_text_mention and name and len(name) >= 2 and name in search_corpus:
             has_text_mention = True
@@ -75,7 +84,7 @@ def filter_characters_for_scene(
         if not has_text_mention and c.aliases:
             for alias in c.aliases:
                 alias_clean = (alias or "").strip().lower()
-                if alias_clean and alias_clean in search_corpus:
+                if alias_clean and len(alias_clean) >= 2 and alias_clean in search_corpus:
                     has_text_mention = True
                     break
 

@@ -20,6 +20,10 @@ Identify which entities are NEW (not yet present in the existing Novel Bible) an
    - `source` MUST contain native {source_lang} script characters. NEVER emit words from {target_lang} or English into `source`.
    - `target` MUST be strictly in {target_lang}.
    - `notes` MUST be in English.
+8. `new_characters` DEDUPLICATION & SUB-NAME DIRECTIVE:
+   - Check the Existing Known Characters roster carefully.
+   - DO NOT extract shortened names, given names, family names, or nicknames of characters already present in the Existing Known Characters roster (e.g. if 'サフィナ・カルシャナ' is in Known Characters, do NOT extract 'サフィナ' or 'カルシャナ' as new characters; if 'フェルディッド・レガリヤ' is known, do NOT extract 'フェルディッド').
+   - Only extract genuinely new, distinct fictional characters appearing for the first time.
 {skills_section}
 {procedural_guidance}
 Respond strictly in valid JSON format:

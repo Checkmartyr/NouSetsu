@@ -269,6 +269,27 @@ class EntityExtractorAgent:
             except Exception:
                 pass
 
+        # Deduplicate extracted characters against existing Bible roster and known sub-names
+        filtered_new_chars: List[CharacterProfile] = []
+        for c in new_chars:
+            if c.original_name and bible.find_character(c.original_name):
+                continue
+            if c.name and bible.find_character(c.name):
+                continue
+            if known_characters:
+                match_kc = any(
+                    (kc.original_name and (
+                        kc.original_name.lower() == c.original_name.lower()
+                        or c.original_name.lower() in [p.lower() for p in re.split(r"[・·\s/_\-]+", kc.original_name) if len(p.strip()) >= 2]
+                    ))
+                    or (kc.name and kc.name.lower() == c.name.lower())
+                    for kc in known_characters
+                )
+                if match_kc:
+                    continue
+            filtered_new_chars.append(c)
+        new_chars = filtered_new_chars
+
         if tracker:
             tracker.record(
                 stage=PipelineStage.EXTRACTION,

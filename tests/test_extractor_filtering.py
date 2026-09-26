@@ -223,3 +223,64 @@ def test_workflow_and_runner_filter_wiring(tmp_path: Path):
     runner = BatchRunner(repo, model_name="mock-model")
     assert runner.workflow.filter_extractor_entities is False
     assert runner.workflow.extractor.enable_entity_filtering is False
+
+
+def test_extractor_deduplicates_known_sub_names():
+    """Verify that EntityExtractorAgent filters out extracted candidates matching existing compound characters."""
+    extractor = EntityExtractorAgent(model_name="mock-model")
+    bible = NovelBible(title="Test", source_language="Japanese", target_language="English")
+    bible.characters.append(CharacterProfile(
+        name="Safina Kalshana",
+        original_name="サフィナ・カルシャナ",
+        role="supporting"
+    ))
+
+    # Mock LLM returning "サフィナ" as a new character
+    mock_llm = MagicMock()
+    mock_llm.invoke.return_value = AIMessage(
+        content='''```json
+{
+  "new_characters": [
+    {
+      "name": "Safina",
+      "original_name": "サフィナ",
+      "aliases": [],
+      "gender": "female",
+      "pronouns": {"source": "彼女", "target": "she"},
+      "role": "supporting",
+      "voice": "timid",
+      "relationships": {}
+    },
+    {
+      "name": "True New Person",
+      "original_name": "完全な新人",
+      "aliases": [],
+      "gender": "male",
+      "pronouns": {"source": "彼", "target": "he"},
+      "role": "minor",
+      "voice": "loud",
+      "relationships": {}
+    }
+  ],
+  "new_terms": [],
+  "active_terms_in_chapter": []
+}
+```'''
+    )
+    extractor.llm = mock_llm
+
+    new_chars, _, _ = extractor.extract(
+        source_text="サフィナは歩いた。完全な新人も来た。",
+        bible=bible
+    )
+
+    names = [c.name for c in new_chars]
+    orig_names = [c.original_name for c in new_chars]
+
+    # "サフィナ" must be filtered out because "サフィナ・カルシャナ" is already known
+    assert "Safina" not in names
+    assert "サフィナ" not in orig_names
+
+    # Genuine new character must be retained
+    assert "True New Person" in names
+
