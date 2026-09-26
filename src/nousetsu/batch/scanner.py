@@ -2,6 +2,7 @@ import logging
 import os
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+import re
 from typing import Dict, List, Optional, Set, Tuple, Union
 from natsort import natsorted
 
@@ -487,3 +488,59 @@ class ChapterScanner:
                 results[name] = tasks
 
         return results
+
+    @classmethod
+    def filter_tasks(
+        cls,
+        tasks: List[ChapterTask],
+        chapter_filter: Optional[Union[str, int]],
+    ) -> List[ChapterTask]:
+        """Filter chapter tasks supporting single number, ranges ('5-58', '5..58'),
+        plus notation ('5+'), and localized chapter prefixes ('ch 48', '第48話')."""
+        if chapter_filter is None:
+            return tasks
+
+        raw_filter = str(chapter_filter).strip()
+        if not raw_filter or raw_filter.lower() in ("all", "*"):
+            return tasks
+
+        filter_str = raw_filter.lower()
+
+        # Check if filter specifies a chapter range (e.g. "5-58", "ch 5 to 58", "5..58")
+        range_match = re.search(
+            r"^(?:chapter|ch|ep|第)?\.?\s*(\d+)\s*(?:-|to|\.\.)\s*(\d+)(?:話|章)?$",
+            filter_str,
+            re.IGNORECASE,
+        )
+        plus_match = re.search(
+            r"^(?:chapter|ch|ep|第)?\.?\s*(\d+)\s*(?:\+|>=)$",
+            filter_str,
+            re.IGNORECASE,
+        )
+        num_match = re.search(
+            r"^(?:chapter|ch|ep|第)?\.?\s*(\d+)(?:話|章)?$",
+            filter_str,
+            re.IGNORECASE,
+        )
+
+        if range_match:
+            start_num = int(range_match.group(1))
+            end_num = int(range_match.group(2))
+            return [t for t in tasks if start_num <= t.chapter_num <= end_num]
+        elif plus_match:
+            start_num = int(plus_match.group(1))
+            return [t for t in tasks if t.chapter_num >= start_num]
+        elif num_match:
+            target_num = int(num_match.group(1))
+            exact = [t for t in tasks if t.chapter_num == target_num]
+            if exact:
+                return exact
+            return [
+                t for t in tasks
+                if str(target_num) in t.source_file.stem.lower() or filter_str in t.source_file.stem.lower()
+            ]
+        else:
+            return [
+                t for t in tasks
+                if str(t.chapter_num) == filter_str or filter_str in t.source_file.stem.lower()
+            ]

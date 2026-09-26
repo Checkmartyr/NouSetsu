@@ -199,7 +199,9 @@ class CritiqueAgent:
                 doc = hit.document if hasattr(hit, "document") else hit
                 content = getattr(doc, "content", str(doc))
                 title = getattr(doc, "title", "Canon Reference")
-                canon_lines.append(f"- [{title}]: {clamp_sentence_boundary(content, 350)}")
+                reason = getattr(hit, "relevance_reason", None) or getattr(hit, "metadata", {}).get("reason")
+                reason_str = f" [Audit Anchor: {reason}]" if reason else ""
+                canon_lines.append(f"- [{title}]{reason_str}: {clamp_sentence_boundary(content, 350)}")
             rag_section = "\nCanonical Series Memory & Prior Translations (via RAG):\n" + "\n".join(canon_lines) + "\n"
 
         # Procedural Graph guidance (Lu et al., arXiv:2609.09153v1)
@@ -386,6 +388,7 @@ class CritiqueAgent:
                         "dense_score": getattr(hit, "dense_score", None),
                         "rrf_score": getattr(hit, "rrf_score", None),
                         "rerank_score": getattr(hit, "rerank_score", None),
+                        "relevance_reason": getattr(hit, "relevance_reason", None),
                     }
                     for hit in rag_context
                 ]

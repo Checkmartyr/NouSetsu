@@ -240,38 +240,9 @@ class BatchRunner:
         if tasks is None:
             tasks = self.scanner.scan_directory(input_dir, output_dir)
         if chapter_filter is not None:
-            raw_filter = str(chapter_filter).strip()
-            if raw_filter:
-                filter_str = raw_filter.lower()
-                # Check if filter specifies a chapter range (e.g. "5-58", "ch 5 to 58", "5..58")
-                range_match = re.search(r"^(?:chapter|ch|ep|第)?\.?\s*(\d+)\s*(?:-|to|\.\.)\s*(\d+)(?:話|章)?$", filter_str, re.IGNORECASE)
-                plus_match = re.search(r"^(?:chapter|ch|ep|第)?\.?\s*(\d+)\s*(?:\+|>=)$", filter_str, re.IGNORECASE)
-                num_match = re.search(r"^(?:chapter|ch|ep|第)?\.?\s*(\d+)(?:話|章)?$", filter_str, re.IGNORECASE)
-
-                if range_match:
-                    start_num = int(range_match.group(1))
-                    end_num = int(range_match.group(2))
-                    tasks = [t for t in tasks if start_num <= t.chapter_num <= end_num]
-                elif plus_match:
-                    start_num = int(plus_match.group(1))
-                    tasks = [t for t in tasks if t.chapter_num >= start_num]
-                elif num_match:
-                    target_num = int(num_match.group(1))
-                    exact = [t for t in tasks if t.chapter_num == target_num]
-                    if exact:
-                        tasks = exact
-                    else:
-                        tasks = [
-                            t for t in tasks
-                            if str(target_num) in t.source_file.stem.lower() or filter_str in t.source_file.stem.lower()
-                        ]
-                else:
-                    tasks = [
-                        t for t in tasks
-                        if str(t.chapter_num) == filter_str or filter_str in t.source_file.stem.lower()
-                    ]
-                if not tasks and self.console:
-                    self.console.print(f"[bold yellow]⚠️ No chapters matched filter: '{chapter_filter}'.[/]")
+            tasks = ChapterScanner.filter_tasks(tasks, chapter_filter)
+            if not tasks and self.console:
+                self.console.print(f"[bold yellow]⚠️ No chapters matched filter: '{chapter_filter}'.[/]")
         if limit:
             tasks = tasks[:limit]
 

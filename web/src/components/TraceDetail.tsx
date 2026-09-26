@@ -25,6 +25,10 @@ export const TraceDetail: React.FC<TraceDetailProps> = ({
   const [internalTab, setInternalTab] = useState<DetailTab>('output');
   const activeTab = controlledTab !== undefined ? controlledTab : internalTab;
 
+  const hasDiffAvailable =
+    chapterDoc.traces.some((t) => t.stage?.toLowerCase() === 'drafting') &&
+    chapterDoc.traces.some((t) => t.stage?.toLowerCase() === 'polishing');
+
   const handleTabSelect = (tab: DetailTab) => {
     if (onTabChange) {
       onTabChange(tab);
@@ -119,6 +123,11 @@ export const TraceDetail: React.FC<TraceDetailProps> = ({
 
           <button
             onClick={() => handleTabSelect('diff')}
+            title={
+              hasDiffAvailable
+                ? "Compare raw draft prose against polished prose"
+                : "Diff comparison requires drafting and polishing traces"
+            }
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-[3px] text-xs transition-colors cursor-pointer ${
               activeTab === 'diff'
                 ? 'bg-[#383330] text-[#f7f5f0] border border-[#544d47] font-medium'
@@ -127,6 +136,9 @@ export const TraceDetail: React.FC<TraceDetailProps> = ({
           >
             <GitCompare className="w-3.5 h-3.5" />
             <span>Diff Comparison</span>
+            {hasDiffAvailable && (
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block ml-0.5" />
+            )}
           </button>
 
           <button

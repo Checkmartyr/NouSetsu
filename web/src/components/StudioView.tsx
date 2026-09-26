@@ -54,6 +54,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
 
   // Translation Options Modal / Fields
+  const [chapterFilterInput, setChapterFilterInput] = useState<string>('');
   const [limitCount, setLimitCount] = useState<number | undefined>(undefined);
   const [forceRetranslate, setForceRetranslate] = useState(false);
 
@@ -117,7 +118,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
     }
   }, [logs, isLogDrawerOpen]);
 
-  const handleStart = async (targetChapter?: number, targetFolder?: string) => {
+  const handleStart = async (targetChapter?: number | string, targetFolder?: string) => {
     if (!activeProjectPath) return;
     setIsStarting(true);
     try {
@@ -128,9 +129,14 @@ export const StudioView: React.FC<StudioViewProps> = ({
           ? selectedFolder
           : undefined;
 
+      const filterToUse =
+        targetChapter !== undefined
+          ? targetChapter
+          : (chapterFilterInput.trim() || undefined);
+
       await startTranslation({
         project_path: activeProjectPath,
-        chapter_num: targetChapter,
+        chapter: filterToUse,
         limit: limitCount,
         force_retranslate: forceRetranslate,
         folder: folderToUse,
@@ -479,6 +485,15 @@ export const StudioView: React.FC<StudioViewProps> = ({
           {/* Translation Options: Limit & Force */}
           {!status?.is_running && (
             <div className="hidden sm:flex items-center gap-2 bg-[#383330] px-2.5 py-1 rounded-[3px] border border-[#3f3a36] text-xs">
+              <label className="text-[#aea69c]" title="Filter chapters: e.g. 48, 5-58, 5+, ch 48">Ch:</label>
+              <input
+                type="text"
+                placeholder="All (e.g. 5-58, 5+)"
+                value={chapterFilterInput}
+                onChange={(e) => setChapterFilterInput(e.target.value)}
+                className="w-28 bg-[#2b2622] border border-[#3f3a36] rounded-[2px] px-1.5 py-0.5 text-[#f7f5f0] text-xs font-mono focus:outline-none focus:border-[#dad2c1]"
+                title="Filter chapters: e.g. 48, 5-58, 5+, ch 48"
+              />
               <label className="text-[#aea69c]">Limit:</label>
               <input
                 type="number"

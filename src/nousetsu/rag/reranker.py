@@ -53,6 +53,10 @@ class MockCrossEncoderReranker(BaseCrossEncoderReranker):
 
             doc_copy = doc.model_copy()
             doc_copy.rerank_score = combined
+            doc_copy.relevance_reason = f"Lexical overlap ({overlap} tokens) with query context"
+            if doc_copy.metadata is None:
+                doc_copy.metadata = {}
+            doc_copy.metadata["reason"] = doc_copy.relevance_reason
             scored_docs.append(doc_copy)
 
         scored_docs.sort(key=lambda d: d.rerank_score or 0.0, reverse=True)
@@ -127,15 +131,25 @@ Respond STRICTLY with a valid JSON array:
             parsed = json.loads(json_str)
 
             scores_by_id: Dict[str, float] = {}
+            reasons_by_id: Dict[str, str] = {}
             if isinstance(parsed, list):
                 for item in parsed:
                     if isinstance(item, dict) and "doc_id" in item and "score" in item:
-                        scores_by_id[str(item["doc_id"])] = float(item["score"])
+                        d_id = str(item["doc_id"])
+                        scores_by_id[d_id] = float(item["score"])
+                        if "reason" in item and item["reason"]:
+                            reasons_by_id[d_id] = str(item["reason"]).strip()
 
             reranked_docs: List[SearchResult] = []
             for doc in documents:
                 doc_copy = doc.model_copy()
                 doc_copy.rerank_score = scores_by_id.get(doc.doc_id, round(doc.rrf_score, 4))
+                reason = reasons_by_id.get(doc.doc_id)
+                if reason:
+                    doc_copy.relevance_reason = reason
+                    if doc_copy.metadata is None:
+                        doc_copy.metadata = {}
+                    doc_copy.metadata["reason"] = reason
                 reranked_docs.append(doc_copy)
 
             reranked_docs.sort(key=lambda d: d.rerank_score or 0.0, reverse=True)

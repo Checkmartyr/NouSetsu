@@ -467,8 +467,8 @@ When modifying this repository, AI agents MUST adhere strictly to these conventi
    - `ProjectConfig` model fields default to `None` so novel projects cleanly inherit models from `.env`.
    - Project YAML files (`.novel/config.yaml`) should only store novel-specific metadata and explicit local overrides.
 10. **Mandatory End-of-Task Git Commit & Push**:
-    - AI agents MUST ALWAYS stage all modified/added files, create a clean conventional commit (e.g. `feat(...)`, `fix(...)`, `docs(...)`, `refactor(...)`), and push to `origin/main` at the conclusion of every task after all tests pass green.
-    - Never leave completed task work uncommitted in the working tree.
+    - AI agents MUST ALWAYS stage all modified, added, and untracked files, create a clean conventional commit (e.g. `feat(...)`, `fix(...)`, `docs(...)`, `refactor(...)`), and immediately push to the active tracking branch on remote (e.g. `git push origin HEAD` or `git push origin <active_branch>`) upon completing any task once all verification tests pass green.
+    - Never leave completed, tested work sitting uncommitted or unpushed in the working tree at the conclusion of a task.
 11. **Mandatory Human Plan Approval Before Implementation**:
     - When operating under planning mode (`/plan`), AI agents MUST ALWAYS present the detailed implementation plan artifact and STOP to wait for explicit manual approval from the user in chat before modifying any project files or executing modifying commands.
     - AI agents MUST NEVER assume implicit approval, rely on automatic system hook overrides, or begin execution until the human user explicitly approves the plan in chat.

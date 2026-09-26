@@ -9,9 +9,11 @@ CRITIC_SKILLS: List[AgentSkill] = [
         title="Omission & Truncation Auditor",
         description="Rigorous line-by-line verification ensuring no sentences, descriptive beats, or dialogues are skipped.",
         content="""### Omission & Truncation Audit Directives:
-- Check that every paragraph and line of dialogue in the source text corresponds to content in the translation.
-- Flag any condensed summaries, skipped subordinate clauses, or missing sensory descriptors.
-- Ensure character inner monologues and sound effects (onomatopoeia) were translated or localized rather than ignored.""",
+- Check that every narrative paragraph and line of dialogue in the source text corresponds to content in the translation.
+- Explicitly verify edge boundaries: ensure the opening sentence and closing sentence of the chapter are not dropped.
+- Flag any condensed summaries, skipped subordinate clauses, or missing character dialogue lines.
+- Ensure character inner monologues and sound effects (onomatopoeia) were translated or localized rather than ignored.
+- Non-Narrative Exemption: Webnovel author comments, bookmark requests (e.g. 『ブックマークありがとうございます』), or ranking announcements are non-story metadata. Their omission in the translated story prose MUST NOT be flagged as an omission or penalized in fidelity.""",
         languages=["all"],
         genres=["all"],
         priority=110,

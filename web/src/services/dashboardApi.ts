@@ -57,7 +57,9 @@ export async function fetchTranslationStatus(): Promise<TranslationStatus | null
 export async function startTranslation(params: {
   project_path?: string;
   folder?: string;
-  chapter_num?: number;
+  chapter?: string | number;
+  chapter_num?: string | number;
+  chapter_filter?: string | number;
   limit?: number;
   force_retranslate?: boolean;
   model?: string;

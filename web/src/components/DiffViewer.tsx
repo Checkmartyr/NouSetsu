@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { AgentPromptTrace } from '../types/trace';
 import * as Diff from 'diff';
-import { Columns, AlignJustify, ArrowRight } from 'lucide-react';
+import { Columns, AlignJustify, ArrowRight, GitCompare } from 'lucide-react';
 
 interface DiffViewerProps {
   currentTrace: AgentPromptTrace;
@@ -9,25 +9,91 @@ interface DiffViewerProps {
 }
 
 export const DiffViewer: React.FC<DiffViewerProps> = ({ currentTrace, allTraces }) => {
-  // Find standard candidate targets
-  const drafterTrace = allTraces.find((t) => t.stage === 'drafting');
-  const polisherTrace = allTraces.find((t) => t.stage === 'polishing');
+  // Filter candidate traces: strictly drafting and polishing prose
+  const draftingTraces = useMemo(
+    () => allTraces.filter((t) => t.stage?.toLowerCase() === 'drafting'),
+    [allTraces]
+  );
+  const polishingTraces = useMemo(
+    () => allTraces.filter((t) => t.stage?.toLowerCase() === 'polishing'),
+    [allTraces]
+  );
+
+  const getTraceLabel = (t?: AgentPromptTrace) => {
+    if (!t) return 'None';
+    const isDraft = t.stage?.toLowerCase() === 'drafting';
+    const tag = isDraft ? 'Draft' : 'Polished';
+    const parts: string[] = [];
+    if (t.iteration && t.iteration > 1) {
+      parts.push(`Pass ${t.iteration}`);
+    }
+    if (t.total_chunks && t.total_chunks > 1) {
+      parts.push(`Chunk ${t.chunk_index + 1}/${t.total_chunks}`);
+    }
+    const details = parts.length > 0 ? ` (${parts.join(', ')})` : '';
+    return `${tag}${details} - ${t.agent || t.model}`;
+  };
+
+  // Source candidates: drafting traces, plus earlier polishing passes if multiple exist
+  const sourceCandidates = useMemo(() => {
+    if (polishingTraces.length > 1) {
+      return [...draftingTraces, ...polishingTraces.slice(0, -1)];
+    }
+    return draftingTraces;
+  }, [draftingTraces, polishingTraces]);
+
+  // Target candidates: polishing traces
+  const targetCandidates = polishingTraces;
 
   // Initial source and target selection
-  const defaultSourceId = drafterTrace ? drafterTrace.trace_id : allTraces[0]?.trace_id;
-  const defaultTargetId = polisherTrace
-    ? polisherTrace.trace_id
-    : currentTrace.trace_id !== defaultSourceId
-    ? currentTrace.trace_id
-    : allTraces[1]?.trace_id || allTraces[0]?.trace_id;
+  const initialPair = useMemo(() => {
+    let src = draftingTraces[0]?.trace_id || '';
+    let tgt = polishingTraces[polishingTraces.length - 1]?.trace_id || '';
 
-  const [sourceTraceId, setSourceTraceId] = useState<string>(defaultSourceId || '');
-  const [targetTraceId, setTargetTraceId] = useState<string>(defaultTargetId || '');
+    if (currentTrace.stage?.toLowerCase() === 'drafting') {
+      src = currentTrace.trace_id;
+      const match = polishingTraces.find((p) => p.chunk_index === currentTrace.chunk_index) ||
+                    polishingTraces[polishingTraces.length - 1];
+      if (match) tgt = match.trace_id;
+    } else if (currentTrace.stage?.toLowerCase() === 'polishing') {
+      tgt = currentTrace.trace_id;
+      const match = draftingTraces.find((d) => d.chunk_index === currentTrace.chunk_index) ||
+                    draftingTraces[0];
+      if (match) src = match.trace_id;
+    }
+
+    return { src, tgt };
+  }, [currentTrace, draftingTraces, polishingTraces]);
+
+  const [sourceTraceId, setSourceTraceId] = useState<string>(initialPair.src);
+  const [targetTraceId, setTargetTraceId] = useState<string>(initialPair.tgt);
   const [diffMode, setDiffMode] = useState<'inline' | 'split'>('inline');
   const [granularity, setGranularity] = useState<'words' | 'lines'>('words');
 
-  const sourceTrace = allTraces.find((t) => t.trace_id === sourceTraceId);
-  const targetTrace = allTraces.find((t) => t.trace_id === targetTraceId);
+  // If no drafting or polishing trace is available yet, render clean informative state
+  if (draftingTraces.length === 0 || polishingTraces.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-80 text-center p-8 bg-[#24201d] border border-[#3f3a36] rounded-[4px]">
+        <GitCompare className="w-12 h-12 text-[#857d75] mb-3 opacity-60" />
+        <h3 className="text-sm font-semibold text-[#f7f5f0] mb-1 font-mono">
+          Diff Comparison Unavailable
+        </h3>
+        <p className="text-xs text-[#aea69c] max-w-md leading-relaxed">
+          Diff Comparison strictly compares raw translation draft prose against polished prose.
+          {draftingTraces.length === 0
+            ? " The drafting stage has not completed yet for this chapter."
+            : " The polishing stage has not completed yet for this chapter."}
+        </p>
+      </div>
+    );
+  }
+
+  const sourceTrace =
+    sourceCandidates.find((t) => t.trace_id === sourceTraceId) ||
+    draftingTraces[0];
+  const targetTrace =
+    targetCandidates.find((t) => t.trace_id === targetTraceId) ||
+    polishingTraces[polishingTraces.length - 1];
 
   const textA = sourceTrace?.raw_output || '';
   const textB = targetTrace?.raw_output || '';
@@ -52,14 +118,14 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({ currentTrace, allTraces 
           <div className="flex items-center gap-1.5">
             <span className="text-xs text-[#857d75] font-mono">From:</span>
             <select
-              value={sourceTraceId}
+              value={sourceTrace?.trace_id || sourceTraceId}
               onChange={(e) => setSourceTraceId(e.target.value)}
               aria-label="Select source trace for diff"
               className="bg-[#24201d] border border-[#3f3a36] rounded-[3px] px-2 py-1 text-xs text-[#f7f5f0] focus:outline-none focus:border-[#b0a89f] font-mono"
             >
-              {allTraces.map((t) => (
+              {sourceCandidates.map((t) => (
                 <option key={t.trace_id} value={t.trace_id}>
-                  {t.agent} ({t.stage})
+                  {getTraceLabel(t)}
                 </option>
               ))}
             </select>
@@ -71,14 +137,14 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({ currentTrace, allTraces 
           <div className="flex items-center gap-1.5">
             <span className="text-xs text-[#857d75] font-mono">To:</span>
             <select
-              value={targetTraceId}
+              value={targetTrace?.trace_id || targetTraceId}
               onChange={(e) => setTargetTraceId(e.target.value)}
               aria-label="Select target trace for diff"
               className="bg-[#24201d] border border-[#3f3a36] rounded-[3px] px-2 py-1 text-xs text-[#f7f5f0] focus:outline-none focus:border-[#b0a89f] font-mono"
             >
-              {allTraces.map((t) => (
+              {targetCandidates.map((t) => (
                 <option key={t.trace_id} value={t.trace_id}>
-                  {t.agent} ({t.stage})
+                  {getTraceLabel(t)}
                 </option>
               ))}
             </select>
@@ -156,7 +222,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({ currentTrace, allTraces 
             {/* Left side: Source */}
             <div className="flex flex-col bg-[#24201d] border border-[#3f3a36] rounded-[4px] overflow-hidden">
               <div className="px-3 py-2 bg-[#2b2622] border-b border-[#3f3a36] text-xs font-semibold text-[#f7f5f0] font-mono">
-                Original Draft: {sourceTrace?.agent} ({sourceTrace?.stage})
+                Original Draft: {getTraceLabel(sourceTrace)}
               </div>
               <div className="p-4 overflow-y-auto font-serif text-[#b0a89f] text-sm leading-relaxed whitespace-pre-wrap">
                 {textA || '<Empty>'}
@@ -166,7 +232,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({ currentTrace, allTraces 
             {/* Right side: Target */}
             <div className="flex flex-col bg-[#24201d] border border-[#3f3a36] rounded-[4px] overflow-hidden">
               <div className="px-3 py-2 bg-[#2b2622] border-b border-[#3f3a36] text-xs font-semibold text-[#f7f5f0] font-mono">
-                Polished Output: {targetTrace?.agent} ({targetTrace?.stage})
+                Polished Output: {getTraceLabel(targetTrace)}
               </div>
               <div className="p-4 overflow-y-auto font-serif text-[#f7f5f0] text-sm leading-relaxed whitespace-pre-wrap">
                 {textB || '<Empty>'}

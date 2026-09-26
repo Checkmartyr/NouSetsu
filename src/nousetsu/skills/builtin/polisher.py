@@ -18,6 +18,21 @@ POLISHER_SKILLS: List[AgentSkill] = [
         source="builtin"
     ),
     AgentSkill(
+        name="content_retention_guard",
+        agent="polisher",
+        title="Full-Content & Sentence Retention Guard",
+        description="Prevents accidental omission of sentences, dialogue exchanges, and ending scenes during prose polishing.",
+        content="""### Full-Content Retention Directives:
+- You are polishing existing translated prose, NOT summarizing or condensing it.
+- Every single narrative paragraph, character reaction, dialogue line, and inner monologue present in the draft MUST be represented in the polished output.
+- Explicitly guard the beginning and end of the chapter: never drop the opening sentence or the final closing sentence.
+- Never consolidate separate dialogue lines into generic summary narration.""",
+        languages=["all"],
+        genres=["all"],
+        priority=112,
+        source="builtin"
+    ),
+    AgentSkill(
         name="translationese_filter",
         agent="polisher",
         title="Anti-Translationese & Stiff Phrasing Filter",

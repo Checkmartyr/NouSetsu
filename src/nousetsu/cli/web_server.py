@@ -13,7 +13,7 @@ import time
 import urllib.parse
 import webbrowser
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import uvicorn
 import yaml
@@ -155,8 +155,9 @@ class CreateProjectRequest(BaseModel):
 class TranslateStartRequest(BaseModel):
     project_path: Optional[str] = None
     folder: Optional[str] = None
-    chapter: Optional[int] = None
-    chapter_num: Optional[int] = None
+    chapter: Optional[Union[int, str]] = None
+    chapter_num: Optional[Union[int, str]] = None
+    chapter_filter: Optional[Union[int, str]] = None
     limit: Optional[int] = None
     force: bool = False
     force_retranslate: bool = False
@@ -165,8 +166,15 @@ class TranslateStartRequest(BaseModel):
     max_loops: Optional[int] = None
     quality_threshold: Optional[float] = None
 
-    def get_chapter(self) -> Optional[int]:
-        return self.chapter if self.chapter is not None else self.chapter_num
+    def get_chapter_filter(self) -> Optional[Union[int, str]]:
+        if self.chapter_filter is not None:
+            return self.chapter_filter
+        if self.chapter is not None:
+            return self.chapter
+        return self.chapter_num
+
+    def get_chapter(self) -> Optional[Union[int, str]]:
+        return self.get_chapter_filter()
 
     def get_force(self) -> bool:
         return self.force or self.force_retranslate
@@ -457,7 +465,7 @@ def _find_chapter_files(
 def _run_batch_worker(
     repo: NovelRepository,
     folder: Optional[str],
-    chapter_num: Optional[int],
+    chapter_num: Optional[Union[int, str]],
     limit: Optional[int],
     force_retranslate: bool,
     model: Optional[str],
@@ -466,7 +474,8 @@ def _run_batch_worker(
     quality_threshold: Optional[float],
     event_bus: SSEEventBus,
     job: ActiveTranslationJob,
-    stop_event: threading.Event
+    stop_event: threading.Event,
+    chapter_filter: Optional[Union[int, str]] = None,
 ) -> None:
     try:
         load_env(repo.root_dir)
@@ -512,8 +521,9 @@ def _run_batch_worker(
             })
 
         tasks = _scan_project_tasks(repo, folder=folder)
-        if chapter_num is not None:
-            tasks = [t for t in tasks if t.chapter_num == chapter_num]
+        effective_filter = chapter_filter if chapter_filter is not None else chapter_num
+        if effective_filter is not None:
+            tasks = ChapterScanner.filter_tasks(tasks, effective_filter)
         if limit:
             tasks = tasks[:limit]
 
@@ -990,7 +1000,8 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
                 _run_batch_worker,
                 repo=repo,
                 folder=body.folder,
-                chapter_num=body.get_chapter(),
+                chapter_num=body.get_chapter_filter(),
+                chapter_filter=body.get_chapter_filter(),
                 limit=body.limit,
                 force_retranslate=body.get_force(),
                 model=body.model,

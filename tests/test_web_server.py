@@ -304,3 +304,29 @@ def test_chapter_metadata_duration_and_token_properties():
     assert dumped["total_tokens"] == 250
 
 
+def test_translate_start_request_chapter_filter():
+    """Verify TranslateStartRequest parses string chapter filters without validation errors."""
+    from nousetsu.cli.web_server import TranslateStartRequest
+
+    # Single integer
+    req1 = TranslateStartRequest(chapter_num=5)
+    assert req1.get_chapter_filter() == 5
+
+    # String integer
+    req2 = TranslateStartRequest(chapter="48")
+    assert req2.get_chapter_filter() == "48"
+
+    # Range string
+    req3 = TranslateStartRequest(chapter="5-58")
+    assert req3.get_chapter_filter() == "5-58"
+
+    # Plus string via chapter_filter field
+    req4 = TranslateStartRequest(chapter_filter="5+")
+    assert req4.get_chapter_filter() == "5+"
+
+    # None
+    req5 = TranslateStartRequest()
+    assert req5.get_chapter_filter() is None
+
+
+

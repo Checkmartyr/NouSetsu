@@ -127,3 +127,33 @@ def is_cjk_language(lang: str) -> bool:
     """Return True if language is Chinese, Japanese, or Korean (where zero-anaphora applies)."""
     normalized = (lang or "").strip().lower()
     return normalized in ["japanese", "chinese", "korean", "cjk", "jp", "zh", "ko", "cn", "kr"]
+
+
+def is_genuine_language_regression(
+    text: str,
+    source_lang: Optional[str],
+    target_lang: Optional[str]
+) -> bool:
+    """
+    Programmatically verify whether text genuinely suffered language regression to source_lang.
+    Protects against LLM critic hallucinations claiming non-existent untranslated lines.
+    """
+    if not text or not source_lang or not target_lang:
+        return False
+    if source_lang.lower() == target_lang.lower():
+        return False
+
+    det = detect_language(text)
+    if det and det.lower() == source_lang.lower():
+        return True
+
+    s_lower = source_lang.lower()
+    t_lower = target_lang.lower()
+    if s_lower in ("japanese", "chinese", "korean") and t_lower not in ("japanese", "chinese", "korean"):
+        cjk_chars = re.findall(r"[\u3040-\u30ff\u4e00-\u9fff\uac00-\ud7af]", text[:8000])
+        non_space_len = len("".join(text[:8000].split()))
+        if non_space_len > 0 and (len(cjk_chars) / non_space_len) > 0.10:
+            return True
+        return False
+
+    return False

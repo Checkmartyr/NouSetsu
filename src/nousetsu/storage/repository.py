@@ -1,6 +1,7 @@
 """Repository for persisting Novel Bible, metadata, checkpoints, and translations."""
 import hashlib
 import json
+import logging
 import os
 from pathlib import Path
 import re
@@ -15,6 +16,8 @@ from nousetsu.models.config import ProjectConfig
 from nousetsu.models.metadata import ChapterMetadata, CheckpointData, PipelineStage, ProjectMetadataDocument, StageStatus
 from nousetsu.models.trace import ChapterTraceDocument
 from nousetsu.utils.language import detect_language_from_dir
+
+logger = logging.getLogger(__name__)
 
 
 def atomic_write_file(

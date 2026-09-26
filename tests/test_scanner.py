@@ -225,4 +225,63 @@ def test_scanner_parallel_parity_and_speed(tmp_path: Path):
         assert len(all_par[proj_name]) == len(all_seq[proj_name])
 
 
+def test_chapter_scanner_filter_tasks(tmp_path: Path):
+    from nousetsu.batch.scanner import ChapterTask
+
+    tasks = [
+        ChapterTask(chapter_num=i, source_file=tmp_path / f"chapter_{i:04d}.txt", output_file=tmp_path / f"{i:04d}.md")
+        for i in range(1, 11)
+    ]
+
+    # None and empty
+    assert len(ChapterScanner.filter_tasks(tasks, None)) == 10
+    assert len(ChapterScanner.filter_tasks(tasks, "")) == 10
+    assert len(ChapterScanner.filter_tasks(tasks, "all")) == 10
+
+    # Single integer
+    res = ChapterScanner.filter_tasks(tasks, 5)
+    assert len(res) == 1 and res[0].chapter_num == 5
+
+    # String integer and prefix
+    res = ChapterScanner.filter_tasks(tasks, "5")
+    assert len(res) == 1 and res[0].chapter_num == 5
+    res = ChapterScanner.filter_tasks(tasks, "ch 5")
+    assert len(res) == 1 and res[0].chapter_num == 5
+    res = ChapterScanner.filter_tasks(tasks, "第5話")
+    assert len(res) == 1 and res[0].chapter_num == 5
+
+    # Range
+    res = ChapterScanner.filter_tasks(tasks, "3-7")
+    assert [t.chapter_num for t in res] == [3, 4, 5, 6, 7]
+    res = ChapterScanner.filter_tasks(tasks, "ch 3 to 7")
+    assert [t.chapter_num for t in res] == [3, 4, 5, 6, 7]
+    res = ChapterScanner.filter_tasks(tasks, "3..7")
+    assert [t.chapter_num for t in res] == [3, 4, 5, 6, 7]
+
+    # Plus
+    res = ChapterScanner.filter_tasks(tasks, "8+")
+    assert [t.chapter_num for t in res] == [8, 9, 10]
+    res = ChapterScanner.filter_tasks(tasks, "8>=")
+    assert [t.chapter_num for t in res] == [8, 9, 10]
+
+
+def test_repository_logger_term_rejection(tmp_path: Path):
+    """Test that rejecting a term lacking source script logs a warning without NameError."""
+    from nousetsu.models.bible import GlossaryItem
+
+    repo = NovelRepository(tmp_path)
+    repo.initialize_project(title="Test Novel", source_lang="Japanese")
+
+    # Pass a term in Latin alphabet that lacks Japanese script
+    repo.update_bible_memory(
+        new_characters=[],
+        new_terms=[GlossaryItem(source="Sword of Justice", target="ดาบแห่งความยุติธรรม")],
+        summary=None,
+    )
+    bible = repo.load_bible()
+    # Should not crash with NameError, and invalid term should be rejected
+    assert not any(t.source == "Sword of Justice" for t in bible.glossary)
+
+
+
 

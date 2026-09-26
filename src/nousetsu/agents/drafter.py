@@ -128,8 +128,10 @@ class ContextAwareDrafterAgent:
                 loc = f"[{r.folder}] " if getattr(r, "folder", None) else ""
                 ch_str = f"Chapter {r.chapter_num}" if getattr(r, "chapter_num", None) else "Lore Entry"
                 t_str = f" ({r.title})" if getattr(r, "title", None) else ""
+                reason = getattr(r, "relevance_reason", None) or getattr(r, "metadata", {}).get("reason")
+                reason_str = f" [Context: {reason}]" if reason else ""
                 content_snip = getattr(r, "content", str(r)).strip()
-                lore_lines.append(f"- {loc}{ch_str}{t_str}: {clamp_sentence_boundary(content_snip, 350)}")
+                lore_lines.append(f"- {loc}{ch_str}{t_str}{reason_str}: {clamp_sentence_boundary(content_snip, 350)}")
             sections.append("\n".join(lore_lines))
 
         if not bible and not rag_results:
@@ -427,6 +429,7 @@ class ContextAwareDrafterAgent:
                             "dense_score": getattr(r, "dense_score", None),
                             "rrf_score": getattr(r, "rrf_score", None),
                             "rerank_score": getattr(r, "rerank_score", None),
+                            "relevance_reason": getattr(r, "relevance_reason", None),
                         }
                         for r in rag_results
                     ]

@@ -37,6 +37,8 @@ class SearchResult(BaseModel):
     rrf_score: float = 0.0
     rerank_score: Optional[float] = None
     rerank_rank: Optional[int] = None
+    relevance_reason: Optional[str] = None
+    category: Optional[str] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
