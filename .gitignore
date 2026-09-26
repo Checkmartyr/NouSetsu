@@ -29,3 +29,4 @@ node_modules/
 !web/dist/**
 .agents/private/
 .api-port
+docs/promo/
