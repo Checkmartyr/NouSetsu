@@ -533,4 +533,4 @@ Her fingers tightened around the hilt of the Azure Thunder Blade at her hip. She
 
 ---
 
-*NouSetsu is designed and maintained by Checkmartyr. Comprehensive technical guides are available in the [`doc/`](file:///D:/Code/novel_translation_Agent/doc/README.md) directory.*
+*NouSetsu is designed and maintained by Checkmartyr. Comprehensive technical guides are available in the [`doc/`](file:///D:/Code/novel_translation_Agent/docs/README.md) directory.*

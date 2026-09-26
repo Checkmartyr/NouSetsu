@@ -76,7 +76,7 @@ LoreVault operates on a zero-daemon, serverless architecture using a dedicated S
 The database is managed through **SQLAlchemy 2.0 ORM** with write-ahead logging (WAL) support, providing ACID-compliant multi-threaded concurrency across batch translation workers.
 
 ### A. Relational Table: `lore_documents`
-Implemented by [`LoreDocumentORM`](file:///D:/Code/novel_translation_Agent/src/nousetsu/rag/db_models.py#L17-L74) in [`src/nousetsu/rag/db_models.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/rag/db_models.py):
+Implemented by [`LoreDocumentORM`](file:///D:/Code/novel_translation_Agent/src/nousetsu/rag/db_models.py#L17-L73) in [`src/nousetsu/rag/db_models.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/rag/db_models.py):
 
 | Column | Type | Nullable | Description |
 |:---|:---|:---:|:---|
@@ -173,7 +173,7 @@ Implemented in [`HybridSearchEngine.search_sparse()`](file:///D:/Code/novel_tran
 
 ### Stage 1B: Dense Semantic Retrieval (Embeddings)
 Implemented in [`HybridSearchEngine.search_dense()`](file:///D:/Code/novel_translation_Agent/src/nousetsu/rag/engine.py#L244-L282):
-- **Embedding Provider**: Managed by [`EmbeddingClient`](file:///D:/Code/novel_translation_Agent/src/nousetsu/rag/embeddings.py#L49-L117). Defaults to Google GenAI `models/gemini-embedding-2` (`text-multilingual-embedding-002`).
+- **Embedding Provider**: Managed by [`EmbeddingClient`](file:///D:/Code/novel_translation_Agent/src/nousetsu/rag/embeddings.py#L49-L116). Defaults to Google GenAI `models/gemini-embedding-2` (`text-multilingual-embedding-002`).
 - **Offline & Testing Isolation**: If running under `pytest` or if model begins with `"mock"`, generates deterministic 64-dimensional pseudo-vectors via MD5 hashing and unit normalization, eliminating live API consumption during CI test runs.
 
 ### Stage 1C: Reciprocal Rank Fusion (RRF)

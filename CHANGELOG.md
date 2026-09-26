@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Exhaustive Code-to-Doc Integrity Auditor (`doc-updater` skill)**:
+  - Upgraded [`check_doc_drift.py`](file:///D:/Code/novel_translation_Agent/.agents/skills/doc-updater/scripts/check_doc_drift.py) into an end-to-end verification engine checking file links, line anchors (`#L{start}-L{end}`), and backticked paths.
+  - Added Python AST symbol verification to validate that classes, functions, and models referenced in markdown links exist in target modules.
+  - Added CLI parser introspection for subcommands and option flags parity against [`src/nousetsu/cli/app.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/cli/app.py).
+  - Added environment variable parity (`NOVEL_*`), Mermaid label quoting checks, Python snippet syntax validation, and `--fix` auto-synchronization for test counts and `doc/` $\to$ `docs/` link paths.
+  - Added `--strict` verification mode for automated CI validation.
 - **Bible Language Integrity & Sanitization Engine**:
   - Implemented [`sanitize_bible`](file:///D:/Code/novel_translation_Agent/src/nousetsu/storage/bible_sanitizer.py) in `src/nousetsu/storage/bible_sanitizer.py` to strictly enforce language purity in `.novel/bible/bible.yaml`.
   - Added iterative fixed-point character profile deduplication, resolving variant aliases, given-name subsets, and compound title prefixes.

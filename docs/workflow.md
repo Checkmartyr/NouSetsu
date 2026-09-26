@@ -462,4 +462,3 @@ The Novel Bible (`bible.yaml`) is the persistent ground truth for character card
    - **Cross-Contamination Reversal**: Detects inverted fields where the source term was saved in the translation field and target term in the source field, swapping them into canonical position.
    - **Corrupted Entry Pruning**: Strips entries where the translated term is identical to the source term or belongs to the wrong Unicode script block.
    - **Deduplication**: Eliminates duplicate character aliases and redundant glossary keys.
-

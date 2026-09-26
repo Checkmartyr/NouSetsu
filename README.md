@@ -8,7 +8,7 @@
 [![Package Manager: uv](https://img.shields.io/badge/managed%20by-uv-purple.svg)](https://github.com/astral-sh/uv)
 [![Framework: LangGraph](https://img.shields.io/badge/agent-LangGraph-orange.svg)](https://github.com/langchain-ai/langgraph)
 [![UI: Textual](https://img.shields.io/badge/ui-Textual%20%26%20Rich-green.svg)](https://textual.textualize.io/)
-[![Tests: 347 Passed](https://img.shields.io/badge/tests-347%20passed-brightgreen.svg)](https://github.com/Checkmartyr/NouSetsu)
+[![Tests: 347 Passed](https://img.shields.io/badge/tests-416%20passed-brightgreen.svg)](https://github.com/Checkmartyr/NouSetsu)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
 ---
@@ -41,7 +41,7 @@ NouSetsu models the translation workflow as a collaborative literary publishing 
 | **4** | **Polishing Agent** | [`PolishingAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/polisher.py) | `gemini-3.5-flash-lite` | **The Stylist**: Rewrites drafted prose into publication-grade target fiction, purging machine-translation tropes ("couldn't help but", "as expected of"), optimizing prose cadence, and enhancing emotional depth while preserving address forms. |
 | **5** | **Chronicler Agent** | [`ChroniclerAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/chronicler.py) | `gemma-4-26b-a4b-it` | **The Memory Keeper**: Autonomously tracks story arc progression, summarizes chapter events, detects character state shifts (injuries, deaths, breakthroughs), and compiles metadata audit records into `.novel/metadata.json`. |
 
-> 📘 *For the exhaustive technical breakdown of every agent file and method signature, see the [Agent Architecture Deep Dive](doc/agents_deep_dive.md).*
+> 📘 *For the exhaustive technical breakdown of every agent file and method signature, see the [Agent Architecture Deep Dive](docs/agents_deep_dive.md).*
 
 ---
 
@@ -85,7 +85,7 @@ NouSetsu encodes procedural execution rules as explicit attributed graphs $G = (
 ### 8. 📊 Prompt Tracking, Web Trace Visualizer & Diff/Patch Optimization
 * **Forensic Prompt Tracking**: [`PromptTracker`](file:///D:/Code/novel_translation_Agent/src/nousetsu/analysis/tracker.py) automatically records full system prompts, user inputs, raw completions, and duration/token telemetry for every pipeline step into `.novel/traces/`.
 * **Interactive Web Visualizer**: Fast Vite + React 19 + TypeScript trace inspector (`nousetsu web`) featuring stage execution timelines, token estimators, unified diff viewers, and raw JSON inspectors, synced in real-time with the active TUI project (`W` hotkey).
-* **Diff / Patch Polishing Engine**: Generates targeted search/replace block patches (`PATCH_POLISHING_SYSTEM_PROMPT`) via [`DiffPatcher`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/diff_patcher.py) rather than re-generating whole chapters from scratch, dramatically reducing polisher token consumption.
+* **Diff / Patch Polishing Engine**: Generates targeted search/replace block patches (`PATCH_POLISHING_SYSTEM_PROMPT`) via [`apply_search_replace_patches`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/diff_patcher.py) rather than re-generating whole chapters from scratch, dramatically reducing polisher token consumption.
 * **KV Context Caching Prefix Stabilization**: Reordered prompt templates ensure invariant system prompts and glossaries reside in stable prefixes (`GEMINI_KV_CACHE_STABLE_PREFIX`), maximizing Gemini prompt cache utilization.
 
 ### 9. 🛡️ Bible Language Integrity & Sanitization Engine
@@ -357,7 +357,7 @@ NouSetsu/
 │   ├── storage/                    # Repository, project registry, and summary migrator
 │   ├── tui/                        # Textual TUI dashboard, reader, and token analytics
 │   └── utils/                      # Utilities (rate limiter, chunker, diff patcher, language detector)
-└── tests/                          # Comprehensive pytest test suite (380 tests across 55 modules)
+└── tests/                          # Comprehensive pytest test suite (416 tests across 59 modules)
 ```
 
 ---
@@ -430,25 +430,25 @@ tests\test_web_server.py ........                                        [100%]
 ```
 
 * **Hermetic Isolation**: Tests run in isolated temporary directories (`tmp_path`), protecting your real novel projects.
-* **Deterministic Execution**: Zero live LLM calls during tests via `MockNovelLLM`, achieving ultra-fast execution (~45s for 380 tests across 55 modules).
+* **Deterministic Execution**: Zero live LLM calls during tests via `MockNovelLLM`, achieving ultra-fast execution (~45s for 416 tests across 59 modules).
 
 ---
 
 ## 📚 Technical Documentation Hub
 
-For deep architectural analyses, developer guides, and end-user documentation, visit the [`doc/`](file:///D:/Code/novel_translation_Agent/doc/) directory:
+For deep architectural analyses, developer guides, and end-user documentation, visit the [`doc/`](file:///D:/Code/novel_translation_Agent/docs/) directory:
 
 | Document | Focus Area |
 | :--- | :--- |
-| [**Five Pipeline Agents**](file:///D:/Code/novel_translation_Agent/doc/agents/README.md) | Dedicated operational guides for each pipeline stage: [**`01_entity_extractor`**](file:///D:/Code/novel_translation_Agent/doc/agents/01_entity_extractor.md), [**`02_drafter`**](file:///D:/Code/novel_translation_Agent/doc/agents/02_drafter.md), [**`03_critic`**](file:///D:/Code/novel_translation_Agent/doc/agents/03_critic.md), [**`04_polisher`**](file:///D:/Code/novel_translation_Agent/doc/agents/04_polisher.md), [**`05_chronicler`**](file:///D:/Code/novel_translation_Agent/doc/agents/05_chronicler.md). |
-| [**User Guide**](file:///D:/Code/novel_translation_Agent/doc/user_guide.md) | Complete end-user manual: TUI navigation, CLI batch, Novel Bible, and custom skills. |
-| [**Workflow Pipeline**](file:///D:/Code/novel_translation_Agent/doc/workflow.md) | LangGraph stages, sequence diagrams, reflection review loop, and state machine. |
-| [**Agents Deep Dive**](file:///D:/Code/novel_translation_Agent/doc/agents_deep_dive.md) | In-depth breakdown of all 5 specialized agents, prompt templates, and cognitive roles. |
-| [**System Architecture**](file:///D:/Code/novel_translation_Agent/doc/architecture.md) | Layer design, component boundaries, and clean architecture data flow. |
-| [**Novel Bible & Memory**](file:///D:/Code/novel_translation_Agent/doc/novel_bible.md) | 3-tier narrative memory, zero-anaphora subject inference, and style guides. |
-| [**Storage & Checkpoints**](file:///D:/Code/novel_translation_Agent/doc/storage_and_checkpoints.md) | Consolidated `.novel/metadata.json`, story arc storage, and paused state resumption. |
-| [**Terminal UI Guide**](file:///D:/Code/novel_translation_Agent/doc/tui_guide.md) | Dual reader, live progress visualizer, Token Analytics dashboard, and keyboard shortcuts. |
-| [**Developer API Reference**](file:///D:/Code/novel_translation_Agent/doc/api_reference.md) | Class signatures, methods, Pydantic schemas, and extension points. |
+| [**Five Pipeline Agents**](file:///D:/Code/novel_translation_Agent/docs/agents/README.md) | Dedicated operational guides for each pipeline stage: [**`01_entity_extractor`**](file:///D:/Code/novel_translation_Agent/docs/agents/01_entity_extractor.md), [**`02_drafter`**](file:///D:/Code/novel_translation_Agent/docs/agents/02_drafter.md), [**`03_critic`**](file:///D:/Code/novel_translation_Agent/docs/agents/03_critic.md), [**`04_polisher`**](file:///D:/Code/novel_translation_Agent/docs/agents/04_polisher.md), [**`05_chronicler`**](file:///D:/Code/novel_translation_Agent/docs/agents/05_chronicler.md). |
+| [**User Guide**](file:///D:/Code/novel_translation_Agent/docs/user_guide.md) | Complete end-user manual: TUI navigation, CLI batch, Novel Bible, and custom skills. |
+| [**Workflow Pipeline**](file:///D:/Code/novel_translation_Agent/docs/workflow.md) | LangGraph stages, sequence diagrams, reflection review loop, and state machine. |
+| [**Agents Deep Dive**](file:///D:/Code/novel_translation_Agent/docs/agents_deep_dive.md) | In-depth breakdown of all 5 specialized agents, prompt templates, and cognitive roles. |
+| [**System Architecture**](file:///D:/Code/novel_translation_Agent/docs/architecture.md) | Layer design, component boundaries, and clean architecture data flow. |
+| [**Novel Bible & Memory**](file:///D:/Code/novel_translation_Agent/docs/novel_bible.md) | 3-tier narrative memory, zero-anaphora subject inference, and style guides. |
+| [**Storage & Checkpoints**](file:///D:/Code/novel_translation_Agent/docs/storage_and_checkpoints.md) | Consolidated `.novel/metadata.json`, story arc storage, and paused state resumption. |
+| [**Terminal UI Guide**](file:///D:/Code/novel_translation_Agent/docs/tui_guide.md) | Dual reader, live progress visualizer, Token Analytics dashboard, and keyboard shortcuts. |
+| [**Developer API Reference**](file:///D:/Code/novel_translation_Agent/docs/api_reference.md) | Class signatures, methods, Pydantic schemas, and extension points. |
 
 ---
 

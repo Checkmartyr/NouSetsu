@@ -1,23 +1,40 @@
 # Documentation Standards & Formatting Guidelines
 
-This guide establishes the stylistic, structural, and semantic rules for all documentation files (`AGENTS.md`, `README.md`, `CHANGELOG.md`, and `doc/**/*.md`) in this repository.
+This guide establishes the stylistic, structural, and semantic rules for all documentation files (`AGENTS.md`, `README.md`, `CHANGELOG.md`, and `docs/**/*.md`) in this repository.
 
 ---
 
 ## 1. Clickable File & Symbol Links
 
-All references to repository files, source modules, classes, and CLI commands must be formatted as clickable GitHub-style markdown links:
+All references to repository files, source modules, classes, and functions must be formatted as clickable GitHub-style markdown links:
 
 - **Files**: `[` `filename.ext` `](` `file:///absolute/path/to/file` `)` or `[` `filename.ext` `](` `./relative/path/to/file.ext` `)`.
   - On Windows, always use forward slashes (`/`), e.g.:
     `[` `app.py` `](` `file:///D:/Code/novel_translation_Agent/src/nousetsu/cli/app.py` `)`
+  - Always link to `docs/` (not legacy `doc/`).
 - **Classes & Functions**: Use backticks with links:
   - `[` `ContextAwareDrafterAgent` `](` `file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/drafter.py` `)`
+  - `[` `filter_characters_for_scene` `](` `file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/character_filter.py` `)`
   - Direct line link: `[` `LineSemanticChunker` `](` `file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/chunker.py#L45-L80` `)`
+- **Symbol Integrity Rule**:
+  - The symbol in the link text **MUST** exist in the referenced target file (verified by Python AST in `check_doc_drift.py`).
+  - Do not reference phantom or refactored classes (e.g. use `apply_diff_patch` instead of nonexistent `DiffPatcher`).
+- **Line Range Bound Rule**:
+  - Any `#L{start}-L{end}` anchor must stay strictly within the line count of the target file.
 
 ---
 
-## 2. GitHub-Flavored Markdown Alerts
+## 2. CLI Commands & Option Flags
+
+When documenting CLI commands:
+- Every command must be prefixed with `nousetsu` (e.g. `nousetsu batch [options]`).
+- Every option flag cited in tables or examples must be registered in [`src/nousetsu/cli/app.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/cli/app.py).
+- When a flag has short and long forms, document both (e.g. `-c`, `--chapter <target>`).
+- Mention actual default values (e.g. `max-tpm: 32000`, `max-rpm: 60`, `chunk-threshold-lines: 85`).
+
+---
+
+## 3. GitHub-Flavored Markdown Alerts
 
 Use standard GitHub alert callouts to highlight operational constraints, warnings, and architectural notes. Never stack consecutive alerts without intervening text:
 
@@ -40,7 +57,7 @@ Use standard GitHub alert callouts to highlight operational constraints, warning
 
 ---
 
-## 3. Mermaid Diagram Standards
+## 4. Mermaid Diagram Standards
 
 All architecture workflows, agent reflection loops, and state machines must use valid Mermaid syntax that renders cleanly in GitHub, VS Code, and IDE previewers:
 
@@ -50,7 +67,7 @@ All architecture workflows, agent reflection loops, and state machines must use 
   - `sequenceDiagram` (Multi-agent messaging and batch orchestrations)
   - `classDiagram` (Data models, schemas, and Pydantic relationships)
 - **Label Quoting Rule**:
-  - Any node label containing parentheses, brackets, or punctuation **MUST** be enclosed in double quotes:
+  - Any node label containing parentheses, brackets, colons, or punctuation **MUST** be enclosed in double quotes:
     ```mermaid
     A["SlidingWindowRateLimiter (32,000 TPM / 60 RPM)"] --> B["FallbackChatModel (gemini-3.5-flash-lite)"]
     ```
@@ -58,7 +75,7 @@ All architecture workflows, agent reflection loops, and state machines must use 
 
 ---
 
-## 4. Keep a Changelog Guidelines (`CHANGELOG.md`)
+## 5. Keep a Changelog Guidelines (`CHANGELOG.md`)
 
 When updating `CHANGELOG.md`, follow the standard [Keep a Changelog](https://keepachangelog.com/) convention:
 
@@ -86,7 +103,7 @@ When updating `CHANGELOG.md`, follow the standard [Keep a Changelog](https://kee
 
 ---
 
-## 5. Rich & Textual CLI Readability
+## 6. Rich & Textual CLI Readability
 
 Because project users view markdown outputs via Rich and Textual TUI readers:
 - Keep table widths reasonable and columns clearly headered.
