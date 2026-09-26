@@ -1,47 +1,73 @@
 # 📖 NouSetsu (濃説 / 脳説)
 
-> **Novel Document-Level Multi-Agent Literary Translation Framework for East Asian Webnovels**  
-> *Powered by LangGraph, LangChain, Textual, and Rich.*
+> **Enterprise-Grade Document-Level Multi-Agent Literary Translation Framework for East Asian Webnovels**  
+> *Powered by LangGraph, LangChain, SQLite Hybrid RAG, Textual, and React 19.*
 
-[![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/)
-[![Version: v0.3.0](https://img.shields.io/badge/version-v0.3.0-blue.svg)](https://github.com/Checkmartyr/NouSetsu)
-[![Package Manager: uv](https://img.shields.io/badge/managed%20by-uv-purple.svg)](https://github.com/astral-sh/uv)
-[![Framework: LangGraph](https://img.shields.io/badge/agent-LangGraph-orange.svg)](https://github.com/langchain-ai/langgraph)
-[![UI: Textual](https://img.shields.io/badge/ui-Textual%20%26%20Rich-green.svg)](https://textual.textualize.io/)
-[![Tests: 347 Passed](https://img.shields.io/badge/tests-416%20passed-brightgreen.svg)](https://github.com/Checkmartyr/NouSetsu)
+[![Python 3.13+](https://img.shields.io/badge/python-3.13+-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/)
+[![Package Manager: uv](https://img.shields.io/badge/managed%20by-uv-DE5FE9.svg?logo=astral&logoColor=white)](https://github.com/astral-sh/uv)
+[![Framework: LangGraph](https://img.shields.io/badge/agent-LangGraph-FF6F00.svg)](https://github.com/langchain-ai/langgraph)
+[![UI: Textual & Rich](https://img.shields.io/badge/cli-Textual%20%26%20Rich-00C853.svg)](https://textual.textualize.io/)
+[![UI: React 19 + Vite](https://img.shields.io/badge/web-React%2019%20%2B%20Vite-61DAFB.svg?logo=react&logoColor=black)](web/)
+[![Tests: 416 Passed](https://img.shields.io/badge/tests-416%20passed-brightgreen.svg)](tests/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
 ---
 
-## ⚔️ The Challenge: Why Traditional MT & Raw LLMs Fail
+## 📑 Table of Contents
+- [Executive Overview](#-executive-overview)
+- [The Problem: Why Naive Machine Translation Fails](#-the-problem-why-naive-machine-translation-fails)
+- [The 5-Stage Agent Assembly Line](#-the-5-stage-agent-assembly-line)
+- [Key Architectural Innovations](#-key-architectural-innovations)
+- [System Architecture](#-system-architecture)
+- [Quick Start](#-quick-start)
+- [Command-Line Interface (CLI) Reference](#-command-line-interface-cli-reference)
+- [Interactive Interfaces: TUI & Web Studio](#-interactive-interfaces-tui--web-studio)
+- [Project Layout](#-project-layout)
+- [Automated Testing & Quality Verification](#-automated-testing--quality-verification)
+- [Technical Documentation Hub](#-technical-documentation-hub)
+- [License](#-license)
 
-Translating Japanese, Chinese, and Korean webnovels and light novels into publication-quality English is notoriously difficult. Sentence-by-sentence machine translation tools (DeepL, Google Translate) and naive single-prompt LLM pipelines suffer from fatal literary flaws:
+---
 
-| Challenge | Traditional MT (Google / DeepL) | Raw Single-Prompt LLM | 📖 NouSetsu Multi-Agent Framework |
+## 🎯 Executive Overview
+
+**NouSetsu** is an autonomous, cross-chapter literary translation and adaptation engine designed specifically for Japanese, Chinese, and Korean webnovels and light novels.
+
+Translating literary long-form prose is substantially more complex than converting isolated sentences. Traditional machine translation (Google Translate, DeepL) and naive single-prompt LLM wrappers degrade quickly over multi-hundred chapter novels—swapping character genders, losing running plot context, hallucinating dropped pronouns, dropping chapter headers, and getting halted by commercial AI safety blocks.
+
+NouSetsu orchestrates five specialized agents within a cyclic **LangGraph** reflection review workflow. It maintains persistent cross-chapter narrative memory via a 3-tier **Novel Bible**, enforces strict terminology and distinct character voice registers, adapts to genre tropes with pluggable domain skills, and features built-in API quota protection and thread-safe cancellation.
+
+---
+
+## ⚔️ The Problem: Why Naive Machine Translation Fails
+
+| Dimension | Traditional MT (Google / DeepL) | Naive Single-Prompt LLM | 📖 NouSetsu Multi-Agent Framework |
 | :--- | :--- | :--- | :--- |
-| **Zero-Anaphora** *(Omitted Pronouns)* | ❌ Guesses blindly; randomly swaps character genders ("he" vs "she"). | ⚠️ Frequently hallucinates subjects or flips narrative point of view. | ✅ **Context-Aware Drafter** resolves omitted subjects via dynamic scene context and character profiles. |
-| **Series Memory & Continuity** | ❌ Zero memory across sentences or chapters. | ⚠️ Context window overflow; forgets plot progression after 2 chapters. | ✅ **3-Tier Narrative Memory** (Macro Whole-Story > Meso Arcs > Micro Chapters) persists throughout the series. |
-| **AI Safety Blocks** *(Sensory / Action)* | ❌ Hard failures or redacted snippets. | ❌ Monolithic HTTP 400 rejection halts the entire translation batch. | ✅ **Recursive Binary Bisection Engine** isolates sensitive lines ($\le 8$ lines) with Google Translate fallback. |
-| **Prose Quality & Cadence** | ❌ Rigid word-for-word translationese ("couldn't help but", "as expected of"). | ⚠️ Inconsistent register; characters sound identical. | ✅ **Polishing Agent** refines sentence cadence, emotional resonance, and aristocratic court registers. |
-| **Terminology Consistency** | ❌ Spells martial arts ranks and items differently every 3 paragraphs. | ⚠️ Drifts across long batches; forgets canonical spellings. | ✅ **Novel Bible** and **Active Chapter Glossary Filter** strictly enforce terminology without prompt bloat. |
-| **Quality Verification** | ❌ No quality feedback or verification. | ❌ What the model outputs on pass 1 is all you get. | ✅ **Critique Agent** reflection review loop scores fidelity/style ($\ge 8.5/10$) with **Best-Candidate Guard**. |
-| **API Quota & Cost Protection** | ❌ None; user must manage quotas manually. | ❌ Constant HTTP 429 quota exhaustion on long chapters. | ✅ **32K TPM / 60 RPM Sliding Window Limiter** + Automatic Failover + Line-Based Semantic Chunking. |
+| **Zero-Anaphora** *(Omitted Pronouns)* | ❌ Guesses blindly; randomly swaps genders ("he" vs "she"). | ⚠️ Frequently hallucinates subjects or flips narrative point of view. | ✅ **Context-Aware Drafter** resolves omitted subjects via dynamic scene context and character profiles. |
+| **Series Memory & Continuity** | ❌ Zero memory across sentences or chapters. | ⚠️ Context overflow; forgets prior plot and relationships after 2 chapters. | ✅ **3-Tier Narrative Memory** (Macro Whole-Story > Meso Arcs > Micro Chapters) persists across volumes. |
+| **AI Safety Blocks** *(Action / Romance)* | ❌ Hard failures or redacted snippets. | ❌ Monolithic HTTP 400 rejection halts the entire translation batch. | ✅ **Recursive Binary Bisection Engine** isolates sensitive lines ($\le 8$ lines) with graceful fallback. |
+| **Prose Quality & Cadence** | ❌ Rigid translationese ("couldn't help but", "as expected of"). | ⚠️ Inconsistent register; all characters sound identical. | ✅ **Polishing Agent** refines cadence, emotional resonance, and distinct dialogue registers with search/replace diff patches. |
+| **Terminology Consistency** | ❌ Spells martial ranks, names, and items differently each chapter. | ⚠️ Drifts across long batches; forgets canonical spellings. | ✅ **Novel Bible** and **Scene Glossary Filter** strictly enforce canonical terminology without prompt bloat. |
+| **Compound Name Resolution** | ❌ Fails to match given names when characters have full/compound names. | ⚠️ Re-extracts duplicates (`サフィナ` vs `サフィナ・カルシャナ`). | ✅ **Sub-Component Regex Matching** & programmatic extractor deduplication prevent identity drift. |
+| **Quality Verification** | ❌ No quality verification or scoring. | ❌ Single-pass generation with uncorrected omissions. | ✅ **Critique Agent** reflection review loop scores fidelity and style ($\ge 8.5/10$) with **Best-Candidate Guard**. |
+| **Quota & Rate Limiting** | ❌ None; user must handle quota exhaustion manually. | ❌ Constant HTTP 429 quota failure on long chapters. | ✅ **32K TPM / 60 RPM Sliding Window Limiter** + automatic failover + line-based semantic chunking. |
 
 ---
 
 ## 🏛️ The 5-Stage Agent Assembly Line
 
-NouSetsu models the translation workflow as a collaborative literary publishing house. Each stage is assigned a specialized AI agent with a distinct cognitive role:
+NouSetsu structures translation as a collaborative literary publishing house. Each stage is executed by a specialized AI agent with a strictly defined cognitive responsibility:
 
 | Stage | Agent Role | Agent Class | Production Model | Core Responsibility |
 | :---: | :--- | :--- | :--- | :--- |
-| **1** | **Entity Extractor** | [`EntityExtractorAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/extractor.py) | `gemini-3.1-flash-lite` | **The Detective**: Scans raw source text *before* drafting to identify unknown character names, cultivate power realms, and discover terms not yet registered in the Novel Bible. Steered by Procedural Graphs to prune conversational junk vocabulary. |
+| **1** | **Entity Extractor** | [`EntityExtractorAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/extractor.py) | `gemini-3.1-flash-lite` | **The Detective**: Analyzes raw source text *before* drafting to discover unknown characters, cultivate power realms, and identify terms not yet registered in the Novel Bible. Steered by Procedural Graphs to prune conversational noise. |
 | **2** | **Context-Aware Drafter** | [`ContextAwareDrafterAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/drafter.py) | `gemini-3.5-flash-lite` | **The Wordsmith**: Produces the initial full translation draft, resolving zero-anaphora (omitted pronouns/subjects), applying distinct dialogue registers, and injecting 3-tier narrative context across chapter and volume boundaries. |
-| **3** | **Critique Agent** | [`CritiqueAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/critic.py) | `gemma-4-26b-a4b-it` | **The Inspector**: Line-by-line auditor scoring fidelity and style (0–10), detecting skipped sentences (omissions), verifying glossary compliance, auditing nickname disparities, and providing actionable critique notes. |
-| **4** | **Polishing Agent** | [`PolishingAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/polisher.py) | `gemini-3.5-flash-lite` | **The Stylist**: Rewrites drafted prose into publication-grade target fiction, purging machine-translation tropes ("couldn't help but", "as expected of"), optimizing prose cadence, and enhancing emotional depth while preserving address forms. |
-| **5** | **Chronicler Agent** | [`ChroniclerAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/chronicler.py) | `gemma-4-26b-a4b-it` | **The Memory Keeper**: Autonomously tracks story arc progression, summarizes chapter events, detects character state shifts (injuries, deaths, breakthroughs), and compiles metadata audit records into `.novel/metadata.json`. |
+| **3** | **Critique Agent** | [`CritiqueAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/critic.py) | `gemma-4-26b-a4b-it` | **The Inspector**: Line-by-line auditor scoring fidelity and style (0–10), detecting skipped sentences (omissions), verifying glossary compliance, auditing nickname disparities, and generating actionable critique notes. |
+| **4** | **Polishing Agent** | [`PolishingAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/polisher.py) | `gemini-3.5-flash-lite` | **The Stylist**: Rewrites drafted prose into publication-grade target fiction, purging machine-translation tropes, optimizing cadence, preserving address forms, and utilizing Diff/Patch block replacement for minimal token consumption. |
+| **5** | **Chronicler Agent** | [`ChroniclerAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/chronicler.py) | `gemma-4-26b-a4b-it` | **The Memory Keeper**: Autonomously tracks story arc boundaries, summarizes chapter events, detects character state shifts (injuries, deaths, breakthroughs), reconciles provisional terms, and compiles metadata audit records into `.novel/metadata.json`. |
 
-> 📘 *For the exhaustive technical breakdown of every agent file and method signature, see the [Agent Architecture Deep Dive](docs/agents_deep_dive.md).*
+> [!NOTE]
+> Global fallback across all pipeline stages is anchored by `gemini-3.5-flash-lite`, activated automatically via `FallbackChatModel` when encountering HTTP 429 quota exhaustion or API exceptions.
 
 ---
 
@@ -49,63 +75,59 @@ NouSetsu models the translation workflow as a collaborative literary publishing 
 
 ### 1. 🧠 3-Tier Hierarchical Narrative Memory (Macro > Meso > Micro)
 To eliminate context drift over multi-hundred chapter epics, NouSetsu structures narrative memory into three distinct tiers inside the **Novel Bible**:
-* **Macro Context (`whole_story_summary`)**: Global narrative synthesis capturing long-term character motivations, overarching conflicts, and major world state changes.
+* **Macro Context (`whole_story_summary`)**: Global narrative synthesis capturing overarching conflicts, long-term character motivations, and major world state changes.
 * **Meso Context (`ArcSummary`)**: Autonomous AI detection of story arc boundaries by the Chronicler Agent. Tracks arc titles, core conflicts, and milestones. Serialized to `.novel/summaries/arcs/arc_XXXX.json`. Completed arcs are archived into the Novel Bible and synthesized into the Macro context.
-* **Micro Context (`ChapterSummary`)**: Immediate preceding chapter outcomes, cliffhangers, and character state changes partitioned by volume folder (`.novel/summaries/<volume>/chapter_XXXX.json`). Seamlessly backfills context across volume transitions (`Villainess_04` $\to$ `Villainess_05`) with volume badges.
+* **Micro Context (`ChapterSummary`)**: Immediate preceding chapter outcomes, cliffhangers, and character state changes partitioned by volume folder (`.novel/summaries/<volume>/chapter_XXXX.json`). Seamlessly backfills context across volume transitions (`Vol_04` $\to$ `Vol_05`) with volume badges.
 
 ### 2. 🛡️ Dual-Resilience AI Safety Engine (Recursive Bisection & Fallback)
 Novel translations frequently trigger commercial AI safety classifiers (e.g. Google AI `prohibited_content` HTTP 400) on intense action scenes or romantic intimacy. NouSetsu features a dual-resilience defense:
 * **Analytical Task Framing**: Automatically envelopes novel excerpts in explicit literary analytical framing across all five pipeline agents, eliminating false-positive safety triggers.
 * **Recursive Binary Bisection (`bisect_text`)**: If an LLM safety block occurs, the system bisects the text chunk along natural paragraph, line, or sentence boundaries. Safe halves are translated with full LLM literary prose, while only the isolated minimal sensitive sub-block ($\le 8$ lines) triggers a seamless **Google Translate fallback** (`deep-translator`) with subsequent literary polishing.
+* **Stateful Subdivision Pattern Memory**: Caches verified safe partition boundaries so downstream `CritiqueAgent` and `PolishingAgent` reuse the cached subdivision pattern without repeating bisection.
 
 ### 3. 🎭 Procedural Graph Steering & Self-Evolution (arXiv:2609.09153v1)
 NouSetsu encodes procedural execution rules as explicit attributed graphs $G = (V, R, E, \Phi)$ carrying `(condition, guidance, pitfalls)`:
 * **Zero Runtime Guidance LLM Tokens**: Uses deterministic code-level localization (< 100 prompt tokens) instead of expensive runtime guidance LLMs.
 * **Anti-Bloat Term Pruning**: Prevents the Extractor from generating common conversational vocabulary, saving **300 to 800 output tokens** per chapter.
-* **Offline Self-Evolution**: System refines graph edges from critique audit traces offline with zero live inference token overhead. Inspectable anytime via `nousetsu graph-info`.
+* **Offline Self-Evolution**: System refines graph edges from critique audit traces offline with zero live inference token overhead via `nousetsu learn-graph`.
 
 ### 4. 🔄 LangGraph Reflection Review Loop & Best-Candidate Guard
 * **Automated Reflection Loop**: The Critique Agent and Polishing Agent enter a multi-pass review loop, refining prose until both fidelity and style meet quality thresholds (`>= 8.5/10`) or reach the configured loop limit.
 * **Best-Candidate Regression Guard**: If a subsequent polishing pass scores lower than an earlier candidate, NouSetsu automatically retains the highest-scoring candidate (`best_polished_text` and `best_audit`), preventing quality degradation.
 
-### 5. ⚡ Enterprise Quota Throttling & Per-Role Routing
-* **Sliding-Window Rate Limiter**: Proactively enforces a rolling 60-second window across **32,000 TPM** and **60 RPM** with offline CJK/Latin token estimation.
-* **Per-Role Model Routing & Failover**: Assign specialized models to each agent role (`extractor_model`, `drafter_model`, `critic_model`, `polisher_model`, `chronicler_model`). Any upstream HTTP 429 quota exhaustion triggers instant failover to `fallback_model` (`gemini-3.5-flash-lite`) via `FallbackChatModel` with 25s–65s window rollover cooldowns.
-* **Line-Based Semantic Chunking**: Chapters exceeding 85 lines are intelligently partitioned into ~70-line semantic chunks with 3-line boundary overlap, eliminating 32k TPM window freezes.
-
-### 6. 🖥️ Reactive Terminal User Interface (Textual + Rich)
-* **Distraction-Free Dashboard**: Features an 85%+ height chapter list with clean minimal status glyphs (`✓` done, `●` running, `⏸` paused, `✕` failed, `·` waiting), a compact 2-row toolbar, and an 80% reading viewport with dual original/translated panes.
-* **Real-Time Token & Duration Analytics**: Press `M` to access the dedicated **Token Analysis Dashboard** with live KPI cards and interactive DataTables broken down by pipeline stage, LLM model, and chapter duration.
-
-### 7. 🔍 Hybrid Search RAG Knowledge Store & Cross-Encoder Reranking
+### 5. 🔍 Hybrid Search RAG Knowledge Store & Cross-Encoder Reranking
 * **Zero-Daemon Local Store**: Powered by SQLite FTS5 (BM25 lexical ranking) and dense 3072-dimensional vectors from **Gemini Embedding 2** (`models/gemini-embedding-2`), managed via **SQLAlchemy 2.0 ORM**.
 * **High-Precision Cross-Encoder**: Combines sparse and dense candidates via Reciprocal Rank Fusion (RRF, $k=60$) and reranks them with an LLM Cross-Encoder (`LLMCrossEncoderReranker`).
 * **Bi-Directional Pipeline Integration**: Injects episodic lore into the Context-Aware Drafter and canonical TM references into the Critique Agent, while the Chronicler Agent cross-references prior lore and automatically embeds/indexes completed summaries and scene chunks.
 
-### 8. 📊 Prompt Tracking, Web Trace Visualizer & Diff/Patch Optimization
-* **Forensic Prompt Tracking**: [`PromptTracker`](file:///D:/Code/novel_translation_Agent/src/nousetsu/analysis/tracker.py) automatically records full system prompts, user inputs, raw completions, and duration/token telemetry for every pipeline step into `.novel/traces/`.
-* **Interactive Web Visualizer**: Fast Vite + React 19 + TypeScript trace inspector (`nousetsu web`) featuring stage execution timelines, token estimators, unified diff viewers, and raw JSON inspectors, synced in real-time with the active TUI project (`W` hotkey).
-* **Diff / Patch Polishing Engine**: Generates targeted search/replace block patches (`PATCH_POLISHING_SYSTEM_PROMPT`) via [`apply_search_replace_patches`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/diff_patcher.py) rather than re-generating whole chapters from scratch, dramatically reducing polisher token consumption.
-* **KV Context Caching Prefix Stabilization**: Reordered prompt templates ensure invariant system prompts and glossaries reside in stable prefixes (`GEMINI_KV_CACHE_STABLE_PREFIX`), maximizing Gemini prompt cache utilization.
+### 6. ⚡ Enterprise Quota Throttling & Per-Role Routing
+* **Sliding-Window Rate Limiter**: Proactively enforces a rolling 60-second window across **32,000 TPM** and **60 RPM** with offline CJK/Latin token estimation.
+* **Per-Role Model Routing & Failover**: Assign specialized models to each agent role (`extractor_model`, `drafter_model`, `critic_model`, `polisher_model`, `chronicler_model`). Any upstream HTTP 429 quota exhaustion triggers instant failover to `fallback_model` (`gemini-3.5-flash-lite`) via `FallbackChatModel` with 25s–65s window rollover cooldowns.
+* **Line-Based Semantic Chunking**: Chapters exceeding 85 lines are intelligently partitioned into ~70-line semantic chunks with 3-line boundary overlap, eliminating 32k TPM window freezes.
 
-### 9. 🛡️ Bible Language Integrity & Sanitization Engine
+### 7. 📊 Diff / Patch Polishing Engine & Title Preservation
+* **Diff / Patch Polishing**: Generates targeted search/replace block patches (`PATCH_POLISHING_SYSTEM_PROMPT`) via [`apply_search_replace_patches`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/diff_patcher.py) rather than re-generating whole chapters from scratch, dramatically reducing polisher token consumption.
+* **Automatic Title Preservation**: Skill directives and programmatic regex guards prevent the polisher from dropping chapter headings.
+
+### 8. 🛡️ Bible Language Integrity & Sanitization Engine
 * **Comprehensive Multi-Pass Sanitization**: [`sanitize_bible`](file:///D:/Code/novel_translation_Agent/src/nousetsu/storage/bible_sanitizer.py) strictly enforces language purity in `.novel/bible/bible.yaml`, eliminating mixed-language pollution, duplicate character profiles, and corrupted glossary terms.
 * **Consonant-Skeleton & Thai Accent Normalization**: Uses Katakana-to-Romaji conversion and Thai tone-mark stripping (`strip_thai_accents`) to canonicalize relationship and pronoun keys, matching variants like `แมรี เลกาเลีย` to `แมรี่ เลกาเลีย` and `Klaus` to `เคลาส์`.
 * **Automated Persistence Guard**: Integrated directly into [`NovelRepository.save_bible`](file:///D:/Code/novel_translation_Agent/src/nousetsu/storage/repository.py), ensuring every bible write automatically merges variants, purges non-CJK source glossary terms, and translates relationship values and voices into literary target prose.
 
-### 10. ⚡ Stateful Subdivision Pattern Memory & Polisher Bisection
-* **Persistent Subdivision Memory**: Caches verified safe partition boundaries across pipeline stages when encountering commercial AI safety blocks (`prohibited_content` HTTP 400).
-* **Targeted Polisher Bisection**: Downstream `CritiqueAgent` and `PolishingAgent` reuse the cached subdivision pattern, bisecting sensitive scenes down to $\le 8$ lines and routing minimal sensitive sub-blocks through Google Translate fallback while preserving safe text in full literary prose.
+### 9. 🔍 Script-Aware Compound Name Filtering & Extractor Deduplication
+* **Sub-Component Regex Matching**: Splits full character names by East Asian delimiters (`[・·\s/_\-]+`) so characters referenced only by given names (e.g. `サフィナ` from `サフィナ・カルシャナ`) remain in the active scene roster.
+* **Programmatic Candidate Deduplication**: Prevents `EntityExtractorAgent` from re-extracting characters already present in the Novel Bible or matching compound sub-names.
+* **Auto-Alias Population**: Registers compound name parts into character aliases, preserving canonical names without overwriting them.
 
-### 11. 📁 Centralized Projects Root (`NOVEL_PROJECTS_DIR`) & High-Speed Scanner
+### 10. 📁 Centralized Projects Root (`NOVEL_PROJECTS_DIR`) & High-Speed Scanner
 * **Storage Decoupling**: Central machine-level `NOVEL_PROJECTS_DIR` in `.env` decouples novel projects from application code, automatically discovering projects across subdirectories.
 * **Parallel Chapter Scanner**: `ChapterScanner.scan_parallel` leverages `ThreadPoolExecutor` and composite cache keys `(path, size, mtime)` for **320x faster project re-scanning**.
 * **Dedicated Scan CLI**: `nousetsu scan` enables fast terminal inspection of chapter queues, completion status, and volume breakdowns across single or multiple projects (`--all-projects`).
 
-### 12. 🎨 Interactive Web Studio, Chapter Upload & Character Visualizer
+### 11. 🎨 Interactive Web Studio, Chapter Upload & Character Visualizer
 * **Multi-Folder Chapter Upload**: Web Studio API endpoint (`/api/projects/{name}/chapters/upload`) enables dragging and dropping raw chapters into target volume folders with live indexing.
 * **Interactive Character Visualizer**: Visual dossiers, relationship maps, and personality/voice analysis cards for Novel Bible characters.
-* **Dynamic Port Allocation**: Automatic free-port detection (`_find_free_port`) and `VITE_API_PORT` coordination prevents port conflicts with Docker Desktop.
+* **Diff Viewer**: Compares initial draft text directly against polished prose, omitting intermediate extraction traces for clear revision tracking.
 
 ---
 
@@ -162,7 +184,7 @@ flowchart TD
 ## 🚀 Quick Start
 
 ### 1. Installation
-Install NouSetsu directly via `pip` or `uv`:
+Install NouSetsu using `uv` (recommended for fast virtual environment management) or standard `pip`:
 
 ```bash
 # Clone the repository
@@ -177,34 +199,37 @@ pip install -e .
 ```
 
 ### 2. Configure Environment & API Keys
-Set your Gemini API key (or configure your central `.env` file):
+Copy the documented environment template and configure your API keys:
 
 ```bash
-# Central machine-level .env file (recommended)
+# Copy template to central .env
 cp .env.example .env
-# Edit .env and set GEMINI_API_KEY=your-api-key
 
-# Or export in your shell
-export GEMINI_API_KEY="your-google-gemini-api-key"        # Linux / macOS
-$env:GEMINI_API_KEY = "your-google-gemini-api-key"       # Windows PowerShell
+# Configure your primary Gemini API key in .env
+# GEMINI_API_KEY="your-google-gemini-api-key"
 ```
 
 > [!NOTE]
-> If no API key is supplied, NouSetsu automatically operates with a deterministic offline mock model (`mock-novel-llm`), enabling testing of UI navigation, batch scanning, and checkpoint resumption without consuming API tokens!
+> If no API key is supplied, NouSetsu automatically operates with a deterministic offline mock model (`mock-novel-llm`), enabling testing of UI navigation, batch scanning, and checkpoint resumption without consuming API tokens.
 
-### 3. Launch
-Launch the interactive Terminal User Interface (TUI) simply by running:
+### 3. Launching NouSetsu
+Launch the interactive Terminal User Interface (TUI):
 
 ```bash
 nousetsu
 ```
 *(Or use the shorthand alias `novel`).*
 
+To launch the Web Studio & Trace Visualizer:
+```bash
+nousetsu web
+```
+
 ---
 
 ## 💻 Command-Line Interface (CLI) Reference
 
-NouSetsu provides a comprehensive suite of subcommands for headless automation, narrative inspection, and skill management:
+NouSetsu provides a full suite of CLI subcommands for headless automation, narrative inspection, and skill management:
 
 ### Subcommands Overview
 
@@ -213,31 +238,19 @@ NouSetsu provides a comprehensive suite of subcommands for headless automation, 
 | `nousetsu` | Automatically launches interactive Textual TUI dashboard | `nousetsu` |
 | `nousetsu --version` | Displays current version (`nousetsu 0.3.0`) | `nousetsu -v` |
 | `nousetsu init` | Initializes a new novel project, directory structure, and Novel Bible | `nousetsu init -t "My Novel" -s Japanese -T English` |
-| `nousetsu batch` | Headless folder-to-folder batch translation with natural sorting | `nousetsu batch -p project/Villainess -F Villainess_05` |
-| `nousetsu narrative` | Renders interactive 3-tier narrative memory tree (Macro > Meso > Micro) | `nousetsu narrative -p project/Villainess` |
-| `nousetsu migrate-summaries` | Upgrades legacy flat summaries into 3-tier story arc hierarchies | `nousetsu migrate-summaries -p project/Villainess` |
-| `nousetsu skills` | Lists and filters active domain skills by agent, language, or genre | `nousetsu skills --agent drafter --genre xianxia` |
-| `nousetsu graph-info` | Visualizes procedural execution graphs and name discipline directives (arXiv:2609.09153v1) | `nousetsu graph-info -a all` |
-| `nousetsu learn-graph` | Executes offline self-evolution loop on diagnostic traces to mutate procedural graphs | `nousetsu learn-graph -p project/Villainess -a all` |
-| `nousetsu realign-chapters` | Detects and resolves chapter numbering collisions across volume folders and syncs RAG | `nousetsu realign-chapters -p project/Villainess -F Villainess_06` |
-| `nousetsu traces` | Inspects, analyzes, and exports agent prompt and output traces | `nousetsu traces -c 48 --show-prompts` |
-| `nousetsu web` | Launches the interactive Vite + React 19 Trace Visualizer web app | `nousetsu web --port 5173` |
-| `nousetsu lore` | Searches project Lore Vault using Hybrid RAG + Cross-Encoder | `nousetsu lore "magic sword"` |
+| `nousetsu batch` | Headless folder-to-folder batch translation with natural sorting | `nousetsu batch -p project/Douyara -F Douyara_01 -c 48` |
 | `nousetsu scan` | Fast scan chapter queue and project status in `NOVEL_PROJECTS_DIR` | `nousetsu scan --all-projects` |
+| `nousetsu web` | Launches the interactive Vite + React 19 Trace Visualizer web app | `nousetsu web --port 5173` |
+| `nousetsu narrative` | Renders interactive 3-tier narrative memory tree (Macro > Meso > Micro) | `nousetsu narrative -p project/Douyara` |
+| `nousetsu migrate-summaries` | Upgrades legacy flat summaries into 3-tier story arc hierarchies | `nousetsu migrate-summaries -p project/Douyara` |
+| `nousetsu skills` | Lists and filters active domain skills by agent, language, or genre | `nousetsu skills --agent drafter --genre xianxia` |
+| `nousetsu graph-info` | Visualizes procedural execution graphs and name discipline directives | `nousetsu graph-info -a all` |
+| `nousetsu learn-graph` | Executes offline self-evolution loop on diagnostic traces to mutate graphs | `nousetsu learn-graph -p project/Douyara -a all` |
+| `nousetsu realign-chapters` | Detects and resolves chapter numbering collisions across volume folders | `nousetsu realign-chapters -p project/Douyara -F Douyara_02` |
+| `nousetsu traces` | Inspects, analyzes, and exports agent prompt and output traces | `nousetsu traces -c 48 --show-prompts` |
+| `nousetsu lore` | Searches project Lore Vault using Hybrid RAG + Cross-Encoder | `nousetsu lore "magic sword"` |
 | `nousetsu migrate-rag` | Backfills novel summaries, arcs, and chunks into RAG store | `nousetsu migrate-rag --embed` |
-| `nousetsu tui` | Explicitly launches the Textual TUI with path overrides | `nousetsu tui -p project/Villainess` |
-
-### Chapter Queue Scanner (`nousetsu scan`)
-
-```bash
-nousetsu scan [OPTIONS]
-```
-
-| Option | Flag | Default | Description |
-| :--- | :---: | :---: | :--- |
-| `--project-dir` | `-p` | `None` | Folder or name of novel project (resolves in `NOVEL_PROJECTS_DIR` or current directory) |
-| `--folder` | `-F` | `None` | Specific volume folder to scan |
-| `--all-projects` | `-A` | `False` | Scan across all projects in `NOVEL_PROJECTS_DIR` with completion overview |
+| `nousetsu tui` | Explicitly launches the Textual TUI with path overrides | `nousetsu tui -p project/Douyara` |
 
 ### Batch Translation Options (`nousetsu batch`)
 
@@ -248,12 +261,13 @@ nousetsu batch [OPTIONS]
 | Option | Flag | Default | Description |
 | :--- | :---: | :---: | :--- |
 | `--project-dir` | `-p` | `.` | Root path to the novel project directory |
-| `--volume` | `-F` | `None` | Target specific volume subfolder (e.g. `Villainess_05`) |
+| `--folder` | `-F` | `None` | Target specific volume subfolder (e.g. `Douyara_01`) |
 | `--chapter` | `-c` | `None` | Filter and translate a specific chapter or range (e.g. `48`, `"5-58"`, `"5+"`, `"ch 48"`) |
 | `--limit` | `-l` | `None` | Maximum number of chapters to process in this run |
 | `--force` | `-f` | `False` | Force re-translation even if chapter is already marked completed |
-| `--source-lang` | `-s` | `English` | Source language (auto-detected if East Asian script is detected) |
-| `--target-lang` | `-T` | `Thai` | Target language for publication-quality output |
+| `--source-lang` | | `None` | Override source language (e.g. `Japanese`, `Chinese`, `Korean`) |
+| `--target-lang` | | `None` | Override target language (e.g. `English`, `Thai`) |
+| `--genre` | `-g` | `None` | Override novel genre (e.g. `xianxia`, `isekai`, `litrpg`, `romance`) |
 | `--model` | `-m` | `.env` | Primary LLM model override (defaults to `NOVEL_MODEL` in `.env`) |
 | `--fallback-model` | | `.env` | Fallback LLM model override (defaults to `NOVEL_FALLBACK_MODEL`) |
 | `--extractor-model` | | `None` | Dedicated model override for Stage 1 (Entity Extractor) |
@@ -269,16 +283,18 @@ nousetsu batch [OPTIONS]
 | `--chunk-threshold-lines` | | `85` | Line threshold to trigger semantic chunking |
 | `--rag / --no-rag` | | `True` | Enable/disable hybrid search episodic lore retrieval |
 | `--rerank / --no-rerank` | | `True` | Enable/disable Stage 2 Cross-Encoder reranking for RAG |
+| `--filter-extractor / --no-filter-extractor` | | `True` | Enable/disable per-chunk character filtering for Extractor |
+| `--reconcile-terms / --no-reconcile-terms` | | `True` | Enable/disable post-polish term reconciliation in Chronicler |
 
 ---
 
-## ⌨️ Textual TUI Controls & Shortcuts
+## 🖥️ Interactive Interfaces: TUI & Web Studio
 
-The interactive Textual TUI provides complete operational control from inside your terminal:
+### Reactive Terminal User Interface (Textual + Rich)
 
 ```text
 ┌─ NouSetsu v0.3.0 ───────────────────────────────────────────────┐
-│ 📁 Project: Villainess (Villainess_05)   🌐 English ➔ Thai       │
+│ 📁 Project: Douyara (Douyara_01)         🌐 Japanese ➔ English  │
 ├───────────────────────────────┬─────────────────────────────────┤
 │ Chapter List                  │ Dual Reader View                │
 │ ✓ 046_Chapter 46.txt          │ Original Source (Left)          │
@@ -310,29 +326,30 @@ The interactive Textual TUI provides complete operational control from inside yo
 
 ---
 
-## 📂 Project Structure & Layout
+## 📂 Project Layout
 
 ```text
 NouSetsu/
-├── .env                            # Central machine-level model routing & API keys
-├── pyproject.toml                  # Hatchling package build & console scripts
+├── .env                            # Machine-level model routing, rate limits & API keys
+├── pyproject.toml                  # Hatchling package build, scripts & dependencies
 ├── CHANGELOG.md                    # Release history following Keep a Changelog
-├── README.md                       # Repository overview and quickstart
+├── README.md                       # Repository overview and technical guide
+├── AGENTS.md                       # Operational guide & architectural handbook for AI agents
 ├── web/                            # React 19 + TypeScript + Vite trace visualizer
 │   ├── src/                        # Visualizer components (timeline, diff viewer, token KPIs)
-│   └── dist/                       # Built static bundle served by embedded web server
-├── doc/                            # Comprehensive technical documentation hub
+│   └── dist/                       # Static production bundle served by embedded web server
+├── docs/                           # Comprehensive technical documentation hub
 │   ├── README.md                   # Documentation index & quick navigation
-│   ├── user_guide.md               # Complete end-user manual (CLI, TUI, Bible, Skills)
-│   ├── workflow.md                 # LangGraph pipeline and agent stages
+│   ├── user_guide.md               # End-user manual (CLI, TUI, Bible, Skills)
+│   ├── workflow.md                 # LangGraph pipeline and agent reflection cycle
 │   ├── agents_deep_dive.md         # In-depth architectural guide for all 5 pipeline agents
 │   ├── architecture.md             # System architecture, layer design, and utilities
 │   ├── novel_bible.md              # 3-tier narrative memory and Novel Bible guide
-│   ├── storage_and_checkpoints.md  # Single metadata, arc storage, and checkpoints
-│   ├── hybrid_rag.md               # Hybrid Search RAG architecture, FTS5, embeddings, & Cross-Encoder
+│   ├── storage_and_checkpoints.md  # Unified metadata, arc storage, and checkpoints
+│   ├── hybrid_rag.md               # Hybrid Search RAG architecture, FTS5 & Cross-Encoder
 │   ├── tui_guide.md                # Textual TUI user guide, token analytics, and shortcuts
 │   └── api_reference.md            # Developer API reference
-├── .novel/                         # Project metadata and persistent memory
+├── .novel/                         # Project metadata and persistent memory (gitignored)
 │   ├── config.yaml                 # Project configuration (languages, paths, loop caps)
 │   ├── metadata.json               # Consolidated chapter checkpoints & audit stats
 │   ├── traces/                     # Chapter and stage LLM prompt & output traces
@@ -344,99 +361,46 @@ NouSetsu/
 │       └── <volume>/               # Micro-tier folder-scoped chapter summaries
 ├── raw_chapters/                   # Input folder for raw source chapters (*.txt, *.md)
 ├── translated_chapters/            # Clean output folder for translated markdown (*.md)
-├── src/nousetsu/                   # Core Python package
+├── src/nousetsu/                   # Core Python framework
 │   ├── agents/                     # Five pipeline agents (extractor, drafter, critic, polisher, chronicler)
 │   ├── analysis/                   # PromptTracker and token telemetry collection
 │   ├── batch/                      # Chapter scanner, natural sorter, and batch runner
-│   ├── cli/                        # CLI command dispatch (nousetsu, novel, web server)
+│   ├── cli/                        # CLI command dispatch & web server
 │   ├── graph/                      # LangGraph state machine & procedural graph engine
 │   ├── models/                     # Pydantic schemas (bible, metadata, state, trace, config)
 │   ├── prompts/                    # Translation and critique prompt templates
 │   ├── rag/                        # SQLite hybrid search engine, SQLAlchemy ORM, and reranker
-│   ├── skills/                     # Domain skills registry, loader, and 22 built-in skills
+│   ├── skills/                     # Domain skills registry, loader, and 23 built-in skills
 │   ├── storage/                    # Repository, project registry, and summary migrator
 │   ├── tui/                        # Textual TUI dashboard, reader, and token analytics
 │   └── utils/                      # Utilities (rate limiter, chunker, diff patcher, language detector)
-└── tests/                          # Comprehensive pytest test suite (416 tests across 59 modules)
+└── tests/                          # Hermetic test suite (416 tests across 59 modules)
 ```
 
 ---
 
-## 🧪 Verification & Automated Testing
+## 🧪 Automated Testing & Quality Verification
 
 NouSetsu is verified continuously through a hermetic, deterministic test suite:
 
 ```bash
 # Run entire test suite using uv
-uv run --no-sync pytest
+uv run --no-sync pytest -q
 ```
 
 ```text
-============================= test session starts =============================
-platform win32 -- Python 3.13.12, pytest-9.1.1, pluggy-1.6.0
-rootdir: D:\Code\novel_translation_Agent
-configfile: pyproject.toml
-collected 347 items
-
-tests\test_character_filter.py ...........                               [  3%]
-tests\test_checkpoint.py .....                                           [  4%]
-tests\test_chronicler_rag.py ...                                         [  5%]
-tests\test_chunker.py ......                                             [  7%]
-tests\test_critic_rag.py ...                                             [  8%]
-tests\test_cross_folder_summaries.py ........                            [ 10%]
-tests\test_diff_patcher.py ......                                        [ 12%]
-tests\test_drafter_chunking.py .                                         [ 12%]
-tests\test_formatting.py .....                                           [ 14%]
-tests\test_glossary_filter.py ......                                     [ 15%]
-tests\test_hierarchy_summary.py .....                                    [ 17%]
-tests\test_interactions.py ......                                        [ 19%]
-tests\test_language.py ...........                                       [ 22%]
-tests\test_migration.py ...                                              [ 23%]
-tests\test_model_env.py .....                                            [ 24%]
-tests\test_model_fallback.py ........                                    [ 27%]
-tests\test_models.py ...                                                 [ 27%]
-tests\test_multi_folder.py ....                                          [ 29%]
-tests\test_patch_polishing.py ...                                        [ 29%]
-tests\test_polisher_language.py .......                                  [ 31%]
-tests\test_polisher_title.py ........                                    [ 34%]
-tests\test_procedural_graph.py ..........                                [ 37%]
-tests\test_projects.py ....                                              [ 38%]
-tests\test_prompt_caching_prefix.py .....                                [ 39%]
-tests\test_prompt_tracker.py ....                                        [ 41%]
-tests\test_rag_engine.py .......                                         [ 43%]
-tests\test_rag_integration.py ...                                        [ 44%]
-tests\test_rag_migration.py .....                                        [ 45%]
-tests\test_rag_reranker.py ......                                        [ 47%]
-tests\test_rate_limiter.py ........                                      [ 49%]
-tests\test_recursive_subdivision.py ......................               [ 56%]
-tests\test_remediation_fixes.py .........                                [ 58%]
-tests\test_retry.py ....                                                 [ 60%]
-tests\test_review_loop.py ......                                         [ 61%]
-tests\test_runner.py .......                                             [ 63%]
-tests\test_safety_blocks.py ............                                 [ 67%]
-tests\test_scanner.py ..                                                 [ 68%]
-tests\test_skills.py ............                                        [ 71%]
-tests\test_step_duration.py ...                                          [ 72%]
-tests\test_stop.py ..                                                    [ 73%]
-tests\test_token_metrics.py ....                                         [ 74%]
-tests\test_token_tracking.py ....                                        [ 75%]
-tests\test_tui.py ...........                                            [ 94%]
-tests\test_tui_performance.py ......                                     [ 96%]
-tests\test_web_api.py ......                                             [ 97%]
-tests\test_web_server.py ........                                        [100%]
-... (380 items across 55 test modules)
-
-======================= 380 passed, 1 warning in 45.51s =======================
+416 passed, 1 warning in ~35s
 ```
 
-* **Hermetic Isolation**: Tests run in isolated temporary directories (`tmp_path`), protecting your real novel projects.
-* **Deterministic Execution**: Zero live LLM calls during tests via `MockNovelLLM`, achieving ultra-fast execution (~45s for 416 tests across 59 modules).
+* **Hermetic Isolation**: Tests run in isolated temporary directories (`tmp_path`), protecting real novel projects from mutation.
+* **Deterministic Execution**: Zero live LLM calls during tests via `MockNovelLLM`, achieving high-speed execution (<40s for 416 tests across 59 modules).
+* **Automated Documentation Auditor**: The built-in [`check_doc_drift.py`](file:///D:/Code/novel_translation_Agent/.agents/skills/doc-updater/scripts/check_doc_drift.py) auditor checks all links, AST symbols, line anchors, and CLI flags with `--strict` verification.
 
 ---
 
 ## 📚 Technical Documentation Hub
 
-For deep architectural analyses, developer guides, and end-user documentation, visit the [`doc/`](file:///D:/Code/novel_translation_Agent/docs/) directory:
+For exhaustive technical analyses, developer guides, and architectural deep dives, visit the [`docs/`](file:///D:/Code/novel_translation_Agent/docs/) directory:
 
 | Document | Focus Area |
 | :--- | :--- |
