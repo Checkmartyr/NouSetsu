@@ -136,47 +136,51 @@ NouSetsu encodes procedural execution rules as explicit attributed graphs $G = (
 ```mermaid
 flowchart TD
     subgraph Input_Layer ["1. Input Discovery & Multi-Volume Memory"]
-        Raw["raw_chapters/*.txt"] --> Scanner["ChapterScanner\n(natsort + SHA256)"]
-        Scanner --> Lang["Language Detector\n(JA / ZH / KO / EN / TH)"]
-        Bible[(".novel/bible/bible.yaml")] --> Memory["3-Tier Narrative Memory\n(Macro > Meso Arcs > Micro Chapters)"]
-        RAGStore[(".novel/rag/lore.db\nSQLite FTS5 + Gemini Embedding 2")] <--> Memory
+        Raw["raw_chapters/*.txt"] --> Scanner["ChapterScanner<br/>(natsort + SHA256)"]
+        Scanner --> Lang["Language Detector<br/>(JA / ZH / KO / EN / TH)"]
+        Bible[(".novel/bible/bible.yaml")] --> Memory["3-Tier Narrative Memory<br/>(Macro ➔ Meso Arcs ➔ Micro Chapters)"]
+        RAGStore[(".novel/rag/lore.db<br/>SQLite FTS5 + Gemini Embedding 2")] <--> Memory
     end
 
     subgraph Agent_Pipeline ["2. Five-Stage Agent Pipeline (LangGraph)"]
-        Scanner & Memory --> Extractor["Stage 1: Entity Extractor (EntityExtractorAgent)\nExtracts characters, terms, cultivation realms"]
-        Extractor --> Drafter["Stage 2: Context-Aware Drafter (ContextAwareDrafterAgent)\nResolves zero-anaphora, voice & episodic lore RAG"]
+        Scanner & Memory --> Extractor["Stage 1: Entity Extractor (EntityExtractorAgent)<br/>Extracts characters, terms, cultivation realms"]
+        Extractor --> Drafter["Stage 2: Context-Aware Drafter (ContextAwareDrafterAgent)<br/>Resolves zero-anaphora, voice &amp; episodic lore RAG"]
         
         subgraph Review_Loop ["Cyclic Reflection Review Loop"]
-            Drafter --> Critic["Stage 3: Critique Agent (CritiqueAgent)\nAudits fidelity (0-10), style (0-10), TM RAG"]
-            Critic --> Polisher["Stage 4: Polishing Agent (PolishingAgent)\nDiff/Patch engine, title guard & cadence polish"]
-            Polisher --> QualityCheck{"Quality Check:\nFidelity & Style >= 8.5\nOR Max Loops Reached?"}
+            Drafter --> Critic["Stage 3: Critique Agent (CritiqueAgent)<br/>Audits fidelity 0-10, style 0-10, TM RAG"]
+            Critic --> Polisher["Stage 4: Polishing Agent (PolishingAgent)<br/>Diff/Patch engine, title guard &amp; cadence polish"]
+            Polisher --> QualityCheck{"Quality Check:<br/>Fidelity &amp; Style &ge; 8.5<br/>OR Max Loops Reached?"}
             QualityCheck -- "Needs Refinement" --> Critic
         end
         
-        QualityCheck -- "Passed / Cap Reached\n(Best Candidate Guard)" --> Chronicler["Stage 5: Chronicler Agent (ChroniclerAgent)\n3-tier summaries, milestones & RAG auto-indexing"]
+        QualityCheck -- "Passed / Cap Reached<br/>(Best Candidate Guard)" --> Chronicler["Stage 5: Chronicler Agent (ChroniclerAgent)<br/>3-tier summaries, milestones &amp; RAG auto-indexing"]
     end
 
     subgraph Safety_Resilience ["3. Safety, Telemetry & Fallback Engine"]
-        Limiter["Sliding-Window Rate Limiter\n(32,000 TPM / 60 RPM + Rollover Cooldown)"]
-        BisectionEngine["Recursive Binary Bisection (bisect_text)\nIsolates sensitive snippets <= 8 lines"]
-        GTFallback["Google Translate Fallback (deep-translator)\nSeamless literary polish fallback"]
-        FallbackRouter["FallbackChatModel\n(Per-Role Routing & 429 Failover)"]
-        StopSignal["Thread-Safe Stop Guard\n(X key / SIGINT -> PAUSED Checkpoint)"]
-        Tracker["PromptTracker Engine\n(Records Prompts, Outputs, Tokens to .novel/traces/)"]
+        Limiter["Sliding-Window Rate Limiter<br/>(32,000 TPM / 60 RPM + Rollover Cooldown)"]
+        BisectionEngine["Recursive Binary Bisection (bisect_text)<br/>Isolates sensitive snippets &le; 8 lines"]
+        GTFallback["Google Translate Fallback (deep-translator)<br/>Seamless literary polish fallback"]
+        FallbackRouter["FallbackChatModel<br/>(Per-Role Routing &amp; 429 Failover)"]
+        StopSignal["Thread-Safe Stop Guard<br/>(X key / SIGINT ➔ PAUSED Checkpoint)"]
+        Tracker["PromptTracker Engine<br/>(Records Prompts, Outputs, Tokens to .novel/traces/)"]
     end
 
     subgraph Persistence_Output ["4. Persistence & Presentation"]
         Chronicler --> OutMarkdown["translated_chapters/*.md"]
-        Chronicler --> MetaJSON[".novel/metadata.json\n(Consolidated Checkpoints & Audits)"]
-        Chronicler --> BibleUpdate[".novel/bible/bible.yaml\n(Lore & Arc Archives)"]
-        Chronicler --> RAGUpdate[".novel/rag/lore.db\n(Auto-indexes Summaries & Scene Chunks)"]
-        Tracker --> TraceJSON[".novel/traces/chapter_*.json\n(Full Agent Prompt Traces)"]
-        MetaJSON --> TUI["Textual Interactive TUI\n(Dual Reader, Token Analytics M, Web W)"]
-        MetaJSON --> CLI["Rich CLI Engine\n(Batch, Traces, Lore, Narrative, Skills)"]
-        TraceJSON --> WebUI["Vite + React 19 Trace Visualizer\n(nousetsu web / http://localhost:5173)"]
+        Chronicler --> MetaJSON[".novel/metadata.json<br/>(Consolidated Checkpoints &amp; Audits)"]
+        Chronicler --> BibleUpdate[".novel/bible/bible.yaml<br/>(Lore &amp; Arc Archives)"]
+        Chronicler --> RAGUpdate[".novel/rag/lore.db<br/>(Auto-indexes Summaries &amp; Scene Chunks)"]
+        Tracker --> TraceJSON[".novel/traces/chapter_*.json<br/>(Full Agent Prompt Traces)"]
+        MetaJSON --> TUI["Textual Interactive TUI<br/>(Dual Reader, Token Analytics M, Web W)"]
+        MetaJSON --> CLI["Rich CLI Engine<br/>(Batch, Traces, Lore, Narrative, Skills)"]
+        TraceJSON --> WebUI["Vite + React 19 Trace Visualizer<br/>(nousetsu web / http://localhost:5173)"]
     end
 
-    Agent_Pipeline <--> Safety_Resilience
+    Extractor & Drafter & Critic & Polisher & Chronicler -.-> FallbackRouter
+    Drafter & Polisher -.-> Limiter
+    Drafter -.-> BisectionEngine
+    BisectionEngine -.-> GTFallback
+    Extractor & Drafter & Critic & Polisher & Chronicler -.-> Tracker
 ```
 
 ---
