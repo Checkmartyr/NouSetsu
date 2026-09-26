@@ -70,6 +70,30 @@ cd NouSetsu
 uv sync
 ```
 
+### Option C: Run with Docker Compose
+If you prefer running containerized with zero local Python/Node dependencies:
+```bash
+git clone https://github.com/Checkmartyr/NouSetsu.git
+cd NouSetsu
+
+# Configure environment variables
+cp .env.example .env
+
+# Launch Web Studio container
+docker compose up -d
+
+# Open http://localhost:5173 in your browser
+```
+
+You can also execute headless batch translations or project scans via Docker Compose:
+```bash
+# Scan novel projects
+docker compose run --rm nousetsu scan --all-projects
+
+# Run batch translation
+docker compose run --rm nousetsu batch --project-dir Douyara -c 48
+```
+
 ### Configuring API Keys
 NouSetsu supports Google Gemini (default), OpenAI, Anthropic, or an offline mock model:
 

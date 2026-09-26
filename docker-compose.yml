@@ -1,0 +1,41 @@
+services:
+  nousetsu:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: nousetsu:latest
+    container_name: nousetsu-web
+    restart: unless-stopped
+    ports:
+      - "${PORT:-5173}:5173"
+    environment:
+      # API Keys (passed from host environment or .env)
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+
+      # Model Selection & Agent Routing
+      - NOVEL_MODEL=${NOVEL_MODEL:-gemini-3.1-flash-lite}
+      - NOVEL_FALLBACK_MODEL=${NOVEL_FALLBACK_MODEL:-gemini-3.5-flash-lite}
+      - NOVEL_EXTRACTOR_MODEL=${NOVEL_EXTRACTOR_MODEL:-gemini-3.1-flash-lite}
+      - NOVEL_DRAFTER_MODEL=${NOVEL_DRAFTER_MODEL:-gemini-3.5-flash-lite}
+      - NOVEL_CRITIC_MODEL=${NOVEL_CRITIC_MODEL:-gemma-4-26b-a4b-it}
+      - NOVEL_POLISHER_MODEL=${NOVEL_POLISHER_MODEL:-gemini-3.5-flash-lite}
+      - NOVEL_CHRONICLER_MODEL=${NOVEL_CHRONICLER_MODEL:-gemma-4-26b-a4b-it}
+
+      # Storage & Network Settings
+      - NOVEL_PROJECTS_DIR=/app/project
+      - HOST=0.0.0.0
+      - PORT=5173
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      # Mount local novel workspaces and translation outputs for persistence
+      - ./project:/app/project
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5173/api/active-project"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s

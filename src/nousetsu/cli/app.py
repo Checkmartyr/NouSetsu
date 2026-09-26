@@ -984,6 +984,10 @@ def cmd_web(args: argparse.Namespace) -> None:
     from nousetsu.cli.web_server import NousetsuWebHandler, run_web_server
 
     port = getattr(args, "port", 5173) or 5173
+    host = getattr(args, "host", None) or os.environ.get("HOST", "127.0.0.1")
+    open_browser = getattr(args, "open_browser", True)
+    if open_browser is None:
+        open_browser = True
     dev_mode = getattr(args, "dev", False)
     do_build = getattr(args, "build", False)
     project_dir = getattr(args, "project_dir", None)
@@ -1009,7 +1013,8 @@ def cmd_web(args: argparse.Namespace) -> None:
         except Exception as e:
             console.print(f"[bold yellow]Build warning or error:[/] {e}")
 
-    url = f"http://localhost:{port}"
+    display_host = "localhost" if host in ("127.0.0.1", "0.0.0.0") else host
+    url = f"http://{display_host}:{port}"
     reg = ProjectRegistry()
     if project_dir:
         p_path = resolve_project_dir(project_dir)
@@ -1031,7 +1036,7 @@ def cmd_web(args: argparse.Namespace) -> None:
 
         t = threading.Thread(
             target=run_web_server,
-            kwargs={"port": api_port, "host": "127.0.0.1", "open_browser": False, "dist_dir": dist_dir},
+            kwargs={"port": api_port, "host": host, "open_browser": False, "dist_dir": dist_dir},
             daemon=True
         )
         t.start()
@@ -1039,7 +1044,8 @@ def cmd_web(args: argparse.Namespace) -> None:
             console.print(f"[bold yellow]Port 5174 in use — API backend bound to :{api_port}[/]")
         console.print(f"[bold green]Starting Vite dev server on[/] [cyan]{url}[/] (API backend on :{api_port}) nya~!")
         console.print(f"[dim]Active TUI Project: {active_p}[/]")
-        webbrowser.open(url)
+        if open_browser:
+            webbrowser.open(url)
         try:
             # Pass the API port as an env variable for Vite to pick up
             env = {**os.environ, "VITE_API_PORT": str(api_port)}
@@ -1065,7 +1071,7 @@ def cmd_web(args: argparse.Namespace) -> None:
             title="Web Visualizer Active",
             border_style="cyan"
         ))
-        run_web_server(port=port, host="127.0.0.1", open_browser=True, dist_dir=dist_dir)
+        run_web_server(port=port, host=host, open_browser=open_browser, dist_dir=dist_dir)
 
 
 def main() -> None:
@@ -1207,6 +1213,8 @@ def main() -> None:
     p_web.add_argument("--project-dir", "-P", default=None, help="Folder or name of novel project (resolves in NOVEL_PROJECTS_DIR or current directory)")
     p_web.add_argument("--folder", "-F", default=None, help="Specific volume folder to focus on")
     p_web.add_argument("--port", "-p", type=int, default=5173, help="Port to run visualizer server on (default: 5173)")
+    p_web.add_argument("--host", "-H", default=os.environ.get("HOST", "127.0.0.1"), help="Host IP to bind to (default: 127.0.0.1 or HOST env var)")
+    p_web.add_argument("--open-browser", action=argparse.BooleanOptionalAction, default=True, help="Automatically open visualizer in browser (default: True)")
     p_web.add_argument("--dev", action="store_true", help="Run with live Vite dev server instead of production dist")
     p_web.add_argument("--build", action="store_true", help="Rebuild frontend assets before launching")
 

@@ -198,7 +198,22 @@ uv pip install -e .
 pip install -e .
 ```
 
-### 2. Configure Environment & API Keys
+### 2. Alternative: Run with Docker Compose
+If you prefer running in a containerized environment without installing Python 3.13 or Node.js on the host:
+
+```bash
+# Copy and configure environment variables
+cp .env.example .env
+
+# Launch the Web Studio container (binds to http://localhost:5173)
+docker compose up -d
+
+# Execute CLI commands inside the container
+docker compose run --rm nousetsu scan --all-projects
+docker compose run --rm nousetsu batch --project-dir Douyara -c 48
+```
+
+### 3. Configure Environment & API Keys
 Copy the documented environment template and configure your API keys:
 
 ```bash
@@ -212,7 +227,7 @@ cp .env.example .env
 > [!NOTE]
 > If no API key is supplied, NouSetsu automatically operates with a deterministic offline mock model (`mock-novel-llm`), enabling testing of UI navigation, batch scanning, and checkpoint resumption without consuming API tokens.
 
-### 3. Launching NouSetsu
+### 4. Launching NouSetsu
 Launch the interactive Terminal User Interface (TUI):
 
 ```bash
@@ -240,7 +255,7 @@ NouSetsu provides a full suite of CLI subcommands for headless automation, narra
 | `nousetsu init` | Initializes a new novel project, directory structure, and Novel Bible | `nousetsu init -t "My Novel" -s Japanese -T English` |
 | `nousetsu batch` | Headless folder-to-folder batch translation with natural sorting | `nousetsu batch -p project/Douyara -F Douyara_01 -c 48` |
 | `nousetsu scan` | Fast scan chapter queue and project status in `NOVEL_PROJECTS_DIR` | `nousetsu scan --all-projects` |
-| `nousetsu web` | Launches the interactive Vite + React 19 Trace Visualizer web app | `nousetsu web --port 5173` |
+| `nousetsu web` | Launches the interactive Vite + React 19 Trace Visualizer web app | `nousetsu web --host 0.0.0.0 --port 5173` |
 | `nousetsu narrative` | Renders interactive 3-tier narrative memory tree (Macro > Meso > Micro) | `nousetsu narrative -p project/Douyara` |
 | `nousetsu migrate-summaries` | Upgrades legacy flat summaries into 3-tier story arc hierarchies | `nousetsu migrate-summaries -p project/Douyara` |
 | `nousetsu skills` | Lists and filters active domain skills by agent, language, or genre | `nousetsu skills --agent drafter --genre xianxia` |

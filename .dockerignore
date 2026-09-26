@@ -1,0 +1,65 @@
+# Version control
+.git
+.gitignore
+.github
+
+# Python cache & environments
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+tests/
+
+# Node & Frontend dependencies
+web/node_modules/
+web/.vite/
+web/.api-port
+src-tauri/target/
+
+# Local novel data & project workspaces (mounted via volume)
+project/
+raw_chapters/
+translated_chapters/
+.novel/
+ideabook/
+scratch/
+tmp/
+*.log
+
+# Local secrets & environment files (injected at runtime)
+.env
+*.local
+
+# Documentation (README.md is kept for Hatchling package build)
+docs/
+CHANGELOG.md
+DESIGN.md
+
+# Docker-related files
+Dockerfile*
+docker-compose*
+.dockerignore
