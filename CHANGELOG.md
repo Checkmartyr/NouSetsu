@@ -7,7 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
+- **Compound Name Character Filter Sub-Component Matching & Extractor Deduplication**:
+  - Enhanced [`filter_characters_for_scene`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/character_filter.py) with CJK/compound name delimiter splitting (`[・·\s/_\-]+`) to match characters when raw text only uses their given name (e.g. `サフィナ` from `サフィナ・カルシャナ`).
+  - Added programmatic deduplication in [`EntityExtractorAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/extractor.py) to discard candidate characters that match existing profiles or compound parts.
+  - Added automatic alias population in [`NovelRepository.update_bible_memory`](file:///D:/Code/novel_translation_Agent/src/nousetsu/storage/repository.py) to prevent name variations from overwriting canonical character names.
+- **Web Diff Comparison Filter & Unified Batch Chapter Filtering**:
+  - Restricted Web Diff viewer comparison strictly to `Drafter` vs `Polisher` prose, omitting extraction and audit traces for crystal-clear revision tracking.
+  - Added CLI-parity chapter range filtering (`--chapter`, `-c`, e.g. `"40-48"`, `"5+"`) to Web Studio batch executions.
+  - Fixed undefined `logger` bug in `NovelRepository.update_bible_memory`.
 - **Exhaustive Code-to-Doc Integrity Auditor (`doc-updater` skill)**:
   - Upgraded [`check_doc_drift.py`](file:///D:/Code/novel_translation_Agent/.agents/skills/doc-updater/scripts/check_doc_drift.py) into an end-to-end verification engine checking file links, line anchors (`#L{start}-L{end}`), and backticked paths.
   - Added Python AST symbol verification to validate that classes, functions, and models referenced in markdown links exist in target modules.
@@ -53,7 +60,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Rich Tree Visualization in `graph-info`**:
   - Updated `nousetsu graph-info` to inspect and render procedural execution graphs for all 5 agents with Rich tree panels.
 - **Test Suite Metrics**:
-  - Expanded test coverage to 380 passing tests across 55 test modules in ~45s.
+  - Expanded test coverage to 416 passing tests across 59 test modules in ~35s.
 
 ### Fixed
 - **Project Settings Persistence in Web Server**:
