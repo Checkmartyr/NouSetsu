@@ -10,8 +10,8 @@ This document details the software architecture, design patterns, and layer sepa
 graph TD
     subgraph Presentation_Layer ["Presentation Layer (UI / Web / CLI)"]
         TUI["Textual TUI Application<br/>(DualReader, ProgressPanel, Token Analytics M, Web Traces W, Volume F, Stop X)"]
-        WEB["Vite + React 19 Web Visualizer<br/>(nousetsu web, port 5173, Prompt Inspector, Timeline)"]
-        CLI["Rich CLI Commands<br/>(init, batch, tui, scan, narrative, migrate-summaries, graph-info, skills, traces, web, lore, migrate-rag)"]
+        WEB["Vite + React 19 Web Visualizer<br/>(nousetsu web, port 5173, Prompt Inspector, Timeline, Studio Reader)"]
+        CLI["Rich CLI Commands<br/>(init, batch, tui, scan, narrative, migrate-summaries, graph-info, skills, traces, web, lore, migrate-rag, import, export)"]
     end
 
     subgraph Batch_Orchestration ["Batch & Task Orchestration"]
@@ -34,6 +34,17 @@ graph TD
         Polisher["Stage 4: Polishing Agent<br/>(PolishingAgent + Cadence Engine + Diff/Patch + Title Guard)"]
         Chronicler["Stage 5: Chronicler Agent<br/>(ChroniclerAgent + 3-Tier Hierarchy + RAG Indexer k=3)"]
         LLM["LLM Client & FallbackChatModel<br/>(Per-Role Model Routing, 429 Automatic Failover)"]
+    end
+
+    subgraph Ebook_Engine ["eBook Ingestion & Publication Compilation (src/nousetsu/ebook/)"]
+        EbookReader["EbookReader & EpubReader & PdfReader<br/>(Chapter extraction & asset preservation)"]
+        EbookWriter["Epub3Writer & PdfWriter<br/>(PyMuPDF Story, margin boxes, page numbering)"]
+        Typography["Thai Typography & Wrap<br/>(PyThaiNLP zero-width break insertion, Google Fonts)"]
+    end
+
+    subgraph Scraper_Bridge ["Web Novel Scraper Bridge (src/nousetsu/scraper/)"]
+        Bridge["NovelScraperBridge<br/>(Subprocess execution, romanized slugs)"]
+        Detector["ScraperDetector<br/>(Virtualenv & executable auto-discovery)"]
     end
 
     subgraph RAG_Engine ["Hybrid Search RAG Knowledge Store"]
@@ -68,11 +79,17 @@ graph TD
         M_PG["ProceduralNode, ProceduralEdge, DiagnosticTrace"]
         M_Trace["AgentPromptTrace, ChapterTraceDocument"]
         M_RAG["LoreDocumentORM, LoreDocument, SearchResult, RAGConfig"]
+        M_Ebook["EbookChapter, EbookMetadata, EbookExportOptions, EbookPreviewResult"]
+        M_Scraper["ScraperChapterItem, ScraperInspectRequest, ScraperExtractRequest"]
     end
 
     %% Dependencies
     TUI --> Runner
     WEB --> TracesDir
+    CLI --> Ebook_Engine
+    CLI --> Scraper_Bridge
+    WEB --> Ebook_Engine
+    WEB --> Scraper_Bridge
     CLI --> Runner
     Runner --> Scanner
     Runner --> Workflow
@@ -198,8 +215,23 @@ Each agent possesses a single cognitive responsibility:
 * **`ProjectRegistry`**: Stores user-registered project directories across arbitrary filesystem locations and persists the `last_active_project` for instant reopening.
 * **`SummaryMigrationEngine` (`src/nousetsu/storage/migration.py`)**: Automatically detects and migrates legacy flat summaries into the 3-tier hierarchy (`whole_story_summary` -> `ArcSummary` -> partitioned volume summaries).
 
-### 8. Domain Model Layer (`src/nousetsu/models/`)
-* Strongly typed Pydantic V2 models defining contracts across the entire system (`TranslationState`, `NovelBible`, `ChapterMetadata`, `ArcSummary`, `ProjectConfig`, `AgentPromptTrace`, `ChapterTraceDocument`, `LoreDocument`, `SearchResult`).
+### 8. Dual-Format eBook Ingestion & Compilation Engine (`src/nousetsu/ebook/`)
+* **`EbookReader` (`src/nousetsu/ebook/reader.py`)**: Unified reader orchestrating `EpubReader` (HTML extraction, navigation parsing, illustration asset dump to `assets/`) and `PdfReader` (`pdfplumber` / `pymupdf` page-to-chapter boundary heuristics).
+* **`Epub3Writer` (`src/nousetsu/ebook/writer.py`)**: Assembles translated markdown files into clean EPUB3 container archives with table of contents navigation (`nav.xhtml`), NCX fallback, embedded CSS stylesheets, and optional Novel Bible appendices.
+* **`PdfWriter` (`src/nousetsu/ebook/writer.py`)**: Compiles translated novels directly into in-memory PDF binary streams (`application/pdf`) using `pymupdf.DocumentWriter` + `pymupdf.Story`. Applies `@page` margin layouts, running bottom page numbers (`- {page} -`), and custom font embeds without requiring headless Chromium or external system utilities.
+* **Thai Typography & Line-Wrap Engine (`src/nousetsu/ebook/typography.py`)**: Evaluates `has_thai_text` and uses `pythainlp` to insert zero-width space characters (`\u200b`) into paragraph runs, preventing awkward Thai syllable break clipping in PDF and EPUB renderers. Embeds Google Fonts (`Sarabun`, `Prompt`, `Kanit`, `Noto Serif Thai`, `Chakra Petch`).
+* **Active Folder Auto-Resolution (`_resolve_export_output_dir`)**: Inspects project structure to automatically locate active translated folders (`<volume>_th`, `<volume>_trans`, or `translated_chapters`) without requiring manual path overrides.
+
+### 9. Web Novel Scraper Subsystem (`src/nousetsu/scraper/`)
+* **`NovelScraperBridge` (`src/nousetsu/scraper/bridge.py`)**: Subprocess orchestration layer communicating with the `Novel-Scraper` engine (`modules/novel_scraper/`). Handles asynchronous execution, SSE stream forwarding (`scraper_progress`), and East Asian title romanization for clean directory slugs.
+* **`ScraperDetector` (`src/nousetsu/scraper/detector.py`)**: 4-tier virtualenv and Python executable auto-discovery verifying submodule installation and Playwright browser availability.
+* **Web Studio Integration**: Powers the "Import from Web URL" modal in `NewProjectModal.tsx`, fetching remote TOCs, providing chapter range selection, and creating ready-to-translate novel workspaces.
+
+### 10. Domain Model Layer (`src/nousetsu/models/`, `src/nousetsu/ebook/models.py`, `src/nousetsu/scraper/models.py`)
+* Strongly typed Pydantic V2 models defining contracts across the entire system:
+  * Translation: `TranslationState`, `NovelBible`, `ChapterMetadata`, `ArcSummary`, `ProjectConfig`, `AgentPromptTrace`, `ChapterTraceDocument`, `LoreDocument`.
+  * eBook: `EbookChapter`, `EbookMetadata`, `EbookExportOptions`, `EbookPreviewResult`, `EbookPreviewChapterItem`.
+  * Scraper: `ScraperChapterItem`, `ScraperInspectRequest`, `ScraperInspectResponse`, `ScraperExtractRequest`.
 
 ---
 

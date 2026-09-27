@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- **Dual-Format eBook Ingestion & Compilation Engine (`nousetsu import` & `nousetsu export`)**:
+  - Implemented [`EbookReader`](file:///D:/Code/novel_translation_Agent/src/nousetsu/ebook/reader.py) supporting EPUB and PDF chapter parsing, volume structure heuristics, and embedded illustration preservation (`--no-images`).
+  - Implemented [`PdfWriter`](file:///D:/Code/novel_translation_Agent/src/nousetsu/ebook/writer.py) via native `pymupdf.DocumentWriter` and `pymupdf.Story`, creating 100% in-memory publication PDF binaries (`application/pdf`) with custom margins and centered bottom page numbers (`- {page} -`).
+  - Added Thai typography word wrapping engine ([`src/nousetsu/ebook/typography.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/ebook/typography.py)) using PyThaiNLP zero-width space (`\u200b`) boundary insertion, preventing syllable clipping across line breaks.
+  - Embedded Thai Google Fonts (`Sarabun`, `Prompt`, `Kanit`, `Noto Serif Thai`, `Chakra Petch`).
+  - Built Live Web Publication Studio Preview modal (`ExportBookModal.tsx`) with real-time typography adjustments (font switcher, font size `12px`–`26px`, line spacing `1.5x`–`2.0x`), dual tabs (interactive Table of Contents + paper-textured reader view), and direct download.
+  - Added active volume translated folder default resolution (`_resolve_export_output_dir`), automatically selecting `<folder>_th` with live translated chapter counts.
+- **Automated Web Novel Chapter Scraper Integration (`modules/novel_scraper`)**:
+  - Integrated `Novel-Scraper` as a self-contained submodule with [`NovelScraperBridge`](file:///D:/Code/novel_translation_Agent/src/nousetsu/scraper/bridge.py) and [`src/nousetsu/scraper/detector.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/scraper/detector.py).
+  - Added zero-touch Table of Contents inspection and batch chapter extraction across Syosetu, Kakuyomu, and webnovel portals.
+  - Added automatic East Asian title romanization for filesystem-safe project directory slugs.
+  - Added "Import from Web URL" flow in Web Studio `NewProjectModal.tsx` supporting chapter range selection and background ingestion into `raw_chapters/`.
+  - Added dedicated architectural and operational guide in [`docs/novel_scraper.md`](file:///D:/Code/novel_translation_Agent/docs/novel_scraper.md).
+
 - **Compound Name Character Filter Sub-Component Matching & Extractor Deduplication**:
   - Enhanced [`filter_characters_for_scene`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/character_filter.py) with CJK/compound name delimiter splitting (`[・·\s/_\-]+`) to match characters when raw text only uses their given name (e.g. `サフィナ` from `サフィナ・カルシャナ`).
   - Added programmatic deduplication in [`EntityExtractorAgent`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/extractor.py) to discard candidate characters that match existing profiles or compound parts.

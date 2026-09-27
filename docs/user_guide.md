@@ -231,6 +231,14 @@ nousetsu realign-chapters -p ./my_novel -F Villainess_06
 # 16. Fast Chapter Queue & Project Scanner
 nousetsu scan --all-projects
 nousetsu scan -p ./my_novel -F Villainess_05
+
+# 17. Import and Extract Chapters from EPUB or PDF
+nousetsu import ./novel.epub -p ./my_novel -F Volume_01
+nousetsu import ./novel.pdf -p ./my_novel --start 1 --end 25
+
+# 18. Compile Translated Chapters into Publication-Ready PDF or EPUB3
+nousetsu export -p ./my_novel -F Volume_01_th -f pdf --font "Sarabun" --font-size 16
+nousetsu export -p ./my_novel -F Volume_01_th -f epub --title "My Translated Novel"
 ```
 
 ### Chapter Queue Scanner (`nousetsu scan`)
@@ -280,6 +288,81 @@ nousetsu scan [OPTIONS]
 
 > [!TIP]
 > Pressing `Ctrl+C` (`SIGINT`) during headless CLI batch translation will gracefully pause the active chapter, flush `.novel/metadata.json`, and exit without data corruption.
+
+### Novel Ingestion & Extraction (`nousetsu import`)
+
+Ingest existing digital light novels and raw chapter compilations in `.epub` or `.pdf` format. NouSetsu automatically extracts chapters, volume metadata, and preserves embedded color illustrations:
+
+```bash
+nousetsu import FILE [OPTIONS]
+```
+
+| Flag | Shorthand | Default | Description |
+|:---|:---:|:---:|:---|
+| `file` | | *(Positional)* | Path to source `.epub` or `.pdf` file |
+| `--project-dir` | `-p` | `None` | Novel project directory |
+| `--folder` / `--volume` | `-F` | `None` | Destination volume subfolder (e.g. `Volume_01` or `raw_chapters`) |
+| `--start` | | `None` | First chapter index to extract |
+| `--end` | | `None` | Last chapter index to extract |
+| `--overwrite` | | `False` | Overwrite existing chapter files in target folder |
+| `--no-images` | | `False` | Skip extracting illustration images to `assets/` |
+
+**Example Workflows**:
+```bash
+# Ingest entire EPUB into Volume 1
+nousetsu import ./light_novel_vol1.epub -p ./projects/reincarnated -F Volume_01
+
+# Ingest specific chapter range from PDF without images
+nousetsu import ./webnovel_raw.pdf -p ./projects/reincarnated --start 1 --end 20 --no-images
+```
+
+---
+
+### Publication eBook & PDF Compilation (`nousetsu export`)
+
+Compile translated markdown chapters into publication-grade **EPUB3** or native in-memory **PDF** files with professional typography:
+
+```bash
+nousetsu export [OPTIONS]
+```
+
+| Flag | Shorthand | Default | Description |
+|:---|:---:|:---:|:---|
+| `--format` | `-f` | `epub` | Output format: `epub`, `pdf` (native binary), or `html` |
+| `--project-dir` | `-p` | `.` | Root folder of the novel project |
+| `--folder` / `--volume` | `-F` | `None` | Translated volume folder to compile (auto-resolves active translated folder) |
+| `--output` | `-o` | `None` | Output destination file path (`.epub`, `.pdf`, or `.html`) |
+| `--title` | | `None` | Book title override |
+| `--author` | | `None` | Author name override |
+| `--font` | | `Sarabun` | Font family (`Sarabun`, `Prompt`, `Kanit`, `Noto Serif Thai`, `Chakra Petch`) |
+| `--font-size` | | `16` | Body text font size in points/pixels |
+| `--line-height` | | `1.8` | Line height spacing ratio |
+| `--no-appendix` | | `False` | Do not append Novel Bible characters/glossary appendix |
+| `--no-wrap` | | `False` | Disable Thai zero-width space line breaking |
+
+**Key Features**:
+* **Native In-Memory PDF Generation**: Uses `pymupdf.DocumentWriter` + `pymupdf.Story` to build genuine binary PDF files with custom page breaks, margins, and centered running bottom page numbers (`- {page} -`).
+* **Thai Typography & Word Wrapping**: Automatically inserts zero-width break spaces (`\u200b`) via `pythainlp` into paragraph runs to prevent abrupt syllable clipping across line breaks.
+* **Auto-Resolution of Active Translated Folders**: Automatically discovers and defaults to volume translated directories (`<volume>_th` or `translated_chapters`) without manual path configuration.
+* **Live Publication Studio**: You can also use the interactive graphical preview in the Web Studio with real-time typography sliders and reader view before downloading.
+
+---
+
+### Web Novel URL Scraper & Project Ingestion
+
+NouSetsu integrates an automated web novel scraper powered by `Novel-Scraper` (`modules/novel_scraper`) for zero-touch ingestion from online fiction portals:
+
+1. Launch Web Studio:
+   ```bash
+   nousetsu web
+   ```
+2. In your browser (`http://localhost:5173`), click **`+ New Project`** and select **`Import from Web URL`**.
+3. Paste a novel landing page URL (e.g. `https://ncode.syosetu.com/n1234xx/` or Kakuyomu).
+4. Click **Inspect (🔍)** to preview the Table of Contents, author name, and chapter count.
+5. Select your target chapter range (e.g. `1` to `50`) and click **`⚡ Import Novel`**.
+6. The system automatically scrapes chapters, sanitizes HTML, romanizes East Asian titles into clean project folder slugs, and populates `raw_chapters/` ready for immediate translation!
+
+For full technical specifications, architecture details, and supported sites, refer to the [**Novel Scraper Guide**](./novel_scraper.md).
 
 ---
 

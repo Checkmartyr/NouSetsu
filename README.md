@@ -8,7 +8,7 @@
 [![Framework: LangGraph](https://img.shields.io/badge/agent-LangGraph-FF6F00.svg)](https://github.com/langchain-ai/langgraph)
 [![UI: Textual & Rich](https://img.shields.io/badge/cli-Textual%20%26%20Rich-00C853.svg)](https://textual.textualize.io/)
 [![UI: React 19 + Vite](https://img.shields.io/badge/web-React%2019%20%2B%20Vite-61DAFB.svg?logo=react&logoColor=black)](web/)
-[![Tests: 416 Passed](https://img.shields.io/badge/tests-416%20passed-brightgreen.svg)](tests/)
+[![Tests: 440 Passed](https://img.shields.io/badge/tests-440%20passed-brightgreen.svg)](tests/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
 ---
@@ -129,6 +129,17 @@ NouSetsu encodes procedural execution rules as explicit attributed graphs $G = (
 * **Interactive Character Visualizer**: Visual dossiers, relationship maps, and personality/voice analysis cards for Novel Bible characters.
 * **Diff Viewer**: Compares initial draft text directly against polished prose, omitting intermediate extraction traces for clear revision tracking.
 
+### 12. 🌐 Automated Web Novel Chapter Scraper Integration (`modules/novel_scraper`)
+* **Headless Online Fiction Ingestion**: Interfaces with the `Novel-Scraper` engine via [`NovelScraperBridge`](file:///D:/Code/novel_translation_Agent/src/nousetsu/scraper/bridge.py) to inspect landing page URLs and discover Table of Contents across Syosetu (`ncode.syosetu.com`), Kakuyomu, and other platforms.
+* **Romanized Directory Slugs**: Automatically converts East Asian novel titles (Kanji/Kana, Chinese, Korean) into filesystem-safe romanized directory slugs (e.g. `douyara-tensei...`).
+* **Web Studio Direct Setup**: Seamless "Import from Web URL" flow in `NewProjectModal.tsx` supporting chapter range selection (e.g. `1` to `50`), one-click project creation, and zero-padded chapter generation (`0001_Title.txt`). See [**Novel Scraper Guide**](file:///D:/Code/novel_translation_Agent/docs/novel_scraper.md).
+
+### 13. 📚 Dual-Format eBook Engine (EPUB3 & Native PyMuPDF PDF Compilation)
+* **eBook & PDF Ingestion (`nousetsu import`)**: Automatically extracts chapters, volume metadata, and embedded illustrations from EPUB and PDF files via [`EbookReader`](file:///D:/Code/novel_translation_Agent/src/nousetsu/ebook/reader.py).
+* **Native PyMuPDF PDF Compilation (`nousetsu export`)**: Generates publication-ready PDFs in memory via [`PdfWriter`](file:///D:/Code/novel_translation_Agent/src/nousetsu/ebook/writer.py) (`pymupdf.DocumentWriter` + `pymupdf.Story`) with custom fonts, margins, page breaks, and centered bottom page numbering (`- {page} -`).
+* **Thai Typography & Word Wrapping**: Solves Southeast Asian text clipping in PDF/EPUB renderers using PyThaiNLP zero-width space (`\u200b`) boundary insertion ([`src/nousetsu/ebook/typography.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/ebook/typography.py)) and embeds Thai Google Fonts (`Sarabun`, `Prompt`, `Kanit`, `Noto Serif Thai`, `Chakra Petch`).
+* **Live Publication Studio**: Interactive modal in Web Studio with real-time typography adjustments (font family, font size, line spacing), Table of Contents, click-to-preview chapter reader, and automatic resolution to the active volume's translated folder (`<folder>_th`).
+
 ---
 
 ## 🏛️ System Architecture
@@ -138,8 +149,8 @@ flowchart TD
     subgraph Input_Layer ["1. Input Discovery & Multi-Volume Memory"]
         Raw["raw_chapters/*.txt"] --> Scanner["ChapterScanner<br/>(natsort + SHA256)"]
         Scanner --> Lang["Language Detector<br/>(JA / ZH / KO / EN / TH)"]
-        Bible[(".novel/bible/bible.yaml")] --> Memory["3-Tier Narrative Memory<br/>(Macro ➔ Meso Arcs ➔ Micro Chapters)"]
-        RAGStore[(".novel/rag/lore.db<br/>SQLite FTS5 + Gemini Embedding 2")] <--> Memory
+        Bible["Novel Bible<br/>.novel/bible/bible.yaml"] --> Memory["3-Tier Narrative Memory<br/>(Macro ➔ Meso Arcs ➔ Micro Chapters)"]
+        RAGStore["SQLite Lore Vault<br/>FTS5 + Gemini Embedding 2"] <--> Memory
     end
 
     subgraph Agent_Pipeline ["2. Five-Stage Agent Pipeline (LangGraph)"]
@@ -272,6 +283,8 @@ NouSetsu provides a full suite of CLI subcommands for headless automation, narra
 | `nousetsu traces` | Inspects, analyzes, and exports agent prompt and output traces | `nousetsu traces -c 48 --show-prompts` |
 | `nousetsu lore` | Searches project Lore Vault using Hybrid RAG + Cross-Encoder | `nousetsu lore "magic sword"` |
 | `nousetsu migrate-rag` | Backfills novel summaries, arcs, and chunks into RAG store | `nousetsu migrate-rag --embed` |
+| `nousetsu import` | Imports and extracts chapters & illustrations from an EPUB or PDF novel file | `nousetsu import -i novel.epub -p project/Douyara` |
+| `nousetsu export` | Compiles translated chapters into EPUB3 or publication-ready PDF | `nousetsu export -p project/Douyara -F Douyara_01 -f pdf` |
 | `nousetsu tui` | Explicitly launches the Textual TUI with path overrides | `nousetsu tui -p project/Douyara` |
 
 ### Batch Translation Options (`nousetsu batch`)
@@ -307,6 +320,42 @@ nousetsu batch [OPTIONS]
 | `--rerank / --no-rerank` | | `True` | Enable/disable Stage 2 Cross-Encoder reranking for RAG |
 | `--filter-extractor / --no-filter-extractor` | | `True` | Enable/disable per-chunk character filtering for Extractor |
 | `--reconcile-terms / --no-reconcile-terms` | | `True` | Enable/disable post-polish term reconciliation in Chronicler |
+
+### Import Options (`nousetsu import`)
+
+```bash
+nousetsu import FILE [OPTIONS]
+```
+
+| Option | Flag | Default | Description |
+| :--- | :---: | :---: | :--- |
+| `file` | | *(Positional)* | Path to source `.epub` or `.pdf` novel file |
+| `--project-dir` | `-p` | `None` | Root folder of novel project |
+| `--folder` | `-F` | `None` | Destination volume subfolder (e.g. `Volume_01` or `raw_chapters`) |
+| `--start` | | `None` | First chapter index to extract |
+| `--end` | | `None` | Last chapter index to extract |
+| `--overwrite` | | `False` | Overwrite existing chapter files in target folder |
+| `--no-images` | | `False` | Skip extracting illustration images to `assets/` |
+
+### Export Options (`nousetsu export`)
+
+```bash
+nousetsu export [OPTIONS]
+```
+
+| Option | Flag | Default | Description |
+| :--- | :---: | :---: | :--- |
+| `--format` | `-f` | `epub` | Output format: `epub`, `pdf` (native binary), or `html` |
+| `--project-dir` | `-p` | `.` | Root folder of novel project |
+| `--folder` | `-F` | `None` | Translated volume folder to compile (auto-resolves active translated folder) |
+| `--output` | `-o` | `None` | Output destination file path (`.epub`, `.pdf`, or `.html`) |
+| `--title` | | `None` | Book title override |
+| `--author` | | `None` | Author name override |
+| `--font` | | `Sarabun` | Font family (`Sarabun`, `Prompt`, `Kanit`, `Noto Serif Thai`, `Chakra Petch`) |
+| `--font-size` | | `16` | Body text font size in points/pixels |
+| `--line-height` | | `1.8` | Line height spacing ratio |
+| `--no-appendix` | | `False` | Do not append Novel Bible characters/glossary appendix |
+| `--no-wrap` | | `False` | Disable Thai zero-width space line breaking |
 
 ---
 
@@ -388,15 +437,17 @@ NouSetsu/
 │   ├── analysis/                   # PromptTracker and token telemetry collection
 │   ├── batch/                      # Chapter scanner, natural sorter, and batch runner
 │   ├── cli/                        # CLI command dispatch & web server
+│   ├── ebook/                      # Dual-format eBook & PDF ingestion and compilation
 │   ├── graph/                      # LangGraph state machine & procedural graph engine
 │   ├── models/                     # Pydantic schemas (bible, metadata, state, trace, config)
 │   ├── prompts/                    # Translation and critique prompt templates
 │   ├── rag/                        # SQLite hybrid search engine, SQLAlchemy ORM, and reranker
+│   ├── scraper/                    # Novel-Scraper bridge, detector, and models
 │   ├── skills/                     # Domain skills registry, loader, and 23 built-in skills
 │   ├── storage/                    # Repository, project registry, and summary migrator
 │   ├── tui/                        # Textual TUI dashboard, reader, and token analytics
 │   └── utils/                      # Utilities (rate limiter, chunker, diff patcher, language detector)
-└── tests/                          # Hermetic test suite (416 tests across 59 modules)
+└── tests/                          # Hermetic test suite (440 tests across 62 modules)
 ```
 
 ---
@@ -411,11 +462,11 @@ uv run --no-sync pytest -q
 ```
 
 ```text
-416 passed, 1 warning in ~35s
+440 passed, 1 warning in ~35s
 ```
 
 * **Hermetic Isolation**: Tests run in isolated temporary directories (`tmp_path`), protecting real novel projects from mutation.
-* **Deterministic Execution**: Zero live LLM calls during tests via `MockNovelLLM`, achieving high-speed execution (<40s for 416 tests across 59 modules).
+* **Deterministic Execution**: Zero live LLM calls during tests via `MockNovelLLM`, achieving high-speed execution (<40s for 440 tests across 62 modules).
 * **Automated Documentation Auditor**: The built-in [`check_doc_drift.py`](file:///D:/Code/novel_translation_Agent/.agents/skills/doc-updater/scripts/check_doc_drift.py) auditor checks all links, AST symbols, line anchors, and CLI flags with `--strict` verification.
 
 ---
@@ -434,6 +485,7 @@ For exhaustive technical analyses, developer guides, and architectural deep dive
 | [**Novel Bible & Memory**](file:///D:/Code/novel_translation_Agent/docs/novel_bible.md) | 3-tier narrative memory, zero-anaphora subject inference, and style guides. |
 | [**Storage & Checkpoints**](file:///D:/Code/novel_translation_Agent/docs/storage_and_checkpoints.md) | Consolidated `.novel/metadata.json`, story arc storage, and paused state resumption. |
 | [**Terminal UI Guide**](file:///D:/Code/novel_translation_Agent/docs/tui_guide.md) | Dual reader, live progress visualizer, Token Analytics dashboard, and keyboard shortcuts. |
+| [**Novel Scraper Guide**](file:///D:/Code/novel_translation_Agent/docs/novel_scraper.md) | Automated webnovel scraping from Syosetu/Kakuyomu, submodule setup, and Web Studio URL import. |
 | [**Developer API Reference**](file:///D:/Code/novel_translation_Agent/docs/api_reference.md) | Class signatures, methods, Pydantic schemas, and extension points. |
 
 ---

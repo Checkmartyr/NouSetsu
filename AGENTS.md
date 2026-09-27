@@ -20,6 +20,7 @@ graph TD
         CLI["CLI Commands<br>(src/nousetsu/cli/app.py)"]
         TUI["Textual TUI App<br>(src/nousetsu/tui/app.py)"]
         WEB["Vite Trace Visualizer<br>(web/, nousetsu web, web_server.py)"]
+        PUB["Publication & Scraper CLI<br>(nousetsu import / export)"]
     end
 
     subgraph "Application Layer"
@@ -27,6 +28,7 @@ graph TD
         CS["ChapterScanner<br>(src/nousetsu/batch/scanner.py)"]
         REPO["NovelRepository<br>(src/nousetsu/storage/repository.py)"]
         ENV["Central .env & Cascade<br>(.env, .env.example)"]
+        SCRAPER["NovelScraperBridge<br>(src/nousetsu/scraper/)"]
     end
 
     subgraph "Orchestration Layer"
@@ -54,9 +56,12 @@ graph TD
         CHAR_FILTER["Scene Character & Glossary Filter<br>(character_filter.py, glossary_filter.py)"]
         GENRE["Genre Detection<br>(src/nousetsu/utils/genre.py)"]
         LANG["Language Detection<br>(src/nousetsu/utils/language.py)"]
+        EBOOK["eBook Ingestion & Compilation<br>(src/nousetsu/ebook/)"]
     end
 
     CLI --> BR
+    PUB --> EBOOK
+    PUB --> SCRAPER
     TUI --> BR
     TUI --> WEB
     CLI --> WEB
@@ -81,6 +86,8 @@ graph TD
     WF --> TOKEN_METRICS
     WF --> GENRE
     WF --> LANG
+    WEB --> EBOOK
+    WEB --> SCRAPER
 ```
 
 ---
@@ -338,6 +345,13 @@ NouSetsu tracks end-to-end token consumption and execution latency per pipeline 
     - Managed via `NovelScraperBridge` with auto-detection of the submodule virtualenv and Python executable.
     - Emits streaming SSE progress events (`scraper_progress`) and writes zero-padded Markdown files (`0001 - Title.md`) directly into `raw_chapters/` or Volume subfolders with automatic cache invalidation.
     - Dual-tab `UploadModal.tsx` in Web Studio allowing users to switch seamlessly between local file drag-and-drop and URL extraction with interactive chapter preview, range filtering, and custom selection.
+25. **Dual-Format eBook Ingestion & Compilation Engine (`nousetsu import` & `nousetsu export`)**:
+    - Complete EPUB3 and PDF ingestion via [`EbookReader`](file:///D:/Code/novel_translation_Agent/src/nousetsu/ebook/reader.py) with automated volume detection, chapter extraction, and embedded image extraction (`--no-images`).
+    - Native publication compilation to EPUB3 (`Epub3Writer`) and PDF ([`PdfWriter`](file:///D:/Code/novel_translation_Agent/src/nousetsu/ebook/writer.py) via `pymupdf.DocumentWriter` + `pymupdf.Story`) with custom fonts, margins, page breaks, and centered bottom page numbering (`- {page} -`).
+    - Advanced Thai typography and word wrapping engine ([`src/nousetsu/ebook/typography.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/ebook/typography.py)) using PyThaiNLP zero-width space (`\u200b`) boundary insertion to prevent abrupt syllable clipping across line breaks.
+    - Embedded Thai Google Fonts (`Sarabun`, `Prompt`, `Kanit`, `Noto Serif Thai`, `Chakra Petch`).
+    - Live Web Publication Studio Preview modal (`ExportBookModal.tsx`) with real-time typography adjustments (font family, font size `12px`–`26px`, line spacing `1.5x`–`2.0x`), interactive Table of Contents, click-to-preview chapter reader view, and direct download.
+    - Automatic translated folder default resolution (`_resolve_export_output_dir`) auto-selecting active volume's translated directory (`<volume>_th`) with live translated chapter counts.
 
 
 ---
@@ -353,10 +367,12 @@ uv sync
 # Query CLI version
 uv run nousetsu --version
 
-# Run complete test suite (416 tests across 59 modules in ~45s)
+# Run complete test suite (440 tests across 62 modules in ~45s)
 uv run pytest
 
 # Run specific test modules
+uv run pytest tests/test_ebook_engine.py
+uv run pytest tests/test_scraper_bridge.py
 uv run pytest tests/test_bible_sanitizer.py
 uv run pytest tests/test_structured_output.py
 uv run pytest tests/test_critic_parsing.py
@@ -429,6 +445,14 @@ uv run nousetsu batch -p project/Villainess -F Villainess_05 --chapter 48
 # Inspect registered domain skills
 uv run nousetsu skills
 uv run nousetsu skills --agent drafter --genre general
+
+# Import and extract chapters and illustrations from EPUB or PDF
+uv run nousetsu import -p project/Villainess -i novel.epub
+uv run nousetsu import -p project/Villainess -i novel.pdf --start 1 --end 20
+
+# Compile translated chapters into publication-ready PDF or EPUB3
+uv run nousetsu export -p project/Villainess -F Villainess_05 -f pdf --font "Sarabun" --font-size 16
+uv run nousetsu export -p project/Villainess -F Villainess_05 -f epub --title "The Villainess Vol 5"
 ```
 
 ---

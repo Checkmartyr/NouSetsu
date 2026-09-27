@@ -763,3 +763,130 @@ def migrate_novel_summaries(
 * **`ChapterMetadata` (`src/nousetsu/models/metadata.py`)**: Chapter metadata record with paired `CheckpointData`, `QualityAudit`, and `TranslationStats` (including cumulative tokens, `duration_seconds`, and granular `step_usage`).
 * **`CheckpointData` (`src/nousetsu/models/metadata.py`)**: Stage tracking with `status` (`PENDING`, `IN_PROGRESS`, `PAUSED`, `COMPLETED`, `FAILED`), `stage_artifacts`, and `error_logs`.
 * **`StageArtifacts` (`src/nousetsu/models/metadata.py`)**: Intermediate outputs (`extracted_characters`, `extracted_terms`, `draft_text`, `critique_notes`, `polished_text`).
+
+---
+
+## 📚 eBook & PDF Publication Engine (`src/nousetsu/ebook/`)
+
+### `EbookReader` (`src/nousetsu/ebook/reader.py`)
+Dispatches EPUB and PDF readers to extract chapter text files and illustrations.
+
+```python
+class EbookReader:
+    @classmethod
+    def from_file(cls, file_path: str | Path) -> "EbookReader":
+        """Instantiates either EpubReader or PdfReader based on file extension."""
+        ...
+        
+    def get_metadata(self) -> EbookMetadata:
+        """Extracts book title, author, language, and chapter count."""
+        ...
+        
+    def get_chapters(self) -> List[EbookChapter]:
+        """Extracts all chapter texts, headers, and relative paths."""
+        ...
+
+def inspect_ebook(file_path: str | Path) -> EbookInspectResult:
+    """Inspects an eBook file and returns summary metadata with Table of Contents."""
+    ...
+
+def extract_ebook_to_directory(
+    file_path: str | Path,
+    output_dir: str | Path,
+    start_chapter: Optional[int] = None,
+    end_chapter: Optional[int] = None,
+    overwrite: bool = False,
+    extract_images: bool = True,
+) -> int:
+    """Extracts chapters into zero-padded text files and dumps illustrations to assets/."""
+    ...
+```
+
+---
+
+### `EbookWriter` (`src/nousetsu/ebook/writer.py`)
+Compiles translated novel chapters into EPUB3 or in-memory native PDF documents.
+
+```python
+def compile_project_to_ebook(
+    repo: NovelRepository,
+    options: EbookExportOptions,
+) -> Tuple[bytes, str, str]:
+    """
+    Compiles translated chapters into eBook binary or HTML stream.
+    Returns: (content_bytes, filename, mime_type)
+    Where mime_type is 'application/epub+zip', 'application/pdf', or 'text/html'.
+    """
+    ...
+
+def preview_project_ebook(
+    repo: NovelRepository,
+    options: EbookExportOptions,
+    preview_chapter_index: int = 1,
+) -> EbookPreviewResult:
+    """Generates preview metadata, Table of Contents, and styled HTML for live Web Studio inspection."""
+    ...
+
+class Epub3Writer:
+    def write(self, chapters: List[EbookChapter], metadata: EbookMetadata, output_path: Optional[Path] = None) -> bytes: ...
+
+class PdfWriter:
+    def write(self, chapters: List[EbookChapter], metadata: EbookMetadata, output_path: Optional[Path] = None) -> bytes:
+        """Builds native PDF using pymupdf.DocumentWriter and pymupdf.Story with bottom page numbers."""
+        ...
+```
+
+---
+
+### Typography & Thai Word Wrapping (`src/nousetsu/ebook/typography.py`)
+
+```python
+def has_thai_text(text: str) -> bool:
+    """Returns True if the text contains Thai unicode characters."""
+    ...
+
+def wrap_thai_paragraph(paragraph: str) -> str:
+    """Inserts zero-width space characters (\\u200b) between Thai words via pythainlp."""
+    ...
+
+def wrap_thai_text(text: str) -> str:
+    """Wraps lines across all paragraphs preserving markdown syntax."""
+    ...
+
+def get_book_stylesheet(
+    language: str = "English",
+    font_family: str = "Sarabun",
+    font_size: int = 16,
+    line_height: float = 1.8,
+) -> str:
+    """Generates CSS stylesheet with embedded Thai Google Fonts and @page margins."""
+    ...
+```
+
+---
+
+## 🌐 Web Novel Scraper Subsystem (`src/nousetsu/scraper/`)
+
+### `NovelScraperBridge` (`src/nousetsu/scraper/bridge.py`)
+Subprocess bridge to the `modules/novel_scraper` repository.
+
+```python
+class NovelScraperBridge:
+    def get_info(self) -> ScraperStatusResponse:
+        """Returns availability status, detected Python path, and supported platforms."""
+        ...
+        
+    def inspect_url(self, url: str) -> ScraperInspectResponse:
+        """Fetches remote TOC, novel title, author, and chapter list from webnovel URL."""
+        ...
+        
+    def extract_chapters(
+        self,
+        url: str,
+        output_dir: str | Path,
+        start_chapter: Optional[int] = None,
+        end_chapter: Optional[int] = None,
+    ) -> Any:
+        """Batch extracts online chapters into target directory."""
+        ...
+```

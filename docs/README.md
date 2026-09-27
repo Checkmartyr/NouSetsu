@@ -17,6 +17,7 @@ Welcome to the **NouSetsu** (濃説 / 脳説) technical documentation. This dire
 | **Storage & Checkpoints** | [**`storage_and_checkpoints.md`**](./storage_and_checkpoints.md) | Single project metadata document (`.novel/metadata.json`), story arc summaries (`.novel/summaries/arcs/`), prompt trace archive (`.novel/traces/`), Hybrid RAG database (`.novel/rag/lore.db`), summary migration engine, step duration tracking, paused checkpoint state machine (`PAUSED`), and SHA-256 integrity. |
 | **Hybrid Search RAG** | [**`hybrid_rag.md`**](./hybrid_rag.md) | In-depth architecture & workflow guide for LoreVault: SQLite FTS5 (BM25), Gemini Embedding 2 (3072-dim), Reciprocal Rank Fusion ($k=60$), LLM Cross-Encoder reranking, and bi-directional pipeline integration. |
 | **Terminal UI (TUI) Guide** | [**`tui_guide.md`**](./tui_guide.md) | Minimal Textual interface, bottom 2-row toolbar, active chapter progress label, Dual Reader inspection, Token Analytics dashboard (`M`), Web Traces hotkey (`W`), Volume Switcher modal (`F`), Stop button (`X`), and Bible editor. |
+| **Novel Scraper Integration** | [**`novel_scraper.md`**](./novel_scraper.md) | Architecture, submodule setup, supported web novel portals (Syosetu, Kakuyomu), title romanization, and Web Studio New Project URL import workflow. |
 | **Developer API Reference** | [**`api_reference.md`**](./api_reference.md) | Python API reference for agents, FallbackChatModel, LineSemanticChunker, workflow graph, rate limiter, ArcSummary, NovelBible hierarchy methods, summary migration, DiffPatcher, PromptTracker, HybridSearchEngine, and Pydantic models. |
 
 ---
@@ -28,12 +29,14 @@ Welcome to the **NouSetsu** (濃説 / 脳説) technical documentation. This dire
 * Deep-dive into each agent's cognitive role, zero-anaphora resolution, and translationese elimination: [**Agents Deep Dive**](./agents_deep_dive.md).
 * Master the interactive terminal reader, token analytics, stop controls, and Bible editor: [**TUI User Guide**](./tui_guide.md).
 * Customize character voices, honorifics, and style guides: [**Novel Bible Guide**](./novel_bible.md).
+* Scrape and import online web novels from Syosetu, Kakuyomu, and URL sources: [**Novel Scraper Guide**](./novel_scraper.md).
 
 ### 🛠️ For AI Developers & Contributors
 * Master the prompt engineering, chunking flow, and safety guards of all 5 agents: [**Agents Deep Dive**](./agents_deep_dive.md).
 * Understand the decoupled modular architecture, rate limiting, and LangGraph wiring: [**System Architecture**](./architecture.md).
 * Explore the checkpointing schema, 3-tier arc storage, prompt traces, and error logging: [**Storage & Checkpoints**](./storage_and_checkpoints.md).
 * Deep dive into the two-stage retrieval, FTS5 BM25, Gemini embeddings, and Cross-Encoder reranking: [**Hybrid Search RAG**](./hybrid_rag.md).
+* Inspect scraper bridge, subprocess execution, and title romanization: [**Novel Scraper Architecture**](./novel_scraper.md).
 * Review classes, methods, rate limiters, migration engine, and agent contracts: [**API Reference**](./api_reference.md).
 
 ---
