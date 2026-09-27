@@ -209,23 +209,45 @@ flowchart TD
 
 ## 🚀 Quick Start
 
-### 1. Installation
-Install NouSetsu using `uv` (recommended for fast virtual environment management) or standard `pip`:
+### 1. Install `uv` and NouSetsu
+
+`uv` installs Python versions, manages the project virtual environment, and installs dependencies from `uv.lock`. NouSetsu requires Python 3.13 or newer.
+
+#### Install `uv`
+
+On Windows, run this in PowerShell:
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+On macOS or Linux, run this in a shell:
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+Restart your terminal if needed, then verify that `uv` is on your `PATH`:
+```bash
+uv --version
+```
+
+#### Clone and install NouSetsu
 
 ```bash
-# Clone the repository (including submodules for webnovel scraping)
+# Clone the repository, including the scraper submodule
 git clone --recurse-submodules https://github.com/Checkmartyr/NouSetsu.git
 cd NouSetsu
 
-# If already cloned without submodules, initialize them:
-git submodule update --init --recursive
+# Install Python 3.13 using uv (skip if a compatible Python is already available)
+uv python install 3.13
 
-# Install in editable mode with uv (recommended)
-uv pip install -e .
+# Create the project environment and install locked dependencies
+uv sync
 
-# Or install with standard pip
-pip install -e .
+# Verify the CLI installation
+uv run nousetsu --version
 ```
+
+If you already cloned the repository without its submodules, initialize them with `git submodule update --init --recursive` before using the scraper.
 
 ### 2. Alternative: Run with Docker Compose
 If you prefer running in a containerized environment without installing Python 3.13 or Node.js on the host:
