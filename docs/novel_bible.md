@@ -260,3 +260,16 @@ NouSetsu integrates an automated, zero-daemon integrity audit engine ([`src/nous
 1. **Script Validation**: Tests character names, aliases, and glossary terms using Unicode script analysis (`is_translation_language_valid`) to ensure target terms conform to the configured target language.
 2. **Inverted Field Repair**: Detects reversed source/target pairs (e.g. source language text stored in the translated field and target language text in the original field) and swaps them into canonical position.
 3. **Corrupted Entry Pruning**: Drops empty, un-translated, or duplicate entries and cleans duplicate aliases from character cards, keeping `bible.yaml` clean and reliable.
+
+---
+
+## 🖥️ Interactive Web Bible Management
+
+You can inspect, search, and manage your novel's characters, relationships, and canonical glossary directly inside the **Web Studio** (`nousetsu web`):
+
+![NouSetsu Web Studio Novel Bible](images/web_studio_bible_demo.png)
+
+- **Searchable Character Cards**: View romanized names, original script, aliases, and vocal register directives.
+- **Obsidian-Style Relationship Graph**: Visualize character dynamics and faction affiliations powered by D3 force layout.
+- **Canonical Glossary Management**: Fast search and category filtering for items, techniques, locations, and titles.
+- **3-Tier Narrative Memory Tab**: Inspect macro story premise, active story arc milestones, and volume-scoped chapter summaries.

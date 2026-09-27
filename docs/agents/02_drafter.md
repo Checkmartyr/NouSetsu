@@ -139,7 +139,7 @@ Commercial AI safety filters frequently trigger HTTP 400 `prohibited_content` bl
    - If the polisher is also blocked, safely retains raw Google Translate text and increments `safety_fallbacks_used`.
 
 ### D. Sliding Context Chunking
-For chapters exceeding `chunk_threshold_lines` (default: 85 lines), chunks are drafted sequentially. The last 300 words of chunk $N$'s draft are passed as `preceding_context` into chunk $N+1$, ensuring dialogue flow and sentence continuity across chunk boundaries.
+For chapters exceeding `chunk_threshold_lines` (default: 800 lines), chunks are drafted sequentially. The last 300 words of chunk $N$'s draft are passed as `preceding_context` into chunk $N+1$, ensuring dialogue flow and sentence continuity across chunk boundaries.
 
 ### E. Per-Scene Character Roster Filtering
 In long novels with 50+ character cards, passing every profile to every chunk wastes prompt tokens and confuses zero-anaphora resolution. The Drafter uses [`filter_characters_for_scene`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/character_filter.py):

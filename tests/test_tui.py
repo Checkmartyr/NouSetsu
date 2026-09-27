@@ -71,7 +71,7 @@ async def test_tui_settings_modal(tmp_path: Path):
         inp_model = settings_screen.query_one("#set_model", Input)
         inp_model.value = "gemini-custom-test"
         inp_chunk_thresh = settings_screen.query_one("#set_chunk_threshold_lines", Input)
-        inp_chunk_thresh.value = "85"
+        inp_chunk_thresh.value = "800"
 
         # Click save button via pilot
         btn_save = settings_screen.query_one("#btn_save_settings", Button)
@@ -84,13 +84,13 @@ async def test_tui_settings_modal(tmp_path: Path):
         # Verify app and runner state updated
         assert app.model_name == "gemini-custom-test"
         assert app.runner.model_name == "gemini-custom-test"
-        assert app.runner.workflow.chunker.threshold_lines == 85
+        assert app.runner.workflow.chunker.threshold_lines == 800
 
         # Verify config was persisted to disk with all fields
         persisted_cfg = app.repo.load_config()
         assert persisted_cfg.title == "Ascendance of a Bookworm"
         assert persisted_cfg.model_name == "gemini-custom-test"
-        assert persisted_cfg.chunk_threshold_lines == 85
+        assert persisted_cfg.chunk_threshold_lines == 800
 
         # Verify bible.yaml was also synchronized with title
         persisted_bible = app.repo.load_bible()
@@ -102,7 +102,7 @@ async def test_tui_settings_modal(tmp_path: Path):
         assert isinstance(app.screen, SettingsModal)
         assert app.screen.query_one("#set_title", Input).value == "Ascendance of a Bookworm"
         assert app.screen.query_one("#set_model", Input).value == "gemini-custom-test"
-        assert app.screen.query_one("#set_chunk_threshold_lines", Input).value == "85"
+        assert app.screen.query_one("#set_chunk_threshold_lines", Input).value == "800"
 
         btn_close = app.screen.query_one("#btn_close_settings", Button)
         await pilot.click(btn_close)

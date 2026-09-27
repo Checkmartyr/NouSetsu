@@ -147,8 +147,8 @@ class BatchRunner:
 
         # Chunking configuration
         resolved_chunking = enable_chunking if enable_chunking is not None else getattr(cfg, "enable_chunking", True)
-        resolved_chunk_thresh = chunk_threshold_lines or getattr(cfg, "chunk_threshold_lines", 85)
-        resolved_target_lines = target_chunk_lines or getattr(cfg, "target_chunk_lines", 70)
+        resolved_chunk_thresh = chunk_threshold_lines or getattr(cfg, "chunk_threshold_lines", 800)
+        resolved_target_lines = target_chunk_lines or getattr(cfg, "target_chunk_lines", 400)
         resolved_overlap_lines = chunk_overlap_lines or getattr(cfg, "chunk_overlap_lines", 3)
 
         resolved_rag = enable_rag if enable_rag is not None else getattr(cfg, "enable_rag", True)

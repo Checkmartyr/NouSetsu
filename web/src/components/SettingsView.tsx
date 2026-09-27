@@ -946,8 +946,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       <input
                         type="number"
                         min={1}
-                        placeholder="85"
-                        value={settings.chunk_threshold_lines === '' ? '' : (settings.chunk_threshold_lines ?? 85)}
+                        placeholder="800"
+                        value={settings.chunk_threshold_lines === '' ? '' : (settings.chunk_threshold_lines ?? 800)}
                         onChange={(e) => {
                           const val = e.target.value;
                           setSettings({
@@ -961,7 +961,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                             settings.chunk_threshold_lines === undefined ||
                             isNaN(Number(settings.chunk_threshold_lines))
                           ) {
-                            setSettings({ ...settings, chunk_threshold_lines: 85 });
+                            setSettings({ ...settings, chunk_threshold_lines: 800 });
                           }
                         }}
                         className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
@@ -974,8 +974,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       <input
                         type="number"
                         min={1}
-                        placeholder="70"
-                        value={settings.chunk_size_lines === '' ? '' : (settings.chunk_size_lines ?? 70)}
+                        placeholder="400"
+                        value={settings.chunk_size_lines === '' ? '' : (settings.chunk_size_lines ?? 400)}
                         onChange={(e) => {
                           const val = e.target.value;
                           setSettings({
@@ -989,7 +989,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                             settings.chunk_size_lines === undefined ||
                             isNaN(Number(settings.chunk_size_lines))
                           ) {
-                            setSettings({ ...settings, chunk_size_lines: 70 });
+                            setSettings({ ...settings, chunk_size_lines: 400 });
                           }
                         }}
                         className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"

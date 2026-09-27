@@ -48,7 +48,7 @@ graph TD
         RL["SlidingWindowRateLimiter<br>(32,000 TPM / 60 RPM)"]
         FALLBACK["FallbackChatModel<br>(Per-Role Routing & 429 Guard)"]
         INTERACTIONS["Gemini Interactions API<br>(/v1beta/interactions)"]
-        CHUNKER["LineSemanticChunker<br>(85-line Threshold)"]
+        CHUNKER["LineSemanticChunker<br>(800-line Threshold)"]
         PATCH["DiffPatcher Engine<br>(src/nousetsu/utils/diff_patcher.py)"]
         TOKEN_METRICS["Token & Duration Metrics<br>(src/nousetsu/analysis/token_metrics.py)"]
         TRACKER["PromptTracker & Traces<br>(src/nousetsu/analysis/tracker.py)"]
@@ -257,7 +257,7 @@ NouSetsu tracks end-to-end token consumption and execution latency per pipeline 
    - Upstream HTTP 429 or `RESOURCE_EXHAUSTED` errors trigger `FallbackChatModel` failover from primary model (e.g. `gemini-3.1-flash-lite`) to designated fallback model (e.g. `gemini-3.5-flash-lite`).
    - Sleep intervals between 25s and 65s allow quota windows to rollover gracefully.
 5. **Line-Based Semantic Chunking** ([`src/nousetsu/utils/chunker.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/chunker.py)):
-   - Chapters exceeding `chunk_threshold_lines` (default: 85 lines) are partitioned into ~70-line semantic chunks with 3-line overlap.
+   - Chapters exceeding `chunk_threshold_lines` (default: 800 lines) are partitioned into ~400-line semantic chunks with 3-line overlap.
    - Drafter and Polisher process chunks sequentially with running context, preventing token truncation.
 6. **Thread-Safe Cancellation**:
    - Supported via `threading.Event` across all worker threads.

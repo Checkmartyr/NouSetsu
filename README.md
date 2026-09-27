@@ -11,6 +11,17 @@
 [![Tests: 440 Passed](https://img.shields.io/badge/tests-440%20passed-brightgreen.svg)](tests/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
+<p align="center">
+  <img src="docs/images/web_studio_dashboard_demo.png" alt="NouSetsu Modern Web Studio & Batch Dashboard" width="100%">
+</p>
+
+<p align="center">
+  <strong>NouSetsu Modern Web Studio (React 19 + Vite)</strong>: High-performance browser environment featuring automated batch translation, volume folder switching, live streaming SSE execution logs, forensic prompt &amp; thought trace auditing, side-by-side diff comparison, and distraction-free literary reading.
+  <br>
+  <code>nousetsu web</code> &bull; <em>Default: http://localhost:5173</em> &bull; 
+  <a href="#modern-web-studio--trace-visualizer-react-19--vite">Explore Full Web Studio Capabilities &rarr;</a>
+</p>
+
 ---
 
 ## 📑 Table of Contents
@@ -103,7 +114,7 @@ NouSetsu encodes procedural execution rules as explicit attributed graphs $G = (
 ### 6. ⚡ Enterprise Quota Throttling & Per-Role Routing
 * **Sliding-Window Rate Limiter**: Proactively enforces a rolling 60-second window across **32,000 TPM** and **60 RPM** with offline CJK/Latin token estimation.
 * **Per-Role Model Routing & Failover**: Assign specialized models to each agent role (`extractor_model`, `drafter_model`, `critic_model`, `polisher_model`, `chronicler_model`). Any upstream HTTP 429 quota exhaustion triggers instant failover to `fallback_model` (`gemini-3.5-flash-lite`) via `FallbackChatModel` with 25s–65s window rollover cooldowns.
-* **Line-Based Semantic Chunking**: Chapters exceeding 85 lines are intelligently partitioned into ~70-line semantic chunks with 3-line boundary overlap, eliminating 32k TPM window freezes.
+* **Line-Based Semantic Chunking**: Chapters exceeding 800 lines are intelligently partitioned into ~400-line semantic chunks with 3-line boundary overlap, eliminating 32k TPM window freezes.
 
 ### 7. 📊 Diff / Patch Polishing Engine & Title Preservation
 * **Diff / Patch Polishing**: Generates targeted search/replace block patches (`PATCH_POLISHING_SYSTEM_PROMPT`) via [`apply_search_replace_patches`](file:///D:/Code/novel_translation_Agent/src/nousetsu/utils/diff_patcher.py) rather than re-generating whole chapters from scratch, dramatically reducing polisher token consumption.
@@ -232,18 +243,70 @@ docker compose run --rm nousetsu batch --project-dir Douyara -c 48
 ```
 
 ### 3. Configure Environment & API Keys
-Copy the documented environment template and configure your API keys:
 
+NouSetsu uses a decoupled configuration system: project metadata resides in `.novel/config.yaml`, while machine-level API credentials and model routing reside in your central `.env` file.
+
+#### Step 1: Copy Configuration Template
+Copy the documented template into your project root:
 ```bash
-# Copy template to central .env
 cp .env.example .env
-
-# Configure your primary Gemini API key in .env
-# GEMINI_API_KEY="your-google-gemini-api-key"
 ```
 
-> [!NOTE]
-> If no API key is supplied, NouSetsu automatically operates with a deterministic offline mock model (`mock-novel-llm`), enabling testing of UI navigation, batch scanning, and checkpoint resumption without consuming API tokens.
+#### Step 2: API Keys & Authentication
+Configure your primary Gemini API key in `.env`:
+```ini
+GEMINI_API_KEY=your_gemini_api_key_here
+```
+> [!TIP]
+> Obtain a free or pay-as-you-go key from [Google AI Studio](https://aistudio.google.com/). You can also export keys directly in your terminal environment:
+> ```bash
+> # Windows PowerShell
+> $env:GEMINI_API_KEY = "AIzaSy..."
+> 
+> # Linux / macOS Bash
+> export GEMINI_API_KEY="AIzaSy..."
+> ```
+> Optional third-party provider keys (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`) can also be defined if using compatible custom routing.
+
+#### Step 3: Multi-Agent Model Routing & Precedence Cascade
+NouSetsu resolves LLM models via a strict **4-tier precedence hierarchy**:
+1. **CLI Flag / Constructor Argument**: Explicit runtime override (e.g. `--model`, `--critic-model`).
+2. **Project Config**: Project-specific override in `.novel/config.yaml` (`cfg.model_name` or `cfg.<agent>_model`).
+3. **Central `.env` Variable**: Machine-level routing (`NOVEL_MODEL`, `NOVEL_CRITIC_MODEL`, etc.).
+4. **Built-in Safe Fallback**: Default production model (`gemini-3.1-flash-lite`, `gemma-4-26b-a4b-it`).
+
+Each pipeline agent can be routed to an independent model tailored to its cognitive responsibility:
+
+| Agent Stage | Environment Variable | Default Model | Cognitive Responsibility |
+| :--- | :--- | :--- | :--- |
+| **Stage 1: Entity Extractor** | `NOVEL_EXTRACTOR_MODEL` | `gemini-3.1-flash-lite` | Entity discovery, character profiles, cultivation ranks |
+| **Stage 2: Context-Aware Drafter** | `NOVEL_DRAFTER_MODEL` | `gemini-3.5-flash-lite` | Zero-anaphora pronoun resolution, dialogue registers |
+| **Stage 3: Critique Agent** | `NOVEL_CRITIC_MODEL` | `gemini-3.5-flash-lite` | Fidelity and style evaluation (0–10 scoring), omission audit |
+| **Stage 4: Polishing Agent** | `NOVEL_POLISHER_MODEL` | `gemini-3.1-flash-lite` | Diff/patch cadence refinement, translationese purging |
+| **Stage 5: Chronicler Agent** | `NOVEL_CHRONICLER_MODEL` | `gemini-3.5-flash-lite` | 3-tier story arc memory, state shifts, term reconciliation |
+| **Global Primary Fallback** | `NOVEL_MODEL` / `DEFAULT_MODEL` | `gemini-3.1-flash-lite` | Default model when stage is not specialized |
+| **Automated 429 Failover** | `NOVEL_FALLBACK_MODEL` | `gemini-3.5-flash-lite` | Activated automatically upon HTTP 429 quota exhaustion |
+
+#### Step 4: Execution, Rate Limiting & Reasoning Tuning
+Tune performance, rate quotas, and model reasoning parameters in `.env`:
+
+| Variable | Default | Description |
+| :--- | :---: | :--- |
+| `NOVEL_MAX_TPM` | `32000` | Tokens-per-minute rate limit window guard |
+| `NOVEL_MAX_RPM` | `60` | Requests-per-minute rate limit window guard |
+| `NOVEL_USE_INTERACTIONS` | `1` | Use Gemini Interactions API (`/v1beta/interactions`) for streaming thoughts |
+| `NOVEL_TEMPERATURE` | `1.0` | Sampling temperature for creative and fluent prose drafting/polishing |
+| `NOVEL_MAX_REVIEW_LOOPS` | `3` | Maximum reflection review passes between Critic and Polisher (bounds: 1–5) |
+| `NOVEL_QUALITY_THRESHOLD` | `8.5` | Quality score threshold (both fidelity & style $\ge 8.5$) triggering early exit |
+| `NOVEL_FILTER_EXTRACTOR_ENTITIES` | `true` | Filter known characters and terms per chunk in Entity Extractor |
+| `NOVEL_THINKING_LEVEL` | `medium` | Gemini reasoning level (`minimal`, `low`, `medium`, `high`, `off`) |
+| `NOVEL_THINKING_BUDGET` | `2048` | Optional maximum thinking token budget for reasoning models |
+| `NOVEL_PROJECTS_DIR` | `project` | Default directory where novel projects are stored |
+| `NOVEL_SCRAPER_PATH` | *(Auto)* | Optional path override for `modules/novel_scraper` submodule |
+| `NOVEL_SCRAPER_PYTHON` | *(Auto)* | Optional Python interpreter override for web novel scraping |
+
+#### Step 5: Zero-Token Offline Mock Testing
+If no `GEMINI_API_KEY` is provided (or when using models prefixed with `"mock"` / `"test"`), NouSetsu automatically operates with a deterministic offline mock model (`mock-novel-llm`). This enables full testing of TUI navigation, project creation, batch scanning, and checkpoint resumption without consuming API tokens or requiring an internet connection.
 
 ### 4. Launching NouSetsu
 Launch the interactive Terminal User Interface (TUI):
@@ -315,7 +378,7 @@ nousetsu batch [OPTIONS]
 | `--max-tpm` | | `32000` | Rate limiter tokens-per-minute quota |
 | `--max-rpm` | | `60` | Rate limiter requests-per-minute quota |
 | `--chunking / --no-chunking` | | `True` | Enable/disable line-based semantic chunking for long chapters |
-| `--chunk-threshold-lines` | | `85` | Line threshold to trigger semantic chunking |
+| `--chunk-threshold-lines` | | `800` | Line threshold to trigger semantic chunking |
 | `--rag / --no-rag` | | `True` | Enable/disable hybrid search episodic lore retrieval |
 | `--rerank / --no-rerank` | | `True` | Enable/disable Stage 2 Cross-Encoder reranking for RAG |
 | `--filter-extractor / --no-filter-extractor` | | `True` | Enable/disable per-chunk character filtering for Extractor |
@@ -394,6 +457,23 @@ nousetsu export [OPTIONS]
 | `S` | **Settings** | Configure LLM models, rate limits, and chunking parameters |
 | `R` | **Refresh** | Re-scan chapter files and reload status badges |
 | `Q` | **Quit** | Exit the TUI application |
+
+### Modern Web Studio & Trace Visualizer (React 19 + Vite)
+
+NouSetsu includes an embedded, high-performance web studio (`nousetsu web`) for batch queue control, forensic inspection of pipeline executions, real-time agent thought auditing, translation diff analysis, and token telemetry:
+
+<p align="center">
+  <img src="docs/images/web_studio_dashboard_demo.png" alt="NouSetsu Web Studio Dashboard" width="100%">
+</p>
+
+* **Studio & Batch Control**: Volume folder switcher, real-time chapter queue status badges, single/batch translation triggers, and live streaming SSE execution logs.
+* **Forensic Trace Inspection**: Audit exact system prompts, dynamic context injections, and raw LLM completions across all 5 stages (`EXTRACTION` ➔ `DRAFTING` ➔ `CRITIQUE` ➔ `POLISHING` ➔ `CHRONICLING`).
+* **Side-by-Side Diff Comparison**: Visually inspect line-by-line evolutions from initial draft through multi-pass polishing with unified color-coded diffs.
+* **Immersive Reader**: Distraction-free reading interface with typography controls, themes (Dark, Sepia, Light), and side-by-side original source peek.
+* **Novel Bible & Roster**: Interactive character sheets with romanized aliases, vocal registers, relationships, and canonical glossary.
+* **Settings & Model Routing**: 5-agent LLM cascade selection (`gemini-3.1-flash-lite`, `gemini-3.5-flash-lite`, `gemma-4-26b-a4b-it`), rate limiters (32K TPM / 60 RPM), and chunking thresholds.
+* **Live Publication Studio**: Preview and customize typography with real-time EPUB3/PDF compilation before downloading.
+* **Zero-Configuration Launch**: Launch directly via CLI (`nousetsu web`) or press `W` from inside the TUI application.
 
 ---
 

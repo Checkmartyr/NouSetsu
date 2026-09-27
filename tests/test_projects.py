@@ -22,7 +22,9 @@ def test_project_config_defaults(tmp_path: Path):
     assert cfg.get_model_name() is not None
     assert cfg.get_agent_model("extractor") is not None
     assert cfg.max_tpm == 32000
-    assert cfg.chunk_threshold_lines == 85
+    assert cfg.chunk_threshold_lines == 800
+    assert cfg.target_chunk_lines == 400
+    assert cfg.chunk_overlap_lines == 3
     assert cfg.raw_dir == "raw_chapters"
     assert cfg.output_dir == "translated_chapters"
     assert cfg.get_raw_path(tmp_path) == (tmp_path / "raw_chapters").resolve()

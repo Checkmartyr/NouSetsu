@@ -38,8 +38,8 @@ class LineSemanticChunker:
 
     def __init__(
         self,
-        threshold_lines: int = 100,
-        target_chunk_lines: int = 70,
+        threshold_lines: int = 800,
+        target_chunk_lines: int = 400,
         overlap_lines: int = 3,
         boundary_window: int = 12
     ):

@@ -170,6 +170,56 @@ If you have an active novel project, it loads immediately. If you are in a new o
 4. **Translate Entire Novel**: Press `B` to translate all chapters sequentially.
 5. **Interrupt Safely**: If you need to stop, press `X` or click **Stop Translation**. The current chapter is immediately saved with status `[PAUSED:STAGE]`. When you restart or press `T`, it resumes exactly where it stopped without repeating completed stages!
 
+### 🌐 Web Studio & Trace Visualizer (React 19 + Vite)
+
+For visual inspection, web novel scraping, and interactive publishing, NouSetsu provides an integrated **Web Studio** built with React 19 and Vite.
+
+#### Launching the Web Studio
+From your terminal, execute:
+```bash
+# Launch on default port (http://localhost:5173)
+nousetsu web
+
+# Or bind to custom host and port
+nousetsu web --host 0.0.0.0 --port 5173
+```
+*(You can also press `W` from within the running Textual TUI application to open the Web Studio automatically!)*
+
+#### 1. Studio & Batch Translation Dashboard
+Inspect real-time chapter queue progress, switch volume folders, trigger single or batch translations, and monitor live streaming SSE execution logs:
+
+![NouSetsu Web Studio Dashboard View](images/web_studio_dashboard_demo.png)
+
+#### 2. Distraction-Free Novel Reader
+Read translated literary prose with custom font sizes, background themes (Dark, Sepia, Light), and an instant side-by-side peek to the raw source text:
+
+![NouSetsu Web Studio Reader View](images/web_studio_reader_demo.png)
+
+#### 3. Interactive Novel Bible & Character Sheets
+Manage the project's living lore repository with searchable character cards, romanized naming aliases, speech registers, and canonical terms:
+
+![NouSetsu Web Studio Novel Bible View](images/web_studio_bible_demo.png)
+
+#### 4. Forensic Pipeline Traces & Agent Thought Auditing
+Inspect raw model prompts, dynamic system instructions, and real-time completions across each stage and reflection review pass:
+
+![NouSetsu Web Studio Traces View](images/web_studio_traces_demo.png)
+
+#### 5. Side-by-Side Diff Comparison
+Track how the Polishing Agent refines prose cadence, fixes dropped chapter headers, and eliminates translationese between draft and polished versions:
+
+![NouSetsu Web Studio Diff Comparison](images/web_studio_diff_demo.png)
+
+#### 6. Granular Token & Latency Analytics
+Inspect real-time token utilization (input, output, thought, cached) and elapsed duration broken down by stage and LLM model:
+
+![NouSetsu Web Studio Token Analytics](images/web_studio_tokens_demo.png)
+
+#### 7. Categorical Settings & Model Routing
+Configure primary and fallback LLM models for each pipeline agent, tune 32K TPM / 60 RPM rate limits, and customize semantic chunking thresholds:
+
+![NouSetsu Web Studio Settings View](images/web_studio_settings_demo.png)
+
 ---
 
 ## ⚡ 4. Headless CLI & Batch Automation
@@ -282,8 +332,8 @@ nousetsu scan [OPTIONS]
 | `--rerank / --no-rerank` | | True | Enable or disable LLM Cross-Encoder reranking of RAG candidates |
 | `--interactions / --no-interactions` | | True | Enable or disable Gemini Interactions API (`/v1beta/interactions`) with fallback |
 | `--chunking / --no-chunking` | | True | Enable or disable line-based semantic chunking for long chapters |
-| `--chunk-threshold-lines` | | `85` | Minimum non-empty lines to trigger chunked translation |
-| `--target-chunk-lines` | | `70` | Target line count per chunk |
+| `--chunk-threshold-lines` | | `800` | Minimum non-empty lines to trigger chunked translation |
+| `--target-chunk-lines` | | `400` | Target line count per chunk |
 | `--auto-update-bible` | | True | Automatically merge newly discovered characters and terms into Novel Bible |
 
 > [!TIP]
@@ -649,7 +699,7 @@ To prevent narrative drift across long multi-volume series, NouSetsu organizes m
    - All chapter checkpoints, error traces, and quality audits are stored in a single JSON file.
    - Enables fast directory scanning and instant resume.
 6. **Line-Based Semantic Chunking (32K TPM Rate-Limit Guard)**:
-   - Scans non-empty lines in source chapters. If line count exceeds `chunk_threshold_lines` (default: 85), automatically divides chapters into ~70-line chunks.
+   - Scans non-empty lines in source chapters. If line count exceeds `chunk_threshold_lines` (default: 800), automatically divides chapters into ~400-line chunks.
    - Snaps to scene break lines (`***`, `---`, `◆◆◆`) and paragraph boundaries while strictly preserving multi-line dialogue quotes (`「...」`, `"..."`).
    - Keeps individual chunk requests under ~3,500 total tokens (under 12% of the 32,000 TPM limit), completely preventing 60-second sliding-window freezes.
    - Passes sliding translation context (last 3 lines of preceding translation) to guarantee zero-anaphora pronoun continuity and character voice.
