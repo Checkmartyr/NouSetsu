@@ -253,9 +253,11 @@ cp .env.example .env
 ```
 
 #### Step 2: API Keys & Authentication
-Configure your primary Gemini API key in `.env`:
+Configure the key(s) for the provider(s) you want to use in `.env`:
 ```ini
 GEMINI_API_KEY=your_gemini_api_key_here
+OPENAI_API_KEY=your_openai_api_key_here
+OPENROUTER_API_KEY=your_openrouter_api_key_here
 ```
 > [!TIP]
 > Obtain a free or pay-as-you-go key from [Google AI Studio](https://aistudio.google.com/). You can also export keys directly in your terminal environment:
@@ -266,7 +268,7 @@ GEMINI_API_KEY=your_gemini_api_key_here
 > # Linux / macOS Bash
 > export GEMINI_API_KEY="AIzaSy..."
 > ```
-> Optional third-party provider keys (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`) can also be defined if using compatible custom routing.
+> OpenAI and OpenRouter are supported directly. OpenRouter uses the OpenAI-compatible API; an `ANTHROPIC_API_KEY` alone does not enable Anthropic routing.
 
 #### Step 3: Multi-Agent Model Routing & Precedence Cascade
 NouSetsu resolves LLM models via a strict **4-tier precedence hierarchy**:
@@ -275,7 +277,13 @@ NouSetsu resolves LLM models via a strict **4-tier precedence hierarchy**:
 3. **Central `.env` Variable**: Machine-level routing (`NOVEL_MODEL`, `NOVEL_CRITIC_MODEL`, etc.).
 4. **Built-in Safe Fallback**: Default production model (`gemini-3.1-flash-lite`, `gemma-4-26b-a4b-it`).
 
-Each pipeline agent can be routed to an independent model tailored to its cognitive responsibility:
+Each pipeline agent can be routed to an independent model tailored to its cognitive responsibility. Provider selection is based on the model ID and matching API key, not on whichever key happens to be present:
+
+- **Gemini**: use a `gemini-*` or `gemma-*` model with `GEMINI_API_KEY` (or `GOOGLE_API_KEY`).
+- **OpenAI**: use a model such as `gpt-4o` with `OPENAI_API_KEY`; `openai:gpt-4o` explicitly selects OpenAI.
+- **OpenRouter**: use an OpenRouter model ID such as `anthropic/claude-3.7-sonnet` with `OPENROUTER_API_KEY`, or prefix it as `openrouter:anthropic/claude-3.7-sonnet`. A bare OpenAI model name can also use OpenRouter when only `OPENROUTER_API_KEY` is configured.
+
+For example, set `NOVEL_MODEL` or an agent-specific `NOVEL_*_MODEL` to the desired model ID. When OpenAI and OpenRouter keys are both present, bare `gpt-*`/`o1`/`o3`/`o4` model names use OpenAI, while slash-form model IDs use OpenRouter.
 
 | Agent Stage | Environment Variable | Default Model | Cognitive Responsibility |
 | :--- | :--- | :--- | :--- |
@@ -306,7 +314,7 @@ Tune performance, rate quotas, and model reasoning parameters in `.env`:
 | `NOVEL_SCRAPER_PYTHON` | *(Auto)* | Optional Python interpreter override for web novel scraping |
 
 #### Step 5: Zero-Token Offline Mock Testing
-If no `GEMINI_API_KEY` is provided (or when using models prefixed with `"mock"` / `"test"`), NouSetsu automatically operates with a deterministic offline mock model (`mock-novel-llm`). This enables full testing of TUI navigation, project creation, batch scanning, and checkpoint resumption without consuming API tokens or requiring an internet connection.
+If no matching provider API key is configured (or when using models prefixed with `"mock"` / `"test"`), NouSetsu operates with a deterministic offline mock model (`mock-novel-llm`). This enables full testing of TUI navigation, project creation, batch scanning, and checkpoint resumption without consuming API tokens or requiring an internet connection.
 
 ### 4. Launching NouSetsu
 Launch the interactive Terminal User Interface (TUI):

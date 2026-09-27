@@ -460,6 +460,35 @@ def _resolve_temperature(temp: Optional[float] = None) -> float:
     return 1.0
 
 
+def _is_gemini_model(model_name: str) -> bool:
+    name = model_name.lower()
+    return "gemini" in name or "gemma" in name
+
+
+def _is_openai_model(model_name: str) -> bool:
+    name = model_name.lower()
+    return name.startswith(("gpt-", "o1", "o3", "o4", "chatgpt-"))
+
+
+def _create_openai_compatible_llm(
+    model_name: str,
+    api_key: str,
+    temperature: float,
+    base_url: Optional[str] = None,
+) -> BaseChatModel:
+    """Create OpenAI or OpenAI-compatible chat models (including OpenRouter)."""
+    from langchain_openai import ChatOpenAI
+
+    kwargs: dict[str, Any] = {
+        "model": model_name,
+        "api_key": api_key,
+        "temperature": temperature,
+    }
+    if base_url:
+        kwargs["base_url"] = base_url
+    return ChatOpenAI(**kwargs)
+
+
 def _create_single_llm(
     model_name: str = "gemini-3.1-flash-lite",
     temperature: Optional[float] = None,
@@ -467,61 +496,96 @@ def _create_single_llm(
     thinking_level: Optional[str] = None,
     thinking_budget: Optional[int] = None,
 ) -> BaseChatModel:
-    """Instantiate a single LLM instance."""
+    """Instantiate an LLM by model ID and the matching configured provider key."""
     resolved_temp = _resolve_temperature(temperature)
-    if model_name.startswith("mock"):
-        return MockNovelLLM(model_name=model_name, temperature=resolved_temp)
+    requested_model = model_name.strip()
+    normalized_model = requested_model.lower()
+    if normalized_model.startswith(("mock", "test")):
+        return MockNovelLLM(model_name=requested_model, temperature=resolved_temp)
 
     import dotenv
     dotenv.load_dotenv()
 
-    api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+    google_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+    openai_key = os.environ.get("OPENAI_API_KEY")
+    openrouter_key = os.environ.get("OPENROUTER_API_KEY")
+    openrouter_base_url = "https://openrouter.ai/api/v1"
 
-    if api_key:
-        env_interactions = os.environ.get("NOVEL_USE_INTERACTIONS", "1").lower() not in ["0", "false", "no"]
-        should_use_interactions = env_interactions if use_interactions is None else use_interactions
+    # Explicit provider prefixes take precedence over all other provider keys.
+    if normalized_model.startswith("openrouter:"):
+        router_model = requested_model.split(":", 1)[1].strip()
+        if openrouter_key and router_model:
+            return _create_openai_compatible_llm(
+                router_model, openrouter_key, resolved_temp, base_url=openrouter_base_url
+            )
+        return MockNovelLLM(model_name=requested_model, temperature=resolved_temp)
 
-        # Default to Gemini Interactions API for Gemini/Gemma models
-        if should_use_interactions and ("gemini" in model_name or "gemma" in model_name):
+    if normalized_model.startswith("openai:"):
+        direct_model = requested_model.split(":", 1)[1].strip()
+        if openai_key and direct_model:
+            return _create_openai_compatible_llm(direct_model, openai_key, resolved_temp)
+        return MockNovelLLM(model_name=requested_model, temperature=resolved_temp)
+
+    if _is_gemini_model(requested_model):
+        if google_key:
+            env_interactions = os.environ.get("NOVEL_USE_INTERACTIONS", "1").lower() not in ["0", "false", "no"]
+            should_use_interactions = env_interactions if use_interactions is None else use_interactions
+
+            if should_use_interactions:
+                try:
+                    from nousetsu.agents.interactions import GeminiInteractionsChatModel
+                    return GeminiInteractionsChatModel(
+                        model_name=requested_model,
+                        temperature=resolved_temp,
+                        api_key=google_key,
+                        thinking_level=thinking_level,
+                        thinking_budget=thinking_budget,
+                    )
+                except Exception:
+                    pass
+
             try:
-                from nousetsu.agents.interactions import GeminiInteractionsChatModel
-                return GeminiInteractionsChatModel(
-                    model_name=model_name,
-                    temperature=resolved_temp,
-                    api_key=api_key,
-                    thinking_level=thinking_level,
-                    thinking_budget=thinking_budget,
-                )
+                from langchain_google_genai import ChatGoogleGenerativeAI
+                genai_kwargs: dict[str, Any] = {
+                    "model": requested_model,
+                    "google_api_key": google_key,
+                    "temperature": resolved_temp,
+                    "max_retries": 5,
+                    "timeout": 180,
+                }
+                if thinking_budget is not None:
+                    genai_kwargs["thinking_budget"] = thinking_budget
+                if thinking_level is not None:
+                    genai_kwargs["thinking_config"] = {"thinking_level": thinking_level.upper()}
+                return ChatGoogleGenerativeAI(**genai_kwargs)
             except Exception:
                 pass
+        return MockNovelLLM(model_name=requested_model, temperature=resolved_temp)
 
-        try:
-            from langchain_google_genai import ChatGoogleGenerativeAI
-            genai_kwargs: dict[str, Any] = {
-                "model": model_name,
-                "google_api_key": api_key,
-                "temperature": resolved_temp,
-                "max_retries": 5,
-                "timeout": 180,
-            }
-            if thinking_budget is not None:
-                genai_kwargs["thinking_budget"] = thinking_budget
-            if thinking_level is not None:
-                genai_kwargs["thinking_config"] = {"thinking_level": thinking_level.upper()}
-            return ChatGoogleGenerativeAI(**genai_kwargs)
-        except Exception:
-            pass
+    # OpenRouter's native model IDs are provider/model strings, for example
+    # "anthropic/claude-3.7-sonnet". The explicit openrouter: prefix also
+    # permits routing model IDs that do not contain a slash.
+    if "/" in requested_model:
+        if openrouter_key:
+            return _create_openai_compatible_llm(
+                requested_model, openrouter_key, resolved_temp, base_url=openrouter_base_url
+            )
+        if normalized_model.startswith("openai/") and openai_key:
+            return _create_openai_compatible_llm(
+                requested_model.split("/", 1)[1], openai_key, resolved_temp
+            )
+        return MockNovelLLM(model_name=requested_model, temperature=resolved_temp)
 
-    openai_key = os.environ.get("OPENAI_API_KEY")
-    if openai_key and ("gpt" in model_name or "o1" in model_name):
-        try:
-            from langchain_openai import ChatOpenAI
-            return ChatOpenAI(model=model_name, api_key=openai_key, temperature=resolved_temp)
-        except Exception:
-            pass
+    if _is_openai_model(requested_model):
+        if openai_key:
+            return _create_openai_compatible_llm(requested_model, openai_key, resolved_temp)
+        if openrouter_key:
+            return _create_openai_compatible_llm(
+                f"openai/{requested_model}", openrouter_key, resolved_temp, base_url=openrouter_base_url
+            )
 
-    # Fallback to deterministic mock if no key or provider fails
-    return MockNovelLLM(model_name=model_name, temperature=resolved_temp)
+    # Keep the deterministic offline behavior when no matching key is configured.
+    return MockNovelLLM(model_name=requested_model, temperature=resolved_temp)
 
 
 def get_llm(
