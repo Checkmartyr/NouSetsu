@@ -361,7 +361,8 @@ class ChapterScanner:
 
         ignored_dir_names = {
             "node_modules", "web", "src-tauri", "dist", ".git", ".novel", ".venv",
-            "__pycache__", "translated_chapters", "raw_chapters", raw_path.name, output_path.name
+            "__pycache__", "translated_chapters", "raw_chapters", raw_path.name, output_path.name,
+            "modules", "docs", "tests", "ideabook", "project", "src", "scripts", "external"
         }
 
         discovered_subdirs: List[Path] = []

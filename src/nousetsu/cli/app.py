@@ -1013,7 +1013,8 @@ def cmd_web(args: argparse.Namespace) -> None:
         except Exception as e:
             console.print(f"[bold yellow]Build warning or error:[/] {e}")
 
-    display_host = "localhost" if host in ("127.0.0.1", "0.0.0.0") else host
+    # Use 127.0.0.1 directly to avoid Windows IPv6 (::1) 2-second connect timeout
+    display_host = "127.0.0.1" if host in ("127.0.0.1", "0.0.0.0") else host
     url = f"http://{display_host}:{port}"
     reg = ProjectRegistry()
     if project_dir:

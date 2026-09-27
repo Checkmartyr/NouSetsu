@@ -62,4 +62,7 @@ include = [
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
+testpaths = ["tests"]
+norecursedirs = ["modules", "node_modules", ".venv", ".novel"]
 asyncio_mode = "auto"
+

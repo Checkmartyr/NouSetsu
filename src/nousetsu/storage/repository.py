@@ -506,7 +506,8 @@ class NovelRepository:
         results: List[Tuple[str, str, int]] = []
         ignored_names = {
             ".novel", ".git", ".github", ".venv", "venv", "__pycache__",
-            "node_modules", "target", "build", "dist", ".pytest_cache"
+            "node_modules", "target", "build", "dist", ".pytest_cache",
+            "modules", "web", "src", "src-tauri", "docs", "tests", "ideabook", "project", "scripts", "external"
         }
         cfg = self.load_config()
 

@@ -219,3 +219,60 @@ export interface UploadChaptersResult {
   message: string;
 }
 
+export interface ScraperCheckResult {
+  available: boolean;
+  scraper_dir: string | null;
+  python_exe: string | null;
+}
+
+export interface ScraperChapterPreview {
+  index: number;
+  title: string;
+  url: string;
+}
+
+export interface ScraperInspectResult {
+  success: boolean;
+  url: string;
+  page_type?: string;
+  novel_title: string;
+  author?: string | null;
+  description?: string | null;
+  total_chapters: number;
+  chapters: ScraperChapterPreview[];
+  error?: string | null;
+}
+
+export interface ScraperExtractParams {
+  url: string;
+  projectPath?: string;
+  folder?: string;
+  chapterIndices?: number[];
+  startChapter?: number;
+  endChapter?: number;
+  concurrency?: number;
+  includeFrontmatter?: boolean;
+  overwrite?: boolean;
+}
+
+export interface ScraperExtractResult {
+  success: boolean;
+  task_id: string;
+  message: string;
+  folder: string;
+}
+
+export interface ScraperStatusResult {
+  task_id: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  progress_percent: number;
+  current_chapter: number;
+  total_chapters: number;
+  current_title?: string | null;
+  message: string;
+  completed_files: string[];
+  output_dir?: string | null;
+  error?: string | null;
+}
+
+

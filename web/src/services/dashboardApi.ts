@@ -6,6 +6,11 @@ import {
   ProjectSettings,
   ProjectFoldersResult,
   UploadChaptersResult,
+  ScraperCheckResult,
+  ScraperInspectResult,
+  ScraperExtractParams,
+  ScraperExtractResult,
+  ScraperStatusResult,
 } from '../types/dashboard';
 
 const API_BASE = '';
@@ -272,4 +277,60 @@ export async function uploadChapters(params: {
   }
   return data as UploadChaptersResult;
 }
+
+export async function checkScraperAvailability(): Promise<ScraperCheckResult> {
+  try {
+    const res = await fetch(`${API_BASE}/api/scraper/check`);
+    if (!res.ok) return { available: false, scraper_dir: null, python_exe: null };
+    return (await res.json()) as ScraperCheckResult;
+  } catch (e) {
+    return { available: false, scraper_dir: null, python_exe: null };
+  }
+}
+
+export async function inspectScraperUrl(url: string): Promise<ScraperInspectResult> {
+  const res = await fetch(`${API_BASE}/api/scraper/inspect`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.detail || data.error || 'Failed to inspect novel URL');
+  }
+  return data as ScraperInspectResult;
+}
+
+export async function startScraperExtract(params: ScraperExtractParams): Promise<ScraperExtractResult> {
+  const res = await fetch(`${API_BASE}/api/scraper/extract`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      url: params.url,
+      project_path: params.projectPath,
+      folder: params.folder,
+      chapter_indices: params.chapterIndices,
+      start_chapter: params.startChapter,
+      end_chapter: params.endChapter,
+      concurrency: params.concurrency ?? 3,
+      include_frontmatter: params.includeFrontmatter ?? false,
+      overwrite: params.overwrite ?? false,
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.detail || 'Failed to start scraping task');
+  }
+  return data as ScraperExtractResult;
+}
+
+export async function fetchScraperStatus(taskId: string): Promise<ScraperStatusResult> {
+  const res = await fetch(`${API_BASE}/api/scraper/status/${taskId}`);
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.detail || 'Failed to fetch scraper task status');
+  }
+  return data as ScraperStatusResult;
+}
+
 

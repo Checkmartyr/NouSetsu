@@ -1,0 +1,3 @@
+[submodule "modules/novel_scraper"]
+	path = modules/novel_scraper
+	url = https://github.com/Checkmartyr/Novel-Scraper.git

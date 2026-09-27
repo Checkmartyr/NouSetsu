@@ -11,6 +11,7 @@ import re
 import threading
 import time
 import urllib.parse
+import uuid
 import webbrowser
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
@@ -22,6 +23,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+
+from nousetsu.scraper import (
+    NovelScraperBridge,
+    ScraperExtractRequest,
+    ScraperInspectRequest,
+    ScraperInspectResponse,
+    ScraperStatusResponse,
+    get_scraper_info,
+)
 
 from nousetsu.batch.runner import BatchRunner
 from nousetsu.batch.scanner import ChapterScanner, ChapterTask, extract_chapter_num, LEADING_SEQ_PATTERN
@@ -501,7 +511,8 @@ def _find_chapter_files(
     # 3. Discovered subdirectories (if folder is not specified or chapter not found in folder)
     ignored = {
         "node_modules", "web", "src-tauri", "dist", ".git", ".novel", ".venv",
-        "__pycache__", "translated_chapters", "raw_chapters"
+        "__pycache__", "translated_chapters", "raw_chapters",
+        "modules", "docs", "tests", "ideabook", "project", "src", "scripts", "external"
     }
     try:
         with os.scandir(repo.root_dir) as it:
@@ -782,6 +793,75 @@ def _process_chapter_files(
     }
 
 
+# In-memory registry of active scraper extraction jobs
+_ACTIVE_SCRAPER_JOBS: Dict[str, ScraperStatusResponse] = {}
+
+
+async def _run_scraper_task(
+    bridge: NovelScraperBridge,
+    req: ScraperExtractRequest,
+    dest_dir: Path,
+    repo: NovelRepository,
+    target_folder_name: str,
+    task_id: str,
+    event_bus: SSEEventBus,
+) -> None:
+    """Run scraper extraction in background, reporting progress and invalidating chapter caches."""
+    def on_progress(status: ScraperStatusResponse) -> None:
+        _ACTIVE_SCRAPER_JOBS[task_id] = status
+        event_bus.publish_sync("scraper_progress", {
+            "task_id": task_id,
+            "folder": target_folder_name,
+            "status": status.status,
+            "progress_percent": status.progress_percent,
+            "current_chapter": status.current_chapter,
+            "total_chapters": status.total_chapters,
+            "current_title": status.current_title,
+            "message": status.message,
+            "timestamp": time.time(),
+        })
+
+    try:
+        final_status = await bridge.extract_chapters(
+            req=req,
+            dest_dir=dest_dir,
+            on_progress=on_progress,
+            task_id=task_id,
+        )
+        _ACTIVE_SCRAPER_JOBS[task_id] = final_status
+
+        # Clear file stats and SHA caches
+        _FILE_STATS_CACHE.clear()
+        _invalidate_chapter_caches(str(repo.root_dir))
+        scanner = ChapterScanner(repo)
+        scanner.clear_sha256_cache()
+
+        event_bus.publish_sync("scraper_completed", {
+            "task_id": task_id,
+            "folder": target_folder_name,
+            "status": final_status.status,
+            "total_uploaded": len(final_status.completed_files),
+            "files": final_status.completed_files,
+            "timestamp": time.time(),
+        })
+    except Exception as e:
+        logger.exception("Background scraper task %s failed: %s", task_id, e)
+        err_status = ScraperStatusResponse(
+            task_id=task_id,
+            status="failed",
+            message=f"Extraction failed: {e}",
+            error=str(e),
+        )
+        _ACTIVE_SCRAPER_JOBS[task_id] = err_status
+        event_bus.publish_sync("scraper_completed", {
+            "task_id": task_id,
+            "folder": target_folder_name,
+            "status": "failed",
+            "error": str(e),
+            "timestamp": time.time(),
+        })
+
+
 # ============================================================================
 # FastAPI Application Factory
 # ============================================================================
@@ -971,7 +1051,7 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
         now = time.time()
         if cache_key in _CHAPTERS_CACHE:
             ts, cached_res = _CHAPTERS_CACHE[cache_key]
-            if now - ts < 4.0:
+            if now - ts < 60.0:
                 return cached_res
 
         tasks = _scan_project_tasks(repo, folder=folder)
@@ -1139,7 +1219,8 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
 
         ignored_dir_names = {
             "node_modules", "web", "src-tauri", "dist", ".git", ".novel", ".venv",
-            "__pycache__", "translated_chapters", raw_dir_name, cfg.output_dir
+            "__pycache__", "translated_chapters", raw_dir_name, cfg.output_dir,
+            "modules", "docs", "tests", "ideabook", "project", "src", "scripts", "external"
         }
 
         folders = [raw_dir_name]
@@ -1202,6 +1283,107 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
             files=file_tuples,
             overwrite=overwrite,
         )
+
+    # ------------------------------------------------------------------------
+    # 2.6 Novel-Scraper URL Extraction Endpoints
+    # ------------------------------------------------------------------------
+
+    @app.get("/api/scraper/check")
+    async def scraper_check() -> Dict[str, Any]:
+        """Check if Novel-Scraper environment is detected and ready."""
+        available, s_dir, py_exe = get_scraper_info()
+        return {
+            "available": available,
+            "scraper_dir": s_dir,
+            "python_exe": py_exe,
+        }
+
+    @app.post("/api/scraper/inspect")
+    async def scraper_inspect(body: ScraperInspectRequest) -> Dict[str, Any]:
+        """Inspect a novel URL and return TOC chapters and novel metadata."""
+        url = body.url.strip()
+        if not url:
+            raise HTTPException(status_code=400, detail="URL cannot be empty.")
+        bridge = NovelScraperBridge()
+        if not bridge.is_available():
+            raise HTTPException(
+                status_code=503,
+                detail="Novel-Scraper is not configured or unavailable. Please initialize git submodule in modules/novel_scraper.",
+            )
+        res = await bridge.inspect_url(url)
+        return res.model_dump()
+
+    @app.post("/api/scraper/extract")
+    async def scraper_extract(body: ScraperExtractRequest) -> Dict[str, Any]:
+        """Trigger background novel chapter extraction into raw chapters or volume folder."""
+        url = body.url.strip()
+        if not url:
+            raise HTTPException(status_code=400, detail="URL cannot be empty.")
+
+        bridge = NovelScraperBridge()
+        if not bridge.is_available():
+            raise HTTPException(
+                status_code=503,
+                detail="Novel-Scraper is not configured or unavailable.",
+            )
+
+        repo = _resolve_repo(body.project_path)
+        cfg = repo.load_config()
+        raw_dir_name = cfg.raw_dir or "raw_chapters"
+
+        folder = body.folder
+        if not folder or folder.strip() in ("", "default", raw_dir_name, "raw_chapters"):
+            dest_dir = cfg.get_raw_path(repo.root_dir)
+            target_folder_name = raw_dir_name
+        else:
+            clean_folder = os.path.normpath(folder.strip()).lstrip("/\\")
+            if not clean_folder or ".." in clean_folder.split(os.sep):
+                raise HTTPException(status_code=400, detail="Invalid folder name.")
+            dest_dir = (repo.root_dir / clean_folder).resolve()
+            try:
+                dest_dir.relative_to(repo.root_dir.resolve())
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Target folder outside of project root is not permitted.")
+            target_folder_name = clean_folder
+
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        task_id = str(uuid.uuid4())[:8]
+
+        init_status = ScraperStatusResponse(
+            task_id=task_id,
+            status="running",
+            progress_percent=0.0,
+            message="Starting novel extraction...",
+            output_dir=str(dest_dir),
+        )
+        _ACTIVE_SCRAPER_JOBS[task_id] = init_status
+
+        asyncio.create_task(
+            _run_scraper_task(
+                bridge=bridge,
+                req=body,
+                dest_dir=dest_dir,
+                repo=repo,
+                target_folder_name=target_folder_name,
+                task_id=task_id,
+                event_bus=event_bus,
+            )
+        )
+
+        return {
+            "success": True,
+            "task_id": task_id,
+            "message": "Scraper extraction started in background.",
+            "folder": target_folder_name,
+        }
+
+    @app.get("/api/scraper/status/{task_id}")
+    async def scraper_status(task_id: str) -> Dict[str, Any]:
+        """Poll progress and status of a scraping task."""
+        job = _ACTIVE_SCRAPER_JOBS.get(task_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Scraper task not found.")
+        return job.model_dump()
 
     # ------------------------------------------------------------------------
     # 3. Server-Sent Events (SSE) Bus

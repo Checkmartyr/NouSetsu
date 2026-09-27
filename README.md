@@ -191,9 +191,12 @@ flowchart TD
 Install NouSetsu using `uv` (recommended for fast virtual environment management) or standard `pip`:
 
 ```bash
-# Clone the repository
-git clone https://github.com/Checkmartyr/NouSetsu.git
+# Clone the repository (including submodules for webnovel scraping)
+git clone --recurse-submodules https://github.com/Checkmartyr/NouSetsu.git
 cd NouSetsu
+
+# If already cloned without submodules, initialize them:
+git submodule update --init --recursive
 
 # Install in editable mode with uv (recommended)
 uv pip install -e .
