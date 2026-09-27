@@ -12,6 +12,8 @@
     "audit:ui": "node ./scripts/run_audit.mjs"
   },
   "dependencies": {
+    "@types/d3-force": "^3.0.10",
+    "d3-force": "^3.0.0",
     "diff": "^8.0.3",
     "lucide-react": "^1.16.0",
     "react": "^19.0.0",

@@ -19,6 +19,11 @@ import {
   Languages,
 } from 'lucide-react';
 import { BibleCharacter } from '../types/dashboard';
+import {
+  ObsidianRelationshipGraph,
+  getEnhancedRelationshipCategory,
+  RelationshipCategoryInfo,
+} from './ObsidianRelationshipGraph';
 
 interface CharacterVisualizerProps {
   characters: BibleCharacter[];
@@ -83,81 +88,9 @@ function getRoleConfig(role?: string) {
   return ROLE_CONFIGS[r] || ROLE_CONFIGS.minor;
 }
 
-// Relationship category detection
-function getRelationshipCategory(rel: string): {
-  color: string;
-  badge: string;
-  category: string;
-} {
-  const s = rel.toLowerCase();
-  if (
-    s.includes('sister') ||
-    s.includes('brother') ||
-    s.includes('mother') ||
-    s.includes('father') ||
-    s.includes('parent') ||
-    s.includes('child') ||
-    s.includes('son') ||
-    s.includes('daughter') ||
-    s.includes('family') ||
-    s.includes('lover') ||
-    s.includes('wife') ||
-    s.includes('husband') ||
-    s.includes('partner') ||
-    s.includes('love')
-  ) {
-    return {
-      color: '#e699b8',
-      badge: 'bg-[#383330] text-[#e699b8] border-[#3f3a36]',
-      category: 'Family & Bond',
-    };
-  }
-  if (
-    s.includes('enemy') ||
-    s.includes('rival') ||
-    s.includes('nemesis') ||
-    s.includes('hostile') ||
-    s.includes('opponent') ||
-    s.includes('foe')
-  ) {
-    return {
-      color: '#cf6659',
-      badge: 'bg-[#383330] text-[#cf6659] border-[#3f3a36]',
-      category: 'Rival & Hostile',
-    };
-  }
-  if (
-    s.includes('ally') ||
-    s.includes('friend') ||
-    s.includes('comrade') ||
-    s.includes('companion')
-  ) {
-    return {
-      color: '#7fa678',
-      badge: 'bg-[#383330] text-[#7fa678] border-[#3f3a36]',
-      category: 'Ally & Friend',
-    };
-  }
-  if (
-    s.includes('mentor') ||
-    s.includes('master') ||
-    s.includes('teacher') ||
-    s.includes('disciple') ||
-    s.includes('student') ||
-    s.includes('servant') ||
-    s.includes('lord')
-  ) {
-    return {
-      color: '#d9a05b',
-      badge: 'bg-[#383330] text-[#d9a05b] border-[#3f3a36]',
-      category: 'Mentor & Order',
-    };
-  }
-  return {
-    color: '#8b9bb4',
-    badge: 'bg-[#383330] text-[#8b9bb4] border-[#3f3a36]',
-    category: 'Acquaintance',
-  };
+// Relationship category detection (enhanced with multilingual Thai/CJK/English support)
+function getRelationshipCategory(rel: string): RelationshipCategoryInfo {
+  return getEnhancedRelationshipCategory(rel);
 }
 
 export const CharacterVisualizer: React.FC<CharacterVisualizerProps> = ({
@@ -175,6 +108,8 @@ export const CharacterVisualizer: React.FC<CharacterVisualizerProps> = ({
   const [viewMode, setViewMode] = useState<'dossier' | 'network'>('dossier');
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
+  const [relViewMode, setRelViewMode] = useState<'graph' | 'matrix'>('graph');
+  const [matrixSearch, setMatrixSearch] = useState('');
 
   const activeIndex = selectedCharacterIndex ?? internalSelectedIndex;
   const activeChar = characters[activeIndex] || characters[0];
@@ -663,14 +598,37 @@ export const CharacterVisualizer: React.FC<CharacterVisualizerProps> = ({
 
               {/* Personal Relationship Network Visualization */}
               <div className="bg-[#383330] border border-[#3f3a36] rounded-[4px] p-4">
-                <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                   <div className="flex items-center gap-1.5 font-mono text-xs font-bold text-[#f7f5f0] uppercase tracking-wide">
                     <Network className="w-3.5 h-3.5 text-[#b0a89f]" />
                     <span>Personal Relationship Map ({personalRelationships.length})</span>
                   </div>
-                  <span className="text-[11px] text-[#857d75]">
-                    Click any node to inspect dossier
-                  </span>
+
+                  {/* Mode Toggle: Obsidian Graph vs Categorized Cards */}
+                  <div className="flex items-center gap-1 bg-[#24201d] p-0.5 rounded-[3px] border border-[#3f3a36] text-[11px] font-mono">
+                    <button
+                      onClick={() => setRelViewMode('graph')}
+                      className={`px-2.5 py-1 rounded-[2px] transition-colors cursor-pointer flex items-center gap-1.5 ${
+                        relViewMode === 'graph'
+                          ? 'bg-[#f7f5f0] text-[#2b2622] font-semibold'
+                          : 'text-[#857d75] hover:text-[#f7f5f0]'
+                      }`}
+                    >
+                      <Sparkles className="w-3 h-3 text-[#d9a05b]" />
+                      Obsidian Graph
+                    </button>
+                    <button
+                      onClick={() => setRelViewMode('matrix')}
+                      className={`px-2.5 py-1 rounded-[2px] transition-colors cursor-pointer flex items-center gap-1.5 ${
+                        relViewMode === 'matrix'
+                          ? 'bg-[#f7f5f0] text-[#2b2622] font-semibold'
+                          : 'text-[#857d75] hover:text-[#f7f5f0]'
+                      }`}
+                    >
+                      <Compass className="w-3 h-3" />
+                      Cards Matrix
+                    </button>
+                  </div>
                 </div>
 
                 {personalRelationships.length === 0 ? (
@@ -678,63 +636,68 @@ export const CharacterVisualizer: React.FC<CharacterVisualizerProps> = ({
                     <Share2 className="w-5 h-5 text-[#857d75]" />
                     <span>No relationships registered yet for this character.</span>
                   </div>
+                ) : relViewMode === 'graph' ? (
+                  <div className="space-y-2">
+                    <ObsidianRelationshipGraph
+                      centerCharacter={activeChar}
+                      relationships={personalRelationships}
+                      onSelectCharacterByIndex={selectCharacterByIndex}
+                      onSelectCharacterByName={selectCharacterByName}
+                    />
+                    <div className="flex items-center justify-between text-[10px] text-[#857d75] font-mono px-1">
+                      <span>• Drag nodes to play with spring physics • Scroll to zoom • Drag canvas to pan</span>
+                      <span>Click any node to inspect dossier</span>
+                    </div>
+                  </div>
                 ) : (
-                  <div className="space-y-3">
-                    {/* SVG Radial Web Diagram */}
-                    <div className="w-full bg-[#24201d] rounded-[3px] border border-[#3f3a36] p-3 flex items-center justify-center overflow-x-auto">
-                      <svg
-                        viewBox="0 0 500 300"
-                        className="w-full max-w-lg h-auto select-none"
-                        style={{ minWidth: '380px' }}
-                      >
-                        {/* Connections to related characters */}
-                        {personalRelationships.map((rel, idx) => {
-                          const total = personalRelationships.length;
-                          const angle = (2 * Math.PI * idx) / total - Math.PI / 2;
-                          const radius = 100;
-                          const x = 250 + radius * Math.cos(angle);
-                          const y = 150 + radius * Math.sin(angle);
-                          const midX = (250 + x) / 2;
-                          const midY = (150 + y) / 2;
+                  /* Categorized Cards Matrix Mode */
+                  <div className="space-y-4">
+                    {/* Matrix search input */}
+                    <div className="relative max-w-sm">
+                      <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-[#857d75]" />
+                      <input
+                        type="text"
+                        value={matrixSearch}
+                        onChange={(e) => setMatrixSearch(e.target.value)}
+                        placeholder="Search relationships..."
+                        className="w-full pl-9 pr-4 py-1.5 bg-[#24201d] border border-[#3f3a36] focus:border-[#d9a05b] rounded-[3px] text-xs font-mono text-[#f7f5f0] placeholder-[#857d75] focus:outline-none"
+                      />
+                    </div>
 
+                    {/* Grouped Category Sections */}
+                    {(['ally', 'rival', 'family', 'mentor', 'acquaintance'] as const).map((catId) => {
+                      const groupRels = personalRelationships.filter((r) => {
+                        if (r.categoryInfo.id !== catId) return false;
+                        if (matrixSearch) {
+                          const q = matrixSearch.toLowerCase();
                           return (
-                            <g key={idx}>
-                              <line
-                                x1={250}
-                                y1={150}
-                                x2={x}
-                                y2={y}
-                                stroke={rel.categoryInfo.color}
-                                strokeWidth="1.5"
-                                strokeDasharray="3 3"
-                                className="opacity-60"
-                              />
+                            r.targetName.toLowerCase().includes(q) ||
+                            r.relation.toLowerCase().includes(q)
+                          );
+                        }
+                        return true;
+                      });
 
-                              {/* Relationship tag pill */}
-                              <rect
-                                x={midX - 32}
-                                y={midY - 8}
-                                width={64}
-                                height={16}
-                                rx={2}
-                                fill="#24201d"
-                                stroke={rel.categoryInfo.color}
-                                strokeWidth="1"
-                              />
-                              <text
-                                x={midX}
-                                y={midY + 3.5}
-                                textAnchor="middle"
-                                fill={rel.categoryInfo.color}
-                                fontSize="9"
-                                fontWeight="bold"
-                                className="select-none pointer-events-none font-mono"
-                              >
-                                {rel.relation.length > 10 ? `${rel.relation.slice(0, 9)}…` : rel.relation}
-                              </text>
+                      if (groupRels.length === 0) return null;
+                      const sample = groupRels[0];
 
-                              {/* Outer Related Node */}
-                              <g
+                      return (
+                        <div key={catId} className="space-y-2">
+                          <div className="flex items-center gap-2 text-xs font-mono font-bold text-[#b0a89f]">
+                            <span
+                              className="w-2 h-2 rounded-full"
+                              style={{ backgroundColor: sample.categoryInfo.color }}
+                            />
+                            <span>{sample.categoryInfo.category}</span>
+                            <span className="text-[10px] text-[#857d75] font-normal">
+                              ({groupRels.length})
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                            {groupRels.map((rel, idx) => (
+                              <div
+                                key={idx}
                                 onClick={() => {
                                   if (rel.targetIndex !== -1) {
                                     selectCharacterByIndex(rel.targetIndex);
@@ -742,96 +705,25 @@ export const CharacterVisualizer: React.FC<CharacterVisualizerProps> = ({
                                     selectCharacterByName(rel.targetName);
                                   }
                                 }}
-                                className="cursor-pointer"
+                                className="bg-[#24201d] hover:bg-[#2b2622] border border-[#3f3a36] p-2.5 rounded-[3px] flex items-center justify-between cursor-pointer transition-colors group"
                               >
-                                <circle
-                                  cx={x}
-                                  cy={y}
-                                  r={18}
-                                  fill="#2b2622"
-                                  stroke={rel.categoryInfo.color}
-                                  strokeWidth="2"
-                                />
-                                <text
-                                  x={x}
-                                  y={y + 4}
-                                  textAnchor="middle"
-                                  fill="#f7f5f0"
-                                  fontSize="10"
-                                  fontWeight="bold"
-                                  className="pointer-events-none select-none font-mono"
-                                >
-                                  {rel.targetName.charAt(0).toUpperCase()}
-                                </text>
-
-                                {/* Name below node */}
-                                <text
-                                  x={x}
-                                  y={y + 28}
-                                  textAnchor="middle"
-                                  fill="#b0a89f"
-                                  fontSize="10"
-                                  fontWeight="500"
-                                  className="pointer-events-none select-none font-mono"
-                                >
-                                  {rel.targetName.length > 11 ? `${rel.targetName.slice(0, 10)}…` : rel.targetName}
-                                </text>
-                              </g>
-                            </g>
-                          );
-                        })}
-
-                        {/* Center Active Character Node */}
-                        <circle
-                          cx={250}
-                          cy={150}
-                          r={24}
-                          fill="#383330"
-                          stroke={roleCfg.color}
-                          strokeWidth="2.5"
-                        />
-                        <text
-                          x={250}
-                          y={154}
-                          textAnchor="middle"
-                          fill="#f7f5f0"
-                          fontSize="12"
-                          fontWeight="bold"
-                          className="pointer-events-none select-none font-mono"
-                        >
-                          {activeChar.name.charAt(0).toUpperCase()}
-                        </text>
-                      </svg>
-                    </div>
-
-                    {/* Interactive Relationship Cards Grid */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                      {personalRelationships.map((rel, idx) => (
-                        <div
-                          key={idx}
-                          onClick={() => {
-                            if (rel.targetIndex !== -1) {
-                              selectCharacterByIndex(rel.targetIndex);
-                            } else {
-                              selectCharacterByName(rel.targetName);
-                            }
-                          }}
-                          className="bg-[#24201d] hover:bg-[#2b2622] border border-[#3f3a36] p-2.5 rounded-[3px] flex items-center justify-between cursor-pointer transition-colors group"
-                        >
-                          <div className="min-w-0 flex-1 pr-2">
-                            <span className="text-xs font-semibold text-[#f7f5f0] truncate block">
-                              {rel.targetName}
-                            </span>
-                            <span
-                              className={`text-[9px] px-1.5 py-0.2 rounded-[2px] font-mono mt-0.5 inline-block border ${rel.categoryInfo.badge}`}
-                            >
-                              {rel.relation}
-                            </span>
+                                <div className="min-w-0 flex-1 pr-2">
+                                  <span className="text-xs font-semibold text-[#f7f5f0] truncate block">
+                                    {rel.targetName}
+                                  </span>
+                                  <span
+                                    className={`text-[9px] px-1.5 py-0.2 rounded-[2px] font-mono mt-0.5 inline-block border ${rel.categoryInfo.badge}`}
+                                  >
+                                    {rel.relation}
+                                  </span>
+                                </div>
+                                <ArrowRight className="w-3.5 h-3.5 text-[#857d75] group-hover:text-[#f7f5f0] transition-colors" />
+                              </div>
+                            ))}
                           </div>
-                          <ArrowRight className="w-3.5 h-3.5 text-[#857d75] group-hover:text-[#f7f5f0] transition-colors" />
                         </div>
-                      ))}
-                    </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
