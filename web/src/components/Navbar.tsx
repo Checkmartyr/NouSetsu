@@ -75,18 +75,18 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <header className="bg-[#2b2622] border-b border-[#3f3a36] sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6">
-        <div className="flex items-center justify-between h-14 gap-4">
+      <div className="max-w-7xl mx-auto px-2 sm:px-6">
+        <div className="flex items-center justify-between h-14 gap-2 sm:gap-4 overflow-hidden">
 
           {/* Left: Logo & Wordmark */}
-          <div className="flex items-center gap-2.5 shrink-0">
+          <div className="flex items-center gap-2 shrink-0">
             <div className="w-7 h-7 rounded-[4px] bg-[#383330] border border-[#3f3a36] flex items-center justify-center text-sm select-none shadow-xs">
               🐾
             </div>
             <div>
               <div className="flex items-center gap-1.5">
                 <span className="font-medium text-sm text-[#f7f5f0] tracking-[-0.3px]">Nousetsu</span>
-                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-[2px] bg-[#383330] text-[#c9c0ad] border border-[#3f3a36]">
+                <span className="hidden sm:inline text-[10px] font-mono px-1.5 py-0.2 rounded-[2px] bg-[#383330] text-[#c9c0ad] border border-[#3f3a36]">
                   agent
                 </span>
               </div>
@@ -94,14 +94,15 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
 
           {/* Center: Workspace Tab Switcher */}
-          <div className="flex items-center gap-1 bg-[#2b2622] p-0.5 rounded-[4px] border border-[#3f3a36]">
+          <nav className="flex items-center gap-1 bg-[#2b2622] p-0.5 rounded-[4px] border border-[#3f3a36] overflow-x-auto max-w-full shrink min-w-0" style={{ scrollbarWidth: 'none' }}>
             {navTabs.map((tab) => {
               const isActive = activeTab === tab.id;
               return (
                 <button
                   key={tab.id}
+                  aria-label={tab.label}
                   onClick={() => onSelectTab(tab.id)}
-                  className={`flex items-center gap-1.5 px-2.5 py-1 text-xs transition-colors cursor-pointer rounded-[3px] ${
+                  className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 text-xs transition-colors cursor-pointer rounded-[3px] shrink-0 whitespace-nowrap ${
                     isActive
                       ? 'bg-[#383330] text-[#f7f5f0] border border-[#544d47] font-medium'
                       : 'text-[#c9c0ad] hover:text-[#f7f5f0] hover:bg-[#383330]/50 font-normal'
@@ -112,10 +113,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </button>
               );
             })}
-          </div>
+          </nav>
 
           {/* Right Column: Project & Trace Controls */}
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="hidden md:flex items-center gap-2 shrink-0">
 
             {/* Trace Chapter Selector (Only shown on traces tab) */}
             {activeTab === 'traces' && chapters.length > 0 && (

@@ -146,8 +146,8 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
   return (
     <div className={`flex flex-col h-full overflow-hidden transition-colors ${curTheme.bg} ${curTheme.text}`}>
       {/* Top Header Controls */}
-      <div className={`px-6 py-2.5 border-b flex items-center justify-between gap-4 shrink-0 ${curTheme.header}`}>
-        <div className="flex items-center gap-3">
+      <div className={`px-3 sm:px-6 py-2 sm:py-2.5 border-b flex items-center justify-between gap-2 sm:gap-4 shrink-0 overflow-x-auto ${curTheme.header}`} style={{ scrollbarWidth: 'none' }}>
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           <button
             onClick={onBackToStudio}
             className={`btn-secondary text-xs px-2.5 py-1 flex items-center gap-1.5`}
@@ -180,7 +180,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
         </div>
 
         {/* Center: Chapter Nav */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={handlePrev}
             disabled={!hasPrev}
@@ -203,7 +203,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
         </div>
 
         {/* Right: Typography & Theme Controls */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           {/* Theme Switcher */}
           <div className={`flex items-center rounded-[3px] border p-0.5 ${curTheme.border}`}>
             <button

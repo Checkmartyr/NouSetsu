@@ -43,7 +43,7 @@ export const TraceTimeline: React.FC<TraceTimelineProps> = ({
   const displayTraces = sortAsc ? filteredTraces : [...filteredTraces].reverse();
 
   return (
-    <aside className="w-80 md:w-96 flex flex-col bg-[#2b2622] border-r border-[#3f3a36] shrink-0 h-full overflow-hidden">
+    <aside className="w-full flex flex-col bg-[#2b2622] border-r border-[#3f3a36] shrink-0 h-full overflow-hidden">
       {/* Search and Filter Header */}
       <div className="p-3 border-b border-[#3f3a36] space-y-2">
         <div className="relative">

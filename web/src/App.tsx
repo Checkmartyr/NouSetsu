@@ -47,6 +47,7 @@ export const App: React.FC = () => {
   );
   const [selectedStageFilter, setSelectedStageFilter] = useState<string | null>(null);
   const [activeDetailTab, setActiveDetailTab] = useState<DetailTab>('output');
+  const [mobileTraceView, setMobileTraceView] = useState<'timeline' | 'detail'>('detail');
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -117,11 +118,28 @@ export const App: React.FC = () => {
     };
   }, [activeProject]);
 
-  // If chapter changes, preserve active stage filter or select first trace
-  const handleSelectChapter = (id: string) => {
+  // If chapter changes, preserve active stage filter or select first trace (with on-demand trace fetching)
+  const handleSelectChapter = async (id: string) => {
     setSelectedChapterId(id);
-    const target = chapters.find((c) => c.id === id);
-    if (target && target.document.traces.length > 0) {
+    let target = chapters.find((c) => c.id === id);
+    if (!target) return;
+
+    if (!target.document.traces || target.document.traces.length === 0) {
+      try {
+        const res = await fetchProjectTraces(activeProject?.path, target.chapterNum, target.folder || undefined);
+        if (res && res.chapters && res.chapters.length > 0) {
+          const loadedCh = res.chapters.find((c) => c.id === id) || res.chapters[0];
+          if (loadedCh && loadedCh.document?.traces && loadedCh.document.traces.length > 0) {
+            target = { ...target, document: loadedCh.document };
+            setChapters((prev) => prev.map((c) => (c.id === id ? target! : c)));
+          }
+        }
+      } catch (err) {
+        console.warn('Could not lazy-load chapter traces:', err);
+      }
+    }
+
+    if (target && target.document.traces && target.document.traces.length > 0) {
       if (selectedStageFilter) {
         const matchingStageTrace = target.document.traces.find((t) => t.stage === selectedStageFilter);
         if (matchingStageTrace) {
@@ -482,32 +500,70 @@ export const App: React.FC = () => {
               selectedStageFilter={selectedStageFilter}
               onSelectStageFilter={handleSelectStageFilter}
             />
+
+            {/* Mobile View Toggle Bar (Only visible on screens < lg) */}
+            <div className="lg:hidden flex items-center justify-between px-3 py-1.5 bg-[#2b2622] border-b border-[#3f3a36]">
+              <span className="text-[11px] font-mono text-[#aea69c]">Trace View:</span>
+              <div className="flex items-center gap-1 bg-[#383330] p-0.5 rounded-[3px] border border-[#3f3a36]">
+                <button
+                  type="button"
+                  onClick={() => setMobileTraceView('timeline')}
+                  className={`px-2 py-0.5 text-xs rounded-[2px] transition-colors cursor-pointer ${
+                    mobileTraceView === 'timeline'
+                      ? 'bg-[#f7f5f0] text-[#2b2622] font-medium'
+                      : 'text-[#c9c0ad] hover:text-[#f7f5f0]'
+                  }`}
+                >
+                  Timeline ({traces.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMobileTraceView('detail')}
+                  className={`px-2 py-0.5 text-xs rounded-[2px] transition-colors cursor-pointer ${
+                    mobileTraceView === 'detail'
+                      ? 'bg-[#f7f5f0] text-[#2b2622] font-medium'
+                      : 'text-[#c9c0ad] hover:text-[#f7f5f0]'
+                  }`}
+                >
+                  Detail
+                </button>
+              </div>
+            </div>
+
             <div className="flex-1 flex overflow-hidden">
-              <TraceTimeline
-                traces={traces}
-                selectedTraceId={selectedTraceId}
-                onSelectTrace={setSelectedTraceId}
-                selectedStageFilter={selectedStageFilter}
-              />
-              {currentTrace && currentChapter ? (
-                <TraceDetail
-                  trace={currentTrace}
-                  chapterDoc={currentChapter.document}
-                  activeTab={activeDetailTab}
-                  onTabChange={setActiveDetailTab}
+              <div className={`${mobileTraceView === 'timeline' ? 'block' : 'hidden'} lg:block w-full lg:w-80 md:w-96 shrink-0 h-full overflow-hidden`}>
+                <TraceTimeline
+                  traces={traces}
+                  selectedTraceId={selectedTraceId}
+                  onSelectTrace={(id) => {
+                    handleSelectChapter(selectedChapterId || '');
+                    setSelectedTraceId(id);
+                    setMobileTraceView('detail');
+                  }}
+                  selectedStageFilter={selectedStageFilter}
                 />
-              ) : (
-                <div className="flex-1 flex flex-col items-center justify-center p-8 text-[#aea69c] text-xs space-y-3">
-                  <p>No traces recorded for this chapter yet.</p>
-                  <button
-                    onClick={handleLoadDemo}
-                    className="btn-primary flex items-center gap-1.5"
-                  >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>Load Demo Traces</span>
-                  </button>
-                </div>
-              )}
+              </div>
+              <div className={`${mobileTraceView === 'detail' ? 'flex' : 'hidden'} lg:flex flex-1 flex-col h-full overflow-hidden min-w-0`}>
+                {currentTrace && currentChapter ? (
+                  <TraceDetail
+                    trace={currentTrace}
+                    chapterDoc={currentChapter.document}
+                    activeTab={activeDetailTab}
+                    onTabChange={setActiveDetailTab}
+                  />
+                ) : (
+                  <div className="flex-1 flex flex-col items-center justify-center p-8 text-[#aea69c] text-xs space-y-3">
+                    <p>No traces recorded for this chapter yet.</p>
+                    <button
+                      onClick={handleLoadDemo}
+                      className="btn-primary flex items-center gap-1.5"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Load Demo Traces</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}

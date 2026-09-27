@@ -74,9 +74,19 @@ export interface BibleTerm {
 }
 
 export interface BibleArc {
+  arc_id?: string;
+  arc_num?: number;
   arc_number?: number;
+  title?: string;
   arc_title?: string;
+  synopsis?: string;
   summary?: string;
+  core_conflict?: string;
+  status?: string;
+  start_chapter?: number;
+  end_chapter?: number | null;
+  folder?: string | null;
+  key_milestones?: string[];
 }
 
 export interface BibleData {
@@ -88,6 +98,7 @@ export interface BibleData {
   whole_story_summary?: string;
   characters: BibleCharacter[];
   glossary: BibleTerm[];
+  active_arc?: BibleArc;
   archived_arcs?: BibleArc[];
 }
 

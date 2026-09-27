@@ -13,9 +13,15 @@ import {
   X,
   Sparkles,
   BookOpen,
-  Eye
+  Eye,
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  Target,
+  CheckCircle2,
+  Bookmark
 } from 'lucide-react';
-import { BibleData, BibleCharacter, BibleTerm } from '../types/dashboard';
+import { BibleData, BibleCharacter, BibleTerm, BibleArc } from '../types/dashboard';
 import {
   fetchBible,
   updateBible,
@@ -78,6 +84,32 @@ export const BibleView: React.FC<BibleViewProps> = ({
     category: 'term',
     notes: '',
   });
+
+  // Narrative Story Arcs State
+  const [expandedArcIndices, setExpandedArcIndices] = useState<Set<number>>(new Set());
+  const [activeArcExpanded, setActiveArcExpanded] = useState<boolean>(true);
+  const [selectedArcModal, setSelectedArcModal] = useState<BibleArc | null>(null);
+  const [searchArc, setSearchArc] = useState('');
+
+  const toggleArcExpanded = (index: number) => {
+    setExpandedArcIndices((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) {
+        next.delete(index);
+      } else {
+        next.add(index);
+      }
+      return next;
+    });
+  };
+
+  const expandAllArcs = (count: number) => {
+    setExpandedArcIndices(new Set(Array.from({ length: count }, (_, i) => i)));
+  };
+
+  const collapseAllArcs = () => {
+    setExpandedArcIndices(new Set());
+  };
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -618,24 +650,348 @@ export const BibleView: React.FC<BibleViewProps> = ({
               />
             </div>
 
+            {/* Active Story Arc (Meso Ongoing) */}
+            {bible?.active_arc && (
+              <div className="bg-[#29231c] border border-amber-600/40 rounded-[4px] p-5 shadow-sm">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Bookmark className="w-4 h-4 text-amber-400" />
+                    <h3 className="font-medium text-[#f7f5f0] text-sm flex items-center gap-2">
+                      Active Story Arc (Ongoing)
+                      <span className="text-[10px] px-2 py-0.5 bg-amber-500/20 text-amber-300 rounded border border-amber-500/30 uppercase tracking-wide font-medium">
+                        ▶ Active
+                      </span>
+                    </h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveArcExpanded(!activeArcExpanded)}
+                    className="text-xs text-[#aea69c] hover:text-[#f7f5f0] flex items-center gap-1 cursor-pointer transition-colors"
+                  >
+                    <span>{activeArcExpanded ? 'Collapse' : 'Expand'}</span>
+                    {activeArcExpanded ? (
+                      <ChevronUp className="w-3.5 h-3.5" />
+                    ) : (
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+                </div>
+
+                <div
+                  onClick={() => setActiveArcExpanded(!activeArcExpanded)}
+                  className="p-3.5 bg-[#24201d] border border-amber-600/30 rounded-[3px] cursor-pointer hover:border-amber-500/50 transition-colors"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-xs text-[#f7f5f0]">
+                        Arc #{bible.active_arc.arc_num ?? bible.active_arc.arc_number ?? 1}:{' '}
+                        {bible.active_arc.title || bible.active_arc.arc_title || 'Ongoing Arc'}
+                      </span>
+                      {bible.active_arc.arc_id && (
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 bg-[#2f2a26] text-[#aea69c] rounded border border-[#3f3a36]">
+                          {bible.active_arc.arc_id}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {bible.active_arc.folder && (
+                        <span className="text-[10px] px-1.5 py-0.5 bg-[#2c2825] text-[#b3aa9d] rounded border border-[#443e39] font-mono">
+                          Vol: {bible.active_arc.folder}
+                        </span>
+                      )}
+                      <span className="text-[10px] px-1.5 py-0.5 bg-[#2c2825] text-[#dad2c1] rounded border border-[#443e39] font-mono">
+                        From Ch. {bible.active_arc.start_chapter ?? 1}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedArcModal(bible.active_arc!);
+                        }}
+                        title="View full details"
+                        className="p-1 text-[#8e8579] hover:text-[#f7f5f0] hover:bg-[#383330] rounded transition-colors"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {!activeArcExpanded && (bible.active_arc.synopsis || bible.active_arc.summary) && (
+                    <div className="text-xs text-[#c9c0ad] mt-1.5 line-clamp-1 leading-relaxed">
+                      {bible.active_arc.synopsis || bible.active_arc.summary}
+                    </div>
+                  )}
+
+                  {activeArcExpanded && (
+                    <div className="mt-3 pt-3 border-t border-[#3f3a36] space-y-3">
+                      {bible.active_arc.core_conflict && (
+                        <div className="bg-[#241e18] border border-amber-900/40 rounded p-2.5">
+                          <div className="text-[10px] font-semibold text-amber-300 uppercase tracking-wider flex items-center gap-1.5 mb-1">
+                            <Target className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                            Core Conflict & Narrative Stakes
+                          </div>
+                          <p className="text-xs text-[#dad2c1] leading-relaxed">
+                            {bible.active_arc.core_conflict}
+                          </p>
+                        </div>
+                      )}
+                      {(bible.active_arc.synopsis || bible.active_arc.summary) && (
+                        <div className="space-y-1">
+                          <div className="text-[10px] font-semibold text-[#aea69c] uppercase tracking-wider">
+                            Narrative Progression
+                          </div>
+                          <p className="text-xs text-[#dad2c1] leading-relaxed whitespace-pre-wrap">
+                            {bible.active_arc.synopsis || bible.active_arc.summary}
+                          </p>
+                        </div>
+                      )}
+                      {bible.active_arc.key_milestones && bible.active_arc.key_milestones.length > 0 && (
+                        <div className="space-y-1">
+                          <div className="text-[10px] font-semibold text-[#aea69c] uppercase tracking-wider">
+                            Milestones Achieved So Far
+                          </div>
+                          <div className="space-y-1 pl-1">
+                            {bible.active_arc.key_milestones.map((m, mIdx) => (
+                              <div key={mIdx} className="text-xs text-[#dad2c1] flex items-start gap-2">
+                                <CheckCircle2 className="w-3.5 h-3.5 text-amber-400 mt-0.5 shrink-0" />
+                                <span>{m}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Meso Story Arcs */}
             <div className="bg-[#383330] border border-[#3f3a36] rounded-[4px] p-5">
-              <h3 className="font-medium text-[#f7f5f0] text-sm mb-3">
-                Archived Story Arcs ({bible?.archived_arcs?.length ?? 0})
-              </h3>
-              {bible?.archived_arcs && bible.archived_arcs.length > 0 ? (
-                <div className="space-y-3">
-                  {bible.archived_arcs.map((arc, i) => (
-                    <div key={i} className="p-3 bg-[#24201d] border border-[#3f3a36] rounded-[3px]">
-                      <div className="font-medium text-xs text-[#f7f5f0]">
-                        Arc #{arc.arc_number ?? i + 1}: {arc.arc_title || 'Untitled Arc'}
-                      </div>
-                      <div className="text-xs text-[#c9c0ad] mt-1 leading-relaxed">
-                        {arc.summary}
-                      </div>
-                    </div>
-                  ))}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                <div className="flex items-center gap-2">
+                  <BookOpen className="w-4 h-4 text-[#dad2c1]" />
+                  <h3 className="font-medium text-[#f7f5f0] text-sm">
+                    Archived Story Arcs ({bible?.archived_arcs?.length ?? 0})
+                  </h3>
                 </div>
+
+                {bible?.archived_arcs && bible.archived_arcs.length > 0 && (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 absolute left-2.5 top-2 text-[#aea69c]" />
+                      <input
+                        type="text"
+                        placeholder="Filter arcs..."
+                        value={searchArc}
+                        onChange={(e) => setSearchArc(e.target.value)}
+                        className="bg-[#24201d] border border-[#3f3a36] rounded-[3px] pl-8 pr-6 py-1 text-xs text-[#dad2c1] placeholder-[#8e8579] focus:outline-none focus:border-[#dad2c1] w-36 sm:w-44"
+                      />
+                      {searchArc && (
+                        <button
+                          type="button"
+                          onClick={() => setSearchArc('')}
+                          className="absolute right-2 top-1.5 text-[#aea69c] hover:text-[#f7f5f0]"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => expandAllArcs(bible.archived_arcs?.length ?? 0)}
+                      className="btn-secondary text-[11px] py-1 px-2 flex items-center gap-1"
+                      title="Expand all arc details"
+                    >
+                      <ChevronDown className="w-3 h-3" />
+                      <span>Expand All</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={collapseAllArcs}
+                      className="btn-secondary text-[11px] py-1 px-2 flex items-center gap-1"
+                      title="Collapse all arc details"
+                    >
+                      <ChevronUp className="w-3 h-3" />
+                      <span>Collapse All</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {bible?.archived_arcs && bible.archived_arcs.length > 0 ? (
+                (() => {
+                  const filteredArcs = bible.archived_arcs
+                    .map((arc, origIdx) => ({ arc, origIdx }))
+                    .filter(({ arc, origIdx }) => {
+                      if (!searchArc.trim()) return true;
+                      const q = searchArc.toLowerCase();
+                      const title = (arc.title || arc.arc_title || '').toLowerCase();
+                      const synopsis = (arc.synopsis || arc.summary || '').toLowerCase();
+                      const conflict = (arc.core_conflict || '').toLowerCase();
+                      const num = String(arc.arc_num ?? arc.arc_number ?? origIdx + 1);
+                      const folder = (arc.folder || '').toLowerCase();
+                      return (
+                        title.includes(q) ||
+                        synopsis.includes(q) ||
+                        conflict.includes(q) ||
+                        num.includes(q) ||
+                        folder.includes(q)
+                      );
+                    });
+
+                  if (filteredArcs.length === 0) {
+                    return (
+                      <div className="text-xs text-[#aea69c] italic p-4 text-center bg-[#24201d] rounded border border-[#3f3a36]">
+                        No story arcs match filter "{searchArc}".
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-3">
+                      {filteredArcs.map(({ arc, origIdx }) => {
+                        const arcNum = arc.arc_num ?? arc.arc_number ?? origIdx + 1;
+                        const arcTitle = arc.title || arc.arc_title || 'Untitled Arc';
+                        const arcSynopsis = arc.synopsis || arc.summary || '';
+                        const isExpanded = expandedArcIndices.has(origIdx);
+
+                        return (
+                          <div
+                            key={arc.arc_id || origIdx}
+                            className="bg-[#24201d] border border-[#3f3a36] hover:border-[#524b45] rounded-[4px] transition-all overflow-hidden"
+                          >
+                            <div
+                              onClick={() => toggleArcExpanded(origIdx)}
+                              className="w-full text-left p-3.5 flex items-center justify-between gap-3 cursor-pointer select-none hover:bg-[#2b2622] transition-colors"
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                <span className="text-[#aea69c] hover:text-[#f7f5f0] p-0.5 rounded transition-transform">
+                                  {isExpanded ? (
+                                    <ChevronDown className="w-4 h-4 text-[#dad2c1] shrink-0" />
+                                  ) : (
+                                    <ChevronRight className="w-4 h-4 text-[#aea69c] shrink-0" />
+                                  )}
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="font-semibold text-xs text-[#f7f5f0]">
+                                      Arc #{arcNum}: {arcTitle}
+                                    </span>
+                                    {arc.arc_id && (
+                                      <span className="text-[10px] font-mono px-1.5 py-0.5 bg-[#2f2a26] text-[#aea69c] rounded border border-[#3f3a36]">
+                                        {arc.arc_id}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {!isExpanded && arcSynopsis && (
+                                    <p className="text-[11px] text-[#9c9488] line-clamp-1 mt-0.5 leading-relaxed">
+                                      {arcSynopsis}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2 shrink-0">
+                                {arc.folder && (
+                                  <span className="text-[10px] px-1.5 py-0.5 bg-[#2c2825] text-[#b3aa9d] rounded border border-[#443e39] font-mono">
+                                    Vol: {arc.folder}
+                                  </span>
+                                )}
+                                <span className="text-[10px] px-1.5 py-0.5 bg-[#2c2825] text-[#dad2c1] rounded border border-[#443e39] font-mono">
+                                  Ch. {arc.start_chapter ?? 1}{arc.end_chapter ? `–${arc.end_chapter}` : '+'}
+                                </span>
+                                <span className="text-[10px] px-1.5 py-0.5 bg-[#1a2c20] text-[#7ecb94] rounded border border-[#2d5038] uppercase tracking-wide font-medium">
+                                  {arc.status || 'Completed'}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedArcModal(arc);
+                                  }}
+                                  title="View full details"
+                                  className="p-1 text-[#8e8579] hover:text-[#f7f5f0] hover:bg-[#383330] rounded transition-colors"
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+
+                            {isExpanded && (
+                              <div className="border-t border-[#332e2b] p-4 bg-[#1e1a18] space-y-3.5">
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                                  <div className="bg-[#24201d] border border-[#383330] rounded p-2">
+                                    <div className="text-[10px] text-[#8e8579] uppercase font-mono">Arc Identifier</div>
+                                    <div className="font-mono text-[#dad2c1] font-medium mt-0.5">
+                                      {arc.arc_id || `arc_${String(arcNum).padStart(4, '0')}`}
+                                    </div>
+                                  </div>
+                                  <div className="bg-[#24201d] border border-[#383330] rounded p-2">
+                                    <div className="text-[10px] text-[#8e8579] uppercase font-mono">Chapters</div>
+                                    <div className="font-mono text-[#dad2c1] font-medium mt-0.5">
+                                      Ch. {arc.start_chapter ?? 1} – {arc.end_chapter ?? 'Ongoing'}
+                                    </div>
+                                  </div>
+                                  <div className="bg-[#24201d] border border-[#383330] rounded p-2">
+                                    <div className="text-[10px] text-[#8e8579] uppercase font-mono">Volume Scope</div>
+                                    <div className="text-[#dad2c1] font-medium mt-0.5 truncate">
+                                      {arc.folder || 'Global'}
+                                    </div>
+                                  </div>
+                                  <div className="bg-[#24201d] border border-[#383330] rounded p-2">
+                                    <div className="text-[10px] text-[#8e8579] uppercase font-mono">Lifecycle State</div>
+                                    <div className="text-[#7ecb94] font-medium mt-0.5 capitalize">
+                                      {arc.status || 'Completed'}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {arc.core_conflict && (
+                                  <div className="bg-[#26201b] border border-amber-900/30 rounded p-3">
+                                    <div className="text-[10px] font-semibold text-amber-300 uppercase tracking-wider flex items-center gap-1.5 mb-1">
+                                      <Target className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                                      Core Conflict & Narrative Stakes
+                                    </div>
+                                    <p className="text-xs text-[#dad2c1] leading-relaxed">
+                                      {arc.core_conflict}
+                                    </p>
+                                  </div>
+                                )}
+
+                                <div className="space-y-1">
+                                  <div className="text-[10px] font-semibold text-[#aea69c] uppercase tracking-wider">
+                                    Arc Progression & Synopsis
+                                  </div>
+                                  <p className="text-xs text-[#c9c0ad] leading-relaxed whitespace-pre-wrap bg-[#24201d] border border-[#383330] rounded p-3">
+                                    {arcSynopsis || 'No narrative synopsis recorded for this arc.'}
+                                  </p>
+                                </div>
+
+                                {arc.key_milestones && arc.key_milestones.length > 0 && (
+                                  <div className="space-y-1.5">
+                                    <div className="text-[10px] font-semibold text-[#aea69c] uppercase tracking-wider">
+                                      Key Milestones Achieved ({arc.key_milestones.length})
+                                    </div>
+                                    <div className="bg-[#24201d] border border-[#383330] rounded p-3 space-y-1.5">
+                                      {arc.key_milestones.map((milestone, mIdx) => (
+                                        <div key={mIdx} className="text-xs text-[#dad2c1] flex items-start gap-2">
+                                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 mt-0.5 shrink-0" />
+                                          <span className="leading-relaxed">{milestone}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()
               ) : (
                 <div className="text-xs text-[#aea69c] italic">
                   No completed story arcs archived yet. ChroniclerAgent archives story arcs automatically upon resolution.
@@ -901,6 +1257,104 @@ export const BibleView: React.FC<BibleViewProps> = ({
                 className="btn-primary text-xs"
               >
                 Save Term
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Story Arc Detail Modal */}
+      {selectedArcModal && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-[#2b2622] border border-[#3f3a36] rounded-[6px] max-w-2xl w-full p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-[#3f3a36]">
+              <div className="flex items-center gap-2">
+                <BookOpen className="w-4 h-4 text-amber-400" />
+                <h2 className="text-sm font-semibold text-[#f7f5f0]">
+                  Arc #{selectedArcModal.arc_num ?? selectedArcModal.arc_number ?? '?'}:{' '}
+                  {selectedArcModal.title || selectedArcModal.arc_title || 'Untitled Arc'}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedArcModal(null)}
+                className="text-[#aea69c] hover:text-[#f7f5f0] p-1 rounded hover:bg-[#383330] transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+              <div className="bg-[#24201d] border border-[#383330] rounded p-2">
+                <div className="text-[10px] text-[#8e8579] uppercase font-mono">Arc Identifier</div>
+                <div className="font-mono text-[#dad2c1] font-medium mt-0.5">
+                  {selectedArcModal.arc_id || 'N/A'}
+                </div>
+              </div>
+              <div className="bg-[#24201d] border border-[#383330] rounded p-2">
+                <div className="text-[10px] text-[#8e8579] uppercase font-mono">Chapters</div>
+                <div className="font-mono text-[#dad2c1] font-medium mt-0.5">
+                  Ch. {selectedArcModal.start_chapter ?? 1} – {selectedArcModal.end_chapter ?? 'Ongoing'}
+                </div>
+              </div>
+              <div className="bg-[#24201d] border border-[#383330] rounded p-2">
+                <div className="text-[10px] text-[#8e8579] uppercase font-mono">Volume Scope</div>
+                <div className="text-[#dad2c1] font-medium mt-0.5 truncate">
+                  {selectedArcModal.folder || 'Global'}
+                </div>
+              </div>
+              <div className="bg-[#24201d] border border-[#383330] rounded p-2">
+                <div className="text-[10px] text-[#8e8579] uppercase font-mono">Status</div>
+                <div className="text-[#7ecb94] font-medium mt-0.5 capitalize">
+                  {selectedArcModal.status || 'Completed'}
+                </div>
+              </div>
+            </div>
+
+            {selectedArcModal.core_conflict && (
+              <div className="bg-[#26201b] border border-amber-900/30 rounded p-3">
+                <div className="text-[10px] font-semibold text-amber-300 uppercase tracking-wider flex items-center gap-1.5 mb-1">
+                  <Target className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  Core Conflict & Narrative Goal
+                </div>
+                <p className="text-xs text-[#dad2c1] leading-relaxed">
+                  {selectedArcModal.core_conflict}
+                </p>
+              </div>
+            )}
+
+            <div className="space-y-1">
+              <div className="text-[10px] font-semibold text-[#aea69c] uppercase tracking-wider">
+                Narrative Progression & Synopsis
+              </div>
+              <p className="text-xs text-[#c9c0ad] leading-relaxed whitespace-pre-wrap bg-[#24201d] border border-[#383330] rounded p-3 max-h-60 overflow-y-auto">
+                {selectedArcModal.synopsis || selectedArcModal.summary || 'No narrative synopsis recorded.'}
+              </p>
+            </div>
+
+            {selectedArcModal.key_milestones && selectedArcModal.key_milestones.length > 0 && (
+              <div className="space-y-1.5">
+                <div className="text-[10px] font-semibold text-[#aea69c] uppercase tracking-wider">
+                  Key Milestones Achieved ({selectedArcModal.key_milestones.length})
+                </div>
+                <div className="bg-[#24201d] border border-[#383330] rounded p-3 space-y-1.5 max-h-48 overflow-y-auto">
+                  {selectedArcModal.key_milestones.map((milestone, mIdx) => (
+                    <div key={mIdx} className="text-xs text-[#dad2c1] flex items-start gap-2">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 mt-0.5 shrink-0" />
+                      <span className="leading-relaxed">{milestone}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end pt-2 border-t border-[#3f3a36]">
+              <button
+                type="button"
+                onClick={() => setSelectedArcModal(null)}
+                className="btn-secondary text-xs"
+              >
+                Close
               </button>
             </div>
           </div>

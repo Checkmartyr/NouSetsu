@@ -75,7 +75,7 @@ export const StagePipeline: React.FC<StagePipelineProps> = ({
           </span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+        <div className="flex md:grid md:grid-cols-5 gap-2 overflow-x-auto pb-1 md:pb-0" style={{ scrollbarWidth: 'none' }}>
           {STAGES.map((s) => {
             const stageTraces = traces.filter((t) => t.stage === s.key);
             const count = stageTraces.length;
@@ -95,7 +95,7 @@ export const StagePipeline: React.FC<StagePipelineProps> = ({
                 key={s.key}
                 type="button"
                 onClick={() => onSelectStageFilter(isSelected ? null : s.key)}
-                className={`flex flex-col p-2.5 rounded-[4px] border text-left transition-colors relative overflow-hidden group cursor-pointer ${
+                className={`flex flex-col p-2 sm:p-2.5 rounded-[4px] border text-left transition-colors relative overflow-hidden group cursor-pointer min-w-[140px] md:min-w-0 flex-1 shrink-0 ${
                   isSelected
                     ? 'bg-[#383330] border-[#f7f5f0] text-[#f7f5f0]'
                     : isPresent

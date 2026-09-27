@@ -556,9 +556,9 @@ export const StudioView: React.FC<StudioViewProps> = ({
       </div>
 
       {/* Main Studio Grid: Left Sidebar (Chapters) & Right Viewer (Dual Text) */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
         {/* Left Column: Chapter Queue & Filters */}
-        <div className="w-96 border-r border-[#3f3a36] bg-[#2b2622] flex flex-col shrink-0">
+        <div className="w-full lg:w-96 border-b lg:border-b-0 lg:border-r border-[#3f3a36] bg-[#2b2622] flex flex-col shrink-0 h-64 sm:h-80 lg:h-full overflow-hidden">
           {/* Filter Bar */}
           <div className="p-3 border-b border-[#3f3a36] space-y-2">
             <div className="relative">
@@ -742,7 +742,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
         </div>
 
         {/* Right Column: Dual Source / Target Comparison Reader */}
-        <div className="flex-1 flex flex-col overflow-hidden bg-[#2b2622]">
+        <div className="flex-1 flex flex-col overflow-hidden bg-[#2b2622] min-w-0">
           {/* Subheader */}
           <div className="px-6 py-2 border-b border-[#3f3a36] flex items-center justify-between bg-[#383330]/30">
             <div className="flex items-center gap-2.5 min-w-0">

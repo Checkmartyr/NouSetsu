@@ -287,9 +287,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       </div>
 
       {/* Main 2-Column Layout */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
         {/* Left Sidebar: Settings Groups */}
-        <aside className="w-64 bg-[#2b2622] border-r border-[#3f3a36] flex flex-col shrink-0">
+        <aside className="w-full md:w-64 bg-[#2b2622] border-b md:border-b-0 md:border-r border-[#3f3a36] flex flex-col shrink-0 max-h-48 md:max-h-none overflow-hidden">
           {/* Quick Search */}
           <div className="p-3 border-b border-[#3f3a36]">
             <div className="relative">
@@ -344,7 +344,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
 
           {/* Sidebar Footer info */}
-          <div className="p-3 border-t border-[#3f3a36] bg-[#2b2622] text-[11px] text-[#aea69c] flex items-center justify-between">
+          <div className="p-3 border-t border-[#3f3a36] bg-[#2b2622] text-[11px] text-[#aea69c] hidden md:flex items-center justify-between">
             <span>Project ID:</span>
             <span className="font-mono text-[#dad2c1] truncate max-w-[120px]">
               {settings?.project_id || 'default_project'}
@@ -353,9 +353,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </aside>
 
         {/* Right Content Area: Form Panes */}
-        <main className="flex-1 overflow-y-auto p-6 flex justify-center bg-[#2b2622]">
-          {loading || !settings ? (
-            <div className="text-center py-20 text-slate-500">Loading settings...</div>
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 flex justify-center bg-[#2b2622] min-w-0">
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-20 text-[#aea69c] text-xs gap-3">
+              <RefreshCw className="w-5 h-5 animate-spin text-[#dad2c1]" />
+              <span>Loading project settings...</span>
+            </div>
+          ) : !settings ? (
+            <div className="flex flex-col items-center justify-center py-20 text-[#aea69c] text-xs gap-3">
+              <Settings className="w-8 h-8 text-[#aea69c]" />
+              <p>No project selected or config.yaml not found.</p>
+              <p className="text-[11px] text-[#8e8579]">Please select an active project from the top navigation bar.</p>
+            </div>
           ) : (
             <form onSubmit={handleSave} className="max-w-4xl w-full space-y-6 pb-16">
               {/* Group 1: General Novel Information */}

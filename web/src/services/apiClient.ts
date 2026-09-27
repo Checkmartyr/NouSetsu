@@ -33,11 +33,22 @@ export async function fetchSyncState(): Promise<SyncState | null> {
 }
 
 /**
- * Fetch all loaded chapter traces for a given project path (or active project)
+ * Fetch loaded chapter traces for a given project path (or active project),
+ * with optional chapter/folder filtering for high-performance lazy loading.
  */
-export async function fetchProjectTraces(projectPath?: string): Promise<ProjectTracesResponse | null> {
+export async function fetchProjectTraces(
+  projectPath?: string,
+  chapter?: number,
+  folder?: string,
+  all?: boolean
+): Promise<ProjectTracesResponse | null> {
   try {
-    const query = projectPath ? `?project_path=${encodeURIComponent(projectPath)}` : '';
+    const params = new URLSearchParams();
+    if (projectPath) params.set('project_path', projectPath);
+    if (chapter !== undefined) params.set('chapter', String(chapter));
+    if (folder) params.set('folder', folder);
+    if (all) params.set('all', 'true');
+    const query = params.toString() ? `?${params.toString()}` : '';
     const res = await fetch(`${API_BASE}/api/traces${query}`, {
       headers: { 'Accept': 'application/json' },
     });
