@@ -57,6 +57,26 @@ def test_active_project_and_sync_state(client: TestClient, web_test_repo: NovelR
     assert "active_project_path" in sync_data
 
 
+def test_create_project_initializes_raw_chapters(client: TestClient):
+    res = client.post(
+        "/api/projects/create",
+        json={
+            "title": "Created From Web",
+            "folder_name": "created-from-web-test",
+            "source_language": "Japanese",
+            "target_language": "English",
+            "genre": "general",
+            "model": "mock-model",
+        },
+    )
+
+    assert res.status_code == 200
+    project_path = Path(res.json()["active_project"]["path"])
+    assert (project_path / ".novel" / "config.yaml").is_file()
+    assert (project_path / "raw_chapters").is_dir()
+    assert (project_path / "translated_chapters").is_dir()
+
+
 def test_chapters_and_content_endpoints(client: TestClient, web_test_repo: NovelRepository):
     proj_param = str(web_test_repo.root_dir)
 
@@ -382,4 +402,3 @@ def test_folders_and_upload_endpoints(client: TestClient, web_test_repo: NovelRe
         "files": [{"name": "evil.txt", "content": "hack"}],
     })
     assert res_bad.status_code == 400
-

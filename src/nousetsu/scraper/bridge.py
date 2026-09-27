@@ -40,6 +40,37 @@ class NovelScraperBridge:
             and self.python_exe.is_file()
         )
 
+    async def romanize_title(self, title: str) -> str:
+        """Romanize a title with the Novel-Scraper's language-aware utility."""
+        cleaned_title = title.strip()
+        if not cleaned_title or not self.is_available():
+            return cleaned_title
+
+        script = (
+            "from src.utils.romanizer import romanize_text; "
+            "import sys; print(romanize_text(sys.argv[1]))"
+        )
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                str(self.python_exe),
+                "-c",
+                script,
+                cleaned_title,
+                cwd=str(self.scraper_dir),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout_data, stderr_data = await proc.communicate()
+            if proc.returncode != 0:
+                err_text = stderr_data.decode("utf-8", errors="replace").strip()
+                logger.warning("Novel title romanization failed: %s", err_text)
+                return cleaned_title
+
+            return stdout_data.decode("utf-8", errors="replace").strip() or cleaned_title
+        except Exception:
+            logger.exception("Failed to romanize novel title")
+            return cleaned_title
+
     async def inspect_url(self, url: str) -> ScraperInspectResponse:
         """Inspect a webnovel URL (TOC or chapter), discovering chapter list and metadata."""
         if not self.is_available():
@@ -87,12 +118,15 @@ class NovelScraperBridge:
                 ScraperChapterItem(index=c["index"], title=c["title"], url=c["url"])
                 for c in data.get("chapters", [])
             ]
+            novel_title = data.get("novel_title", "Unknown Novel")
+            romanized_title = await self.romanize_title(novel_title)
 
             return ScraperInspectResponse(
                 success=data.get("success", True),
                 url=url,
                 page_type=data.get("page_type", "TOC"),
-                novel_title=data.get("novel_title", "Unknown Novel"),
+                novel_title=novel_title,
+                romanized_title=romanized_title,
                 author=data.get("author"),
                 description=data.get("description"),
                 total_chapters=data.get("total_chapters", len(chapters)),

@@ -24,6 +24,7 @@ class ScraperInspectResponse(BaseModel):
     url: str
     page_type: Optional[str] = "TOC"
     novel_title: str = "Unknown Novel"
+    romanized_title: Optional[str] = None
     author: Optional[str] = None
     description: Optional[str] = None
     total_chapters: int = 0

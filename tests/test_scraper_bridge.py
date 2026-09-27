@@ -32,6 +32,39 @@ def test_scraper_detector_and_submodule():
     assert bridge.is_available() is True
 
 
+@pytest.mark.asyncio
+async def test_scraper_bridge_romanizes_title_with_submodule(tmp_path, monkeypatch):
+    scraper_dir = tmp_path / "novel_scraper"
+    scraper_dir.mkdir()
+    python_exe = tmp_path / "python.exe"
+    python_exe.touch()
+    bridge = NovelScraperBridge(scraper_dir=scraper_dir, python_exe=python_exe)
+    captured = {}
+
+    class FakeProcess:
+        returncode = 0
+
+        async def communicate(self):
+            return b"Akuyaku Kizoku", b""
+
+    async def fake_create_subprocess_exec(*args, **kwargs):
+        captured["args"] = args
+        captured["cwd"] = kwargs["cwd"]
+        return FakeProcess()
+
+    monkeypatch.setattr(
+        "nousetsu.scraper.bridge.asyncio.create_subprocess_exec",
+        fake_create_subprocess_exec,
+    )
+
+    romanized = await bridge.romanize_title("悪役貴族")
+
+    assert romanized == "Akuyaku Kizoku"
+    assert captured["args"][0] == str(python_exe)
+    assert captured["args"][-1] == "悪役貴族"
+    assert captured["cwd"] == str(scraper_dir)
+
+
 def test_scraper_models_serialization():
     """Test validation and serialization of scraper request and response schemas."""
     # Test Inspect Request & Response
@@ -46,6 +79,7 @@ def test_scraper_models_serialization():
         success=True,
         url=inspect_req.url,
         novel_title="Test Slime Isekai",
+        romanized_title="Test Slime Isekai",
         author="Test Author",
         description="A great adventure.",
         total_chapters=2,
@@ -53,6 +87,7 @@ def test_scraper_models_serialization():
     )
     dumped = inspect_res.model_dump()
     assert dumped["total_chapters"] == 2
+    assert dumped["romanized_title"] == "Test Slime Isekai"
     assert dumped["chapters"][0]["title"] == "Chapter 1: The Beginning"
 
     # Test Extract Request

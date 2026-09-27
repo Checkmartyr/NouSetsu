@@ -236,6 +236,7 @@ export interface ScraperInspectResult {
   url: string;
   page_type?: string;
   novel_title: string;
+  romanized_title?: string | null;
   author?: string | null;
   description?: string | null;
   total_chapters: number;
