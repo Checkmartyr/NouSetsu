@@ -30,3 +30,12 @@ node_modules/
 .agents/private/
 .api-port
 docs/promo/
+
+# Rust / Tauri build artifacts
+src-tauri/target/
+
+# Playwright test reports & generated audit artifacts
+web/playwright-report/
+web/test-results/
+web/audit-results/
+
