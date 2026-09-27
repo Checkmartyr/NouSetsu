@@ -605,6 +605,71 @@ class PdfWriter:
         return pdf_bytes
 
 
+def _resolve_export_output_dir(repo: NovelRepository, folder: Optional[str] = None) -> Tuple[Path, str]:
+    """Resolve the target directory containing translated markdown chapters.
+
+    Returns:
+        (resolved_output_path, folder_name)
+    """
+    cfg = repo.load_config()
+    raw_folder = (folder or "").strip()
+
+    # 1. Explicit folder provided
+    if raw_folder and raw_folder not in ("all", "default"):
+        clean = raw_folder.strip("/\\")
+        direct_cand = repo.root_dir / clean
+        cand_th = repo.root_dir / f"{clean}_th"
+        cand_tr = repo.root_dir / f"{clean}_trans"
+
+        if direct_cand.is_dir() and any(f.suffix.lower() == ".md" for f in direct_cand.iterdir() if f.is_file()):
+            return direct_cand, direct_cand.name
+        if cand_th.is_dir() and any(f.suffix.lower() == ".md" for f in cand_th.iterdir() if f.is_file()):
+            return cand_th, cand_th.name
+        if cand_tr.is_dir() and any(f.suffix.lower() == ".md" for f in cand_tr.iterdir() if f.is_file()):
+            return cand_tr, cand_tr.name
+
+        if direct_cand.is_dir():
+            return direct_cand, direct_cand.name
+        if cand_th.is_dir():
+            return cand_th, cand_th.name
+        if cand_tr.is_dir():
+            return cand_tr, cand_tr.name
+
+        return direct_cand, direct_cand.name
+
+    # 2. No explicit folder provided or 'all' / 'default'
+    default_out = cfg.get_output_path(repo.root_dir)
+    if default_out.is_dir() and any(f.suffix.lower() == ".md" for f in default_out.iterdir() if f.is_file()):
+        return default_out, default_out.name
+
+    # Otherwise, discover non-empty translated folders in project
+    candidates: List[Tuple[Path, int]] = []
+    try:
+        for _, out_name, _ in repo.discover_folders():
+            p = repo.root_dir / out_name
+            if p.is_dir():
+                md_cnt = len([f for f in p.iterdir() if f.is_file() and f.suffix.lower() == ".md"])
+                if md_cnt > 0:
+                    candidates.append((p, md_cnt))
+    except Exception:
+        pass
+
+    if repo.root_dir.exists():
+        for child in repo.root_dir.iterdir():
+            if child.is_dir() and (child.name.endswith("_th") or child.name.endswith("_trans") or child.name == "translated_chapters"):
+                if not any(c[0] == child for c in candidates):
+                    md_cnt = len([f for f in child.iterdir() if f.is_file() and f.suffix.lower() == ".md"])
+                    if md_cnt > 0:
+                        candidates.append((child, md_cnt))
+
+    if candidates:
+        candidates.sort(key=lambda c: c[1], reverse=True)
+        best_path = candidates[0][0]
+        return best_path, best_path.name
+
+    return default_out, default_out.name
+
+
 def preview_project_ebook(
     repo: NovelRepository,
     options: EbookExportOptions,
@@ -617,12 +682,7 @@ def preview_project_ebook(
     language = options.language or cfg.target_language or "th"
 
     # 1. Resolve output directory for translated chapters
-    if options.folder and options.folder not in ("all", "default"):
-        cand_th = repo.root_dir / f"{options.folder}_th"
-        cand_tr = repo.root_dir / f"{options.folder}_trans"
-        out_dir = cand_th if cand_th.is_dir() else (cand_tr if cand_tr.is_dir() else repo.root_dir / options.folder)
-    else:
-        out_dir = cfg.get_output_path(repo.root_dir)
+    out_dir, resolved_folder_name = _resolve_export_output_dir(repo, options.folder)
 
     if not out_dir.exists():
         raise FileNotFoundError(f"Translated chapters directory does not exist: {out_dir}")
@@ -636,7 +696,8 @@ def preview_project_ebook(
     # Inspect cover image
     cover_base64: Optional[str] = None
     has_cover = False
-    assets_dir = out_dir.parent / options.folder / "assets" if options.folder else out_dir.parent / "raw_chapters" / "assets"
+    base_raw_name = re.sub(r'_(th|trans)$', '', resolved_folder_name)
+    assets_dir = out_dir.parent / base_raw_name / "assets" if (out_dir.parent / base_raw_name / "assets").exists() else out_dir.parent / "raw_chapters" / "assets"
     for cand_name in ["cover.jpg", "cover.png", "cover.jpeg"]:
         p_cand = out_dir.parent / cand_name
         if p_cand.exists():
@@ -726,12 +787,7 @@ def compile_project_to_ebook(
     language = options.language or cfg.target_language or "th"
 
     # 1. Resolve output directory for translated chapters
-    if options.folder and options.folder != "all" and options.folder != "default":
-        cand_th = repo.root_dir / f"{options.folder}_th"
-        cand_tr = repo.root_dir / f"{options.folder}_trans"
-        out_dir = cand_th if cand_th.is_dir() else (cand_tr if cand_tr.is_dir() else repo.root_dir / options.folder)
-    else:
-        out_dir = cfg.get_output_path(repo.root_dir)
+    out_dir, resolved_folder_name = _resolve_export_output_dir(repo, options.folder)
 
     if not out_dir.exists():
         raise FileNotFoundError(f"Translated chapters directory does not exist: {out_dir}")
@@ -747,7 +803,8 @@ def compile_project_to_ebook(
     selected_indices = set(options.chapter_indices) if options.chapter_indices else None
 
     # Load chapter illustrations if an assets directory exists
-    assets_dir = out_dir.parent / options.folder / "assets" if options.folder else out_dir.parent / "raw_chapters" / "assets"
+    base_raw_name = re.sub(r'_(th|trans)$', '', resolved_folder_name)
+    assets_dir = out_dir.parent / base_raw_name / "assets" if (out_dir.parent / base_raw_name / "assets").exists() else out_dir.parent / "raw_chapters" / "assets"
     available_images: Dict[str, bytes] = {}
     if assets_dir.exists():
         for img_file in assets_dir.iterdir():

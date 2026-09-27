@@ -911,6 +911,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
         onClose={() => setIsExportModalOpen(false)}
         activeProjectPath={activeProjectPath}
         activeProjectTitle={activeProjectTitle}
+        initialFolder={selectedFolder !== 'all' ? selectedFolder : undefined}
       />
     </div>
   );

@@ -327,10 +327,18 @@ def test_ebook_web_api(tmp_path: Path):
     assert "เนื้อเรื่อง" in resp_export_html.text
     assert "ภาษาไทย" in resp_export_html.text
 
+    # 7. Check /api/folders returns translated_folders and default_translated_folder
+    resp_folders = client.get(f"/api/folders?project_path={proj_dir}")
+    assert resp_folders.status_code == 200
+    f_data = resp_folders.json()
+    assert "translated_folders" in f_data
+    assert any(tf["folder"] == "Volume_01_th" for tf in f_data["translated_folders"])
+    assert f_data["default_translated_folder"] == "Volume_01_th"
+
 
 def test_pdf_writer_and_preview(tmp_path: Path):
     """Test PdfWriter and preview_project_ebook directly."""
-    from nousetsu.ebook.writer import PdfWriter, preview_project_ebook
+    from nousetsu.ebook.writer import PdfWriter, preview_project_ebook, compile_project_to_ebook
 
     proj_dir = tmp_path / "pdf_novel"
     repo = NovelRepository(proj_dir)
@@ -343,22 +351,25 @@ def test_pdf_writer_and_preview(tmp_path: Path):
     (trans_dir / "0001.md").write_text("# Chapter 1: The Azure Cauldron\n\nInside the ancient chamber, smoke curled from the cauldron.", encoding="utf-8")
     (trans_dir / "0002.md").write_text("# Chapter 2: The Pill Tribulation\n\nThunder rumbled in the clear sky as the celestial pill formed.", encoding="utf-8")
 
-    options = EbookExportOptions(
+    # Test preview with automatic folder resolution (folder=None)
+    options_auto = EbookExportOptions(
         title="The Azure Alchemist",
         author="Master Mayoi",
-        folder="raw_chapters",
         font_family="Noto Serif Thai",
         font_size=18,
         line_height=1.8,
     )
-
-    # Test preview
-    preview = preview_project_ebook(repo, options, preview_chapter_index=2)
+    preview = preview_project_ebook(repo, options_auto, preview_chapter_index=2)
     assert preview.total_chapters == 2
     assert len(preview.toc) == 2
     assert preview.sample_chapter_index == 2
     assert preview.sample_chapter_title == "Chapter 2: The Pill Tribulation"
     assert "Thunder rumbled" in preview.sample_chapter_html
+
+    # Test compilation with automatic folder resolution (folder=None)
+    pdf_bytes, filename, mime = compile_project_to_ebook(repo, options_auto)
+    assert mime == "application/epub+zip"
+    assert len(pdf_bytes) > 1000
 
     # Test PDF Writer directly
     metadata = EbookMetadata(
@@ -373,5 +384,6 @@ def test_pdf_writer_and_preview(tmp_path: Path):
     pdf_bytes = pdf_writer.build_pdf_bytes()
     assert pdf_bytes.startswith(b"%PDF-")
     assert len(pdf_bytes) > 2000
+
 
 

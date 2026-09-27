@@ -22,13 +22,14 @@ import {
   Image as ImageIcon,
 } from 'lucide-react';
 import { fetchProjectFolders, exportEbook, previewEbook } from '../services/dashboardApi';
-import { EbookExportOptions, EbookPreviewResult } from '../types/dashboard';
+import { EbookExportOptions, EbookPreviewResult, TranslatedFolderItem } from '../types/dashboard';
 
 interface ExportBookModalProps {
   isOpen: boolean;
   onClose: () => void;
   activeProjectPath: string | null;
   activeProjectTitle?: string | null;
+  initialFolder?: string | null;
 }
 
 const FONT_OPTIONS = [
@@ -44,9 +45,11 @@ export const ExportBookModal: React.FC<ExportBookModalProps> = ({
   onClose,
   activeProjectPath,
   activeProjectTitle,
+  initialFolder,
 }) => {
   const [format, setFormat] = useState<'pdf' | 'epub' | 'html'>('pdf');
   const [folders, setFolders] = useState<string[]>([]);
+  const [translatedFolders, setTranslatedFolders] = useState<TranslatedFolderItem[]>([]);
   const [selectedFolder, setSelectedFolder] = useState<string>('all');
   const [title, setTitle] = useState<string>('');
   const [author, setAuthor] = useState<string>('');
@@ -102,14 +105,40 @@ export const ExportBookModal: React.FC<ExportBookModalProps> = ({
       setSuccessMsg(null);
 
       fetchProjectFolders(activeProjectPath).then((data) => {
-        const validFolders = data.folders.filter(
-          (f) => f.endsWith('_th') || f.endsWith('_trans') || f === 'translated_chapters'
-        );
-        setFolders(validFolders.length > 0 ? validFolders : data.folders);
-        setSelectedFolder(data.default_folder || 'all');
+        setFolders(data.folders || []);
+        const tFolders = data.translated_folders || [];
+        setTranslatedFolders(tFolders);
+
+        // Determine default export folder:
+        // 1. If initialFolder passed from StudioView, resolve matching translated folder
+        if (initialFolder && initialFolder !== 'all') {
+          const match = tFolders.find(
+            (tf) => tf.folder === initialFolder || tf.folder === `${initialFolder}_th` || tf.folder === `${initialFolder}_trans`
+          );
+          if (match) {
+            setSelectedFolder(match.folder);
+            return;
+          }
+          setSelectedFolder(initialFolder);
+          return;
+        }
+
+        // 2. Use backend's default_translated_folder
+        if (data.default_translated_folder) {
+          setSelectedFolder(data.default_translated_folder);
+          return;
+        }
+
+        // 3. Pick non-empty translated folder or default
+        const nonNull = tFolders.find((tf) => tf.chapter_count > 0);
+        if (nonNull) {
+          setSelectedFolder(nonNull.folder);
+        } else {
+          setSelectedFolder(data.default_folder || 'all');
+        }
       });
     }
-  }, [isOpen, activeProjectPath, activeProjectTitle]);
+  }, [isOpen, activeProjectPath, activeProjectTitle, initialFolder]);
 
   useEffect(() => {
     if (isOpen && activeProjectPath) {
@@ -322,12 +351,22 @@ export const ExportBookModal: React.FC<ExportBookModalProps> = ({
                 disabled={isExporting}
                 className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] px-2.5 py-1.5 text-[#f7f5f0] text-xs focus:outline-none focus:border-[#b0a89f] cursor-pointer disabled:opacity-50 font-mono"
               >
-                <option value="all">Entire Novel (translated_chapters/)</option>
-                {folders.map((f) => (
-                  <option key={f} value={f}>
-                    {f}
-                  </option>
-                ))}
+                {translatedFolders.length > 0 ? (
+                  translatedFolders.map((tf) => (
+                    <option key={tf.folder} value={tf.folder}>
+                      {tf.name} ({tf.chapter_count} chapters){tf.is_default ? ' ★ Default' : ''}
+                    </option>
+                  ))
+                ) : (
+                  <>
+                    <option value="all">Entire Novel (translated_chapters/)</option>
+                    {folders.map((f) => (
+                      <option key={f} value={f}>
+                        {f}
+                      </option>
+                    ))}
+                  </>
+                )}
               </select>
             </div>
 

@@ -204,9 +204,18 @@ export interface ProjectSettings {
   [key: string]: any;
 }
 
+export interface TranslatedFolderItem {
+  folder: string;
+  name: string;
+  chapter_count: number;
+  is_default?: boolean;
+}
+
 export interface ProjectFoldersResult {
   default_folder: string;
   folders: string[];
+  default_translated_folder?: string;
+  translated_folders?: TranslatedFolderItem[];
 }
 
 export interface UploadChaptersResult {

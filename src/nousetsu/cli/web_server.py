@@ -1254,9 +1254,75 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
         except Exception as e:
             logger.warning("Error listing project folders: %s", e)
 
+        # Enumerate translated folders
+        translated_folders: List[Dict[str, Any]] = []
+        seen_trans_names = set()
+        default_out_name = Path(cfg.output_dir).name if cfg.output_dir else "translated_chapters"
+
+        # 1. Configured output directory
+        def_out_dir = cfg.get_output_path(repo.root_dir)
+        def_out_count = 0
+        if def_out_dir.is_dir():
+            def_out_count = len([f for f in def_out_dir.iterdir() if f.is_file() and f.suffix.lower() == ".md"])
+            translated_folders.append({
+                "folder": def_out_dir.name,
+                "name": def_out_dir.name,
+                "chapter_count": def_out_count,
+                "is_default": True,
+            })
+            seen_trans_names.add(def_out_dir.name)
+
+        # 2. Discover translated pairings from repo
+        try:
+            for _, out_name, _ in repo.discover_folders():
+                p = repo.root_dir / out_name
+                if p.is_dir() and p.name not in seen_trans_names:
+                    cnt = len([f for f in p.iterdir() if f.is_file() and f.suffix.lower() == ".md"])
+                    translated_folders.append({
+                        "folder": p.name,
+                        "name": p.name,
+                        "chapter_count": cnt,
+                        "is_default": False,
+                    })
+                    seen_trans_names.add(p.name)
+        except Exception:
+            pass
+
+        # 3. Any directory ending in _th or _trans
+        if repo.root_dir.exists():
+            for child in sorted(repo.root_dir.iterdir()):
+                if child.is_dir() and (child.name.endswith("_th") or child.name.endswith("_trans")):
+                    if child.name not in seen_trans_names:
+                        cnt = len([f for f in child.iterdir() if f.is_file() and f.suffix.lower() == ".md"])
+                        translated_folders.append({
+                            "folder": child.name,
+                            "name": child.name,
+                            "chapter_count": cnt,
+                            "is_default": False,
+                        })
+                        seen_trans_names.add(child.name)
+
+        # Determine default_translated_folder
+        default_trans_folder = default_out_name
+        if active_job.active_folder:
+            af = active_job.active_folder
+            match = next((t["folder"] for t in translated_folders if t["folder"] in (af, f"{af}_th", f"{af}_trans")), None)
+            if match:
+                default_trans_folder = match
+            elif (repo.root_dir / f"{af}_th").is_dir():
+                default_trans_folder = f"{af}_th"
+
+        if not any(t["folder"] == default_trans_folder for t in translated_folders if t["chapter_count"] > 0):
+            non_empty = [t for t in translated_folders if t["chapter_count"] > 0]
+            if non_empty:
+                non_empty.sort(key=lambda t: t["chapter_count"], reverse=True)
+                default_trans_folder = non_empty[0]["folder"]
+
         return {
             "default_folder": raw_dir_name,
             "folders": folders,
+            "default_translated_folder": default_trans_folder,
+            "translated_folders": translated_folders,
         }
 
     @app.post("/api/chapters/upload")
