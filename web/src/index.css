@@ -159,3 +159,34 @@
 .input-text::placeholder {
   color: #aea69c;
 }
+
+/* eBook Live Preview Prose Styling */
+.ebook-preview-prose p {
+  text-indent: 1.6em;
+  margin-top: 0;
+  margin-bottom: 0.8em;
+  text-align: justify;
+  text-justify: inter-word;
+  word-break: normal;
+  overflow-wrap: break-word;
+}
+.ebook-preview-prose blockquote {
+  margin: 1.5rem 1rem;
+  padding: 0.6rem 1.2rem;
+  border-left: 3px solid #d9a05b;
+  background-color: #f7f4ed;
+  font-style: italic;
+  color: #444444;
+}
+.ebook-preview-prose blockquote p {
+  text-indent: 0;
+  margin: 0;
+}
+.ebook-preview-prose h2,
+.ebook-preview-prose h3 {
+  font-weight: 600;
+  margin-top: 1.5rem;
+  margin-bottom: 0.8rem;
+  color: #2b2622;
+}
+

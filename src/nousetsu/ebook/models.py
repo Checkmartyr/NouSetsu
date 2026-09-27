@@ -60,15 +60,44 @@ class EbookImportParams(BaseModel):
 
 
 class EbookExportOptions(BaseModel):
-    """Configuration for exporting translated chapters to EPUB or Printable PDF."""
+    """Configuration for exporting translated chapters to EPUB, PDF, or Printable HTML."""
     project_path: Optional[str] = None
     folder: Optional[str] = None
     chapter_indices: Optional[List[int]] = None
     start_chapter: Optional[int] = None
     end_chapter: Optional[int] = None
-    format: str = Field("epub", description="'epub' or 'html_print'")
+    format: str = Field("epub", description="'epub', 'pdf', or 'html_print'")
     title: Optional[str] = None
     author: Optional[str] = None
     language: str = "th"
     include_bible_appendix: bool = True
     apply_thai_word_wrap: bool = True
+    font_family: Optional[str] = Field("Sarabun", description="Font family: 'Sarabun', 'Prompt', 'Kanit', 'Noto Serif Thai', 'Chakra Petch'")
+    font_size: Optional[int] = Field(16, description="Base prose font size in px/pt (12-24)")
+    line_height: Optional[float] = Field(1.8, description="Prose line height ratio (1.4-2.2)")
+
+
+class EbookPreviewChapterItem(BaseModel):
+    """Table of contents item for live preview."""
+    index: int
+    title: str
+    word_count: int
+    has_images: bool = False
+    source_file: Optional[str] = None
+
+
+class EbookPreviewResult(BaseModel):
+    """Live preview result with Table of Contents and rendered chapter prose."""
+    title: str
+    author: Optional[str] = None
+    language: str = "th"
+    total_chapters: int
+    total_words: int
+    has_cover: bool = False
+    cover_base64: Optional[str] = None
+    toc: List[EbookPreviewChapterItem] = Field(default_factory=list)
+    sample_chapter_index: int = 1
+    sample_chapter_title: str = ""
+    sample_chapter_html: str = ""
+    sample_chapter_text: str = ""
+

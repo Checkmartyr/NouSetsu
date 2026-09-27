@@ -281,14 +281,97 @@ def test_ebook_web_api(tmp_path: Path):
     assert resp_export.headers["content-type"] == "application/epub+zip"
     assert len(resp_export.content) > 500
 
-    # 4. Export endpoint (Printable HTML / PDF)
+    # 4. Preview endpoint (ToC + Chapter Prose + Typography)
+    resp_prev = client.post(
+        "/api/ebook/preview",
+        json={
+            "project_path": str(proj_dir),
+            "folder": "Volume_01",
+            "preview_chapter_index": 1,
+            "font_family": "Prompt",
+            "font_size": 18,
+            "line_height": 2.0,
+        },
+    )
+    assert resp_prev.status_code == 200
+    prev_data = resp_prev.json()
+    assert prev_data["title"] == "Web Novel Adventure"
+    assert prev_data["total_chapters"] == 1
+    assert len(prev_data["toc"]) == 1
+    assert prev_data["toc"][0]["title"] == "บทที่ 1"
+    assert "เนื้อเรื่อง" in prev_data["sample_chapter_html"]
+
+    # 5. Export endpoint (Native PDF)
     resp_export_pdf = client.post(
         "/api/ebook/export",
-        json={"project_path": str(proj_dir), "format": "pdf", "folder": "Volume_01"},
+        json={
+            "project_path": str(proj_dir),
+            "format": "pdf",
+            "folder": "Volume_01",
+            "font_family": "Kanit",
+            "font_size": 16,
+        },
     )
     assert resp_export_pdf.status_code == 200
-    assert "text/html" in resp_export_pdf.headers["content-type"]
-    assert "เนื้อเรื่อง" in resp_export_pdf.text
-    assert "ภาษาไทย" in resp_export_pdf.text
-    assert "\u200b" in resp_export_pdf.text
+    assert resp_export_pdf.headers["content-type"] == "application/pdf"
+    assert resp_export_pdf.content.startswith(b"%PDF-")
+    assert len(resp_export_pdf.content) > 1000
+
+    # 6. Export endpoint (Printable HTML)
+    resp_export_html = client.post(
+        "/api/ebook/export",
+        json={"project_path": str(proj_dir), "format": "html", "folder": "Volume_01"},
+    )
+    assert resp_export_html.status_code == 200
+    assert "text/html" in resp_export_html.headers["content-type"]
+    assert "เนื้อเรื่อง" in resp_export_html.text
+    assert "ภาษาไทย" in resp_export_html.text
+
+
+def test_pdf_writer_and_preview(tmp_path: Path):
+    """Test PdfWriter and preview_project_ebook directly."""
+    from nousetsu.ebook.writer import PdfWriter, preview_project_ebook
+
+    proj_dir = tmp_path / "pdf_novel"
+    repo = NovelRepository(proj_dir)
+    cfg = repo.load_config()
+    cfg.title = "The Azure Alchemist"
+    repo.save_config(cfg)
+
+    trans_dir = proj_dir / "raw_chapters_th"
+    trans_dir.mkdir(parents=True, exist_ok=True)
+    (trans_dir / "0001.md").write_text("# Chapter 1: The Azure Cauldron\n\nInside the ancient chamber, smoke curled from the cauldron.", encoding="utf-8")
+    (trans_dir / "0002.md").write_text("# Chapter 2: The Pill Tribulation\n\nThunder rumbled in the clear sky as the celestial pill formed.", encoding="utf-8")
+
+    options = EbookExportOptions(
+        title="The Azure Alchemist",
+        author="Master Mayoi",
+        folder="raw_chapters",
+        font_family="Noto Serif Thai",
+        font_size=18,
+        line_height=1.8,
+    )
+
+    # Test preview
+    preview = preview_project_ebook(repo, options, preview_chapter_index=2)
+    assert preview.total_chapters == 2
+    assert len(preview.toc) == 2
+    assert preview.sample_chapter_index == 2
+    assert preview.sample_chapter_title == "Chapter 2: The Pill Tribulation"
+    assert "Thunder rumbled" in preview.sample_chapter_html
+
+    # Test PDF Writer directly
+    metadata = EbookMetadata(
+        title="The Azure Alchemist",
+        author="Master Mayoi",
+        chapters=[
+            EbookChapter(index=1, title="Chapter 1", content_text="Sample text 1"),
+            EbookChapter(index=2, title="Chapter 2", content_text="Sample text 2"),
+        ]
+    )
+    pdf_writer = PdfWriter(metadata, font_family="Prompt", font_size=16)
+    pdf_bytes = pdf_writer.build_pdf_bytes()
+    assert pdf_bytes.startswith(b"%PDF-")
+    assert len(pdf_bytes) > 2000
+
 

@@ -15,6 +15,7 @@ import {
   EbookImportParams,
   EbookImportResult,
   EbookExportOptions,
+  EbookPreviewResult,
 } from '../types/dashboard';
 
 const API_BASE = '';
@@ -387,7 +388,7 @@ export async function exportEbook(options: EbookExportOptions): Promise<{ blob: 
   }
 
   // Parse filename from Content-Disposition header if available
-  let filename = options.format === 'pdf' ? 'novel.html' : 'novel.epub';
+  let filename = options.format === 'pdf' ? 'novel.pdf' : (options.format === 'html' ? 'novel.html' : 'novel.epub');
   const disposition = res.headers.get('Content-Disposition');
   if (disposition) {
     const match = disposition.match(/filename="?([^";]+)"?/i);
@@ -399,6 +400,25 @@ export async function exportEbook(options: EbookExportOptions): Promise<{ blob: 
   const blob = await res.blob();
   return { blob, filename };
 }
+
+export async function previewEbook(
+  options: EbookExportOptions,
+  previewIndex: number = 1
+): Promise<EbookPreviewResult> {
+  const reqBody = { ...options, preview_chapter_index: previewIndex };
+  const res = await fetch(`${API_BASE}/api/ebook/preview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(reqBody),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.detail || data.error || 'Failed to preview eBook');
+  }
+  return data as EbookPreviewResult;
+}
+
 
 
 

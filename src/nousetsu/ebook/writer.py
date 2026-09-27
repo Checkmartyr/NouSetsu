@@ -7,6 +7,7 @@ Features:
 - Automatic Novel Bible Character & Terminology appendix generation.
 """
 
+import base64
 import html
 import io
 import mimetypes
@@ -18,10 +19,18 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional, Tuple, Dict, Any
 
+try:
+    import pymupdf
+    _HAS_PYMUPDF = True
+except ImportError:
+    _HAS_PYMUPDF = False
+
 from nousetsu.ebook.models import (
     EbookChapter,
     EbookMetadata,
     EbookExportOptions,
+    EbookPreviewChapterItem,
+    EbookPreviewResult,
 )
 from nousetsu.ebook.typography import wrap_thai_text, get_book_stylesheet
 from nousetsu.storage.repository import NovelRepository
@@ -100,9 +109,19 @@ def _markdown_to_xhtml(md_text: str) -> str:
 class Epub3Writer:
     """Compiles an EbookMetadata container into an EPUB3 binary archive."""
 
-    def __init__(self, metadata: EbookMetadata, apply_thai_word_wrap: bool = True):
+    def __init__(
+        self,
+        metadata: EbookMetadata,
+        apply_thai_word_wrap: bool = True,
+        font_family: Optional[str] = "Sarabun",
+        font_size: Optional[int] = 16,
+        line_height: Optional[float] = 1.8,
+    ):
         self.meta = metadata
         self.apply_thai_wrap = apply_thai_word_wrap
+        self.font_family = font_family
+        self.font_size = font_size
+        self.line_height = line_height
         self.book_id = f"urn:uuid:{uuid.uuid4()}"
         self.now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -130,7 +149,12 @@ class Epub3Writer:
             )
 
             # 3. OEBPS/stylesheet.css
-            css_content = get_book_stylesheet(self.meta.language)
+            css_content = get_book_stylesheet(
+                self.meta.language,
+                font_family=self.font_family,
+                font_size=self.font_size,
+                line_height=self.line_height,
+            )
             zf.writestr("OEBPS/stylesheet.css", css_content)
 
             # 4. Cover Image
@@ -334,9 +358,17 @@ class HtmlPrintWriter:
         metadata: EbookMetadata,
         bible_appendix_html: Optional[str] = None,
         apply_thai_word_wrap: bool = True,
+        font_family: Optional[str] = "Sarabun",
+        font_size: Optional[int] = 16,
+        line_height: Optional[float] = 1.8,
     ) -> str:
-        """Create high-fidelity single-page HTML with @media print rules and Sarabun font."""
-        css = get_book_stylesheet(metadata.language)
+        """Create high-fidelity single-page HTML with @media print rules and chosen font."""
+        css = get_book_stylesheet(
+            metadata.language,
+            font_family=font_family,
+            font_size=font_size,
+            line_height=line_height,
+        )
 
         # Chapter TOC
         toc_items = []
@@ -474,11 +506,216 @@ def _generate_bible_appendix_html(repo: NovelRepository) -> str:
     return "\n".join(parts)
 
 
+class PdfWriter:
+    """Publication-grade native PDF writer using PyMuPDF Story and DocumentWriter."""
+
+    def __init__(
+        self,
+        metadata: EbookMetadata,
+        apply_thai_word_wrap: bool = True,
+        font_family: Optional[str] = "Sarabun",
+        font_size: Optional[int] = 16,
+        line_height: Optional[float] = 1.8,
+        paper_size: str = "a5",
+        margin_pt: float = 36.0,
+    ):
+        self.metadata = metadata
+        self.apply_thai_word_wrap = apply_thai_word_wrap
+        self.font_family = font_family or "Sarabun"
+        self.font_size = font_size or 16
+        self.line_height = line_height or 1.8
+        self.paper_size = paper_size
+        self.margin_pt = margin_pt
+
+    def build_pdf_bytes(self, bible_appendix_html: Optional[str] = None) -> bytes:
+        """Render publication-grade PDF bytes with header, TOC, chapters, and page numbers."""
+        if not _HAS_PYMUPDF:
+            raise ImportError("PyMuPDF (pymupdf) is required for PDF compilation.")
+
+        stylesheet = get_book_stylesheet(
+            language=self.metadata.language,
+            font_family=self.font_family,
+            font_size=self.font_size,
+            line_height=self.line_height,
+        )
+
+        parts: List[str] = []
+        # Title page
+        parts.append(f"<h1 class=\"book-title\">{html.escape(self.metadata.title)}</h1>")
+        if self.metadata.author:
+            parts.append(f"<h2 class=\"book-author\">{html.escape(self.metadata.author)}</h2>")
+        if self.metadata.description:
+            parts.append(f"<p style=\"text-align: center; color: #666;\">{html.escape(self.metadata.description)}</p>")
+        parts.append("<div style=\"break-after: page; page-break-after: always;\"></div>")
+
+        # Table of Contents in PDF
+        parts.append("<nav class=\"toc-container\"><h2 class=\"chapter-title\">Table of Contents</h2><ol>")
+        for ch in self.metadata.chapters:
+            parts.append(f"<li>{html.escape(ch.title)}</li>")
+        parts.append("</ol></nav>")
+        parts.append("<div style=\"break-after: page; page-break-after: always;\"></div>")
+
+        # Chapters
+        for ch in self.metadata.chapters:
+            parts.append(f"<h2 class=\"chapter-title\">{html.escape(ch.title)}</h2>")
+            raw_text = ch.content_text
+            if self.apply_thai_word_wrap and self.metadata.language.lower().startswith("th"):
+                raw_text = wrap_thai_text(raw_text)
+            xhtml_body = _markdown_to_xhtml(raw_text)
+            parts.append(f"<div class=\"chapter-body\">{xhtml_body}</div>")
+            parts.append("<div style=\"break-after: page; page-break-after: always;\"></div>")
+
+        # Novel Bible Appendix
+        if bible_appendix_html:
+            parts.append(f"<div class=\"appendix-section\"><h2 class=\"chapter-title\">Appendix: Novel Bible &amp; Characters</h2>{bible_appendix_html}</div>")
+
+        full_html = f"<!DOCTYPE html><html><head><meta charset=\"utf-8\"><style>{stylesheet}</style></head><body>{''.join(parts)}</body></html>"
+
+        buf = io.BytesIO()
+        writer = pymupdf.DocumentWriter(buf)
+        story = pymupdf.Story(html=full_html, user_css=stylesheet)
+
+        rect = pymupdf.paper_rect(self.paper_size)
+        content_rect = pymupdf.Rect(
+            self.margin_pt,
+            self.margin_pt,
+            rect.width - self.margin_pt,
+            rect.height - (self.margin_pt + 15),
+        )
+
+        more = 1
+        while more:
+            dev = writer.begin_page(rect)
+            more, _ = story.place(content_rect)
+            story.draw(dev)
+            writer.end_page()
+        writer.close()
+
+        # Inject bottom page numbers
+        raw_pdf = buf.getvalue()
+        doc = pymupdf.open(stream=raw_pdf, filetype="pdf")
+        for idx in range(len(doc)):
+            page = doc[idx]
+            page_text = f"- {idx + 1} -"
+            text_pt = pymupdf.Point(rect.width / 2 - 12, rect.height - 20)
+            page.insert_text(text_pt, page_text, fontsize=8.5, color=(0.45, 0.45, 0.45))
+
+        pdf_bytes = doc.tobytes()
+        doc.close()
+        return pdf_bytes
+
+
+def preview_project_ebook(
+    repo: NovelRepository,
+    options: EbookExportOptions,
+    preview_chapter_index: int = 1,
+) -> EbookPreviewResult:
+    """Generate lightweight live preview with Table of Contents and sample chapter HTML."""
+    cfg = repo.load_config()
+    title = options.title or cfg.title or repo.root_dir.name
+    author = options.author or getattr(cfg, "author", None) or "Author"
+    language = options.language or cfg.target_language or "th"
+
+    # 1. Resolve output directory for translated chapters
+    if options.folder and options.folder not in ("all", "default"):
+        cand_th = repo.root_dir / f"{options.folder}_th"
+        cand_tr = repo.root_dir / f"{options.folder}_trans"
+        out_dir = cand_th if cand_th.is_dir() else (cand_tr if cand_tr.is_dir() else repo.root_dir / options.folder)
+    else:
+        out_dir = cfg.get_output_path(repo.root_dir)
+
+    if not out_dir.exists():
+        raise FileNotFoundError(f"Translated chapters directory does not exist: {out_dir}")
+
+    md_files = [f for f in out_dir.iterdir() if f.is_file() and f.suffix.lower() == ".md"]
+    md_files.sort(key=lambda p: p.name)
+
+    if not md_files:
+        raise ValueError(f"No translated markdown chapters found in {out_dir}")
+
+    # Inspect cover image
+    cover_base64: Optional[str] = None
+    has_cover = False
+    assets_dir = out_dir.parent / options.folder / "assets" if options.folder else out_dir.parent / "raw_chapters" / "assets"
+    for cand_name in ["cover.jpg", "cover.png", "cover.jpeg"]:
+        p_cand = out_dir.parent / cand_name
+        if p_cand.exists():
+            mime = "image/png" if p_cand.suffix.lower() == ".png" else "image/jpeg"
+            cover_base64 = f"data:{mime};base64,{base64.b64encode(p_cand.read_bytes()).decode('ascii')}"
+            has_cover = True
+            break
+        if assets_dir.exists() and (assets_dir / cand_name).exists():
+            p_cand = assets_dir / cand_name
+            mime = "image/png" if p_cand.suffix.lower() == ".png" else "image/jpeg"
+            cover_base64 = f"data:{mime};base64,{base64.b64encode(p_cand.read_bytes()).decode('ascii')}"
+            has_cover = True
+            break
+
+    toc: List[EbookPreviewChapterItem] = []
+    chapter_mds: Dict[int, Tuple[str, str]] = {}
+    selected_indices = set(options.chapter_indices) if options.chapter_indices else None
+
+    for idx, f in enumerate(md_files, start=1):
+        m = re.match(r"^(\d+)", f.stem)
+        ch_num = int(m.group(1)) if m else idx
+
+        if selected_indices and ch_num not in selected_indices:
+            continue
+        if options.start_chapter and ch_num < options.start_chapter:
+            continue
+        if options.end_chapter and ch_num > options.end_chapter:
+            continue
+
+        raw_md = f.read_text(encoding="utf-8", errors="replace")
+        first_line = raw_md.strip().split("\n")[0] if raw_md.strip() else ""
+        ch_title = first_line.lstrip("# \t") if first_line.startswith("#") else f.stem
+
+        words = len(raw_md.split())
+        has_imgs = bool(re.search(r"!\[(.*?)\]\((.*?)\)", raw_md))
+        ch_item_idx = len(toc) + 1
+
+        toc.append(EbookPreviewChapterItem(
+            index=ch_item_idx,
+            title=ch_title,
+            word_count=words,
+            has_images=has_imgs,
+            source_file=f.name,
+        ))
+        chapter_mds[ch_item_idx] = (ch_title, raw_md)
+
+    if not toc:
+        raise ValueError("No chapters matched the requested chapter range.")
+
+    target_idx = max(1, min(preview_chapter_index, len(toc)))
+    sample_title, sample_raw_md = chapter_mds[target_idx]
+
+    proc_md = sample_raw_md
+    if options.apply_thai_word_wrap and language.lower().startswith("th"):
+        proc_md = wrap_thai_text(proc_md)
+
+    sample_xhtml = _markdown_to_xhtml(proc_md)
+
+    return EbookPreviewResult(
+        title=title,
+        author=author,
+        language=language,
+        total_chapters=len(toc),
+        total_words=sum(c.word_count for c in toc),
+        has_cover=has_cover,
+        cover_base64=cover_base64,
+        toc=toc,
+        sample_chapter_index=target_idx,
+        sample_chapter_title=sample_title,
+        sample_chapter_html=sample_xhtml,
+        sample_chapter_text=sample_raw_md,
+    )
+
+
 def compile_project_to_ebook(
     repo: NovelRepository,
     options: EbookExportOptions,
 ) -> Tuple[bytes, str, str]:
-    """Compile translated chapters into EPUB3 binary data or printable HTML.
+    """Compile translated chapters into EPUB3 binary data, native PDF, or printable HTML.
 
     Returns:
         (content_bytes, output_filename, mime_type)
@@ -595,14 +832,33 @@ def compile_project_to_ebook(
     safe_title = re.sub(r'[<>:\"/\\|?*]', '_', title).strip()
 
     # 4. Generate Output
-    if options.format in ("html_print", "pdf", "html"):
+    if options.format == "pdf":
+        pdf_writer = PdfWriter(
+            metadata,
+            apply_thai_word_wrap=options.apply_thai_word_wrap,
+            font_family=options.font_family,
+            font_size=options.font_size,
+            line_height=options.line_height,
+        )
+        pdf_bytes = pdf_writer.build_pdf_bytes(bible_appendix_html=bible_appendix_html)
+        return pdf_bytes, f"{safe_title}.pdf", "application/pdf"
+    elif options.format in ("html_print", "html"):
         html_str = HtmlPrintWriter.build_printable_html(
             metadata,
             bible_appendix_html=bible_appendix_html,
             apply_thai_word_wrap=options.apply_thai_word_wrap,
+            font_family=options.font_family,
+            font_size=options.font_size,
+            line_height=options.line_height,
         )
         return html_str.encode("utf-8"), f"{safe_title}.html", "text/html"
     else:
-        writer = Epub3Writer(metadata, apply_thai_word_wrap=options.apply_thai_word_wrap)
+        writer = Epub3Writer(
+            metadata,
+            apply_thai_word_wrap=options.apply_thai_word_wrap,
+            font_family=options.font_family,
+            font_size=options.font_size,
+            line_height=options.line_height,
+        )
         epub_data = writer.build_epub_bytes(bible_appendix_html=bible_appendix_html)
         return epub_data, f"{safe_title}.epub", "application/epub+zip"

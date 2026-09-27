@@ -28,7 +28,9 @@ from nousetsu.ebook import (
     EbookReader,
     EbookExportOptions,
     EbookImportParams,
+    EbookPreviewResult,
     compile_project_to_ebook,
+    preview_project_ebook,
 )
 from nousetsu.scraper import (
     NovelScraperBridge,
@@ -220,6 +222,8 @@ class UploadChaptersRequest(BaseModel):
 
 class EbookExportRequest(EbookExportOptions):
     project_path: Optional[str] = None
+    preview_chapter_index: Optional[int] = Field(1, description="1-based chapter index for live preview prose")
+
 
 
 
@@ -1520,9 +1524,23 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
             logger.exception("Failed to import eBook: %s", e)
             raise HTTPException(status_code=500, detail=f"Failed to import eBook: {e}")
 
+    @app.post("/api/ebook/preview")
+    async def ebook_preview(body: EbookExportRequest) -> Dict[str, Any]:
+        """Generate live preview with Table of Contents and styled chapter prose."""
+        repo = _resolve_repo(body.project_path)
+        try:
+            preview_idx = body.preview_chapter_index or 1
+            result = preview_project_ebook(repo, body, preview_chapter_index=preview_idx)
+            return result.model_dump()
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.exception("Failed to generate eBook preview: %s", e)
+            raise HTTPException(status_code=500, detail=f"Failed to generate eBook preview: {e}")
+
     @app.post("/api/ebook/export")
     async def ebook_export(body: EbookExportRequest) -> Response:
-        """Compile translated chapters into EPUB3 or Printable HTML."""
+        """Compile translated chapters into EPUB3, native PDF, or Printable HTML."""
         repo = _resolve_repo(body.project_path)
         try:
             content_bytes, filename, mime_type = compile_project_to_ebook(repo, body)

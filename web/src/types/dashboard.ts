@@ -313,16 +313,45 @@ export interface EbookImportResult {
 
 export interface EbookExportOptions {
   project_path?: string;
-  format?: 'epub' | 'pdf';
+  format?: 'epub' | 'pdf' | 'html';
   folder?: string;
   title?: string;
   author?: string;
   include_bible_appendix?: boolean;
   include_images?: boolean;
+  apply_thai_word_wrap?: boolean;
   soft_wrap_thai?: boolean;
+  font_family?: string;
+  font_size?: number;
+  line_height?: number;
   page_size?: 'A5' | 'A4' | 'B6';
   custom_css?: string;
+  preview_chapter_index?: number;
 }
+
+export interface EbookPreviewChapterItem {
+  index: number;
+  title: string;
+  word_count: number;
+  has_images: boolean;
+  source_file?: string | null;
+}
+
+export interface EbookPreviewResult {
+  title: string;
+  author?: string | null;
+  language: string;
+  total_chapters: number;
+  total_words: number;
+  has_cover: boolean;
+  cover_base64?: string | null;
+  toc: EbookPreviewChapterItem[];
+  sample_chapter_index: number;
+  sample_chapter_title: string;
+  sample_chapter_html: string;
+  sample_chapter_text: string;
+}
+
 
 
 

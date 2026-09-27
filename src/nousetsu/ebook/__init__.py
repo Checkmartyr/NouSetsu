@@ -7,6 +7,8 @@ from nousetsu.ebook.models import (
     EbookInspectResult,
     EbookImportParams,
     EbookExportOptions,
+    EbookPreviewChapterItem,
+    EbookPreviewResult,
 )
 from nousetsu.ebook.reader import (
     EpubReader,
@@ -24,6 +26,8 @@ from nousetsu.ebook.typography import (
 from nousetsu.ebook.writer import (
     Epub3Writer,
     HtmlPrintWriter,
+    PdfWriter,
+    preview_project_ebook,
     compile_project_to_ebook,
 )
 
@@ -34,6 +38,8 @@ __all__ = [
     "EbookInspectResult",
     "EbookImportParams",
     "EbookExportOptions",
+    "EbookPreviewChapterItem",
+    "EbookPreviewResult",
     "EpubReader",
     "PdfReader",
     "EbookReader",
@@ -45,5 +51,8 @@ __all__ = [
     "get_book_stylesheet",
     "Epub3Writer",
     "HtmlPrintWriter",
+    "PdfWriter",
+    "preview_project_ebook",
     "compile_project_to_ebook",
 ]
+

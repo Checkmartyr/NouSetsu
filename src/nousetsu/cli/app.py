@@ -1141,8 +1141,6 @@ def cmd_export(args: argparse.Namespace) -> None:
     repo = NovelRepository(target_path)
 
     fmt = getattr(args, "format", "epub").lower()
-    if fmt == "html":
-        fmt = "pdf"  # Maps to printable HTML
 
     options = EbookExportOptions(
         format=fmt,
@@ -1150,10 +1148,13 @@ def cmd_export(args: argparse.Namespace) -> None:
         title=getattr(args, "title", None),
         author=getattr(args, "author", None),
         include_bible_appendix=not getattr(args, "no_appendix", False),
-        soft_wrap_thai=not getattr(args, "no_wrap", False),
+        apply_thai_word_wrap=not getattr(args, "no_wrap", False),
+        font_family=getattr(args, "font", "Sarabun"),
+        font_size=getattr(args, "font_size", 16),
+        line_height=getattr(args, "line_height", 1.8),
     )
 
-    console.print(f"[dim]Compiling translated chapters into {fmt.upper()}...[/]")
+    console.print(f"[dim]Compiling translated chapters into {fmt.upper()} (Font: {options.font_family}, Size: {options.font_size}px)...[/]")
     try:
         content_bytes, default_filename, mime_type = compile_project_to_ebook(repo, options)
     except Exception as e:
@@ -1347,12 +1348,15 @@ def main() -> None:
 
     # export
     p_export = subparsers.add_parser("export", help="Compile translated chapters into EPUB3 or printable HTML/PDF")
-    p_export.add_argument("--format", "-f", choices=["epub", "pdf", "html"], default="epub", help="Output format (default: epub)")
+    p_export.add_argument("--format", "-f", choices=["epub", "pdf", "html"], default="epub", help="Output format: 'epub', 'pdf' (native binary), or 'html' (default: epub)")
     p_export.add_argument("--project-dir", "-p", default=None, help="Root folder of novel project")
     p_export.add_argument("--folder", "-F", default=None, help="Translated folder to compile (e.g. Volume_01_th or default)")
-    p_export.add_argument("--output", "-o", default=None, help="Output destination file path (.epub or .html)")
+    p_export.add_argument("--output", "-o", default=None, help="Output destination file path (.epub, .pdf, or .html)")
     p_export.add_argument("--title", default=None, help="Book title override")
     p_export.add_argument("--author", default=None, help="Author name override")
+    p_export.add_argument("--font", default="Sarabun", help="Font family ('Sarabun', 'Prompt', 'Kanit', 'Noto Serif Thai', 'Chakra Petch')")
+    p_export.add_argument("--font-size", type=int, default=16, help="Prose font size in px/pt (default: 16)")
+    p_export.add_argument("--line-height", type=float, default=1.8, help="Line height ratio (default: 1.8)")
     p_export.add_argument("--no-appendix", action="store_true", help="Do not append Novel Bible characters/glossary appendix")
     p_export.add_argument("--no-wrap", action="store_true", help="Disable Thai zero-width space line wrapping")
 

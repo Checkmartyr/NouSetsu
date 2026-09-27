@@ -1,7 +1,7 @@
 """Typography utilities for Thai script handling, word wrapping, and book CSS generation."""
 
 import re
-from typing import List
+from typing import List, Optional, Dict, Tuple
 
 try:
     import pythainlp
@@ -14,6 +14,15 @@ THAI_CHAR_PATTERN = re.compile(r"[\u0E00-\u0E7F]")
 
 # Regex to protect markdown elements (images, links, code blocks) from ZWSP insertion
 MD_LINK_OR_IMG_PATTERN = re.compile(r"(!?\[.*?\]\(.*?\)|`[^`]+`)")
+
+# Known Thai Google Fonts and their font URLs
+THAI_GOOGLE_FONTS: Dict[str, Tuple[str, str]] = {
+    "sarabun": ("Sarabun", "https://fonts.googleapis.com/css2?family=Sarabun:ital,wght@0,300;0,400;0,600;1,400;1,600&display=swap"),
+    "prompt": ("Prompt", "https://fonts.googleapis.com/css2?family=Prompt:ital,wght@0,300;0,400;0,600;1,400;1,600&display=swap"),
+    "kanit": ("Kanit", "https://fonts.googleapis.com/css2?family=Kanit:ital,wght@0,300;0,400;0,600;1,400;1,600&display=swap"),
+    "noto serif thai": ("Noto Serif Thai", "https://fonts.googleapis.com/css2?family=Noto+Serif+Thai:wght@400;600&display=swap"),
+    "chakra petch": ("Chakra Petch", "https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,400;0,600;1,400;1,600&display=swap"),
+}
 
 
 def has_thai_text(text: str) -> bool:
@@ -84,22 +93,41 @@ def wrap_thai_text(content: str) -> str:
     return "\n".join(processed_lines)
 
 
-def get_book_stylesheet(language: str = "th") -> str:
-    """Return publication-grade CSS for EPUB3 and HTML print media with Sarabun font."""
+def get_book_stylesheet(
+    language: str = "th",
+    font_family: Optional[str] = "Sarabun",
+    font_size: Optional[int] = 16,
+    line_height: Optional[float] = 1.8,
+) -> str:
+    """Return publication-grade CSS for EPUB3, PDF, and HTML print media with selectable fonts."""
+    font_size = font_size or 16
+    line_height = line_height or 1.8
     font_import = ""
-    font_family = "'Sarabun', 'Noto Sans Thai', 'Segoe UI', Tahoma, sans-serif"
+    font_family_css = "'Sarabun', 'Noto Sans Thai', 'Segoe UI', Tahoma, sans-serif"
+
+    req_font = (font_family or "").strip()
+    req_font_lower = req_font.lower()
 
     if language.lower().startswith("th"):
-        font_import = "@import url('https://fonts.googleapis.com/css2?family=Sarabun:ital,wght@0,300;0,400;0,600;1,400;1,600&display=swap');"
+        if req_font_lower in THAI_GOOGLE_FONTS:
+            actual_name, url = THAI_GOOGLE_FONTS[req_font_lower]
+            font_import = f"@import url('{url}');"
+            font_family_css = f"'{actual_name}', 'Noto Sans Thai', 'Segoe UI', Tahoma, sans-serif"
+        elif req_font:
+            # Custom font passed
+            font_family_css = f"'{req_font}', 'Sarabun', 'Noto Sans Thai', Tahoma, sans-serif"
+        else:
+            font_import = "@import url('https://fonts.googleapis.com/css2?family=Sarabun:ital,wght@0,300;0,400;0,600;1,400;1,600&display=swap');"
+            font_family_css = "'Sarabun', 'Noto Sans Thai', 'Segoe UI', Tahoma, sans-serif"
     elif language.lower().startswith("ja"):
         font_import = "@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;600&display=swap');"
-        font_family = "'Noto Serif JP', 'Hiragino Mincho ProN', 'Yu Mincho', serif"
+        font_family_css = f"'{req_font}', 'Noto Serif JP', 'Hiragino Mincho ProN', 'Yu Mincho', serif" if req_font else "'Noto Serif JP', 'Hiragino Mincho ProN', 'Yu Mincho', serif"
     elif language.lower().startswith("zh"):
         font_import = "@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&display=swap');"
-        font_family = "'Noto Serif SC', 'Songti SC', 'SimSun', serif"
+        font_family_css = f"'{req_font}', 'Noto Serif SC', 'Songti SC', 'SimSun', serif" if req_font else "'Noto Serif SC', 'Songti SC', 'SimSun', serif"
     else:
         font_import = "@import url('https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap');"
-        font_family = "'Literata', 'Georgia', serif"
+        font_family_css = f"'{req_font}', 'Literata', 'Georgia', serif" if req_font else "'Literata', 'Georgia', serif"
 
     return f"""/* NouSetsu Book Publication Stylesheet */
 {font_import}
@@ -109,9 +137,9 @@ def get_book_stylesheet(language: str = "th") -> str:
 html, body {{
     margin: 0;
     padding: 0;
-    font-family: {font_family};
-    font-size: 16px;
-    line-height: 1.8;
+    font-family: {font_family_css};
+    font-size: {font_size}px;
+    line-height: {line_height};
     color: #1a1a1a;
     background-color: #ffffff;
     text-align: justify;
@@ -255,16 +283,10 @@ table.glossary-table th {{
     font-weight: 600;
 }}
 
-/* Paged Print Rules (@media print) */
+/* Paged Print Rules */
 @page {{
     size: A5;
     margin: 20mm 15mm 20mm 15mm;
-    @bottom-center {{
-        content: counter(page);
-        font-family: {font_family};
-        font-size: 9pt;
-        color: #777777;
-    }}
 }}
 
 @media print {{
