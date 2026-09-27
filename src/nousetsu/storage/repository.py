@@ -281,8 +281,8 @@ class ProjectRegistry:
             paths.append(resolved)
             self._save_data(paths)
 
-    def list_projects(self) -> List[dict]:
-        """Return list of project metadata for all known and discoverable projects."""
+    def list_project_paths(self) -> List[str]:
+        """Return list of valid project directory paths without loading Bibles/summaries."""
         paths = self._load_data()
         
         reg_env = os.environ.get("NOVEL_REGISTRY_DIR")
@@ -320,16 +320,20 @@ class ProjectRegistry:
                                 if p_str not in paths:
                                     paths.append(p_str)
 
+        valid_paths = [p_str for p_str in paths if Path(p_str).exists() and (Path(p_str) / ".novel").exists()]
+        if len(valid_paths) != len(paths):
+            self._save_data(valid_paths)
+        return valid_paths
+
+    def list_projects(self) -> List[dict]:
+        """Return list of project metadata for all known and discoverable projects."""
+        valid_paths = self.list_project_paths()
         results = []
-        valid_paths = []
-        for p_str in paths:
+        for p_str in valid_paths:
             p = Path(p_str)
-            if not p.exists() or not (p / ".novel").exists():
-                continue
-            valid_paths.append(p_str)
             repo = NovelRepository(p)
             cfg = repo.load_config()
-            bible = repo.load_bible()
+            bible = repo.load_bible(load_summaries=False)
             results.append({
                 "path": p_str,
                 "title": cfg.title if cfg.title != "Untitled Novel" else bible.title,
@@ -339,9 +343,6 @@ class ProjectRegistry:
                 "output_dir": str(cfg.get_output_path(p)),
                 "model_name": cfg.model_name
             })
-
-        if len(valid_paths) != len(paths):
-            self._save_data(valid_paths)
 
         return results
 
@@ -577,7 +578,7 @@ class NovelRepository:
     def bible_file_path(self) -> Path:
         return self.bible_dir / "bible.yaml"
 
-    def load_bible(self, folder: Optional[str] = None) -> NovelBible:
+    def load_bible(self, folder: Optional[str] = None, load_summaries: bool = True) -> NovelBible:
         """Load Novel Bible from YAML, and sync chapter summaries (with folder scoping)."""
         path = self.bible_file_path()
         if not path.exists():
@@ -594,6 +595,10 @@ class NovelRepository:
                     time.sleep(0.05 * (attempt + 1))
                 else:
                     raise
+
+        if not load_summaries:
+            # Fast path for project metadata/listing without scanning summaries directory
+            return NovelBible.model_validate(data)
 
         # Load chapter summaries with folder scoping
         summaries: List[ChapterSummary] = []

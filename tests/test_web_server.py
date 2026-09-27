@@ -329,4 +329,142 @@ def test_translate_start_request_chapter_filter():
     assert req5.get_chapter_filter() is None
 
 
+def test_bible_arc_normalization_and_compatibility(sample_web_project):
+    """Verify /api/bible populates arc UI aliases and PUT /api/bible normalizes them back."""
+    from fastapi.testclient import TestClient
+    from nousetsu.cli.web_server import app
+    from nousetsu.models.bible import ArcSummary, NovelBible
+    from nousetsu.storage.repository import NovelRepository
 
+    proj_dir = sample_web_project["proj_dir"]
+    repo = NovelRepository(proj_dir)
+    bible = NovelBible(
+        title="Arc Test Novel",
+        source_language="Japanese",
+        target_language="English",
+        archived_arcs=[
+            ArcSummary(
+                arc_id="arc_0001",
+                arc_num=1,
+                title="Awakening Arc",
+                synopsis="The hero awakens in the ruins.",
+                core_conflict="Escape the beast",
+                status="completed",
+                start_chapter=1,
+                end_chapter=5,
+                key_milestones=["Defeated beast", "Found sword"],
+            )
+        ],
+        active_arc=ArcSummary(
+            arc_id="arc_0002",
+            arc_num=2,
+            title="Academy Arc",
+            synopsis="The hero joins the academy.",
+            core_conflict="Pass the trial",
+            status="active",
+            start_chapter=6,
+            key_milestones=["Passed entrance exam"],
+        ),
+    )
+    repo.save_bible(bible)
+
+    client = TestClient(app)
+
+    # 1. GET /api/bible must populate both title & arc_title, arc_num & arc_number, synopsis & summary
+    res = client.get(f"/api/bible?project_path={proj_dir}")
+    assert res.status_code == 200
+    data = res.json()
+    archived = data["archived_arcs"][0]
+    assert archived["title"] == "Awakening Arc"
+    assert archived["arc_title"] == "Awakening Arc"
+    assert archived["arc_num"] == 1
+    assert archived["arc_number"] == 1
+    assert archived["synopsis"] == "The hero awakens in the ruins."
+    assert archived["summary"] == "The hero awakens in the ruins."
+    assert archived["core_conflict"] == "Escape the beast"
+    assert archived["key_milestones"] == ["Defeated beast", "Found sword"]
+
+    active = data["active_arc"]
+    assert active["title"] == "Academy Arc"
+    assert active["arc_title"] == "Academy Arc"
+    assert active["arc_num"] == 2
+    assert active["arc_number"] == 2
+    assert active["synopsis"] == "The hero joins the academy."
+    assert active["summary"] == "The hero joins the academy."
+
+    # 2. PUT /api/bible accepts arc_title, arc_number, summary from frontend and normalizes back
+    incoming_data = {
+        "title": "Arc Test Novel",
+        "source_language": "Japanese",
+        "target_language": "English",
+        "genre": "fantasy",
+        "characters": [],
+        "glossary": [],
+        "archived_arcs": [
+            {
+                "arc_id": "arc_0001",
+                "arc_number": 1,
+                "arc_title": "Awakening Arc (Updated)",
+                "summary": "Updated synopsis.",
+                "core_conflict": "Escape the beast",
+                "status": "completed",
+                "start_chapter": 1,
+                "end_chapter": 5,
+            }
+        ],
+        "active_arc": {
+            "arc_id": "arc_0002",
+            "arc_number": 2,
+            "arc_title": "Academy Arc (Updated)",
+            "summary": "Updated academy synopsis.",
+            "status": "active",
+            "start_chapter": 6,
+        },
+    }
+    put_res = client.put(f"/api/bible?project_path={proj_dir}", json=incoming_data)
+    assert put_res.status_code == 200
+    assert put_res.json()["success"] is True
+
+    # Reload from repo to confirm persisted NovelBible
+    saved_bible = repo.load_bible()
+    assert saved_bible.archived_arcs[0].title == "Awakening Arc (Updated)"
+    assert saved_bible.archived_arcs[0].arc_num == 1
+    assert saved_bible.archived_arcs[0].synopsis == "Updated synopsis."
+    assert saved_bible.active_arc.title == "Academy Arc (Updated)"
+    assert saved_bible.active_arc.arc_num == 2
+    assert saved_bible.active_arc.synopsis == "Updated academy synopsis."
+
+
+def test_project_meta_caching_and_fast_scan(sample_web_project):
+    """Verify that _get_project_meta memoizes results into _PROJECT_META_CACHE."""
+    from nousetsu.cli.web_server import _get_project_meta, _PROJECT_META_CACHE, _invalidate_chapter_caches
+
+    proj_dir = sample_web_project["proj_dir"]
+    _invalidate_chapter_caches(str(proj_dir))
+
+    # First call populates cache
+    meta1 = _get_project_meta(proj_dir)
+    assert meta1["trace_count"] == 2
+    p_str = str(proj_dir.resolve())
+    assert p_str in _PROJECT_META_CACHE
+
+    # Second call returns from cache
+    meta2 = _get_project_meta(proj_dir)
+    assert meta2 == meta1
+
+    # Invalidation clears the cache
+    _invalidate_chapter_caches(str(proj_dir))
+    assert p_str not in _PROJECT_META_CACHE
+
+
+def test_api_traces_filtering_and_single_chapter(live_server, sample_web_project):
+    """Verify that /api/traces supports single-chapter filtering for lazy loading."""
+    # Query specific chapter 1
+    url = f"{live_server}/api/traces?chapter=1"
+    req = urllib.request.Request(url)
+    with urllib.request.urlopen(req) as res:
+        assert res.status == 200
+        data = json.loads(res.read().decode("utf-8"))
+        assert len(data["chapters"]) == 1
+        assert data["chapters"][0]["chapterNum"] == 1
+        assert len(data["chapters"][0]["document"]["traces"]) == 1

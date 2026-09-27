@@ -203,9 +203,41 @@ class UploadChaptersRequest(BaseModel):
 # ============================================================================
 # Metadata & Trace Extraction Helpers (Legacy & New)
 # ============================================================================
+# Metadata & Trace Extraction Helpers (Optimized with In-Memory Caches)
+# ============================================================================
+
+# In-memory caches for web server endpoints
+_CHAPTERS_CACHE: Dict[Tuple[str, Optional[str]], Tuple[float, List[Dict[str, Any]]]] = {}
+_PROJECT_META_CACHE: Dict[str, Tuple[float, Dict[str, Any]]] = {}
+_TRACES_CACHE: Dict[Tuple[str, Optional[int], Optional[str], bool], Tuple[float, List[Dict[str, Any]]]] = {}
+
+
+def _invalidate_chapter_caches(project_path: Optional[str] = None) -> None:
+    """Clear chapter, metadata, and trace caches when mutations occur."""
+    if project_path:
+        p_str = str(project_path)
+        keys_to_del = [k for k in _CHAPTERS_CACHE if k[0] == p_str]
+        for k in keys_to_del:
+            _CHAPTERS_CACHE.pop(k, None)
+        _PROJECT_META_CACHE.pop(p_str, None)
+        trace_keys = [k for k in _TRACES_CACHE if k[0] == p_str]
+        for k in trace_keys:
+            _TRACES_CACHE.pop(k, None)
+    else:
+        _CHAPTERS_CACHE.clear()
+        _PROJECT_META_CACHE.clear()
+        _TRACES_CACHE.clear()
+
 
 def _get_project_meta(project_path: Path) -> Dict[str, Any]:
-    """Extract metadata (title, genre, languages, trace stats) for a project directory."""
+    """Extract metadata (title, genre, languages, trace stats) for a project directory with TTL caching."""
+    p_str = str(project_path.resolve())
+    now = time.time()
+    if p_str in _PROJECT_META_CACHE:
+        cached_ts, cached_meta = _PROJECT_META_CACHE[p_str]
+        if now - cached_ts < 3.0:
+            return dict(cached_meta)
+
     title = project_path.name
     genre = "general"
     src_lang = "auto"
@@ -221,29 +253,8 @@ def _get_project_meta(project_path: Path) -> Dict[str, Any]:
     bible_json = novel_dir / "bible.json"
     traces_dir = novel_dir / "traces"
 
-    # 1. Read bible as base novel information if available
-    if bible_file.exists():
-        try:
-            with open(bible_file, "r", encoding="utf-8") as f:
-                b = yaml.safe_load(f) or {}
-                title = b.get("title", title)
-                genre = b.get("genre", genre)
-                src_lang = b.get("source_language", src_lang)
-                tgt_lang = b.get("target_language", tgt_lang)
-        except Exception:
-            pass
-    elif bible_json.exists():
-        try:
-            with open(bible_json, "r", encoding="utf-8") as f:
-                b = json.load(f)
-                title = b.get("title", title)
-                genre = b.get("genre", genre)
-                src_lang = b.get("source_language", src_lang)
-                tgt_lang = b.get("target_language", tgt_lang)
-        except Exception:
-            pass
-
-    # 2. Config file takes highest precedence for project title, genre, and languages
+    # 1. Config file takes highest precedence for project title, genre, and languages
+    config_loaded = False
     if config_file.exists():
         try:
             with open(config_file, "r", encoding="utf-8") as f:
@@ -252,6 +263,7 @@ def _get_project_meta(project_path: Path) -> Dict[str, Any]:
                 genre = cfg.get("genre", genre)
                 src_lang = cfg.get("source_language", src_lang)
                 tgt_lang = cfg.get("target_language", tgt_lang)
+                config_loaded = True
         except Exception:
             pass
     elif config_json.exists():
@@ -262,23 +274,65 @@ def _get_project_meta(project_path: Path) -> Dict[str, Any]:
                 genre = cfg.get("genre", genre)
                 src_lang = cfg.get("source_language", src_lang)
                 tgt_lang = cfg.get("target_language", tgt_lang)
+                config_loaded = True
         except Exception:
             pass
 
-    if traces_dir.exists() and traces_dir.is_dir():
-        for tf in traces_dir.rglob("*"):
-            if tf.is_file() and (tf.name.endswith(".json") or tf.name.endswith(".jsonl")):
-                has_traces = True
-                trace_count += 1
-                try:
-                    mtime = tf.stat().st_mtime
-                    if mtime > latest_mtime:
-                        latest_mtime = mtime
-                except Exception:
-                    pass
+    # 2. Read bible as fallback novel information if any key field is missing
+    if not config_loaded or title == project_path.name or genre == "general":
+        if bible_file.exists():
+            try:
+                with open(bible_file, "r", encoding="utf-8") as f:
+                    for _ in range(30):
+                        line = f.readline()
+                        if not line or line.startswith("characters:") or line.startswith("glossary:"):
+                            break
+                        line = line.strip()
+                        if line.startswith("title:") and (title == project_path.name):
+                            t_val = line.split(":", 1)[1].strip().strip("'\"")
+                            if t_val:
+                                title = t_val
+                        elif line.startswith("genre:") and (genre == "general"):
+                            g_val = line.split(":", 1)[1].strip().strip("'\"")
+                            if g_val:
+                                genre = g_val
+                        elif line.startswith("source_language:") and (src_lang == "auto"):
+                            sl_val = line.split(":", 1)[1].strip().strip("'\"")
+                            if sl_val:
+                                src_lang = sl_val
+                        elif line.startswith("target_language:") and (tgt_lang == "English"):
+                            tl_val = line.split(":", 1)[1].strip().strip("'\"")
+                            if tl_val:
+                                tgt_lang = tl_val
+            except Exception:
+                pass
+        elif bible_json.exists():
+            try:
+                with open(bible_json, "r", encoding="utf-8") as f:
+                    b = json.load(f)
+                    title = b.get("title", title)
+                    genre = b.get("genre", genre)
+                    src_lang = b.get("source_language", src_lang)
+                    tgt_lang = b.get("target_language", tgt_lang)
+            except Exception:
+                pass
 
-    return {
-        "path": str(project_path.resolve()),
+    if traces_dir.exists() and traces_dir.is_dir():
+        for dirpath, _, filenames in os.walk(traces_dir):
+            for fname in filenames:
+                if fname.endswith((".json", ".jsonl")):
+                    has_traces = True
+                    trace_count += 1
+                    try:
+                        fpath = os.path.join(dirpath, fname)
+                        mtime = os.path.getmtime(fpath)
+                        if mtime > latest_mtime:
+                            latest_mtime = mtime
+                    except OSError:
+                        pass
+
+    res = {
+        "path": p_str,
         "name": project_path.name,
         "title": title,
         "genre": genre,
@@ -288,35 +342,83 @@ def _get_project_meta(project_path: Path) -> Dict[str, Any]:
         "trace_count": trace_count,
         "latest_trace_mtime": latest_mtime,
     }
+    _PROJECT_META_CACHE[p_str] = (now, res)
+    return dict(res)
 
 
-def _load_project_traces(project_path: Path) -> List[Dict[str, Any]]:
-    """Scan and parse all chapter trace documents (.json and .jsonl) for a project."""
+def _load_project_traces(
+    project_path: Path,
+    chapter_num_filter: Optional[int] = None,
+    folder_filter: Optional[str] = None,
+    include_all: bool = False,
+) -> List[Dict[str, Any]]:
+    """Scan and parse chapter trace documents (.json and .jsonl) for a project with memoized caching."""
     traces_dir = project_path / ".novel" / "traces"
     if not traces_dir.exists() or not traces_dir.is_dir():
         return []
 
+    p_str = str(project_path.resolve())
+    cache_key = (p_str, chapter_num_filter, folder_filter, include_all)
+    now = time.time()
+    if cache_key in _TRACES_CACHE:
+        cached_ts, cached_traces = _TRACES_CACHE[cache_key]
+        if now - cached_ts < 4.0:
+            return cached_traces
+
+    # If folder_filter is provided, search inside that subfolder if it exists
+    search_dir = traces_dir / folder_filter if folder_filter and (traces_dir / folder_filter).is_dir() else traces_dir
+
+    if chapter_num_filter is not None:
+        target_stem = f"chapter_{str(chapter_num_filter).zfill(4)}"
+        candidate_files = sorted(
+            list(search_dir.rglob(f"{target_stem}.json")) + list(search_dir.rglob(f"{target_stem}.jsonl")),
+            key=lambda p: (0 if p.suffix == ".json" else 1, p.name)
+        )
+    else:
+        candidate_files = sorted(
+            list(traces_dir.rglob("chapter_*.json")) + list(traces_dir.rglob("chapter_*.jsonl")),
+            key=lambda p: (0 if p.suffix == ".json" else 1, p.name)
+        )
+
+    # Determine unique chapter numbers count
+    matched_chapter_nums = set()
+    for f in candidate_files:
+        m = re.search(r"chapter_(\d+)", f.stem)
+        if m:
+            matched_chapter_nums.add(int(m.group(1)))
+
+    total_chapters_count = len(matched_chapter_nums)
+    # When large project (>5 chapters) and single chapter not requested and not include_all:
+    # only include full trace prompts/outputs for the first chapter, stripping large trace lists for the others
+    strip_heavy_traces = (total_chapters_count > 5 and chapter_num_filter is None and not include_all)
+
     chapters_map: Dict[str, Dict[str, Any]] = {}
-    candidate_files = sorted(
-        list(traces_dir.rglob("chapter_*.json")) + list(traces_dir.rglob("chapter_*.jsonl")),
-        key=lambda p: (0 if p.suffix == ".json" else 1, p.name)
-    )
+    is_first_chapter = True
 
     for tf in candidate_files:
         try:
             rel_parts = tf.relative_to(traces_dir).parts
             folder = rel_parts[0] if len(rel_parts) > 1 else None
+            if folder_filter and folder != folder_filter:
+                continue
 
             m = re.search(r"chapter_(\d+)", tf.stem)
             chapter_num = int(m.group(1)) if m else 1
-            key = f"{folder or 'root'}_ch{chapter_num}"
+            if chapter_num_filter is not None and chapter_num != chapter_num_filter:
+                continue
 
+            key = f"{folder or 'root'}_ch{chapter_num}"
             if key in chapters_map and tf.suffix == ".jsonl":
                 continue
 
             if tf.suffix == ".json":
                 with open(tf, "r", encoding="utf-8") as f:
                     doc = json.load(f)
+                if strip_heavy_traces and not is_first_chapter:
+                    doc = dict(doc)
+                    doc["traces"] = []
+                else:
+                    is_first_chapter = False
             else:
                 traces = []
                 with open(tf, "r", encoding="utf-8") as f:
@@ -346,8 +448,10 @@ def _load_project_traces(project_path: Path) -> List[Dict[str, Any]]:
                     "total_duration_seconds": round(total_duration, 3),
                     "total_token_usage": tok,
                     "stage_breakdown": stage_bd,
-                    "traces": traces,
+                    "traces": [] if (strip_heavy_traces and not is_first_chapter) else traces,
                 }
+                if not (strip_heavy_traces and not is_first_chapter):
+                    is_first_chapter = False
 
             chapters_map[key] = {
                 "id": key,
@@ -361,22 +465,8 @@ def _load_project_traces(project_path: Path) -> List[Dict[str, Any]]:
 
     loaded = list(chapters_map.values())
     loaded.sort(key=lambda c: (c.get("folder") or "", c.get("chapterNum", 0)))
+    _TRACES_CACHE[cache_key] = (now, loaded)
     return loaded
-
-
-# In-memory caches for web server endpoints
-_CHAPTERS_CACHE: Dict[Tuple[str, Optional[str]], Tuple[float, List[Dict[str, Any]]]] = {}
-
-
-def _invalidate_chapter_caches(project_path: Optional[str] = None) -> None:
-    """Clear chapter caches when mutations occur (translations, uploads, settings)."""
-    if project_path:
-        p_str = str(project_path)
-        keys_to_del = [k for k in _CHAPTERS_CACHE if k[0] == p_str]
-        for k in keys_to_del:
-            _CHAPTERS_CACHE.pop(k, None)
-    else:
-        _CHAPTERS_CACHE.clear()
 
 
 def _scan_project_tasks(repo: NovelRepository, folder: Optional[str] = None) -> List[ChapterTask]:
@@ -733,12 +823,11 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
         active_meta = _get_project_meta(active_p)
         active_meta["is_active"] = True
 
-        discovered = registry.list_projects()
+        paths = registry.list_project_paths()
         discovered_paths = []
         seen = {str(active_p.resolve())}
 
-        for d in discovered:
-            p_str = d.get("path")
+        for p_str in paths:
             if p_str and p_str not in seen:
                 p = Path(p_str)
                 if p.exists() and (p / ".novel").exists():
@@ -815,8 +904,8 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
     async def get_all_projects() -> Dict[str, Any]:
         registry = ProjectRegistry()
         active_p = registry.get_last_active_project() or resolve_project_dir(None)
-        discovered = registry.list_projects()
-        valid_paths = [Path(d["path"]) for d in discovered if d.get("path") and Path(d["path"]).exists()]
+        paths = registry.list_project_paths()
+        valid_paths = [Path(p) for p in paths if Path(p).exists()]
 
         if len(valid_paths) > 1:
             with ThreadPoolExecutor(max_workers=min(8, len(valid_paths))) as executor:
@@ -847,10 +936,20 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
         }
 
     @app.get("/api/traces")
-    async def get_traces(project_path: Optional[str] = Query(None)) -> Dict[str, Any]:
+    async def get_traces(
+        project_path: Optional[str] = Query(None),
+        chapter: Optional[int] = Query(None),
+        folder: Optional[str] = Query(None),
+        all: bool = Query(False),
+    ) -> Dict[str, Any]:
         repo = _resolve_repo(project_path)
         meta = _get_project_meta(repo.root_dir)
-        chapters = _load_project_traces(repo.root_dir)
+        chapters = _load_project_traces(
+            repo.root_dir,
+            chapter_num_filter=chapter,
+            folder_filter=folder,
+            include_all=all,
+        )
         return {
             "project_path": meta["path"],
             "project_title": meta["title"],
@@ -1163,6 +1262,27 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
             if "voice" in c and "speaking_style" not in c:
                 c["speaking_style"] = c["voice"]
 
+        def _normalize_arc_dict(arc: Dict[str, Any]):
+            if "title" in arc and "arc_title" not in arc:
+                arc["arc_title"] = arc["title"]
+            elif "arc_title" in arc and "title" not in arc:
+                arc["title"] = arc["arc_title"]
+            if "arc_num" in arc and "arc_number" not in arc:
+                arc["arc_number"] = arc["arc_num"]
+            elif "arc_number" in arc and "arc_num" not in arc:
+                arc["arc_num"] = arc["arc_number"]
+            if "synopsis" in arc and "summary" not in arc:
+                arc["summary"] = arc["synopsis"]
+            elif "summary" in arc and "synopsis" not in arc:
+                arc["synopsis"] = arc["summary"]
+
+        for a in data.get("archived_arcs", []):
+            if isinstance(a, dict):
+                _normalize_arc_dict(a)
+
+        if isinstance(data.get("active_arc"), dict):
+            _normalize_arc_dict(data["active_arc"])
+
         return data
 
     @app.put("/api/bible")
@@ -1184,6 +1304,26 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
                     if isinstance(char, dict):
                         if "speaking_style" in char and "voice" not in char:
                             char["voice"] = char["speaking_style"]
+
+            # Normalize story arcs: arc_title -> title, arc_number -> arc_num, summary -> synopsis
+            if "archived_arcs" in bible_data and isinstance(bible_data["archived_arcs"], list):
+                for item in bible_data["archived_arcs"]:
+                    if isinstance(item, dict):
+                        if "arc_title" in item and "title" not in item:
+                            item["title"] = item["arc_title"]
+                        if "arc_number" in item and "arc_num" not in item:
+                            item["arc_num"] = item["arc_number"]
+                        if "summary" in item and "synopsis" not in item:
+                            item["synopsis"] = item["summary"]
+
+            if "active_arc" in bible_data and isinstance(bible_data["active_arc"], dict):
+                act = bible_data["active_arc"]
+                if "arc_title" in act and "title" not in act:
+                    act["title"] = act["arc_title"]
+                if "arc_number" in act and "arc_num" not in act:
+                    act["arc_num"] = act["arc_number"]
+                if "summary" in act and "synopsis" not in act:
+                    act["synopsis"] = act["summary"]
 
             bible = NovelBible.model_validate(bible_data)
             repo.save_bible(bible)
@@ -1623,6 +1763,11 @@ class NousetsuWebHandler(http.server.SimpleHTTPRequestHandler):
 
         if path == "/api/traces":
             proj_arg = query.get("project_path", [None])[0]
+            chapter_arg = query.get("chapter", [None])[0]
+            chapter_num = int(chapter_arg) if chapter_arg and chapter_arg.isdigit() else None
+            folder_arg = query.get("folder", [None])[0]
+            all_arg = query.get("all", ["false"])[0].lower() in ("true", "1")
+
             if proj_arg:
                 target_p = Path(proj_arg).resolve()
             else:
@@ -1634,7 +1779,12 @@ class NousetsuWebHandler(http.server.SimpleHTTPRequestHandler):
                 return
 
             meta = _get_project_meta(target_p)
-            chapters = _load_project_traces(target_p)
+            chapters = _load_project_traces(
+                target_p,
+                chapter_num_filter=chapter_num,
+                folder_filter=folder_arg,
+                include_all=all_arg,
+            )
 
             self._send_json({
                 "project_path": meta["path"],
