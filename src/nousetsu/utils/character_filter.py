@@ -77,6 +77,16 @@ def filter_characters_for_scene(
                     has_text_mention = True
                     break
 
+        # Check structured name components in source language (e.g. given name or surname in source text)
+        if not has_text_mention and c.names and source_text:
+            src_n = c.names.source
+            src_corpus = source_text.lower()
+            for part in (src_n.name, src_n.m_name, src_n.s_name):
+                p_clean = (part or "").strip().lower()
+                if len(p_clean) >= 2 and p_clean in src_corpus:
+                    has_text_mention = True
+                    break
+
         name = (c.name or "").strip().lower()
         if not has_text_mention and name and len(name) >= 2 and name in search_corpus:
             has_text_mention = True

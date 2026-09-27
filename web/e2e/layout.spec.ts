@@ -67,7 +67,7 @@ test.describe('Layout & Viewport Responsiveness', () => {
 
     // Find and click the + / New Project button in the navbar if present
     const newProjectBtn = page.locator('header button[title*="New Project"], header button:has-text("New Project"), header button:has(.lucide-plus)');
-    if ((await newProjectBtn.count()) > 0) {
+    if ((await newProjectBtn.count()) > 0 && await newProjectBtn.first().isVisible()) {
       await newProjectBtn.first().click();
       await page.waitForTimeout(200);
 

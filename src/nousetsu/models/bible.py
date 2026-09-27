@@ -1,6 +1,55 @@
 """Novel Bible data models for characters, glossary, style rules, and narrative memory."""
+import re
 from typing import Any, Dict, List, Optional, Union
 from pydantic import BaseModel, Field, field_validator, model_validator
+
+
+class CharacterNameDetail(BaseModel):
+    """Linguistic components of a character's personal name."""
+    name: str = Field(default="", description="Given / first name (e.g. 'Mary' or 'メアリィ' or '炎')")
+    m_name: str = Field(default="", description="Middle name or noble connector (e.g. 'Lukia' or 'ルクア' or 'von')")
+    s_name: str = Field(default="", description="Surname / family / clan name (e.g. 'Legalia' or 'レガリヤ' or '萧')")
+
+    def full_name(self, separator: Optional[str] = None, order: str = "given_first") -> str:
+        """Constructs canonical full name from components.
+        order: 'given_first' ([name, m_name, s_name]) or 'surname_first' ([s_name, m_name, name]).
+        """
+        parts = [self.name, self.m_name, self.s_name] if order == "given_first" else [self.s_name, self.m_name, self.name]
+        valid_parts = [str(p).strip() for p in parts if p and str(p).strip()]
+        if not valid_parts:
+            return ""
+        if separator is None:
+            # Auto-detect Japanese Katakana or CJK script
+            is_cjk = any(re.search(r"[\u3040-\u30ff\u4e00-\u9fff\uac00-\ud7af]", p) for p in valid_parts)
+            separator = "・" if is_cjk else " "
+        return separator.join(valid_parts)
+
+    def is_empty(self) -> bool:
+        return not bool((self.name or "").strip() or (self.m_name or "").strip() or (self.s_name or "").strip())
+
+
+class CharacterNames(BaseModel):
+    """Structured name components mapped across source and target languages."""
+    source: CharacterNameDetail = Field(
+        default_factory=CharacterNameDetail,
+        description="Name components in source language native script"
+    )
+    target: CharacterNameDetail = Field(
+        default_factory=CharacterNameDetail,
+        description="Name components in target translation language"
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_names(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            src = data.get("source")
+            tgt = data.get("target")
+            if isinstance(src, str):
+                data["source"] = {"name": src}
+            if isinstance(tgt, str):
+                data["target"] = {"name": tgt}
+        return data
 
 
 class CharacterPronouns(BaseModel):
@@ -20,8 +69,12 @@ class CharacterPronouns(BaseModel):
 
 
 class CharacterProfile(BaseModel):
-    name: str = Field(..., description="Standard translated character name")
-    original_name: str = Field(..., description="Original raw name in source text")
+    name: str = Field(default="", description="Standard translated character name")
+    original_name: str = Field(default="", description="Original raw name in source text")
+    names: Optional[CharacterNames] = Field(
+        default=None,
+        description="Structured name components (name, m_name, s_name) in source and target languages"
+    )
     aliases: List[str] = Field(default_factory=list, description="Known nicknames, aliases, titles")
     gender: str = Field(default="unspecified", description="Gender identity for pronoun consistency")
     role: str = Field(default="supporting", description="Role e.g. protagonist, antagonist, supporting, mentor")
@@ -32,18 +85,74 @@ class CharacterProfile(BaseModel):
         description="Source and target language pronouns for zero-anaphora and dialogue consistency"
     )
 
+    @classmethod
+    def _parse_name_components(cls, full_name: str) -> Dict[str, str]:
+        """Heuristically infers name, m_name, s_name from full name strings for legacy migration."""
+        if not full_name:
+            return {"name": "", "m_name": "", "s_name": ""}
+        parts = [p.strip() for p in re.split(r"[・·\s]+", str(full_name).strip()) if p.strip()]
+        if len(parts) == 1:
+            return {"name": parts[0], "m_name": "", "s_name": ""}
+        elif len(parts) == 2:
+            return {"name": parts[0], "m_name": "", "s_name": parts[1]}
+        elif len(parts) >= 3:
+            return {"name": parts[0], "m_name": " ".join(parts[1:-1]), "s_name": parts[-1]}
+        return {"name": "", "m_name": "", "s_name": ""}
+
     @model_validator(mode="before")
     @classmethod
-    def _migrate_pronoun_inputs(cls, data: Any) -> Any:
-        if isinstance(data, dict):
-            if "pronouns" in data:
-                p = data["pronouns"]
-                if isinstance(p, str):
-                    data["pronouns"] = {"source": p, "target": ""}
-            elif any(k in data for k in ("source_pronoun", "target_pronoun", "source_pronouns", "target_pronouns")):
-                src = data.pop("source_pronoun", None) or data.pop("source_pronouns", "")
-                tgt = data.pop("target_pronoun", None) or data.pop("target_pronouns", "")
-                data["pronouns"] = {"source": src, "target": tgt}
+    def _migrate_and_sync_character(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+
+        # 1. Pronoun migration
+        if "pronouns" in data:
+            p = data["pronouns"]
+            if isinstance(p, str):
+                data["pronouns"] = {"source": p, "target": ""}
+        elif any(k in data for k in ("source_pronoun", "target_pronoun", "source_pronouns", "target_pronouns")):
+            src = data.pop("source_pronoun", None) or data.pop("source_pronouns", "")
+            tgt = data.pop("target_pronoun", None) or data.pop("target_pronouns", "")
+            data["pronouns"] = {"source": src, "target": tgt}
+
+        # 2. Structured name components synchronization
+        raw_name = str(data.get("name") or "").strip()
+        raw_orig = str(data.get("original_name") or "").strip()
+        names_data = data.get("names")
+
+        if names_data:
+            if isinstance(names_data, dict):
+                src_obj = names_data.get("source") or {}
+                tgt_obj = names_data.get("target") or {}
+            else:
+                src_obj = getattr(names_data, "source", None) or {}
+                tgt_obj = getattr(names_data, "target", None) or {}
+
+            def _get_val(obj, fld):
+                if isinstance(obj, dict):
+                    return str(obj.get(fld) or "")
+                return str(getattr(obj, fld, "") or "")
+
+            if not raw_orig and src_obj:
+                parts = [_get_val(src_obj, "name"), _get_val(src_obj, "m_name"), _get_val(src_obj, "s_name")]
+                v_parts = [p.strip() for p in parts if p and p.strip()]
+                if v_parts:
+                    sep = "・" if any(re.search(r"[\u3040-\u30ff\u4e00-\u9fff\uac00-\ud7af]", p) for p in v_parts) else " "
+                    data["original_name"] = sep.join(v_parts)
+
+            if not raw_name and tgt_obj:
+                parts = [_get_val(tgt_obj, "name"), _get_val(tgt_obj, "m_name"), _get_val(tgt_obj, "s_name")]
+                v_parts = [p.strip() for p in parts if p and p.strip()]
+                if v_parts:
+                    data["name"] = " ".join(v_parts)
+        elif not names_data and (raw_name or raw_orig):
+            src_detail = cls._parse_name_components(raw_orig)
+            tgt_detail = cls._parse_name_components(raw_name)
+            data["names"] = {
+                "source": src_detail,
+                "target": tgt_detail,
+            }
+
         return data
 
 
@@ -121,7 +230,17 @@ class NovelBible(BaseModel):
             if any(alias.lower() == target_lower for alias in char.aliases):
                 return char
 
-        # 2. Match Japanese/CJK name components (e.g. 'メアリィ' in 'メアリィ・レガリヤ')
+        # 2. Match structured name components (source & target: given, middle, surname)
+        for char in self.characters:
+            if char.names:
+                src = char.names.source
+                tgt = char.names.target
+                src_parts = [src.name, src.m_name, src.s_name]
+                tgt_parts = [tgt.name, tgt.m_name, tgt.s_name]
+                if any(p and p.strip().lower() == target_lower for p in src_parts + tgt_parts):
+                    return char
+
+        # 3. Match Japanese/CJK name components (e.g. 'メアリィ' in 'メアリィ・レガリヤ')
         for char in self.characters:
             orig = char.original_name.strip()
             if "・" in orig:

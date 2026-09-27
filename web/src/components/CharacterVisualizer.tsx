@@ -16,6 +16,7 @@ import {
   Info,
   Plus,
   Compass,
+  Languages,
 } from 'lucide-react';
 import { BibleCharacter } from '../types/dashboard';
 
@@ -25,6 +26,8 @@ interface CharacterVisualizerProps {
   onSelectCharacter?: (index: number) => void;
   onEditCharacter?: (char: BibleCharacter, index: number) => void;
   onAddCharacter?: () => void;
+  sourceLanguage?: string;
+  targetLanguage?: string;
 }
 
 // Role thematic configurations
@@ -163,6 +166,8 @@ export const CharacterVisualizer: React.FC<CharacterVisualizerProps> = ({
   onSelectCharacter,
   onEditCharacter,
   onAddCharacter,
+  sourceLanguage,
+  targetLanguage,
 }) => {
   const [internalSelectedIndex, setInternalSelectedIndex] = useState<number>(
     selectedCharacterIndex ?? 0
@@ -501,6 +506,86 @@ export const CharacterVisualizer: React.FC<CharacterVisualizerProps> = ({
                   </div>
                 )}
               </div>
+
+              {/* Linguistic Name Components (Source & Target) */}
+              {activeChar.names && (
+                Boolean(
+                  activeChar.names.source && (activeChar.names.source.name || activeChar.names.source.m_name || activeChar.names.source.s_name)
+                ) ||
+                Boolean(
+                  activeChar.names.target && (activeChar.names.target.name || activeChar.names.target.m_name || activeChar.names.target.s_name)
+                )
+              ) && (
+                <div className="bg-[#383330] border border-[#3f3a36] rounded-[4px] p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[#b0a89f] font-mono">
+                      <Languages className="w-3.5 h-3.5 text-[#d9a05b]" />
+                      Linguistic Name Components
+                    </div>
+                    <span className="text-[10px] font-mono text-[#857d75]">
+                      Structured Naming Model
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {/* Source Script */}
+                    <div className="bg-[#24201d] p-3 rounded-[3px] border border-[#3f3a36]">
+                      <div className="text-[10px] font-mono uppercase tracking-wider text-[#857d75] mb-2 flex items-center justify-between">
+                        <span>{sourceLanguage || 'Source Script'}</span>
+                        <span className="text-[9px] text-[#b0a89f]/60 font-mono">Original</span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="bg-[#2b2622] p-2 rounded-[2px] border border-[#3f3a36]/60">
+                          <span className="text-[9px] font-mono uppercase text-[#857d75] block">Given</span>
+                          <span className="text-xs font-mono font-medium text-[#f7f5f0] truncate block" title={activeChar.names.source?.name}>
+                            {activeChar.names.source?.name || '—'}
+                          </span>
+                        </div>
+                        <div className="bg-[#2b2622] p-2 rounded-[2px] border border-[#3f3a36]/60">
+                          <span className="text-[9px] font-mono uppercase text-[#857d75] block">Middle</span>
+                          <span className="text-xs font-mono font-medium text-[#f7f5f0] truncate block" title={activeChar.names.source?.m_name}>
+                            {activeChar.names.source?.m_name || '—'}
+                          </span>
+                        </div>
+                        <div className="bg-[#2b2622] p-2 rounded-[2px] border border-[#3f3a36]/60">
+                          <span className="text-[9px] font-mono uppercase text-[#857d75] block">Surname</span>
+                          <span className="text-xs font-mono font-medium text-[#f7f5f0] truncate block" title={activeChar.names.source?.s_name}>
+                            {activeChar.names.source?.s_name || '—'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Target Script */}
+                    <div className="bg-[#24201d] p-3 rounded-[3px] border border-[#3f3a36]">
+                      <div className="text-[10px] font-mono uppercase tracking-wider text-[#857d75] mb-2 flex items-center justify-between">
+                        <span>{targetLanguage || 'Target Translation'}</span>
+                        <span className="text-[9px] text-emerald-400/80 font-mono">English</span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="bg-[#2b2622] p-2 rounded-[2px] border border-[#3f3a36]/60">
+                          <span className="text-[9px] font-mono uppercase text-[#857d75] block">Given</span>
+                          <span className="text-xs font-mono font-medium text-emerald-400 truncate block" title={activeChar.names.target?.name}>
+                            {activeChar.names.target?.name || '—'}
+                          </span>
+                        </div>
+                        <div className="bg-[#2b2622] p-2 rounded-[2px] border border-[#3f3a36]/60">
+                          <span className="text-[9px] font-mono uppercase text-[#857d75] block">Middle</span>
+                          <span className="text-xs font-mono font-medium text-emerald-400 truncate block" title={activeChar.names.target?.m_name}>
+                            {activeChar.names.target?.m_name || '—'}
+                          </span>
+                        </div>
+                        <div className="bg-[#2b2622] p-2 rounded-[2px] border border-[#3f3a36]/60">
+                          <span className="text-[9px] font-mono uppercase text-[#857d75] block">Surname</span>
+                          <span className="text-xs font-mono font-medium text-emerald-400 truncate block" title={activeChar.names.target?.s_name}>
+                            {activeChar.names.target?.s_name || '—'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Middle Row: Dialogue Register & Speech Profile */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

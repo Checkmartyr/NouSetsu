@@ -767,6 +767,19 @@ class NovelRepository:
                 # Merge relationships
                 if new_char.relationships:
                     existing.relationships.update(new_char.relationships)
+                # Evolve/merge structured names
+                if new_char.names:
+                    if not existing.names:
+                        existing.names = new_char.names
+                    else:
+                        for lang in ("source", "target"):
+                            new_detail = getattr(new_char.names, lang, None)
+                            ext_detail = getattr(existing.names, lang, None)
+                            if new_detail and ext_detail:
+                                for fld in ("name", "m_name", "s_name"):
+                                    val = getattr(new_detail, fld, "")
+                                    if val and not getattr(ext_detail, fld, ""):
+                                        setattr(ext_detail, fld, val)
 
         for new_term in new_terms:
             if not new_term.source or not new_term.source.strip():

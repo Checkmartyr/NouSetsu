@@ -47,6 +47,20 @@ def format_character_roster(
         else:
             lines.append(f"- **{c.name}** ({orig_name} | {gender_str} | {role_str})")
 
+        # Name Breakdown (Given, Middle, Surname)
+        if c.names and (not c.names.source.is_empty() or not c.names.target.is_empty()):
+            src_n = c.names.source
+            tgt_n = c.names.target
+            breakdown_parts = []
+            if src_n.name or tgt_n.name:
+                breakdown_parts.append(f"Given: {src_n.name or '—'} -> {tgt_n.name or '—'}")
+            if src_n.m_name or tgt_n.m_name:
+                breakdown_parts.append(f"Middle: {src_n.m_name or '—'} -> {tgt_n.m_name or '—'}")
+            if src_n.s_name or tgt_n.s_name:
+                breakdown_parts.append(f"Surname: {src_n.s_name or '—'} -> {tgt_n.s_name or '—'}")
+            if breakdown_parts:
+                lines.append(f"  * Name Breakdown: {' | '.join(breakdown_parts)}")
+
         # 2. Voice & Tone
         voice_str = (c.voice or "").strip()
         if voice_str and voice_str.lower() not in ["none", "neutral", "unspecified"]:

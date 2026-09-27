@@ -45,9 +45,21 @@ export interface TranslationStatus {
   last_log: string | null;
 }
 
+export interface CharacterNameDetail {
+  name?: string;
+  m_name?: string;
+  s_name?: string;
+}
+
+export interface CharacterNames {
+  source?: CharacterNameDetail;
+  target?: CharacterNameDetail;
+}
+
 export interface BibleCharacter {
   name: string;
   original_name: string;
+  names?: CharacterNames;
   gender?: string;
   role?: string;
   speaking_style?: string;

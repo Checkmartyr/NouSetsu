@@ -29,6 +29,7 @@ import {
   updateRawBible
 } from '../services/dashboardApi';
 import { CharacterVisualizer } from './CharacterVisualizer';
+import { Pagination } from './Pagination';
 
 interface BibleViewProps {
   activeProjectPath: string | null;
@@ -59,6 +60,12 @@ export const BibleView: React.FC<BibleViewProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [termCategoryFilter, setTermCategoryFilter] = useState('all');
 
+  // Pagination State
+  const [charPage, setCharPage] = useState(1);
+  const [charPageSize, setCharPageSize] = useState(12);
+  const [glossaryPage, setGlossaryPage] = useState(1);
+  const [glossaryPageSize, setGlossaryPageSize] = useState(25);
+
   // Character Modal / Form
   const [isCharModalOpen, setIsCharModalOpen] = useState(false);
   const [editingCharIndex, setEditingCharIndex] = useState<number | null>(null);
@@ -67,6 +74,10 @@ export const BibleView: React.FC<BibleViewProps> = ({
   const [charForm, setCharForm] = useState<BibleCharacter>({
     name: '',
     original_name: '',
+    names: {
+      source: { name: '', m_name: '', s_name: '' },
+      target: { name: '', m_name: '', s_name: '' },
+    },
     gender: 'female',
     role: '',
     speaking_style: '',
@@ -134,7 +145,17 @@ export const BibleView: React.FC<BibleViewProps> = ({
 
   useEffect(() => {
     loadBibleData();
+    setCharPage(1);
+    setGlossaryPage(1);
   }, [activeProjectPath]);
+
+  useEffect(() => {
+    setCharPage(1);
+  }, [searchChar]);
+
+  useEffect(() => {
+    setGlossaryPage(1);
+  }, [searchTerm, termCategoryFilter]);
 
   useEffect(() => {
     if (activeTab === 'raw') {
@@ -168,12 +189,46 @@ export const BibleView: React.FC<BibleViewProps> = ({
     }
   };
 
+  // Helper to parse name components from a full string
+  const parseNameParts = (str?: string) => {
+    if (!str) return { name: '', m_name: '', s_name: '' };
+    const parts = str.split(/[・·\s]+/).filter(Boolean);
+    if (parts.length === 1) return { name: parts[0], m_name: '', s_name: '' };
+    if (parts.length === 2) return { name: parts[0], m_name: '', s_name: parts[1] };
+    if (parts.length >= 3)
+      return {
+        name: parts[0],
+        m_name: parts.slice(1, -1).join(' '),
+        s_name: parts[parts.length - 1],
+      };
+    return { name: '', m_name: '', s_name: '' };
+  };
+
+  // Helper to assemble full name from components
+  const assembleFullName = (
+    detail?: { name?: string; m_name?: string; s_name?: string },
+    isSource: boolean = false
+  ) => {
+    if (!detail) return '';
+    const parts = [detail.name, detail.m_name, detail.s_name].filter(
+      (p) => p && p.trim()
+    ) as string[];
+    if (parts.length === 0) return '';
+    const isCjk = parts.some((p) => /[\u3040-\u30ff\u4e00-\u9fff\uac00-\ud7af]/.test(p));
+    const sep = isCjk || isSource ? '・' : ' ';
+    return parts.join(sep);
+  };
+
   // Character Operations
   const openAddCharModal = () => {
     setEditingCharIndex(null);
     setCharForm({
       name: '',
       original_name: '',
+      names: {
+        source: { name: '', m_name: '', s_name: '' },
+        target: { name: '', m_name: '', s_name: '' },
+      },
       gender: 'unknown',
       role: 'supporting',
       speaking_style: '',
@@ -190,8 +245,24 @@ export const BibleView: React.FC<BibleViewProps> = ({
 
   const openEditCharModal = (char: BibleCharacter, index: number) => {
     setEditingCharIndex(index);
+    const existingNames = char.names || {
+      source: parseNameParts(char.original_name),
+      target: parseNameParts(char.name),
+    };
     setCharForm({
       ...char,
+      names: {
+        source: {
+          name: existingNames.source?.name || '',
+          m_name: existingNames.source?.m_name || '',
+          s_name: existingNames.source?.s_name || '',
+        },
+        target: {
+          name: existingNames.target?.name || '',
+          m_name: existingNames.target?.m_name || '',
+          s_name: existingNames.target?.s_name || '',
+        },
+      },
       speaking_style: char.speaking_style || char.voice || '',
       voice: char.voice || char.speaking_style || '',
     });
@@ -224,6 +295,9 @@ export const BibleView: React.FC<BibleViewProps> = ({
 
     const finalCharForm: BibleCharacter = {
       ...charForm,
+      name: charForm.name.trim() || assembleFullName(charForm.names?.target, false) || 'Unnamed',
+      original_name:
+        charForm.original_name.trim() || assembleFullName(charForm.names?.source, true) || 'Unknown',
       aliases: parsedAliases,
       relationships: parsedRelationships,
       speaking_style: charForm.speaking_style || charForm.voice || '',
@@ -291,29 +365,47 @@ export const BibleView: React.FC<BibleViewProps> = ({
     handleSaveBible({ ...bible, glossary: newGlossary });
   };
 
-  // Filtered lists
-  const filteredChars = (bible?.characters || []).filter((c) => {
-    const q = searchChar.toLowerCase();
-    return (
-      c.name.toLowerCase().includes(q) ||
-      c.original_name.toLowerCase().includes(q) ||
-      (c.role && c.role.toLowerCase().includes(q))
-    );
-  });
+  // Filtered lists with original index preservation
+  const filteredChars = (bible?.characters || [])
+    .map((c, origIdx) => ({ c, origIdx }))
+    .filter(({ c }) => {
+      const q = searchChar.toLowerCase();
+      return (
+        c.name.toLowerCase().includes(q) ||
+        c.original_name.toLowerCase().includes(q) ||
+        (c.role && c.role.toLowerCase().includes(q))
+      );
+    });
+
+  const charTotalPages = Math.max(1, Math.ceil(filteredChars.length / charPageSize));
+  const safeCharPage = Math.min(Math.max(1, charPage), charTotalPages);
+  const paginatedChars = filteredChars.slice(
+    (safeCharPage - 1) * charPageSize,
+    safeCharPage * charPageSize
+  );
 
   const categories = Array.from(
     new Set((bible?.glossary || []).map((t) => t.category).filter(Boolean))
   ) as string[];
 
-  const filteredGlossary = (bible?.glossary || []).filter((t) => {
-    const q = searchTerm.toLowerCase();
-    const termVal = (t.source || t.term || '').toLowerCase();
-    const transVal = (t.target || t.translation || '').toLowerCase();
-    const matchesSearch = termVal.includes(q) || transVal.includes(q);
-    const matchesCat =
-      termCategoryFilter === 'all' ? true : t.category === termCategoryFilter;
-    return matchesSearch && matchesCat;
-  });
+  const filteredGlossary = (bible?.glossary || [])
+    .map((t, origIdx) => ({ t, origIdx }))
+    .filter(({ t }) => {
+      const q = searchTerm.toLowerCase();
+      const termVal = (t.source || t.term || '').toLowerCase();
+      const transVal = (t.target || t.translation || '').toLowerCase();
+      const matchesSearch = termVal.includes(q) || transVal.includes(q);
+      const matchesCat =
+        termCategoryFilter === 'all' ? true : t.category === termCategoryFilter;
+      return matchesSearch && matchesCat;
+    });
+
+  const glossaryTotalPages = Math.max(1, Math.ceil(filteredGlossary.length / glossaryPageSize));
+  const safeGlossaryPage = Math.min(Math.max(1, glossaryPage), glossaryTotalPages);
+  const paginatedGlossary = filteredGlossary.slice(
+    (safeGlossaryPage - 1) * glossaryPageSize,
+    safeGlossaryPage * glossaryPageSize
+  );
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-[#2b2622] text-[#f7f5f0]">
@@ -345,7 +437,7 @@ export const BibleView: React.FC<BibleViewProps> = ({
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex items-center gap-0.5 bg-[#2b2622] p-0.5 rounded-[4px] border border-[#3f3a36]">
+        <div className="flex items-center gap-0.5 bg-[#2b2622] p-0.5 rounded-[4px] border border-[#3f3a36] max-w-full overflow-x-auto">
           <button
             onClick={() => setActiveTab('characters')}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-[3px] text-xs transition-colors cursor-pointer ${
@@ -417,6 +509,8 @@ export const BibleView: React.FC<BibleViewProps> = ({
               onSelectCharacter={(idx) => setSelectedCharIndex(idx)}
               onEditCharacter={(c, idx) => openEditCharModal(c, idx)}
               onAddCharacter={openAddCharModal}
+              sourceLanguage={bible?.source_language}
+              targetLanguage={bible?.target_language}
             />
           </div>
         ) : activeTab === 'characters' ? (
@@ -443,10 +537,10 @@ export const BibleView: React.FC<BibleViewProps> = ({
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredChars.map((c, i) => (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4">
+              {paginatedChars.map(({ c, origIdx }) => (
                 <div
-                  key={i}
+                  key={origIdx}
                   className="bg-[#383330] border border-[#3f3a36] hover:border-[#544d47] rounded-[4px] p-4 flex flex-col justify-between transition-colors"
                 >
                   <div>
@@ -460,8 +554,7 @@ export const BibleView: React.FC<BibleViewProps> = ({
                       <div className="flex items-center gap-1">
                         <button
                           onClick={() => {
-                            const origIdx = (bible?.characters || []).indexOf(c);
-                            setSelectedCharIndex(origIdx !== -1 ? origIdx : i);
+                            setSelectedCharIndex(origIdx);
                             setActiveTab('visualizer');
                           }}
                           title="Visualize Character Sheet & Network"
@@ -471,7 +564,7 @@ export const BibleView: React.FC<BibleViewProps> = ({
                           <Eye className="w-3.5 h-3.5" />
                         </button>
                         <button
-                          onClick={() => openEditCharModal(c, i)}
+                          onClick={() => openEditCharModal(c, origIdx)}
                           title="Edit"
                           aria-label={`Edit ${c.name}`}
                           className="p-1 text-[#aea69c] hover:text-[#f7f5f0] cursor-pointer transition-colors"
@@ -479,7 +572,7 @@ export const BibleView: React.FC<BibleViewProps> = ({
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
                         <button
-                          onClick={() => deleteChar(i)}
+                          onClick={() => deleteChar(origIdx)}
                           title="Delete"
                           aria-label={`Delete ${c.name}`}
                           className="p-1 text-[#aea69c] hover:text-rose-400 cursor-pointer transition-colors"
@@ -512,6 +605,21 @@ export const BibleView: React.FC<BibleViewProps> = ({
                       )}
                     </div>
 
+                    {c.names && (c.names.target?.name || c.names.target?.s_name || c.names.source?.name || c.names.source?.s_name) && (
+                      <div className="text-[10px] font-mono px-2 py-1 mt-2 bg-[#24201d] rounded-[3px] border border-[#3f3a36] text-[#aea69c] flex flex-wrap gap-x-2 gap-y-0.5">
+                        <span className="text-[#dad2c1] font-semibold">Names:</span>
+                        {(c.names.target?.name || c.names.source?.name) && (
+                          <span>Given: <strong className="text-[#f7f5f0]">{c.names.target?.name || c.names.source?.name}</strong></span>
+                        )}
+                        {(c.names.target?.m_name || c.names.source?.m_name) && (
+                          <span>Mid: <strong className="text-[#f7f5f0]">{c.names.target?.m_name || c.names.source?.m_name}</strong></span>
+                        )}
+                        {(c.names.target?.s_name || c.names.source?.s_name) && (
+                          <span>Sur: <strong className="text-[#f7f5f0]">{c.names.target?.s_name || c.names.source?.s_name}</strong></span>
+                        )}
+                      </div>
+                    )}
+
                     {(c.speaking_style || c.voice) && (
                       <p className="text-xs text-[#aea69c] mt-2 italic">
                         &ldquo;{c.speaking_style || c.voice}&rdquo;
@@ -527,6 +635,28 @@ export const BibleView: React.FC<BibleViewProps> = ({
                 </div>
               ))}
             </div>
+
+            {filteredChars.length === 0 && (
+              <div className="text-center py-12 text-[#aea69c] text-xs font-mono">
+                {searchChar
+                  ? `No characters found matching "${searchChar}".`
+                  : 'No characters registered in Novel Bible yet.'}
+              </div>
+            )}
+
+            <Pagination
+              currentPage={safeCharPage}
+              totalPages={charTotalPages}
+              totalItems={filteredChars.length}
+              pageSize={charPageSize}
+              pageSizeOptions={[12, 24, 48]}
+              onPageChange={setCharPage}
+              onPageSizeChange={(newSize) => {
+                setCharPageSize(newSize);
+                setCharPage(1);
+              }}
+              itemName="characters"
+            />
           </div>
         ) : activeTab === 'glossary' ? (
           /* GLOSSARY VIEW */
@@ -579,8 +709,8 @@ export const BibleView: React.FC<BibleViewProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#3f3a36]">
-                  {filteredGlossary.map((t, i) => (
-                    <tr key={i} className="hover:bg-[#2b2622]/40 transition-colors">
+                  {paginatedGlossary.map(({ t, origIdx }) => (
+                    <tr key={origIdx} className="hover:bg-[#2b2622]/40 transition-colors">
                       <td className="p-3 font-medium text-[#f7f5f0] font-mono">
                         {t.source || t.term}
                       </td>
@@ -598,14 +728,14 @@ export const BibleView: React.FC<BibleViewProps> = ({
                       <td className="p-3 text-right">
                         <div className="flex items-center justify-end gap-1">
                           <button
-                            onClick={() => openEditTermModal(t, i)}
+                            onClick={() => openEditTermModal(t, origIdx)}
                             className="p-1 text-[#aea69c] hover:text-[#f7f5f0] cursor-pointer"
                             aria-label={`Edit term ${t.source || t.term}`}
                           >
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
                           <button
-                            onClick={() => deleteTerm(i)}
+                            onClick={() => deleteTerm(origIdx)}
                             className="p-1 text-[#aea69c] hover:text-rose-400 cursor-pointer"
                             aria-label={`Delete term ${t.source || t.term}`}
                           >
@@ -615,9 +745,32 @@ export const BibleView: React.FC<BibleViewProps> = ({
                       </td>
                     </tr>
                   ))}
+                  {filteredGlossary.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="p-8 text-center text-[#aea69c] font-mono">
+                        {searchTerm || termCategoryFilter !== 'all'
+                          ? 'No glossary terms found matching your filter.'
+                          : 'No glossary terms registered in Novel Bible yet.'}
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
+
+            <Pagination
+              currentPage={safeGlossaryPage}
+              totalPages={glossaryTotalPages}
+              totalItems={filteredGlossary.length}
+              pageSize={glossaryPageSize}
+              pageSizeOptions={[25, 50, 100]}
+              onPageChange={setGlossaryPage}
+              onPageSizeChange={(newSize) => {
+                setGlossaryPageSize(newSize);
+                setGlossaryPage(1);
+              }}
+              itemName="terms"
+            />
           </div>
         ) : activeTab === 'memory' ? (
           /* NARRATIVE MEMORY VIEW */
@@ -1030,7 +1183,7 @@ export const BibleView: React.FC<BibleViewProps> = ({
       {/* Character Edit/Add Modal */}
       {isCharModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-[#2b2622] border border-[#3f3a36] rounded-[6px] max-w-lg w-full p-6 space-y-4 shadow-2xl">
+          <div className="bg-[#2b2622] border border-[#3f3a36] rounded-[6px] max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-medium text-[#f7f5f0]">
                 {editingCharIndex !== null ? 'Edit Character' : 'Add Character'}
@@ -1043,9 +1196,165 @@ export const BibleView: React.FC<BibleViewProps> = ({
               </button>
             </div>
 
+            {/* Structured Name Breakdown Section */}
+            <div className="bg-[#24201d] border border-[#3f3a36] rounded-[4px] p-3 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-[#dad2c1] uppercase tracking-wider font-mono">
+                  Name Breakdown (Source & Target)
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const srcFull = assembleFullName(charForm.names?.source, true);
+                    const tgtFull = assembleFullName(charForm.names?.target, false);
+                    setCharForm({
+                      ...charForm,
+                      original_name: srcFull || charForm.original_name,
+                      name: tgtFull || charForm.name,
+                    });
+                  }}
+                  className="text-[10px] font-mono text-[#dad2c1] hover:text-[#f7f5f0] bg-[#383330] hover:bg-[#453f3a] border border-[#3f3a36] px-2 py-0.5 rounded-[2px] cursor-pointer transition-colors"
+                >
+                  ⚡ Auto-Assemble Full Names
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                {/* Source Language Column */}
+                <div className="space-y-1.5 p-2 bg-[#1e1b18] rounded border border-[#383330]">
+                  <div className="text-[10px] font-mono text-emerald-400 font-medium">
+                    {bible?.source_language || 'Source'} Script
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-[#aea69c]">Given / First (name)</label>
+                    <input
+                      type="text"
+                      value={charForm.names?.source?.name || ''}
+                      onChange={(e) =>
+                        setCharForm({
+                          ...charForm,
+                          names: {
+                            ...charForm.names,
+                            source: { ...charForm.names?.source, name: e.target.value },
+                            target: charForm.names?.target || {},
+                          },
+                        })
+                      }
+                      className="input-text w-full text-xs font-mono py-1"
+                      placeholder="e.g. メアリィ"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-[#aea69c]">Middle / Particle (m_name)</label>
+                    <input
+                      type="text"
+                      value={charForm.names?.source?.m_name || ''}
+                      onChange={(e) =>
+                        setCharForm({
+                          ...charForm,
+                          names: {
+                            ...charForm.names,
+                            source: { ...charForm.names?.source, m_name: e.target.value },
+                            target: charForm.names?.target || {},
+                          },
+                        })
+                      }
+                      className="input-text w-full text-xs font-mono py-1"
+                      placeholder="e.g. ルクア"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-[#aea69c]">Surname / Family (s_name)</label>
+                    <input
+                      type="text"
+                      value={charForm.names?.source?.s_name || ''}
+                      onChange={(e) =>
+                        setCharForm({
+                          ...charForm,
+                          names: {
+                            ...charForm.names,
+                            source: { ...charForm.names?.source, s_name: e.target.value },
+                            target: charForm.names?.target || {},
+                          },
+                        })
+                      }
+                      className="input-text w-full text-xs font-mono py-1"
+                      placeholder="e.g. レガリヤ"
+                    />
+                  </div>
+                </div>
+
+                {/* Target Language Column */}
+                <div className="space-y-1.5 p-2 bg-[#1e1b18] rounded border border-[#383330]">
+                  <div className="text-[10px] font-mono text-amber-300 font-medium">
+                    {bible?.target_language || 'Target'} Translation
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-[#aea69c]">Given / First (name)</label>
+                    <input
+                      type="text"
+                      value={charForm.names?.target?.name || ''}
+                      onChange={(e) =>
+                        setCharForm({
+                          ...charForm,
+                          names: {
+                            ...charForm.names,
+                            source: charForm.names?.source || {},
+                            target: { ...charForm.names?.target, name: e.target.value },
+                          },
+                        })
+                      }
+                      className="input-text w-full text-xs py-1"
+                      placeholder="e.g. Mary"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-[#aea69c]">Middle / Particle (m_name)</label>
+                    <input
+                      type="text"
+                      value={charForm.names?.target?.m_name || ''}
+                      onChange={(e) =>
+                        setCharForm({
+                          ...charForm,
+                          names: {
+                            ...charForm.names,
+                            source: charForm.names?.source || {},
+                            target: { ...charForm.names?.target, m_name: e.target.value },
+                          },
+                        })
+                      }
+                      className="input-text w-full text-xs py-1"
+                      placeholder="e.g. Lukia"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-[#aea69c]">Surname / Family (s_name)</label>
+                    <input
+                      type="text"
+                      value={charForm.names?.target?.s_name || ''}
+                      onChange={(e) =>
+                        setCharForm({
+                          ...charForm,
+                          names: {
+                            ...charForm.names,
+                            source: charForm.names?.source || {},
+                            target: { ...charForm.names?.target, s_name: e.target.value },
+                          },
+                        })
+                      }
+                      className="input-text w-full text-xs py-1"
+                      placeholder="e.g. Legalia"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-3 text-xs">
               <div>
-                <label className="block text-[#aea69c] mb-1">English Name *</label>
+                <label className="block text-[#aea69c] mb-1">
+                  {bible?.target_language ? `${bible.target_language} Full Name *` : 'Target Full Name *'}
+                </label>
                 <input
                   type="text"
                   value={charForm.name}
@@ -1055,7 +1364,9 @@ export const BibleView: React.FC<BibleViewProps> = ({
                 />
               </div>
               <div>
-                <label className="block text-[#aea69c] mb-1">Original Name *</label>
+                <label className="block text-[#aea69c] mb-1">
+                  {bible?.source_language ? `${bible.source_language} Original Full Name *` : 'Source Original Full Name *'}
+                </label>
                 <input
                   type="text"
                   value={charForm.original_name}
