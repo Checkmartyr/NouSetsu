@@ -15,6 +15,7 @@ import {
   Square,
   Sliders,
   BookOpen,
+  Image as ImageIcon,
 } from 'lucide-react';
 import {
   fetchProjectFolders,
@@ -23,10 +24,13 @@ import {
   inspectScraperUrl,
   startScraperExtract,
   fetchScraperStatus,
+  inspectEbook,
+  importEbook,
 } from '../services/dashboardApi';
 import {
   ScraperInspectResult,
   ScraperStatusResult,
+  EbookInspectResult,
 } from '../types/dashboard';
 
 interface UploadModalProps {
@@ -45,7 +49,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
   onUploadSuccess,
 }) => {
   // Navigation tab
-  const [activeTab, setActiveTab] = useState<'local' | 'url'>('local');
+  const [activeTab, setActiveTab] = useState<'local' | 'url' | 'ebook'>('local');
 
   // Shared folder selection state
   const [folders, setFolders] = useState<string[]>(['raw_chapters']);
@@ -74,6 +78,18 @@ export const UploadModal: React.FC<UploadModalProps> = ({
   const [isScraping, setIsScraping] = useState(false);
   const [scraperStatus, setScraperStatus] = useState<ScraperStatusResult | null>(null);
 
+  // eBook (EPUB/PDF) state
+  const [ebookFile, setEbookFile] = useState<File | null>(null);
+  const [isInspectingEbook, setIsInspectingEbook] = useState(false);
+  const [ebookInspectResult, setEbookInspectResult] = useState<EbookInspectResult | null>(null);
+  const [ebookExtractImages, setEbookExtractImages] = useState<boolean>(true);
+  const [ebookSelectionMode, setEbookSelectionMode] = useState<'all' | 'range' | 'custom'>('all');
+  const [ebookRangeStart, setEbookRangeStart] = useState<number>(1);
+  const [ebookRangeEnd, setEbookRangeEnd] = useState<number>(10);
+  const [selectedEbookIndices, setSelectedEbookIndices] = useState<Set<number>>(new Set());
+  const [isImportingEbook, setIsImportingEbook] = useState(false);
+  const ebookFileInputRef = useRef<HTMLInputElement>(null);
+
   // Feedback alerts
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -93,6 +109,10 @@ export const UploadModal: React.FC<UploadModalProps> = ({
       setCustomFolderName('');
       setInspectResult(null);
       setScraperStatus(null);
+      setEbookFile(null);
+      setEbookInspectResult(null);
+      setIsInspectingEbook(false);
+      setIsImportingEbook(false);
       setErrorMsg(null);
       setSuccessMsg(null);
     }
@@ -365,6 +385,109 @@ export const UploadModal: React.FC<UploadModalProps> = ({
     }
   };
 
+  // --------------------------------------------------------------------------
+  // eBook (EPUB & PDF) Handlers
+  // --------------------------------------------------------------------------
+
+  const handleSelectEbookFile = async (file: File) => {
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    if (ext !== 'epub' && ext !== 'pdf') {
+      setErrorMsg('Please select a valid .epub or .pdf file.');
+      return;
+    }
+    setEbookFile(file);
+    setIsInspectingEbook(true);
+    setErrorMsg(null);
+    setSuccessMsg(null);
+    try {
+      const res = await inspectEbook(file);
+      setEbookInspectResult(res);
+      setEbookRangeStart(1);
+      setEbookRangeEnd(res.total_chapters || 10);
+      setSelectedEbookIndices(new Set(res.chapters.map((c) => c.index)));
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to inspect eBook file');
+      setEbookInspectResult(null);
+    } finally {
+      setIsInspectingEbook(false);
+    }
+  };
+
+  const toggleEbookChapterSelection = (index: number) => {
+    setSelectedEbookIndices((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
+  };
+
+  const selectAllEbookChapters = () => {
+    if (!ebookInspectResult) return;
+    setSelectedEbookIndices(new Set(ebookInspectResult.chapters.map((c) => c.index)));
+  };
+
+  const deselectAllEbookChapters = () => {
+    setSelectedEbookIndices(new Set());
+  };
+
+  const handleImportEbook = async () => {
+    if (!activeProjectPath) {
+      setErrorMsg('No active project selected.');
+      return;
+    }
+    if (!ebookFile || !ebookInspectResult) {
+      setErrorMsg('Please select an eBook file to import.');
+      return;
+    }
+
+    const targetFolder =
+      selectedFolder === '__new__' ? customFolderName.trim() : selectedFolder;
+
+    if (selectedFolder === '__new__' && !targetFolder) {
+      setErrorMsg('Please provide a name for the new folder.');
+      return;
+    }
+
+    let startCh: number | undefined;
+    let endCh: number | undefined;
+    let indicesStr: string | undefined;
+
+    if (ebookSelectionMode === 'range') {
+      startCh = ebookRangeStart;
+      endCh = ebookRangeEnd;
+    } else if (ebookSelectionMode === 'custom') {
+      indicesStr = Array.from(selectedEbookIndices).join(',');
+      if (!indicesStr) {
+        setErrorMsg('Please select at least one chapter to import.');
+        return;
+      }
+    }
+
+    setIsImportingEbook(true);
+    setErrorMsg(null);
+    setSuccessMsg(null);
+
+    try {
+      const result = await importEbook(ebookFile, {
+        project_path: activeProjectPath,
+        folder: targetFolder === 'raw_chapters' ? undefined : targetFolder,
+        start_chapter: startCh,
+        end_chapter: endCh,
+        selected_indices: indicesStr,
+        overwrite: overwrite,
+        extract_images: ebookExtractImages,
+      });
+
+      setSuccessMsg(result.message || `Successfully imported ${result.imported_count} chapters.`);
+      onUploadSuccess({ folder: targetFolder, uploadedCount: result.imported_count });
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to import eBook chapters');
+    } finally {
+      setIsImportingEbook(false);
+    }
+  };
+
   const effectiveFolderDisplay =
     selectedFolder === '__new__'
       ? customFolderName.trim() || 'new_folder'
@@ -426,6 +549,19 @@ export const UploadModal: React.FC<UploadModalProps> = ({
           >
             <Globe className="w-3.5 h-3.5 text-[#d9a05b]" />
             Extract from URL <span className="text-[10px] text-[#d9a05b] font-bold">✨</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('ebook')}
+            disabled={isUploading || isScraping || isImportingEbook}
+            className={`pb-2 px-3 text-xs font-mono font-medium transition-colors border-b-2 flex items-center gap-1.5 cursor-pointer disabled:opacity-50 ${
+              activeTab === 'ebook'
+                ? 'border-[#94a8c9] text-[#f7f5f0]'
+                : 'border-transparent text-[#857d75] hover:text-[#b0a89f]'
+            }`}
+          >
+            <BookOpen className="w-3.5 h-3.5 text-[#94a8c9]" />
+            eBook (.epub / .pdf) <span className="text-[10px] text-[#94a8c9] font-bold">📚</span>
           </button>
         </div>
 
@@ -1002,6 +1138,353 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                   <>
                     <Zap className="w-3.5 h-3.5" />
                     Scrape & Import
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Tab 3: eBook (EPUB & PDF) */}
+        {activeTab === 'ebook' && (
+          <div className="p-5 space-y-4 text-xs overflow-y-auto flex-1">
+            {/* File Dropzone or Selected Card */}
+            {!ebookInspectResult ? (
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setIsDragging(true);
+                }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setIsDragging(false);
+                  if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                    handleSelectEbookFile(e.dataTransfer.files[0]);
+                  }
+                }}
+                onClick={() => ebookFileInputRef.current?.click()}
+                className={`p-6 border-2 border-dashed rounded-[4px] flex flex-col items-center justify-center text-center cursor-pointer transition-colors ${
+                  isDragging
+                    ? 'border-[#94a8c9] bg-[#94a8c9]/10'
+                    : 'border-[#3f3a36] hover:border-[#857d75] bg-[#24201d]'
+                }`}
+              >
+                <input
+                  ref={ebookFileInputRef}
+                  type="file"
+                  accept=".epub,.pdf"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      handleSelectEbookFile(e.target.files[0]);
+                    }
+                  }}
+                  className="hidden"
+                />
+
+                {isInspectingEbook ? (
+                  <div className="flex flex-col items-center gap-2 py-4">
+                    <Loader2 className="w-8 h-8 text-[#94a8c9] animate-spin" />
+                    <span className="font-mono text-xs text-[#f7f5f0]">
+                      Analyzing eBook structure with PyMuPDF & EPUB parser...
+                    </span>
+                    <span className="text-[11px] text-[#857d75]">
+                      Extracting Table of Contents, Thai diacritics, and illustrations
+                    </span>
+                  </div>
+                ) : (
+                  <>
+                    <BookOpen className="w-8 h-8 text-[#94a8c9] mb-2" />
+                    <span className="font-mono text-xs text-[#f7f5f0] font-semibold">
+                      Drop .epub or .pdf novel file here, or browse
+                    </span>
+                    <span className="text-[11px] text-[#857d75] mt-1 max-w-sm">
+                      Automatic chapter extraction, PyMuPDF complex script parsing (Thai/CJK), and illustration detection
+                    </span>
+                    <span className="inline-block mt-3 px-2 py-0.5 bg-[#383330] text-[#94a8c9] text-[10px] font-mono rounded-[2px] border border-[#3f3a36]">
+                      Supports EPUB2, EPUB3, and PDF
+                    </span>
+                  </>
+                )}
+              </div>
+            ) : (
+              /* Inspected Book Preview Card */
+              <div className="space-y-3">
+                <div className="p-3 bg-[#24201d] border border-[#3f3a36] rounded-[3px] flex gap-3">
+                  {ebookInspectResult.has_cover && ebookInspectResult.cover_base64 ? (
+                    <img
+                      src={ebookInspectResult.cover_base64}
+                      alt="Cover Art"
+                      className="w-16 h-24 object-cover rounded-[2px] border border-[#3f3a36] shrink-0 shadow-md"
+                    />
+                  ) : (
+                    <div className="w-16 h-24 bg-[#383330] rounded-[2px] border border-[#3f3a36] flex flex-col items-center justify-center text-[#857d75] shrink-0">
+                      <BookOpen className="w-6 h-6" />
+                      <span className="text-[9px] mt-1 font-mono uppercase">No Cover</span>
+                    </div>
+                  )}
+
+                  <div className="flex-1 min-w-0 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[10px] px-1.5 py-0.2 bg-[#94a8c9]/20 text-[#94a8c9] rounded-[2px] font-mono uppercase font-bold">
+                          {ebookInspectResult.format.toUpperCase()}
+                        </span>
+                        <span className="text-[10px] px-1.5 py-0.2 bg-[#7fa678]/20 text-[#a5c49f] rounded-[2px] font-mono">
+                          {ebookInspectResult.total_chapters} Chapters
+                        </span>
+                      </div>
+                      <h3 className="font-mono font-bold text-sm text-[#f7f5f0] truncate mt-1">
+                        {ebookInspectResult.title}
+                      </h3>
+                      {ebookInspectResult.author && (
+                        <p className="text-[11px] text-[#b0a89f] truncate">
+                          Author: {ebookInspectResult.author}
+                        </p>
+                      )}
+                      <p className="text-[11px] text-[#857d75] truncate mt-0.5">
+                        File: {ebookFile?.name}
+                      </p>
+                    </div>
+
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEbookFile(null);
+                          setEbookInspectResult(null);
+                        }}
+                        className="text-[11px] text-[#94a8c9] hover:underline cursor-pointer font-mono"
+                      >
+                        &larr; Choose different file
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Destination Folder */}
+                <div className="space-y-1">
+                  <label className="text-[#b0a89f] font-mono text-[11px] flex items-center gap-1.5">
+                    <Folder className="w-3.5 h-3.5 text-[#857d75]" />
+                    Destination Folder in Project
+                  </label>
+                  <select
+                    value={selectedFolder}
+                    onChange={(e) => setSelectedFolder(e.target.value)}
+                    disabled={isImportingEbook}
+                    className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] px-2.5 py-1.5 text-[#f7f5f0] text-xs focus:outline-none focus:border-[#b0a89f] cursor-pointer disabled:opacity-50 font-mono"
+                  >
+                    {folders.map((f) => (
+                      <option key={f} value={f}>
+                        {f} {f === defaultFolder ? '(Default Raw Directory)' : '(Volume Subfolder)'}
+                      </option>
+                    ))}
+                    <option value="__new__">+ Create New Subfolder / Volume...</option>
+                  </select>
+
+                  {selectedFolder === '__new__' && (
+                    <div className="pt-1.5 flex items-center gap-2">
+                      <FolderPlus className="w-3.5 h-3.5 text-[#d9a05b] shrink-0" />
+                      <input
+                        type="text"
+                        value={customFolderName}
+                        onChange={(e) => setCustomFolderName(e.target.value)}
+                        placeholder="e.g. Volume_01 or Arc_Prologue"
+                        disabled={isImportingEbook}
+                        className="flex-1 bg-[#24201d] border border-[#d9a05b]/60 rounded-[3px] px-2.5 py-1 text-[#f7f5f0] text-xs font-mono focus:outline-none focus:border-[#d9a05b]"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Chapter Selection Mode */}
+                <div className="space-y-2 pt-1">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[#b0a89f] font-mono text-[11px] flex items-center gap-1.5">
+                      <Sliders className="w-3.5 h-3.5 text-[#857d75]" />
+                      Chapter Ingestion Selection
+                    </label>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setEbookSelectionMode('all')}
+                        className={`text-[10px] font-mono px-2 py-0.5 rounded-[2px] transition-colors cursor-pointer ${
+                          ebookSelectionMode === 'all'
+                            ? 'bg-[#94a8c9] text-[#1c1815] font-bold'
+                            : 'bg-[#383330] text-[#b0a89f] hover:text-[#f7f5f0]'
+                        }`}
+                      >
+                        All ({ebookInspectResult.total_chapters})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEbookSelectionMode('range')}
+                        className={`text-[10px] font-mono px-2 py-0.5 rounded-[2px] transition-colors cursor-pointer ${
+                          ebookSelectionMode === 'range'
+                            ? 'bg-[#94a8c9] text-[#1c1815] font-bold'
+                            : 'bg-[#383330] text-[#b0a89f] hover:text-[#f7f5f0]'
+                        }`}
+                      >
+                        Range
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEbookSelectionMode('custom')}
+                        className={`text-[10px] font-mono px-2 py-0.5 rounded-[2px] transition-colors cursor-pointer ${
+                          ebookSelectionMode === 'custom'
+                            ? 'bg-[#94a8c9] text-[#1c1815] font-bold'
+                            : 'bg-[#383330] text-[#b0a89f] hover:text-[#f7f5f0]'
+                        }`}
+                      >
+                        Custom ({selectedEbookIndices.size})
+                      </button>
+                    </div>
+                  </div>
+
+                  {ebookSelectionMode === 'range' && (
+                    <div className="p-2.5 bg-[#24201d] border border-[#3f3a36] rounded-[3px] flex items-center gap-2">
+                      <span className="text-[#857d75] font-mono">From Chapter:</span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={ebookInspectResult.total_chapters}
+                        value={ebookRangeStart}
+                        onChange={(e) => setEbookRangeStart(parseInt(e.target.value, 10) || 1)}
+                        className="w-16 bg-[#2b2622] border border-[#3f3a36] rounded-[2px] px-2 py-0.5 text-center font-mono text-[#f7f5f0]"
+                      />
+                      <span className="text-[#857d75] font-mono">To:</span>
+                      <input
+                        type="number"
+                        min={ebookRangeStart}
+                        max={ebookInspectResult.total_chapters}
+                        value={ebookRangeEnd}
+                        onChange={(e) => setEbookRangeEnd(parseInt(e.target.value, 10) || ebookRangeStart)}
+                        className="w-16 bg-[#2b2622] border border-[#3f3a36] rounded-[2px] px-2 py-0.5 text-center font-mono text-[#f7f5f0]"
+                      />
+                    </div>
+                  )}
+
+                  {ebookSelectionMode === 'custom' && (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-[11px] text-[#857d75]">
+                        <span className="font-mono">
+                          Selected {selectedEbookIndices.size} of {ebookInspectResult.total_chapters}
+                        </span>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={selectAllEbookChapters}
+                            className="hover:underline text-[#94a8c9]"
+                          >
+                            Select All
+                          </button>
+                          <span>&bull;</span>
+                          <button
+                            type="button"
+                            onClick={deselectAllEbookChapters}
+                            className="hover:underline text-[#94a8c9]"
+                          >
+                            Deselect All
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="max-h-36 overflow-y-auto border border-[#3f3a36] rounded-[3px] bg-[#24201d] divide-y divide-[#3f3a36]/50">
+                        {ebookInspectResult.chapters.map((ch) => {
+                          const isChecked = selectedEbookIndices.has(ch.index);
+                          return (
+                            <div
+                              key={ch.index}
+                              onClick={() => toggleEbookChapterSelection(ch.index)}
+                              className={`p-2 flex items-center justify-between cursor-pointer hover:bg-[#2b2622] transition-colors ${
+                                isChecked ? 'bg-[#383330]/40' : ''
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                {isChecked ? (
+                                  <CheckSquare className="w-3.5 h-3.5 text-[#94a8c9] shrink-0" />
+                                ) : (
+                                  <Square className="w-3.5 h-3.5 text-[#857d75] shrink-0" />
+                                )}
+                                <span className="font-mono text-xs text-[#f7f5f0] truncate">
+                                  {ch.title}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 text-[10px] text-[#857d75] shrink-0 font-mono">
+                                {ch.has_images && (
+                                  <span className="text-[#d9a05b] flex items-center gap-0.5">
+                                    <ImageIcon className="w-3 h-3" />
+                                    img
+                                  </span>
+                                )}
+                                <span>{ch.word_count.toLocaleString()} words</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Import Options */}
+                <div className="p-2.5 bg-[#24201d] border border-[#3f3a36] rounded-[3px] space-y-2">
+                  <label className="flex items-center gap-2 text-[#dad2c1] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={ebookExtractImages}
+                      onChange={(e) => setEbookExtractImages(e.target.checked)}
+                      className="rounded-[2px] accent-[#94a8c9] cursor-pointer"
+                    />
+                    <span>Extract illustrations & cover to project assets/ folder</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 text-[#dad2c1] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={overwrite}
+                      onChange={(e) => setOverwrite(e.target.checked)}
+                      className="rounded-[2px] accent-[#94a8c9] cursor-pointer"
+                    />
+                    <span>Overwrite existing chapter files if numbered identically</span>
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {/* Action Footer */}
+            <div className="pt-3 border-t border-[#3f3a36] flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={isImportingEbook || isInspectingEbook}
+                className="px-3.5 py-1.5 rounded-[3px] bg-[#383330] hover:bg-[#3f3a36] text-[#f7f5f0] text-xs font-medium transition-colors cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={handleImportEbook}
+                disabled={isImportingEbook || isInspectingEbook || !ebookInspectResult}
+                className="flex items-center gap-1.5 px-4 py-1.5 rounded-[3px] bg-[#94a8c9] hover:bg-[#a9bcdb] text-[#1c1815] text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {isImportingEbook ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Importing Chapters...</span>
+                  </>
+                ) : (
+                  <>
+                    <BookOpen className="w-3.5 h-3.5" />
+                    <span>
+                      Import{' '}
+                      {ebookSelectionMode === 'custom'
+                        ? `${selectedEbookIndices.size} Chapters`
+                        : ebookSelectionMode === 'range'
+                        ? `${Math.max(0, ebookRangeEnd - ebookRangeStart + 1)} Chapters`
+                        : `${ebookInspectResult?.total_chapters || ''} Chapters`}
+                    </span>
                   </>
                 )}
               </button>

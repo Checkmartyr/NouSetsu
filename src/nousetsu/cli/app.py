@@ -21,6 +21,12 @@ from nousetsu.storage.repository import (
     resolve_project_dir,
     get_new_project_dir,
 )
+from nousetsu.ebook import (
+    EbookImportParams,
+    EbookExportOptions,
+    extract_ebook_to_directory,
+    compile_project_to_ebook,
+)
 from nousetsu.tui.app import NovelAgentApp
 
 from nousetsu.utils.env import load_env
@@ -1075,6 +1081,109 @@ def cmd_web(args: argparse.Namespace) -> None:
         run_web_server(port=port, host=host, open_browser=open_browser, dist_dir=dist_dir)
 
 
+def cmd_import(args: argparse.Namespace) -> None:
+    file_path = Path(args.file).resolve()
+    if not file_path.is_file():
+        console.print(f"[bold red]Error:[/] File not found: [yellow]{file_path}[/]")
+        sys.exit(1)
+
+    ext = file_path.suffix.lower()
+    if ext not in (".epub", ".pdf"):
+        console.print(f"[bold red]Error:[/] Unsupported file format '{ext}'. Must be .epub or .pdf.")
+        sys.exit(1)
+
+    target_path = resolve_project_dir(getattr(args, "project_dir", None))
+    repo = NovelRepository(target_path)
+
+    folder_name = getattr(args, "folder", None)
+    cfg = repo.load_config()
+    if folder_name and folder_name.strip():
+        clean_f = re.sub(r'[\\/*?:"<>|]', "", folder_name.strip()).replace(" ", "_")
+        dest_dir = repo.root_dir / clean_f
+    else:
+        dest_dir = cfg.get_raw_path(repo.root_dir)
+
+    params = EbookImportParams(
+        start_chapter=getattr(args, "start", None),
+        end_chapter=getattr(args, "end", None),
+        overwrite=getattr(args, "overwrite", False),
+        extract_images=not getattr(args, "no_images", False),
+    )
+
+    console.print(f"[dim]Parsing {ext.upper()} container and extracting chapters...[/]")
+    try:
+        res = extract_ebook_to_directory(file_path, dest_dir, params)
+    except Exception as e:
+        console.print(f"[bold red]Extraction failed:[/] {e}")
+        sys.exit(1)
+
+    table = Table(title="eBook Ingestion Summary", border_style="cyan")
+    table.add_column("Property", style="bold cyan")
+    table.add_column("Value", style="green")
+    table.add_row("Source File", file_path.name)
+    table.add_row("Detected Title", res.get("title") or "Unknown")
+    if res.get("author"):
+        table.add_row("Detected Author", res["author"])
+    table.add_row("Destination Folder", str(dest_dir.relative_to(repo.root_dir)))
+    table.add_row("Extracted Chapters", str(res.get("total_extracted", 0)))
+    if res.get("total_skipped", 0) > 0:
+        table.add_row("Skipped (Existing)", str(res["total_skipped"]))
+
+    console.print(table)
+    console.print(Panel.fit(
+        f"[bold green]Import Complete![/] Successfully imported [cyan]{res.get('total_extracted', 0)}[/] chapters into [bold]{dest_dir.name}[/].",
+        border_style="green",
+    ))
+
+
+def cmd_export(args: argparse.Namespace) -> None:
+    target_path = resolve_project_dir(getattr(args, "project_dir", None))
+    repo = NovelRepository(target_path)
+
+    fmt = getattr(args, "format", "epub").lower()
+    if fmt == "html":
+        fmt = "pdf"  # Maps to printable HTML
+
+    options = EbookExportOptions(
+        format=fmt,
+        folder=getattr(args, "folder", None),
+        title=getattr(args, "title", None),
+        author=getattr(args, "author", None),
+        include_bible_appendix=not getattr(args, "no_appendix", False),
+        soft_wrap_thai=not getattr(args, "no_wrap", False),
+    )
+
+    console.print(f"[dim]Compiling translated chapters into {fmt.upper()}...[/]")
+    try:
+        content_bytes, default_filename, mime_type = compile_project_to_ebook(repo, options)
+    except Exception as e:
+        console.print(f"[bold red]Compilation failed:[/] {e}")
+        sys.exit(1)
+
+    out_arg = getattr(args, "output", None)
+    if out_arg:
+        out_path = Path(out_arg).resolve()
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+    else:
+        out_path = repo.root_dir / default_filename
+
+    out_path.write_bytes(content_bytes)
+
+    size_kb = len(content_bytes) / 1024
+    size_str = f"{size_kb:.1f} KB" if size_kb < 1024 else f"{size_kb / 1024:.2f} MB"
+
+    console.print(Panel.fit(
+        f"[bold green]eBook Compilation Successful![/]\n\n"
+        f"File: [cyan]{out_path}[/]\n"
+        f"Format: [bold magenta]{fmt.upper()}[/]\n"
+        f"Size: [yellow]{size_str}[/]\n"
+        f"Novel Bible Appendix: [green]{'Included' if options.include_bible_appendix else 'Excluded'}[/]\n"
+        f"Thai Word Wrap: [green]{'Active (ZWSP)' if options.soft_wrap_thai else 'Disabled'}[/]",
+        title="Export Complete",
+        border_style="green",
+    ))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Agentic Document-Level Novel Translation CLI")
     parser.add_argument("--version", "-v", action="version", version=f"nousetsu {__version__}")
@@ -1226,6 +1335,27 @@ def main() -> None:
     p_realign.add_argument("--dry-run", action="store_true", help="Preview realignment changes without modifying disk")
     p_realign.add_argument("--re-chronicle", action="store_true", help="Use ChroniclerAgent to re-generate summaries for vacated chapter slots")
 
+    # import
+    p_import = subparsers.add_parser("import", help="Import and extract chapters & illustrations from an EPUB or PDF novel file")
+    p_import.add_argument("file", help="Path to .epub or .pdf novel file")
+    p_import.add_argument("--project-dir", "-p", default=None, help="Root folder of novel project")
+    p_import.add_argument("--folder", "-F", default=None, help="Destination folder name (e.g. Volume_01 or raw_chapters)")
+    p_import.add_argument("--start", type=int, default=None, help="First chapter index to import")
+    p_import.add_argument("--end", type=int, default=None, help="Last chapter index to import")
+    p_import.add_argument("--overwrite", action="store_true", help="Overwrite existing chapter files")
+    p_import.add_argument("--no-images", action="store_true", help="Do not extract illustration images to assets/")
+
+    # export
+    p_export = subparsers.add_parser("export", help="Compile translated chapters into EPUB3 or printable HTML/PDF")
+    p_export.add_argument("--format", "-f", choices=["epub", "pdf", "html"], default="epub", help="Output format (default: epub)")
+    p_export.add_argument("--project-dir", "-p", default=None, help="Root folder of novel project")
+    p_export.add_argument("--folder", "-F", default=None, help="Translated folder to compile (e.g. Volume_01_th or default)")
+    p_export.add_argument("--output", "-o", default=None, help="Output destination file path (.epub or .html)")
+    p_export.add_argument("--title", default=None, help="Book title override")
+    p_export.add_argument("--author", default=None, help="Author name override")
+    p_export.add_argument("--no-appendix", action="store_true", help="Do not append Novel Bible characters/glossary appendix")
+    p_export.add_argument("--no-wrap", action="store_true", help="Disable Thai zero-width space line wrapping")
+
     args = parser.parse_args()
 
     if args.command == "init":
@@ -1254,6 +1384,10 @@ def main() -> None:
         cmd_migrate_rag(args)
     elif args.command in ("realign-chapters", "realign"):
         cmd_realign_chapters(args)
+    elif args.command == "import":
+        cmd_import(args)
+    elif args.command == "export":
+        cmd_export(args)
     elif args.command == "tui":
         cmd_tui(args)
     else:

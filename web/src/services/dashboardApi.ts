@@ -11,6 +11,10 @@ import {
   ScraperExtractParams,
   ScraperExtractResult,
   ScraperStatusResult,
+  EbookInspectResult,
+  EbookImportParams,
+  EbookImportResult,
+  EbookExportOptions,
 } from '../types/dashboard';
 
 const API_BASE = '';
@@ -332,5 +336,69 @@ export async function fetchScraperStatus(taskId: string): Promise<ScraperStatusR
   }
   return data as ScraperStatusResult;
 }
+
+export async function inspectEbook(file: File): Promise<EbookInspectResult> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const res = await fetch(`${API_BASE}/api/ebook/inspect`, {
+    method: 'POST',
+    body: formData,
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.detail || data.error || 'Failed to inspect eBook');
+  }
+  return data as EbookInspectResult;
+}
+
+export async function importEbook(file: File, params: EbookImportParams): Promise<EbookImportResult> {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (params.project_path) formData.append('project_path', params.project_path);
+  if (params.folder) formData.append('folder', params.folder);
+  if (params.start_chapter !== undefined) formData.append('start_chapter', String(params.start_chapter));
+  if (params.end_chapter !== undefined) formData.append('end_chapter', String(params.end_chapter));
+  if (params.selected_indices) formData.append('selected_indices', params.selected_indices);
+  if (params.overwrite !== undefined) formData.append('overwrite', String(params.overwrite));
+  if (params.extract_images !== undefined) formData.append('extract_images', String(params.extract_images));
+
+  const res = await fetch(`${API_BASE}/api/ebook/import`, {
+    method: 'POST',
+    body: formData,
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.detail || data.error || 'Failed to import eBook chapters');
+  }
+  return data as EbookImportResult;
+}
+
+export async function exportEbook(options: EbookExportOptions): Promise<{ blob: Blob; filename: string }> {
+  const res = await fetch(`${API_BASE}/api/ebook/export`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(options),
+  });
+
+  if (!res.ok) {
+    const errorJson = await res.json().catch(() => ({}));
+    throw new Error(errorJson.detail || 'Failed to compile and export eBook');
+  }
+
+  // Parse filename from Content-Disposition header if available
+  let filename = options.format === 'pdf' ? 'novel.html' : 'novel.epub';
+  const disposition = res.headers.get('Content-Disposition');
+  if (disposition) {
+    const match = disposition.match(/filename="?([^";]+)"?/i);
+    if (match && match[1]) {
+      filename = match[1];
+    }
+  }
+
+  const blob = await res.blob();
+  return { blob, filename };
+}
+
 
 

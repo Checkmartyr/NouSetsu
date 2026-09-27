@@ -24,6 +24,12 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from nousetsu.ebook import (
+    EbookReader,
+    EbookExportOptions,
+    EbookImportParams,
+    compile_project_to_ebook,
+)
 from nousetsu.scraper import (
     NovelScraperBridge,
     ScraperExtractRequest,
@@ -95,6 +101,8 @@ class SSEEventBus:
                     )
                 except Exception:
                     pass
+
+    publish = publish_sync
 
 
 class ActiveTranslationJob:
@@ -208,6 +216,11 @@ class UploadChaptersRequest(BaseModel):
     folder: Optional[str] = Field(None, description="Target volume or subfolder name (default: raw_chapters)")
     files: List[UploadFileItem] = Field(..., description="Files to upload")
     overwrite: bool = Field(False, description="Whether to overwrite existing files")
+
+
+class EbookExportRequest(EbookExportOptions):
+    project_path: Optional[str] = None
+
 
 
 # ============================================================================
@@ -1384,6 +1397,156 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
         if not job:
             raise HTTPException(status_code=404, detail="Scraper task not found.")
         return job.model_dump()
+
+    # ------------------------------------------------------------------------
+    # 2.7 eBook (EPUB & PDF) Ingestion & Compilation Endpoints
+    # ------------------------------------------------------------------------
+
+    @app.post("/api/ebook/inspect")
+    async def ebook_inspect(
+        file: UploadFile = File(...),
+    ) -> Dict[str, Any]:
+        """Inspect an uploaded EPUB or PDF file and return TOC chapters, metadata, and preview."""
+        filename = file.filename or "uploaded.epub"
+        ext = Path(filename).suffix.lower()
+        if ext not in (".epub", ".pdf"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported file format '{ext}'. Only .epub and .pdf are supported.",
+            )
+        try:
+            raw_bytes = await file.read()
+            reader = EbookReader.from_bytes(raw_bytes, filename=filename)
+            res = reader.inspect()
+            return res.model_dump()
+        except Exception as e:
+            logger.exception("Failed to inspect eBook: %s", e)
+            raise HTTPException(status_code=500, detail=f"Failed to inspect eBook: {e}")
+
+    @app.post("/api/ebook/import")
+    async def ebook_import(
+        file: UploadFile = File(...),
+        project_path: Optional[str] = Form(None),
+        folder: Optional[str] = Form(None),
+        start_chapter: Optional[int] = Form(None),
+        end_chapter: Optional[int] = Form(None),
+        selected_indices: Optional[str] = Form(None),
+        overwrite: bool = Form(False),
+        extract_images: bool = Form(True),
+    ) -> Dict[str, Any]:
+        """Extract and ingest chapters from an uploaded EPUB/PDF into project raw folder."""
+        repo = _resolve_repo(project_path)
+        filename = file.filename or "uploaded.epub"
+        ext = Path(filename).suffix.lower()
+        if ext not in (".epub", ".pdf"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported file format '{ext}'. Only .epub and .pdf are supported.",
+            )
+
+        try:
+            raw_bytes = await file.read()
+            reader = EbookReader.from_bytes(raw_bytes, filename=filename)
+
+            # Determine destination folder
+            cfg = repo.load_config()
+            if folder and folder.strip():
+                clean_f = re.sub(r'[\\/*?:"<>|]', "", folder.strip()).replace(" ", "_")
+                dest_dir = repo.root_dir / clean_f
+            else:
+                dest_dir = cfg.get_raw_path(repo.root_dir)
+            dest_dir.mkdir(parents=True, exist_ok=True)
+
+            # Assets directory for illustrations
+            assets_dir = repo.root_dir / "assets"
+            assets_dir.mkdir(parents=True, exist_ok=True)
+
+            indices = None
+            if selected_indices and selected_indices.strip():
+                try:
+                    indices = [int(x.strip()) for x in selected_indices.split(",") if x.strip().isdigit()]
+                except Exception:
+                    pass
+
+            chapters = reader.extract_chapters(
+                start_chapter=start_chapter,
+                end_chapter=end_chapter,
+                selected_indices=indices,
+            )
+
+            if not chapters:
+                raise HTTPException(status_code=400, detail="No chapters could be extracted from eBook.")
+
+            # Save illustrations if requested
+            if extract_images:
+                try:
+                    images = reader.extract_images()
+                    for img in images:
+                        img_path = assets_dir / img.filename
+                        if not img_path.exists() or overwrite:
+                            img_path.write_bytes(img.image_bytes)
+                except Exception as img_err:
+                    logger.warning("Could not extract eBook images: %s", img_err)
+
+            # Save chapters to raw markdown/txt files
+            saved_files = []
+            for chap in chapters:
+                clean_title = re.sub(r'[\\/*?:"<>|]', "", chap.title).replace(" ", "_")[:60]
+                target_fname = f"{chap.index:04d}_{clean_title}.txt"
+                target_file = dest_dir / target_fname
+
+                if target_file.exists() and not overwrite:
+                    continue
+
+                content = chap.content_text
+                if not content.startswith("#"):
+                    content = f"# {chap.title}\n\n{content}"
+                target_file.write_text(content, encoding="utf-8")
+                saved_files.append(target_fname)
+
+            _invalidate_chapter_caches(str(repo.root_dir))
+            event_bus.publish("chapters_updated", {"project_path": str(repo.root_dir), "folder": folder})
+
+            return {
+                "success": True,
+                "imported_count": len(saved_files),
+                "folder": folder or "",
+                "files": saved_files,
+                "message": f"Successfully imported {len(saved_files)} chapters from {filename}",
+            }
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.exception("Failed to import eBook: %s", e)
+            raise HTTPException(status_code=500, detail=f"Failed to import eBook: {e}")
+
+    @app.post("/api/ebook/export")
+    async def ebook_export(body: EbookExportRequest) -> Response:
+        """Compile translated chapters into EPUB3 or Printable HTML."""
+        repo = _resolve_repo(body.project_path)
+        try:
+            content_bytes, filename, mime_type = compile_project_to_ebook(repo, body)
+            return Response(
+                content=content_bytes,
+                media_type=mime_type,
+                headers={
+                    "Content-Disposition": f'attachment; filename="{filename}"',
+                    "Content-Type": mime_type,
+                },
+            )
+        except Exception as e:
+            logger.exception("Failed to compile eBook: %s", e)
+            raise HTTPException(status_code=500, detail=f"Failed to compile eBook: {e}")
+
+    @app.get("/api/project/assets/{filename:path}")
+    async def get_project_asset(filename: str, project_path: Optional[str] = Query(None)) -> FileResponse:
+        """Serve extracted novel illustrations or assets."""
+        repo = _resolve_repo(project_path)
+        asset_file = (repo.root_dir / "assets" / filename).resolve()
+        assets_root = (repo.root_dir / "assets").resolve()
+        if not str(asset_file).startswith(str(assets_root)) or not asset_file.is_file():
+            raise HTTPException(status_code=404, detail="Asset not found")
+        return FileResponse(asset_file)
 
     # ------------------------------------------------------------------------
     # 3. Server-Sent Events (SSE) Bus

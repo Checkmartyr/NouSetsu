@@ -276,4 +276,53 @@ export interface ScraperStatusResult {
   error?: string | null;
 }
 
+export interface EbookInspectChapterItem {
+  index: number;
+  title: string;
+  word_count: number;
+  has_images: boolean;
+}
+
+export interface EbookInspectResult {
+  title: string;
+  author?: string | null;
+  format: 'epub' | 'pdf';
+  total_chapters: number;
+  chapters: EbookInspectChapterItem[];
+  has_cover: boolean;
+  cover_base64?: string | null;
+}
+
+export interface EbookImportParams {
+  project_path?: string;
+  folder?: string;
+  start_chapter?: number;
+  end_chapter?: number;
+  selected_indices?: string;
+  overwrite?: boolean;
+  extract_images?: boolean;
+}
+
+export interface EbookImportResult {
+  success: boolean;
+  imported_count: number;
+  folder: string;
+  files: string[];
+  message: string;
+}
+
+export interface EbookExportOptions {
+  project_path?: string;
+  format?: 'epub' | 'pdf';
+  folder?: string;
+  title?: string;
+  author?: string;
+  include_bible_appendix?: boolean;
+  include_images?: boolean;
+  soft_wrap_thai?: boolean;
+  page_size?: 'A5' | 'A4' | 'B6';
+  custom_css?: string;
+}
+
+
 

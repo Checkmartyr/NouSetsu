@@ -25,6 +25,7 @@ import {
   stopTranslation
 } from '../services/dashboardApi';
 import { UploadModal } from './UploadModal';
+import { ExportBookModal } from './ExportBookModal';
 
 interface StudioViewProps {
   activeProjectPath: string | null;
@@ -52,6 +53,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
   const [isLogDrawerOpen, setIsLogDrawerOpen] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
 
   // Translation Options Modal / Fields
   const [chapterFilterInput, setChapterFilterInput] = useState<string>('');
@@ -546,6 +548,15 @@ export const StudioView: React.FC<StudioViewProps> = ({
           </button>
 
           <button
+            onClick={() => setIsExportModalOpen(true)}
+            title="Export novel eBook (EPUB3 / PDF)"
+            className="btn-secondary flex items-center gap-1.5 text-xs px-3 py-1.5 text-[#d9a05b] border-[#d9a05b]/40 hover:bg-[#d9a05b]/10"
+          >
+            <BookOpen className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Export eBook</span>
+          </button>
+
+          <button
             onClick={refreshData}
             title="Refresh chapter list"
             className="btn-secondary p-1.5 text-xs"
@@ -892,6 +903,14 @@ export const StudioView: React.FC<StudioViewProps> = ({
             setSelectedFolder(folder);
           }
         }}
+      />
+
+      {/* Export Novel eBook Modal */}
+      <ExportBookModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        activeProjectPath={activeProjectPath}
+        activeProjectTitle={activeProjectTitle}
       />
     </div>
   );
