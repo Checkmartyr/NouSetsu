@@ -5,11 +5,17 @@ Scraper Bridge: executes Novel-Scraper commands via subprocess and handles strea
 import asyncio
 import json
 import logging
+import sys
 import uuid
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from nousetsu.scraper.detector import find_scraper_directory, find_scraper_python, get_scraper_info
+from nousetsu.scraper.detector import (
+    find_scraper_directory,
+    find_scraper_python,
+    get_repo_root,
+    get_scraper_info,
+)
 from nousetsu.scraper.models import (
     ScraperChapterItem,
     ScraperExtractRequest,
@@ -18,6 +24,14 @@ from nousetsu.scraper.models import (
 )
 
 logger = logging.getLogger("nousetsu.scraper.bridge")
+
+_BUNDLED_BRIDGE_RUNNER = (
+    "import runpy, sys; "
+    "scraper_root, bridge_path = sys.argv[1:3]; "
+    "sys.path.insert(0, scraper_root); "
+    "sys.argv = [bridge_path, *sys.argv[3:]]; "
+    "runpy.run_path(bridge_path, run_name='__main__')"
+)
 
 
 class NovelScraperBridge:
@@ -39,6 +53,43 @@ class NovelScraperBridge:
             and self.python_exe is not None
             and self.python_exe.is_file()
         )
+
+    def _bundled_api_bridge_path(self) -> Optional[Path]:
+        """Find NouSetsu's packaged adapter for companion checkouts without api_bridge.py."""
+        if getattr(sys, "frozen", False):
+            extraction_dir = getattr(sys, "_MEIPASS", None)
+            if extraction_dir:
+                packaged_bridge = Path(extraction_dir) / "nousetsu" / "scraper" / "api_bridge.py"
+                if packaged_bridge.is_file():
+                    return packaged_bridge
+
+        source_bridge = get_repo_root() / "modules" / "novel_scraper" / "src" / "api_bridge.py"
+        return source_bridge if source_bridge.is_file() else None
+
+    def _api_bridge_command(self, operation: str, *args: str) -> List[str]:
+        if self.scraper_dir is None or self.python_exe is None:
+            raise RuntimeError("Novel-Scraper is not available.")
+
+        companion_bridge = self.scraper_dir / "src" / "api_bridge.py"
+        if companion_bridge.is_file():
+            return [str(self.python_exe), "-m", "src.api_bridge", operation, *args]
+
+        bundled_bridge = self._bundled_api_bridge_path()
+        if bundled_bridge is None:
+            raise FileNotFoundError(
+                "The Novel-Scraper checkout is missing src/api_bridge.py and NouSetsu's bundled adapter is unavailable."
+            )
+
+        logger.info("Using bundled scraper adapter for companion checkout at %s", self.scraper_dir)
+        return [
+            str(self.python_exe),
+            "-c",
+            _BUNDLED_BRIDGE_RUNNER,
+            str(self.scraper_dir),
+            str(bundled_bridge),
+            operation,
+            *args,
+        ]
 
     async def romanize_title(self, title: str) -> str:
         """Romanize a title with the Novel-Scraper's language-aware utility."""
@@ -80,14 +131,7 @@ class NovelScraperBridge:
                 error="Novel-Scraper is not installed or configured. Please initialize the git submodule or configure NOVEL_SCRAPER_PATH.",
             )
 
-        cmd = [
-            str(self.python_exe),
-            "-m",
-            "src.api_bridge",
-            "inspect",
-            "--url",
-            url,
-        ]
+        cmd = self._api_bridge_command("inspect", "--url", url)
 
         logger.info("Executing inspect: %s in %s", " ".join(cmd), self.scraper_dir)
 
@@ -164,10 +208,7 @@ class NovelScraperBridge:
 
         dest_dir.mkdir(parents=True, exist_ok=True)
 
-        cmd = [
-            str(self.python_exe),
-            "-m",
-            "src.api_bridge",
+        cmd = self._api_bridge_command(
             "extract",
             "--url",
             req.url,
@@ -175,7 +216,7 @@ class NovelScraperBridge:
             str(dest_dir.resolve()),
             "--concurrency",
             str(req.concurrency),
-        ]
+        )
 
         if req.chapter_indices:
             cmd.extend(["--indices", ",".join(str(i) for i in req.chapter_indices)])

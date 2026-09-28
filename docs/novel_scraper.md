@@ -92,7 +92,7 @@ graph TD
 
 ### Component Breakdown
 * [`src/nousetsu/scraper/detector.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/scraper/detector.py): Auto-discovers the `modules/novel_scraper` directory across standard repository paths and resolves a working Python interpreter equipped with the scraper's dependencies.
-* [`src/nousetsu/scraper/bridge.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/scraper/bridge.py): Spawns headless sub-processes to execute scraper commands, parses JSON output streams, handles error recovery, and converts East Asian titles into filesystem-safe slugs.
+* [`src/nousetsu/scraper/bridge.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/scraper/bridge.py): Spawns headless sub-processes to execute scraper commands, parses JSON output streams, handles error recovery, and converts East Asian titles into filesystem-safe slugs. Desktop builds bundle NouSetsu's API adapter and use it when an external scraper checkout does not yet provide `src/api_bridge.py`.
 * [`src/nousetsu/scraper/models.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/scraper/models.py): Strongly-typed Pydantic schemas validating inspect requests, TOC chapter items, and extraction jobs.
 
 ---
@@ -111,6 +111,8 @@ When cloning NouSetsu for the first time, initialize the submodule:
 ```bash
 git submodule update --init --recursive
 ```
+
+The desktop app can use an external checkout through `NOVEL_SCRAPER_PATH` and `NOVEL_SCRAPER_PYTHON`. If that checkout does not have `src/api_bridge.py`, the packaged app supplies its compatible adapter and runs it against the checkout's `src` package.
 
 If the scraper submodule uses standalone dependencies, you can install them in the main virtual environment:
 ```bash

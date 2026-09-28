@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parent.parent
 WEB_DIR = ROOT / "web"
 FRONTEND_DIST = WEB_DIR / "dist"
 ENTRY_POINT = ROOT / "src" / "nousetsu" / "desktop_backend.py"
+SCRAPER_API_BRIDGE = ROOT / "modules" / "novel_scraper" / "src" / "api_bridge.py"
 TAURI_BINARIES = ROOT / "src-tauri" / "binaries"
 PYINSTALLER_DIST = ROOT / "src-tauri" / "target" / "backend-dist"
 PYINSTALLER_WORK = ROOT / "src-tauri" / "target" / "backend-work"
@@ -101,6 +102,11 @@ def main() -> None:
         raise FileNotFoundError(f"Build the web frontend before freezing the backend: {FRONTEND_DIST}")
     if not ENTRY_POINT.is_file():
         raise FileNotFoundError(f"Backend entry point is missing: {ENTRY_POINT}")
+    if not SCRAPER_API_BRIDGE.is_file():
+        raise FileNotFoundError(
+            f"Novel-Scraper API bridge is missing: {SCRAPER_API_BRIDGE}. "
+            "Initialize the scraper submodule with git submodule update --init --recursive."
+        )
 
     TAURI_BINARIES.mkdir(parents=True, exist_ok=True)
     PYINSTALLER_DIST.mkdir(parents=True, exist_ok=True)
@@ -133,6 +139,8 @@ def main() -> None:
         str(ROOT / "src"),
         "--add-data",
         f"{FRONTEND_DIST}{os.pathsep}web/dist",
+        "--add-data",
+        f"{SCRAPER_API_BRIDGE}{os.pathsep}nousetsu/scraper",
     ]
     for package in COLLECT_ALL:
         command.extend(["--collect-all", package])

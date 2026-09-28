@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Install signed desktop updates from Settings without manually downloading the Windows installer.
 - Add a Windows release workflow that publishes signed Tauri updater artifacts and the GitHub update manifest.
 
+### Fixed
+- Make the desktop scraper work with external Novel-Scraper checkouts that lack NouSetsu's `src.api_bridge` adapter.
+
 ## [0.4.1] - 2026-09-28
 
 ### Added

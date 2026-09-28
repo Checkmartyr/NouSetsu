@@ -33,6 +33,58 @@ def test_scraper_detector_and_submodule():
 
 
 @pytest.mark.asyncio
+async def test_scraper_bridge_uses_bundled_adapter_for_older_checkout(tmp_path, monkeypatch):
+    scraper_dir = tmp_path / "legacy_scraper"
+    (scraper_dir / "src").mkdir(parents=True)
+    (scraper_dir / "src" / "main.py").touch()
+    python_exe = tmp_path / "python.exe"
+    python_exe.touch()
+    bundled_adapter = tmp_path / "bundled" / "api_bridge.py"
+    bridge = NovelScraperBridge(scraper_dir=scraper_dir, python_exe=python_exe)
+    monkeypatch.setattr(bridge, "_bundled_api_bridge_path", lambda: bundled_adapter)
+    captured = {}
+
+    class FakeProcess:
+        returncode = 0
+
+        async def communicate(self):
+            return (
+                b'{"success":true,"novel_title":"Test Novel","chapters":[]}',
+                b"",
+            )
+
+    async def fake_create_subprocess_exec(*args, **kwargs):
+        captured["args"] = args
+        captured["cwd"] = kwargs["cwd"]
+        return FakeProcess()
+
+    async def fake_romanize_title(title):
+        return title
+
+    monkeypatch.setattr(
+        "nousetsu.scraper.bridge.asyncio.create_subprocess_exec",
+        fake_create_subprocess_exec,
+    )
+    monkeypatch.setattr(bridge, "romanize_title", fake_romanize_title)
+
+    url = "https://example.com/novel/"
+    result = await bridge.inspect_url(url)
+
+    assert result.success is True
+    assert result.novel_title == "Test Novel"
+    assert captured["args"][:2] == (str(python_exe), "-c")
+    assert "runpy.run_path" in captured["args"][2]
+    assert captured["args"][3:] == (
+        str(scraper_dir),
+        str(bundled_adapter),
+        "inspect",
+        "--url",
+        url,
+    )
+    assert captured["cwd"] == str(scraper_dir)
+
+
+@pytest.mark.asyncio
 async def test_scraper_bridge_romanizes_title_with_submodule(tmp_path, monkeypatch):
     scraper_dir = tmp_path / "novel_scraper"
     scraper_dir.mkdir()
