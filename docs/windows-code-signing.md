@@ -37,7 +37,7 @@ release certificate can still build locally.
 Verify the generated installer:
 
 ```powershell
-Get-AuthenticodeSignature .\src-tauri\target\release\bundle\nsis\Nousetsu_0.4.0_x64-setup.exe |
+Get-AuthenticodeSignature .\src-tauri\target\release\bundle\nsis\Nousetsu_0.4.1_x64-setup.exe |
   Format-List Status, StatusMessage, SignerCertificate
 ```
 
@@ -46,9 +46,10 @@ publisher. SmartScreen reputation can still take time to build for a newly
 signed publisher or file; signing removes the “Unknown publisher” state but
 cannot guarantee that every first download is warning-free.
 
-## Existing v0.4.0 installer
+## Published installers
 
-Signing cannot be applied retroactively to the uploaded file. After provisioning
-a trusted certificate, rebuild and publish the signed installer. Prefer a new
-patch release such as `v0.4.1` if users have already downloaded `v0.4.0`; users
-who already have the old installer must download the newly signed one.
+The `v0.4.0` and `v0.4.1` installers were built unsigned because no trusted
+code-signing certificate was available for the release builds. Signing cannot
+be applied retroactively to an uploaded installer. After provisioning a trusted
+certificate, publish a newly built signed installer as a later patch release;
+users must download that new installer.

@@ -941,7 +941,7 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
     app = FastAPI(
         title="NouSetsu Web Dashboard & API",
         description="REST and SSE API for agentic novel translation, trace inspection, and Novel Bible management.",
-        version="0.4.0",
+        version="0.4.1",
     )
 
     # CORS configuration
@@ -1867,7 +1867,7 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
 
     @app.get("/api/updates/latest")
     async def get_latest_release() -> Dict[str, Any]:
-        current_version = os.environ.get("NOUSETSU_DESKTOP_VERSION", "0.4.0")
+        current_version = os.environ.get("NOUSETSU_DESKTOP_VERSION", "0.4.1")
         try:
             release = await asyncio.to_thread(_fetch_latest_github_release)
         except urllib.error.HTTPError as error:

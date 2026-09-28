@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-09-28
+
+### Added
+- Seed the desktop app's local `.env` from bundled defaults on first launch, preserving existing settings during upgrades.
+- Add opt-in Authenticode signing support for Windows Tauri builds.
+
 ## [0.4.0] - 2026-09-28
 
 - **Tauri Desktop App & Backend Lifecycle**: Added the desktop shell with a managed Python backend lifecycle and a desktop-aware projects directory.
@@ -179,6 +185,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Automatic CJK source language detection (Japanese, Chinese, Korean).
 - Console scripts `nousetsu` and `novel`.
 
+[0.4.1]: https://github.com/Checkmartyr/NouSetsu/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/Checkmartyr/NouSetsu/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Checkmartyr/NouSetsu/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Checkmartyr/NouSetsu/compare/v0.1.0...v0.2.0
