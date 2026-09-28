@@ -48,7 +48,7 @@ interface SettingCategory {
 const SETTING_CATEGORIES: SettingCategory[] = [
   { id: 'all', name: 'All Settings', shortDesc: 'Continuous full view', icon: LayoutGrid },
   { id: 'general', name: 'Novel Information', shortDesc: 'Metadata, title & language', icon: Sliders },
-  { id: 'models', name: 'Model Routing', shortDesc: '5 Agents & LLM cascades', icon: Cpu },
+  { id: 'models', name: 'Model Routing', shortDesc: 'Agents, API keys & model defaults', icon: Cpu },
   { id: 'review', name: 'Review & Quality', shortDesc: 'Reflection loops & Diff patch', icon: RefreshCw },
   { id: 'chunking', name: 'Semantic Chunking', shortDesc: 'Line-based text chunking', icon: Layers },
   { id: 'memory', name: 'Memory & Bible', shortDesc: 'Cross-folder & reconciliation', icon: BookMarked },
@@ -56,8 +56,44 @@ const SETTING_CATEGORIES: SettingCategory[] = [
   { id: 'safety', name: 'Safety & Bisection', shortDesc: 'Recursive safety bisection', icon: ShieldAlert },
   { id: 'ratelimit', name: 'Rate Limits & Quota', shortDesc: '32k TPM / 60 RPM guard', icon: Zap },
   { id: 'paths', name: 'Workspace Paths', shortDesc: 'Raw & translated directories', icon: Folder },
-  { id: 'environment', name: 'Environment & API Keys', shortDesc: 'Local .env and provider credentials', icon: KeyRound },
   { id: 'updates', name: 'App Updates', shortDesc: 'Check GitHub releases', icon: Download },
+];
+
+const ENV_FIELDS_BY_CATEGORY: Record<string, { title: string; keys: string[] }> = {
+  general: { title: 'Language Defaults', keys: ['SOURCE_LANG', 'TARGET_LANG'] },
+  models: {
+    title: 'Machine Model Defaults & API Keys',
+    keys: [
+      'DEFAULT_MODEL', 'NOVEL_MODEL', 'NOVEL_FALLBACK_MODEL',
+      'NOVEL_EXTRACTOR_MODEL', 'NOVEL_DRAFTER_MODEL', 'NOVEL_CRITIC_MODEL',
+      'NOVEL_POLISHER_MODEL', 'NOVEL_CHRONICLER_MODEL',
+      'NOVEL_THINKING_LEVEL', 'NOVEL_EXTRACTOR_THINKING_LEVEL',
+      'NOVEL_DRAFTER_THINKING_LEVEL', 'NOVEL_CRITIC_THINKING_LEVEL',
+      'NOVEL_POLISHER_THINKING_LEVEL', 'NOVEL_CHRONICLER_THINKING_LEVEL',
+      'NOVEL_THINKING_BUDGET', 'NOVEL_EXTRACTOR_THINKING_BUDGET',
+      'NOVEL_DRAFTER_THINKING_BUDGET', 'NOVEL_CRITIC_THINKING_BUDGET',
+      'NOVEL_POLISHER_THINKING_BUDGET', 'NOVEL_CHRONICLER_THINKING_BUDGET',
+      'NOVEL_TEMPERATURE', 'NOVEL_USE_INTERACTIONS',
+    ],
+  },
+  review: { title: 'Quality Defaults', keys: ['NOVEL_MAX_REVIEW_LOOPS', 'NOVEL_QUALITY_THRESHOLD'] },
+  memory: {
+    title: 'Memory & Entity Defaults',
+    keys: ['NOVEL_FILTER_EXTRACTOR_ENTITIES', 'NOVEL_POST_POLISH_RECONCILIATION'],
+  },
+  rag: { title: 'RAG Model Defaults', keys: ['NOVEL_RAG_EMBEDDING_MODEL', 'NOVEL_RAG_RERANKER_MODEL'] },
+  ratelimit: { title: 'Rate Limit Defaults', keys: ['NOVEL_MAX_TPM', 'NOVEL_MAX_RPM'] },
+  paths: {
+    title: 'Machine Workspace Paths',
+    keys: ['NOVEL_PROJECTS_DIR', 'NOVEL_SCRAPER_PATH', 'NOVEL_SCRAPER_PYTHON'],
+  },
+};
+
+const API_KEY_LABELS = [
+  { key: 'GEMINI_API_KEY', label: 'Gemini API key' },
+  { key: 'GOOGLE_API_KEY', label: 'Google API key (Gemini alias)' },
+  { key: 'OPENAI_API_KEY', label: 'OpenAI API key' },
+  { key: 'OPENROUTER_API_KEY', label: 'OpenRouter API key' },
 ];
 
 interface ToggleSwitchProps {
@@ -99,6 +135,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [activeTab, setActiveTab] = useState<string>('general');
   const [categorySearch, setCategorySearch] = useState<string>('');
   const [machineEnvironment, setMachineEnvironment] = useState<MachineEnvironment | null>(null);
+  const [loadingEnvironment, setLoadingEnvironment] = useState(true);
   const [apiKeyInputs, setApiKeyInputs] = useState<Record<string, string>>({});
   const [clearApiKeys, setClearApiKeys] = useState<string[]>([]);
   const [savingEnvironment, setSavingEnvironment] = useState(false);
@@ -124,8 +161,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   };
 
   const loadMachineEnvironment = async () => {
+    setLoadingEnvironment(true);
     const data = await fetchMachineEnvironment();
     setMachineEnvironment(data);
+    setLoadingEnvironment(false);
   };
 
   useEffect(() => {
@@ -290,18 +329,116 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
   };
 
+  const renderMachineEnvironmentSection = (category: string) => {
+    const group = ENV_FIELDS_BY_CATEGORY[category];
+    if (!group || !machineEnvironment) return null;
+
+    return (
+      <section key={category} className="bg-[#383330] border border-[#3f3a36] rounded-[4px] p-5 space-y-4">
+        <div className="flex items-center gap-2 border-b border-[#4a433e] pb-3">
+          <KeyRound className="w-4 h-4 text-amber-300" />
+          <div>
+            <h2 className="text-sm font-bold text-slate-200">{group.title}</h2>
+            <p className="text-[11px] text-slate-400 mt-1">Machine defaults saved in the local .env file.</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+          {group.keys.map((key) => (
+            <label key={key} className="block min-w-0">
+              <span className="block text-slate-400 mb-1 font-mono">{key}</span>
+              <input
+                type="text"
+                value={machineEnvironment.values[key] || ''}
+                onChange={(event) => setMachineEnvironment((current) => current ? {
+                  ...current,
+                  values: { ...current.values, [key]: event.target.value },
+                } : current)}
+                className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
+              />
+            </label>
+          ))}
+        </div>
+
+        {category === 'models' && (
+          <div className="border-t border-[#4a433e] pt-4 space-y-3">
+            <div>
+              <h3 className="text-xs font-semibold text-slate-200">Provider API keys</h3>
+              <p className="text-[10px] text-slate-400 mt-1">Keys are stored locally and never returned to the browser. Leave blank to keep a saved key; status reflects this .env file.</p>
+              <p className="text-[10px] text-slate-500 mt-1 font-mono break-all">.env: {machineEnvironment.env_file_path}</p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              {API_KEY_LABELS.map(({ key, label }) => {
+                const configured = Boolean(machineEnvironment.api_key_status[key]);
+                const markedForRemoval = clearApiKeys.includes(key);
+                return (
+                  <div key={key} className="bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-3 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <label htmlFor={`api-key-${key}`} className="font-medium text-slate-300">{label}</label>
+                      <span className={configured && !markedForRemoval ? 'text-emerald-400 text-[10px]' : 'text-slate-500 text-[10px]'}>
+                        {markedForRemoval ? 'Will be removed' : configured ? 'Configured' : 'Not configured'}
+                      </span>
+                    </div>
+                    <input
+                      id={`api-key-${key}`}
+                      type="password"
+                      autoComplete="new-password"
+                      value={apiKeyInputs[key] || ''}
+                      onChange={(event) => {
+                        setApiKeyInputs((current) => ({ ...current, [key]: event.target.value }));
+                        setClearApiKeys((current) => current.filter((item) => item !== key));
+                      }}
+                      placeholder={configured ? 'Enter a new key to replace the saved one' : 'Paste API key'}
+                      className="w-full bg-[#2b2622] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
+                    />
+                    {configured && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setClearApiKeys((current) => markedForRemoval ? current.filter((item) => item !== key) : [...current, key]);
+                          setApiKeyInputs((current) => ({ ...current, [key]: '' }));
+                        }}
+                        className="text-[10px] text-rose-300 hover:text-rose-200"
+                      >
+                        {markedForRemoval ? 'Undo clear' : 'Clear saved key'}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <p className="text-[10px] text-slate-500">Save .env to persist the machine defaults and any API key changes.</p>
+          </div>
+        )}
+
+        {category === 'paths' && (
+          <p className="text-[10px] text-slate-500">On desktop, project/ is created beside the app when writable; otherwise projects use app data. An explicit NOVEL_PROJECTS_DIR takes precedence.</p>
+        )}
+
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={handleSaveEnvironment}
+            disabled={savingEnvironment}
+            className="btn-primary text-xs flex items-center gap-1.5 disabled:opacity-50"
+          >
+            <Save className="w-3.5 h-3.5" />
+            {savingEnvironment ? 'Saving .env...' : 'Save .env'}
+          </button>
+        </div>
+      </section>
+    );
+  };
+
   // Keyboard shortcut: Ctrl+S or Cmd+S saves the visible settings section.
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
         event.preventDefault();
-        if (activeTab === 'environment') {
+        if (activeTab === 'updates') return;
+        handleSave();
+        if (activeTab === 'all' || ENV_FIELDS_BY_CATEGORY[activeTab]) {
           handleSaveEnvironment();
-        } else if (activeTab === 'all') {
-          handleSave();
-          handleSaveEnvironment();
-        } else if (activeTab !== 'updates') {
-          handleSave();
         }
       }
     };
@@ -337,11 +474,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             </h1>
           </div>
           <p className="text-xs text-[#aea69c] mt-0.5">
-            Manage <code className="text-[#dad2c1] font-mono">.novel/config.yaml</code> settings across all pipeline subsystems
+            Manage project settings and related machine defaults in <code className="text-[#dad2c1] font-mono">.env</code>
           </p>
         </div>
 
-        {!['environment', 'updates'].includes(activeTab) && (
+        {activeTab !== 'updates' && (
           <div className="flex items-center gap-3">
             <span className="hidden sm:inline-block text-[11px] text-[#aea69c] font-mono">
               Press <kbd className="px-1.5 py-0.5 bg-[#383330] border border-[#3f3a36] rounded-[2px] text-[#dad2c1]">Ctrl+S</kbd> to save
@@ -431,11 +568,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <RefreshCw className="w-5 h-5 animate-spin text-[#dad2c1]" />
               <span>Loading project settings...</span>
             </div>
-          ) : !settings && !['all', 'environment', 'updates'].includes(activeTab) ? (
+          ) : !settings && !['all', 'updates'].includes(activeTab) && !ENV_FIELDS_BY_CATEGORY[activeTab] ? (
             <div className="flex flex-col items-center justify-center py-20 text-[#aea69c] text-xs gap-3">
               <Settings className="w-8 h-8 text-[#aea69c]" />
               <p>No project selected or config.yaml not found.</p>
-              <p className="text-[11px] text-[#8e8579]">Select a project for novel settings, or choose Environment & API Keys or App Updates.</p>
+              <p className="text-[11px] text-[#8e8579]">Select a project for project settings. Machine environment values are available in their related settings tabs.</p>
             </div>
           ) : (
             <div className="max-w-4xl w-full space-y-6 pb-16">
@@ -1496,7 +1633,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </datalist>
 
               {/* Bottom Save Button row */}
-              {!['environment', 'updates'].includes(activeTab) && (
+              {activeTab !== 'updates' && (
                 <div className="pt-4 flex justify-end">
                   <button
                     type="submit"
@@ -1516,107 +1653,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 </div>
               )}
 
-              {(showAll || activeTab === 'environment') && (
-                <section className="bg-[#383330] border border-[#3f3a36] rounded-[4px] p-5 space-y-5">
-                  <div className="flex items-center gap-2 border-b border-[#4a433e] pb-3">
-                    <KeyRound className="w-4 h-4 text-amber-300" />
-                    <div>
-                      <h2 className="text-sm font-bold text-slate-200">Machine Environment & API Keys</h2>
-                      <p className="text-[11px] text-slate-400 mt-1">Edit supported NouSetsu runtime values in the local .env file. Desktop creates project/ beside the app when writable, otherwise it uses app data; an explicit NOVEL_PROJECTS_DIR overrides this default.</p>
-                    </div>
-                  </div>
-
-                  {machineEnvironment ? (
-                    <>
-                      <p className="text-[10px] text-slate-500 font-mono break-all">File: {machineEnvironment.env_file_path}</p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                        {Object.entries(machineEnvironment.values).map(([key, value]) => (
-                          <label key={key} className="block min-w-0">
-                            <span className="block text-slate-400 mb-1 font-mono">{key}</span>
-                            <input
-                              type="text"
-                              value={value}
-                              onChange={(event) => setMachineEnvironment((current) => current ? {
-                                ...current,
-                                values: { ...current.values, [key]: event.target.value },
-                              } : current)}
-                              className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
-                            />
-                          </label>
-                        ))}
-                      </div>
-
-                      <div className="border-t border-[#4a433e] pt-4 space-y-3">
-                        <div>
-                          <h3 className="text-xs font-semibold text-slate-200">Provider API keys</h3>
-                          <p className="text-[10px] text-slate-400 mt-1">Keys are stored locally and never returned to the browser. Leave blank to keep a saved key; status reflects this .env file, not external process environment variables.</p>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                          {[
-                            ['GEMINI_API_KEY', 'Gemini API key'],
-                            ['GOOGLE_API_KEY', 'Google API key (Gemini alias)'],
-                            ['OPENAI_API_KEY', 'OpenAI API key'],
-                            ['OPENROUTER_API_KEY', 'OpenRouter API key'],
-                          ].map(([key, label]) => {
-                            const configured = Boolean(machineEnvironment.api_key_status[key]);
-                            const markedForRemoval = clearApiKeys.includes(key);
-                            return (
-                              <div key={key} className="bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-3 space-y-2">
-                                <div className="flex items-center justify-between gap-2">
-                                  <label htmlFor={`api-key-${key}`} className="font-medium text-slate-300">{label}</label>
-                                  <span className={configured && !markedForRemoval ? 'text-emerald-400 text-[10px]' : 'text-slate-500 text-[10px]'}>
-                                    {markedForRemoval ? 'Will be removed' : configured ? 'Configured' : 'Not configured'}
-                                  </span>
-                                </div>
-                                <input
-                                  id={`api-key-${key}`}
-                                  type="password"
-                                  autoComplete="new-password"
-                                  value={apiKeyInputs[key] || ''}
-                                  onChange={(event) => {
-                                    setApiKeyInputs((current) => ({ ...current, [key]: event.target.value }));
-                                    setClearApiKeys((current) => current.filter((item) => item !== key));
-                                  }}
-                                  placeholder={configured ? 'Enter a new key to replace the saved one' : 'Paste API key'}
-                                  className="w-full bg-[#2b2622] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
-                                />
-                                {configured && (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setClearApiKeys((current) => markedForRemoval ? current.filter((item) => item !== key) : [...current, key]);
-                                      setApiKeyInputs((current) => ({ ...current, [key]: '' }));
-                                    }}
-                                    className="text-[10px] text-rose-300 hover:text-rose-200"
-                                  >
-                                    {markedForRemoval ? 'Undo clear' : 'Clear saved key'}
-                                  </button>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      <div className="flex justify-end">
-                        <button
-                          type="button"
-                          onClick={handleSaveEnvironment}
-                          disabled={savingEnvironment}
-                          className="btn-primary text-xs flex items-center gap-1.5 disabled:opacity-50"
-                        >
-                          <Save className="w-3.5 h-3.5" />
-                          {savingEnvironment ? 'Saving .env...' : 'Save Environment Settings'}
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="flex items-center justify-between text-xs text-slate-400">
-                      <span>Could not load the local environment settings.</span>
-                      <button type="button" onClick={loadMachineEnvironment} className="text-indigo-300 hover:text-indigo-200">Retry</button>
-                    </div>
-                  )}
+              {!machineEnvironment && (showAll || ENV_FIELDS_BY_CATEGORY[activeTab]) && (
+                <section className="bg-[#383330] border border-[#3f3a36] rounded-[4px] p-4 text-xs text-slate-400 flex items-center justify-between">
+                  <span>{loadingEnvironment ? 'Loading local .env settings...' : 'Could not load local .env settings.'}</span>
+                  {!loadingEnvironment && <button type="button" onClick={loadMachineEnvironment} className="text-indigo-300 hover:text-indigo-200">Retry</button>}
                 </section>
+              )}
+              {Object.keys(ENV_FIELDS_BY_CATEGORY).map((category) =>
+                (showAll || activeTab === category) ? renderMachineEnvironmentSection(category) : null
               )}
 
               {(showAll || activeTab === 'updates') && (
