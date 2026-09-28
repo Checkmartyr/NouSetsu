@@ -1,0 +1,73 @@
+name: Desktop Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Set up stable Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Verify release tag matches application versions
+        shell: pwsh
+        run: |
+          $tauriVersion = (Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json).version
+          $cargoVersion = (Select-String -Path src-tauri/Cargo.toml -Pattern '^version = "([^"]+)"').Matches.Groups[1].Value
+          $pythonVersion = (Select-String -Path pyproject.toml -Pattern '^version = "([^"]+)"').Matches.Groups[1].Value
+          if ($env:GITHUB_REF_NAME -ne "v$tauriVersion" -or $cargoVersion -ne $tauriVersion -or $pythonVersion -ne $tauriVersion) {
+            throw "Release tag and Tauri, Cargo, and Python versions must match."
+          }
+
+      - name: Install Python build dependencies
+        run: uv sync --locked --group desktop-build
+
+      - name: Install frontend dependencies
+        run: npm ci --prefix web
+
+      - name: Run Python tests
+        run: uv run --no-sync python -m pytest
+
+      - name: Require updater signing key
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) {
+            throw "Add the TAURI_SIGNING_PRIVATE_KEY repository Actions secret before publishing a release."
+          }
+
+      - name: Build and publish the signed updater release
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "NouSetsu ${{ github.ref_name }}"
+          releaseBody: "See CHANGELOG.md at this tag for release notes."
+          releaseDraft: false
+          prerelease: false
+          args: --bundles nsis --config src-tauri/tauri.updater.conf.json
+          uploadUpdaterJson: true
+          updaterJsonPreferNsis: true

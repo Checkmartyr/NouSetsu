@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { getVersion } from '@tauri-apps/api/app';
+import { check, type Update } from '@tauri-apps/plugin-updater';
 import {
   Settings,
   Cpu,
@@ -20,7 +22,6 @@ import {
   Search,
   Info,
   KeyRound,
-  ExternalLink,
   DownloadCloud,
 } from 'lucide-react';
 import { MachineEnvironment, ProjectSettings, UpdateCheckResult } from '../types/dashboard';
@@ -31,6 +32,8 @@ import {
   saveMachineEnvironment,
   updateSettings,
 } from '../services/dashboardApi';
+
+const isTauriDesktop = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
 interface SettingsViewProps {
   activeProjectPath: string | null;
@@ -48,7 +51,7 @@ interface SettingCategory {
 
 const SETTING_CATEGORIES: SettingCategory[] = [
   { id: 'global', name: 'Environment & API Keys', shortDesc: 'Machine-wide .env defaults', icon: KeyRound, group: 'global' },
-  { id: 'updates', name: 'App Updates', shortDesc: 'Check GitHub releases', icon: Download, group: 'global' },
+  { id: 'updates', name: 'App Updates', shortDesc: 'Install updates in the app', icon: Download, group: 'global' },
   { id: 'all', name: 'All Project Settings', shortDesc: 'Full project configuration', icon: LayoutGrid, group: 'project' },
   { id: 'general', name: 'Novel Information', shortDesc: 'Metadata, title & language', icon: Sliders, group: 'project' },
   { id: 'models', name: 'Model Routing', shortDesc: 'Agent models & LLM cascades', icon: Cpu, group: 'project' },
@@ -194,7 +197,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [savingEnvironment, setSavingEnvironment] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<UpdateCheckResult | null>(null);
   const [updateError, setUpdateError] = useState<string | null>(null);
+  const [desktopUpdate, setDesktopUpdate] = useState<Update | null>(null);
   const [checkingUpdates, setCheckingUpdates] = useState(false);
+  const [installingUpdate, setInstallingUpdate] = useState(false);
+  const [updateProgress, setUpdateProgress] = useState<number | null>(null);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -373,12 +379,75 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const handleCheckUpdates = async () => {
     setCheckingUpdates(true);
     setUpdateError(null);
+    setUpdateInfo(null);
     try {
-      setUpdateInfo(await checkLatestRelease());
+      if (desktopUpdate) {
+        await desktopUpdate.close();
+        setDesktopUpdate(null);
+      }
+
+      if (isTauriDesktop()) {
+        const currentVersion = await getVersion();
+        const update = await check();
+        if (update) {
+          setDesktopUpdate(update);
+          setUpdateInfo({
+            current_version: update.currentVersion,
+            latest_version: update.version,
+            update_available: true,
+            release_name: `NouSetsu ${update.version}`,
+            release_notes: update.body || 'No release notes were provided.',
+            release_url: 'https://github.com/Checkmartyr/NouSetsu/releases/latest',
+            published_at: update.date,
+            assets: [],
+          });
+        } else {
+          setUpdateInfo({
+            current_version: currentVersion,
+            latest_version: currentVersion,
+            update_available: false,
+            release_name: 'You are up to date',
+            release_notes: 'No newer signed update is available.',
+            release_url: 'https://github.com/Checkmartyr/NouSetsu/releases/latest',
+            assets: [],
+          });
+        }
+      } else {
+        setUpdateInfo(await checkLatestRelease());
+      }
     } catch (error) {
       setUpdateError(error instanceof Error ? error.message : 'Could not check for updates.');
     } finally {
       setCheckingUpdates(false);
+    }
+  };
+
+  const handleInstallUpdate = async () => {
+    if (!desktopUpdate) return;
+    setInstallingUpdate(true);
+    setUpdateError(null);
+    setUpdateProgress(0);
+    let contentLength: number | undefined;
+    let downloadedBytes = 0;
+
+    try {
+      await desktopUpdate.downloadAndInstall((event) => {
+        if (event.event === 'Started') {
+          contentLength = event.data.contentLength;
+          setUpdateProgress(contentLength ? 0 : null);
+        } else if (event.event === 'Progress') {
+          downloadedBytes += event.data.chunkLength;
+          if (contentLength && contentLength > 0) {
+            setUpdateProgress(Math.min(100, Math.round((downloadedBytes / contentLength) * 100)));
+          }
+        } else if (event.event === 'Finished') {
+          setUpdateProgress(100);
+        }
+      });
+    } catch (error) {
+      setUpdateError(error instanceof Error ? error.message : 'Could not install the update.');
+      setInstallingUpdate(false);
+      setUpdateProgress(null);
     }
   };
 
@@ -1779,13 +1848,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       <DownloadCloud className="w-4 h-4 text-sky-300" />
                       <div>
                         <h2 className="text-sm font-bold text-slate-200">NouSetsu Desktop Updates</h2>
-                        <p className="text-[11px] text-slate-400 mt-1">Check the latest published GitHub release tag and download its installer.</p>
+                        <p className="text-[11px] text-slate-400 mt-1">
+                          {isTauriDesktop()
+                            ? 'Check, download, and install signed updates without leaving NouSetsu.'
+                            : 'Check release information here; install updates from the NouSetsu desktop app.'}
+                        </p>
                       </div>
                     </div>
                     <button
                       type="button"
                       onClick={handleCheckUpdates}
-                      disabled={checkingUpdates}
+                      disabled={checkingUpdates || installingUpdate}
                       className="btn-primary text-xs flex items-center gap-1.5 disabled:opacity-50"
                     >
                       <RefreshCw className={`w-3.5 h-3.5 ${checkingUpdates ? 'animate-spin' : ''}`} />
@@ -1807,20 +1880,45 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       <div className="max-h-64 overflow-y-auto rounded-[3px] bg-[#24201d] border border-[#3f3a36] p-3 whitespace-pre-wrap text-slate-300 leading-relaxed">
                         {updateInfo.release_notes}
                       </div>
-                      <div className="flex flex-wrap items-center gap-3">
-                        <a href={updateInfo.release_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-indigo-300 hover:text-indigo-200">
-                          Open GitHub release <ExternalLink className="w-3 h-3" />
-                        </a>
-                        {updateInfo.assets.map((asset) => (
-                          <a key={asset.download_url} href={asset.download_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-indigo-300 hover:text-indigo-200">
-                            Download {asset.name} <ExternalLink className="w-3 h-3" />
-                          </a>
-                        ))}
-                      </div>
-                      <p className="text-[10px] text-slate-500">Install the downloaded release manually; its installer updates the frontend and bundled Python backend together. Silent in-app installation requires signed Tauri updater artifacts, which are not configured for this project yet.</p>
+                      {updateInfo.update_available && desktopUpdate && (
+                        <button
+                          type="button"
+                          onClick={handleInstallUpdate}
+                          disabled={installingUpdate}
+                          className="btn-primary text-xs inline-flex items-center gap-1.5 disabled:opacity-50"
+                        >
+                          <DownloadCloud className="w-3.5 h-3.5" />
+                          {installingUpdate ? 'Installing update...' : 'Download & Install'}
+                        </button>
+                      )}
+                      {updateInfo.update_available && !isTauriDesktop() && (
+                        <p className="text-[10px] text-slate-400">
+                          Open the installed desktop app to install this update. Web Studio does not download or launch installers.
+                        </p>
+                      )}
+                      {installingUpdate && (
+                        <div role="status" className="space-y-1.5">
+                          <div className="flex justify-between text-[10px] text-slate-400">
+                            <span>Downloading and installing the signed update...</span>
+                            <span>{updateProgress === null ? ' ' : `${updateProgress}%`}</span>
+                          </div>
+                          <div className="h-1.5 overflow-hidden rounded bg-[#24201d]">
+                            <div
+                              className={`h-full bg-sky-400 transition-all ${updateProgress === null ? 'w-1/3 animate-pulse' : ''}`}
+                              style={updateProgress === null ? undefined : { width: `${updateProgress}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
-                  {!updateInfo && !updateError && <p className="text-xs text-slate-400">The release checker compares the latest GitHub release tag with this desktop app version.</p>}
+                  {!updateInfo && !updateError && (
+                    <p className="text-xs text-slate-400">
+                      {isTauriDesktop()
+                        ? 'NouSetsu checks for signed releases and installs updates directly in the app.'
+                        : 'In-app updates are available from the installed NouSetsu desktop application.'}
+                    </p>
+                  )}
                 </section>
               )}
             </div>

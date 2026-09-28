@@ -12,6 +12,8 @@
     "audit:ui": "node ./scripts/run_audit.mjs"
   },
   "dependencies": {
+    "@tauri-apps/api": "^2.12.0",
+    "@tauri-apps/plugin-updater": "^2.13.0",
     "@types/d3-force": "^3.0.10",
     "d3-force": "^3.0.0",
     "diff": "^8.0.3",
