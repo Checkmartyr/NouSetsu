@@ -34,7 +34,7 @@ a migration plan.
 
 ## Release workflow
 
-Pushing a version tag such as `v0.4.2` runs
+Pushing a version tag such as `v0.4.3` runs
 `.github/workflows/desktop-release.yml`. The tag must match the versions in
 `pyproject.toml`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json`. The
 workflow installs build dependencies, runs the Python tests, builds the NSIS

@@ -5,7 +5,7 @@ from nousetsu.utils.env import load_env
 # Automatically load environment variables from central .env if present
 load_env()
 
-__version__ = "0.4.2"
+__version__ = "0.4.3"
 
 # Register backward-compatibility alias so legacy 'src.*' imports resolve cleanly
 sys.modules.setdefault("src", sys.modules[__name__])

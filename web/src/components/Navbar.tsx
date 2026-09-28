@@ -80,8 +80,8 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Left: Logo & Wordmark */}
           <div className="flex items-center gap-2 shrink-0">
-            <div className="w-7 h-7 rounded-[4px] bg-[#383330] border border-[#3f3a36] flex items-center justify-center text-sm select-none shadow-xs">
-              🐾
+            <div className="w-7 h-7 rounded-[4px] bg-[#383330] border border-[#3f3a36] flex items-center justify-center select-none shadow-xs overflow-hidden">
+              <img src="/favicon.png" alt="Nousetsu" className="w-full h-full object-cover" />
             </div>
             <div>
               <div className="flex items-center gap-1.5">

@@ -37,7 +37,7 @@ release certificate can still build locally.
 Verify the generated installer:
 
 ```powershell
-Get-AuthenticodeSignature .\src-tauri\target\release\bundle\nsis\Nousetsu_0.4.2_x64-setup.exe |
+Get-AuthenticodeSignature .\src-tauri\target\release\bundle\nsis\Nousetsu_0.4.3_x64-setup.exe |
   Format-List Status, StatusMessage, SignerCertificate
 ```
 

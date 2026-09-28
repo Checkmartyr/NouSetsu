@@ -1,3 +1,4 @@
+import { API_BASE } from './apiBase';
 import {
   ChapterItem,
   ChapterContent,
@@ -19,8 +20,6 @@ import {
   MachineEnvironment,
   UpdateCheckResult,
 } from '../types/dashboard';
-
-const API_BASE = '';
 
 export async function fetchChapters(projectPath?: string, folder?: string): Promise<ChapterItem[]> {
   try {
@@ -217,10 +216,23 @@ export async function saveMachineEnvironment(data: {
 
 export async function checkLatestRelease(): Promise<UpdateCheckResult> {
   const res = await fetch(`${API_BASE}/api/updates/latest`);
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data.detail || 'Could not check for updates.');
+  const responseText = await res.text();
+  let data: unknown;
+
+  try {
+    data = JSON.parse(responseText);
+  } catch {
+    throw new Error(`Update check returned an invalid response (HTTP ${res.status}).`);
   }
+
+  if (!res.ok) {
+    const detail =
+      typeof data === 'object' && data !== null && 'detail' in data && typeof data.detail === 'string'
+        ? data.detail
+        : `Update check failed (HTTP ${res.status}).`;
+    throw new Error(detail);
+  }
+
   return data as UpdateCheckResult;
 }
 

@@ -1,6 +1,5 @@
 import { ActiveProjectResponse, SyncState, ProjectTracesResponse, CreateProjectRequest, ProjectMeta } from '../types/trace';
-
-const API_BASE = '';
+import { API_BASE } from './apiBase';
 
 /**
  * Check if the backend trace server is reachable and get the active project

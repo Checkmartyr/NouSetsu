@@ -24,6 +24,7 @@ import {
   KeyRound,
   DownloadCloud,
 } from 'lucide-react';
+import { isTauriDesktopRuntime } from '../services/apiBase';
 import { MachineEnvironment, ProjectSettings, UpdateCheckResult } from '../types/dashboard';
 import {
   checkLatestRelease,
@@ -33,7 +34,23 @@ import {
   updateSettings,
 } from '../services/dashboardApi';
 
-const isTauriDesktop = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+const isTauriDesktop = isTauriDesktopRuntime;
+
+const getErrorMessage = (error: unknown, fallback: string): string => {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === 'string' && error.trim()) return error;
+  if (typeof error === 'object' && error !== null) {
+    const message = 'message' in error ? error.message : undefined;
+    if (typeof message === 'string' && message.trim()) return message;
+    try {
+      const serialized = JSON.stringify(error);
+      if (serialized && serialized !== '{}') return serialized;
+    } catch {
+      // Keep the fallback if the thrown value cannot be serialized.
+    }
+  }
+  return fallback;
+};
 
 interface SettingsViewProps {
   activeProjectPath: string | null;
@@ -388,35 +405,40 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
       if (isTauriDesktop()) {
         const currentVersion = await getVersion();
-        const update = await check();
-        if (update) {
-          setDesktopUpdate(update);
-          setUpdateInfo({
-            current_version: update.currentVersion,
-            latest_version: update.version,
-            update_available: true,
-            release_name: `NouSetsu ${update.version}`,
-            release_notes: update.body || 'No release notes were provided.',
-            release_url: 'https://github.com/Checkmartyr/NouSetsu/releases/latest',
-            published_at: update.date,
-            assets: [],
-          });
-        } else {
-          setUpdateInfo({
-            current_version: currentVersion,
-            latest_version: currentVersion,
-            update_available: false,
-            release_name: 'You are up to date',
-            release_notes: 'No newer signed update is available.',
-            release_url: 'https://github.com/Checkmartyr/NouSetsu/releases/latest',
-            assets: [],
-          });
+        try {
+          const update = await check();
+          if (update) {
+            setDesktopUpdate(update);
+            setUpdateInfo({
+              current_version: update.currentVersion,
+              latest_version: update.version,
+              update_available: true,
+              release_name: `NouSetsu ${update.version}`,
+              release_notes: update.body || 'No release notes were provided.',
+              release_url: 'https://github.com/Checkmartyr/NouSetsu/releases/latest',
+              published_at: update.date,
+              assets: [],
+            });
+          } else {
+            setUpdateInfo({
+              current_version: currentVersion,
+              latest_version: currentVersion,
+              update_available: false,
+              release_name: 'You are up to date',
+              release_notes: 'No newer signed update is available.',
+              release_url: 'https://github.com/Checkmartyr/NouSetsu/releases/latest',
+              assets: [],
+            });
+          }
+        } catch (updaterError) {
+          console.warn('Signed desktop update check failed; trying the release API.', updaterError);
+          setUpdateInfo(await checkLatestRelease());
         }
       } else {
         setUpdateInfo(await checkLatestRelease());
       }
     } catch (error) {
-      setUpdateError(error instanceof Error ? error.message : 'Could not check for updates.');
+      setUpdateError(getErrorMessage(error, 'Could not check for updates.'));
     } finally {
       setCheckingUpdates(false);
     }
@@ -445,7 +467,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         }
       });
     } catch (error) {
-      setUpdateError(error instanceof Error ? error.message : 'Could not install the update.');
+      setUpdateError(getErrorMessage(error, 'Could not install the update.'));
       setInstallingUpdate(false);
       setUpdateProgress(null);
     }
@@ -1893,7 +1915,29 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       )}
                       {updateInfo.update_available && !isTauriDesktop() && (
                         <p className="text-[10px] text-slate-400">
-                          Open the installed desktop app to install this update. Web Studio does not download or launch installers.
+                          Web Studio cannot install updates. Download and run the installer from the{' '}
+                          <a
+                            href={updateInfo.release_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-indigo-300 hover:text-indigo-200 underline"
+                          >
+                            latest GitHub release
+                          </a>.
+                        </p>
+                      )}
+                      {updateInfo.update_available && isTauriDesktop() && !desktopUpdate && (
+                        <p className="text-[10px] text-slate-400">
+                          The signed in-app check was unavailable. Download the installer from the{' '}
+                          <a
+                            href={updateInfo.release_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-indigo-300 hover:text-indigo-200 underline"
+                          >
+                            latest GitHub release
+                          </a>{' '}
+                          and run it to update NouSetsu.
                         </p>
                       )}
                       {installingUpdate && (
