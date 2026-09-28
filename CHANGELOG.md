@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-09-28
+
+### Fixed
+- Grant the desktop app the Tauri permission required to read its version for updater checks.
+
 ## [0.4.3] - 2026-09-28
 
 ### Fixed
@@ -200,6 +205,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Automatic CJK source language detection (Japanese, Chinese, Korean).
 - Console scripts `nousetsu` and `novel`.
 
+[0.4.4]: https://github.com/Checkmartyr/NouSetsu/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/Checkmartyr/NouSetsu/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/Checkmartyr/NouSetsu/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/Checkmartyr/NouSetsu/compare/v0.4.0...v0.4.1

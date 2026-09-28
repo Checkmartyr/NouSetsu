@@ -1,6 +1,6 @@
 [package]
 name = "nousetsu-desktop"
-version = "0.4.3"
+version = "0.4.4"
 description = "Nousetsu Literary Novel Translation Studio"
 authors = ["Nousetsu Team"]
 edition = "2021"
