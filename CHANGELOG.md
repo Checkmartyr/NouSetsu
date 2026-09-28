@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-28
+
+- **Tauri Desktop App & Backend Lifecycle**: Added the desktop shell with a managed Python backend lifecycle and a desktop-aware projects directory.
+- **Global and Project Settings**: Split machine-wide `.env` settings from project configuration, including per-agent model and thinking defaults.
+- **Release Checks**: Added release-version checks against GitHub Releases in Web Studio.
 - **Dual-Format eBook Ingestion & Compilation Engine (`nousetsu import` & `nousetsu export`)**:
   - Implemented [`EbookReader`](file:///D:/Code/novel_translation_Agent/src/nousetsu/ebook/reader.py) supporting EPUB and PDF chapter parsing, volume structure heuristics, and embedded illustration preservation (`--no-images`).
   - Implemented [`PdfWriter`](file:///D:/Code/novel_translation_Agent/src/nousetsu/ebook/writer.py) via native `pymupdf.DocumentWriter` and `pymupdf.Story`, creating 100% in-memory publication PDF binaries (`application/pdf`) with custom margins and centered bottom page numbers (`- {page} -`).
@@ -174,6 +179,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Automatic CJK source language detection (Japanese, Chinese, Korean).
 - Console scripts `nousetsu` and `novel`.
 
+[0.4.0]: https://github.com/Checkmartyr/NouSetsu/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Checkmartyr/NouSetsu/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Checkmartyr/NouSetsu/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Checkmartyr/NouSetsu/releases/tag/v0.1.0
