@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-09-28
+
 ### Added
 - Install signed desktop updates from Settings without manually downloading the Windows installer.
 - Add a Windows release workflow that publishes signed Tauri updater artifacts and the GitHub update manifest.
@@ -192,6 +194,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Automatic CJK source language detection (Japanese, Chinese, Korean).
 - Console scripts `nousetsu` and `novel`.
 
+[0.4.2]: https://github.com/Checkmartyr/NouSetsu/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/Checkmartyr/NouSetsu/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/Checkmartyr/NouSetsu/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Checkmartyr/NouSetsu/compare/v0.2.0...v0.3.0

@@ -362,7 +362,7 @@ NouSetsu provides a full suite of CLI subcommands for headless automation, narra
 | Command | Description | Example Usage |
 | :--- | :--- | :--- |
 | `nousetsu` | Automatically launches interactive Textual TUI dashboard | `nousetsu` |
-| `nousetsu --version` | Displays current version (`nousetsu 0.4.1`) | `nousetsu -v` |
+| `nousetsu --version` | Displays current version (`nousetsu 0.4.2`) | `nousetsu -v` |
 | `nousetsu init` | Initializes a new novel project, directory structure, and Novel Bible | `nousetsu init -t "My Novel" -s Japanese -T English` |
 | `nousetsu batch` | Headless folder-to-folder batch translation with natural sorting | `nousetsu batch -p project/Douyara -F Douyara_01 -c 48` |
 | `nousetsu scan` | Fast scan chapter queue and project status in `NOVEL_PROJECTS_DIR` | `nousetsu scan --all-projects` |
@@ -457,7 +457,7 @@ nousetsu export [OPTIONS]
 ### Reactive Terminal User Interface (Textual + Rich)
 
 ```text
-┌─ NouSetsu v0.4.1 ───────────────────────────────────────────────┐
+┌─ NouSetsu v0.4.2 ───────────────────────────────────────────────┐
 │ 📁 Project: Douyara (Douyara_01)         🌐 Japanese ➔ English  │
 ├───────────────────────────────┬─────────────────────────────────┤
 │ Chapter List                  │ Dual Reader View                │
