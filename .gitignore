@@ -33,6 +33,7 @@ docs/promo/
 
 # Rust / Tauri build artifacts
 src-tauri/target/
+src-tauri/binaries/nousetsu-backend*
 
 # Playwright test reports & generated audit artifacts
 web/playwright-report/

@@ -505,6 +505,20 @@ NouSetsu includes an embedded, high-performance web studio (`nousetsu web`) for 
 * **Live Publication Studio**: Preview and customize typography with real-time EPUB3/PDF compilation before downloading.
 * **Zero-Configuration Launch**: Launch directly via CLI (`nousetsu web`) or press `W` from inside the TUI application.
 
+### Native Desktop Installer (Tauri)
+
+The Windows installer bundles the Python runtime, NouSetsu backend dependencies, and the built web studio. Python does not need to be installed on the destination machine.
+
+```powershell
+uv sync
+cd web
+npm ci
+cd ..\src-tauri
+cargo tauri build
+```
+
+The Tauri build hook builds the web frontend, freezes the API backend with PyInstaller, smoke-tests its API, and bundles it into the installer. MSI and NSIS installers are written under `src-tauri/target/release/bundle/`. Keep model API keys out of the installer; the running app reads them from environment variables or a `.env` file in its application data directory.
+
 ---
 
 ## 📂 Project Layout

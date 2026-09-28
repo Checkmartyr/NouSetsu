@@ -4,6 +4,14 @@
   "version": "0.1.0",
   "identifier": "com.nousetsu.app",
   "build": {
+    "beforeDevCommand": {
+      "script": "npm run dev",
+      "cwd": "../web"
+    },
+    "beforeBuildCommand": {
+      "script": "npm --prefix web run build && uv run --no-sync python src-tauri/build_sidecar.py",
+      "cwd": ".."
+    },
     "frontendDist": "../web/dist",
     "devUrl": "http://localhost:5173"
   },
@@ -27,6 +35,9 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "resources": [
+      "binaries/nousetsu-backend/"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

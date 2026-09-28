@@ -10,7 +10,9 @@ import os
 import re
 import threading
 import time
+import urllib.error
 import urllib.parse
+import urllib.request
 import uuid
 import webbrowser
 from pathlib import Path
@@ -54,13 +56,61 @@ from nousetsu.storage.repository import (
     resolve_project_dir,
     get_new_project_dir,
 )
-from nousetsu.utils.env import load_env, get_env_snapshot
+from nousetsu.utils.env import load_env, get_env_snapshot, get_env_settings, save_env_settings
 from nousetsu.utils.language import detect_language
 
 # Ensure environment variables from central .env are loaded into web server process
 load_env()
 
 logger = logging.getLogger(__name__)
+
+GITHUB_RELEASES_LATEST_URL = "https://api.github.com/repos/Checkmartyr/NouSetsu/releases/latest"
+
+
+def _fetch_latest_github_release() -> Dict[str, Any]:
+    request = urllib.request.Request(
+        GITHUB_RELEASES_LATEST_URL,
+        headers={
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "NouSetsu-Desktop-Updater",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=10) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    if not isinstance(payload, dict) or not payload.get("tag_name"):
+        raise ValueError("GitHub returned an invalid release response.")
+    return payload
+
+
+def _release_version_parts(version: str) -> Optional[Tuple[int, int, int, bool]]:
+    match = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?", version.strip())
+    if not match:
+        return None
+    return int(match.group(1)), int(match.group(2)), int(match.group(3)), bool(match.group(4))
+
+
+def _is_newer_release(latest: str, current: str) -> bool:
+    latest_parts = _release_version_parts(latest)
+    current_parts = _release_version_parts(current)
+    if latest_parts is None or current_parts is None:
+        return False
+    if latest_parts[:3] != current_parts[:3]:
+        return latest_parts[:3] > current_parts[:3]
+    return current_parts[3] and not latest_parts[3]
+
+
+def _require_local_settings_origin(request: Request) -> None:
+    origin = request.headers.get("origin")
+    if not origin:
+        return
+    if origin == "tauri://localhost":
+        return
+    parsed_origin = urllib.parse.urlsplit(origin)
+    if parsed_origin.scheme in {"http", "https"} and parsed_origin.hostname in {
+        "localhost", "127.0.0.1", "::1", "tauri.localhost"
+    }:
+        return
+    raise HTTPException(status_code=403, detail="Environment settings are only available to the local app.")
 
 
 # ============================================================================
@@ -1782,6 +1832,77 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
             return {"success": True, "bible": bible.model_dump()}
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Invalid YAML content: {e}")
+
+    # ------------------------------------------------------------------------
+    # Machine Environment and Desktop Updates
+    # ------------------------------------------------------------------------
+
+    @app.get("/api/environment")
+    async def get_machine_environment(request: Request) -> Dict[str, Any]:
+        _require_local_settings_origin(request)
+        load_env()
+        return get_env_settings()
+
+    @app.put("/api/environment")
+    async def update_machine_environment(request: Request, body: Dict[str, Any]) -> Dict[str, Any]:
+        _require_local_settings_origin(request)
+        values = body.get("values", {})
+        api_keys = body.get("api_keys", {})
+        clear_api_keys = body.get("clear_api_keys", [])
+        if (
+            not isinstance(values, dict)
+            or not isinstance(api_keys, dict)
+            or not isinstance(clear_api_keys, list)
+            or any(not isinstance(key, str) for key in clear_api_keys)
+        ):
+            raise HTTPException(status_code=400, detail="Invalid environment settings payload.")
+        try:
+            saved = save_env_settings(values, api_keys, clear_api_keys)
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+        except OSError as error:
+            logger.exception("Could not save local environment settings")
+            raise HTTPException(status_code=500, detail="Could not write the local .env file.") from error
+        return {"success": True, **saved}
+
+    @app.get("/api/updates/latest")
+    async def get_latest_release() -> Dict[str, Any]:
+        current_version = os.environ.get("NOUSETSU_DESKTOP_VERSION", "0.1.0")
+        try:
+            release = await asyncio.to_thread(_fetch_latest_github_release)
+        except urllib.error.HTTPError as error:
+            if error.code == 404:
+                raise HTTPException(status_code=404, detail="No published GitHub release was found.") from error
+            raise HTTPException(status_code=502, detail=f"GitHub release check failed (HTTP {error.code}).") from error
+        except (urllib.error.URLError, TimeoutError, ValueError, json.JSONDecodeError) as error:
+            logger.warning("GitHub release check failed: %s", error)
+            raise HTTPException(status_code=502, detail="Could not check GitHub releases. Check your network and try again.") from error
+
+        latest_version = str(release["tag_name"])
+        raw_assets = release.get("assets")
+        assets: List[Dict[str, Any]] = (
+            [asset for asset in raw_assets if isinstance(asset, dict)]
+            if isinstance(raw_assets, list)
+            else []
+        )
+        return {
+            "current_version": current_version,
+            "latest_version": latest_version,
+            "update_available": _is_newer_release(latest_version, current_version),
+            "release_name": release.get("name") or latest_version,
+            "release_notes": release.get("body") or "No release notes were provided.",
+            "release_url": release.get("html_url") or "https://github.com/Checkmartyr/NouSetsu/releases",
+            "published_at": release.get("published_at"),
+            "assets": [
+                {
+                    "name": asset.get("name"),
+                    "download_url": asset.get("browser_download_url"),
+                    "size": asset.get("size"),
+                }
+                for asset in assets
+                if asset.get("browser_download_url")
+            ],
+        }
 
     # ------------------------------------------------------------------------
     # 5. Project Settings Endpoints

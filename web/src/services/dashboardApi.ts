@@ -16,6 +16,8 @@ import {
   EbookImportResult,
   EbookExportOptions,
   EbookPreviewResult,
+  MachineEnvironment,
+  UpdateCheckResult,
 } from '../types/dashboard';
 
 const API_BASE = '';
@@ -182,6 +184,44 @@ export async function fetchSettings(projectPath?: string): Promise<ProjectSettin
   } catch (e) {
     return null;
   }
+}
+
+export async function fetchMachineEnvironment(): Promise<MachineEnvironment | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/environment`);
+    if (!res.ok) return null;
+    return (await res.json()) as MachineEnvironment;
+  } catch (e) {
+    console.error('Failed to fetch machine environment settings:', e);
+    return null;
+  }
+}
+
+export async function saveMachineEnvironment(data: {
+  values: Record<string, string>;
+  api_keys: Record<string, string>;
+  clear_api_keys: string[];
+}): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE}/api/environment`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return res.ok;
+  } catch (e) {
+    console.error('Failed to save machine environment settings:', e);
+    return false;
+  }
+}
+
+export async function checkLatestRelease(): Promise<UpdateCheckResult> {
+  const res = await fetch(`${API_BASE}/api/updates/latest`);
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.detail || 'Could not check for updates.');
+  }
+  return data as UpdateCheckResult;
 }
 
 export async function updateSettings(

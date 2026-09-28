@@ -130,6 +130,29 @@ export interface ModelPreset {
   };
 }
 
+export interface MachineEnvironment {
+  env_file_path: string;
+  values: Record<string, string>;
+  api_key_status: Record<string, boolean>;
+}
+
+export interface UpdateReleaseAsset {
+  name: string;
+  download_url: string;
+  size?: number;
+}
+
+export interface UpdateCheckResult {
+  current_version: string;
+  latest_version: string;
+  update_available: boolean;
+  release_name: string;
+  release_notes: string;
+  release_url: string;
+  published_at?: string | null;
+  assets: UpdateReleaseAsset[];
+}
+
 export interface ProjectSettings {
   // General & Project Metadata
   project_id?: string;

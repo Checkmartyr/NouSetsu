@@ -19,9 +19,18 @@ import {
   LayoutGrid,
   Search,
   Info,
+  KeyRound,
+  ExternalLink,
+  DownloadCloud,
 } from 'lucide-react';
-import { ProjectSettings } from '../types/dashboard';
-import { fetchSettings, updateSettings } from '../services/dashboardApi';
+import { MachineEnvironment, ProjectSettings, UpdateCheckResult } from '../types/dashboard';
+import {
+  checkLatestRelease,
+  fetchMachineEnvironment,
+  fetchSettings,
+  saveMachineEnvironment,
+  updateSettings,
+} from '../services/dashboardApi';
 
 interface SettingsViewProps {
   activeProjectPath: string | null;
@@ -47,6 +56,8 @@ const SETTING_CATEGORIES: SettingCategory[] = [
   { id: 'safety', name: 'Safety & Bisection', shortDesc: 'Recursive safety bisection', icon: ShieldAlert },
   { id: 'ratelimit', name: 'Rate Limits & Quota', shortDesc: '32k TPM / 60 RPM guard', icon: Zap },
   { id: 'paths', name: 'Workspace Paths', shortDesc: 'Raw & translated directories', icon: Folder },
+  { id: 'environment', name: 'Environment & API Keys', shortDesc: 'Local .env and provider credentials', icon: KeyRound },
+  { id: 'updates', name: 'App Updates', shortDesc: 'Check GitHub releases', icon: Download },
 ];
 
 interface ToggleSwitchProps {
@@ -87,6 +98,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [toast, setToast] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<string>('general');
   const [categorySearch, setCategorySearch] = useState<string>('');
+  const [machineEnvironment, setMachineEnvironment] = useState<MachineEnvironment | null>(null);
+  const [apiKeyInputs, setApiKeyInputs] = useState<Record<string, string>>({});
+  const [clearApiKeys, setClearApiKeys] = useState<string[]>([]);
+  const [savingEnvironment, setSavingEnvironment] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<UpdateCheckResult | null>(null);
+  const [updateError, setUpdateError] = useState<string | null>(null);
+  const [checkingUpdates, setCheckingUpdates] = useState(false);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -94,28 +112,30 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   };
 
   const loadSettingsData = async () => {
-    if (!activeProjectPath) return;
+    if (!activeProjectPath) {
+      setSettings(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     const data = await fetchSettings(activeProjectPath);
     setSettings(data);
     setLoading(false);
   };
 
+  const loadMachineEnvironment = async () => {
+    const data = await fetchMachineEnvironment();
+    setMachineEnvironment(data);
+  };
+
   useEffect(() => {
     loadSettingsData();
   }, [activeProjectPath]);
 
-  // Keyboard shortcut: Ctrl+S or Cmd+S to save
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
-        e.preventDefault();
-        handleSave();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [settings, activeProjectPath]);
+    loadMachineEnvironment();
+  }, []);
+
 
   const handleLoadEnvPresets = () => {
     if (!settings) return;
@@ -170,7 +190,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     if (!activeProjectPath || !settings) return;
     setSaving(true);
     // Exclude nested stale config and env snapshots before sending to backend
-    const { config, env, ...cleanSettings } = settings;
+    const { config, env, machine_env, api_key_status, env_file_path, ...cleanSettings } = settings;
     const sanitizedSettings = {
       ...cleanSettings,
       // Review
@@ -239,6 +259,56 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
   };
 
+  const handleSaveEnvironment = async () => {
+    if (!machineEnvironment) return;
+    setSavingEnvironment(true);
+    const success = await saveMachineEnvironment({
+      values: machineEnvironment.values,
+      api_keys: apiKeyInputs,
+      clear_api_keys: clearApiKeys,
+    });
+    setSavingEnvironment(false);
+    if (success) {
+      setApiKeyInputs({});
+      setClearApiKeys([]);
+      await loadMachineEnvironment();
+      showToast('Local environment settings saved.');
+    } else {
+      alert('Could not save the local .env settings.');
+    }
+  };
+
+  const handleCheckUpdates = async () => {
+    setCheckingUpdates(true);
+    setUpdateError(null);
+    try {
+      setUpdateInfo(await checkLatestRelease());
+    } catch (error) {
+      setUpdateError(error instanceof Error ? error.message : 'Could not check for updates.');
+    } finally {
+      setCheckingUpdates(false);
+    }
+  };
+
+  // Keyboard shortcut: Ctrl+S or Cmd+S saves the visible settings section.
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+        event.preventDefault();
+        if (activeTab === 'environment') {
+          handleSaveEnvironment();
+        } else if (activeTab === 'all') {
+          handleSave();
+          handleSaveEnvironment();
+        } else if (activeTab !== 'updates') {
+          handleSave();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeTab, settings, activeProjectPath, machineEnvironment, apiKeyInputs, clearApiKeys]);
+
   const filteredCategories = SETTING_CATEGORIES.filter((cat) => {
     if (!categorySearch.trim()) return true;
     const q = categorySearch.toLowerCase();
@@ -271,19 +341,21 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <span className="hidden sm:inline-block text-[11px] text-[#aea69c] font-mono">
-            Press <kbd className="px-1.5 py-0.5 bg-[#383330] border border-[#3f3a36] rounded-[2px] text-[#dad2c1]">Ctrl+S</kbd> to save
-          </span>
-          <button
-            onClick={() => handleSave()}
-            disabled={saving || !settings}
-            className="btn-primary text-xs flex items-center gap-1.5"
-          >
-            <Save className="w-3.5 h-3.5" />
-            <span>{saving ? 'Saving...' : 'Save Settings'}</span>
-          </button>
-        </div>
+        {!['environment', 'updates'].includes(activeTab) && (
+          <div className="flex items-center gap-3">
+            <span className="hidden sm:inline-block text-[11px] text-[#aea69c] font-mono">
+              Press <kbd className="px-1.5 py-0.5 bg-[#383330] border border-[#3f3a36] rounded-[2px] text-[#dad2c1]">Ctrl+S</kbd> to save
+            </span>
+            <button
+              onClick={() => handleSave()}
+              disabled={saving || !settings}
+              className="btn-primary text-xs flex items-center gap-1.5"
+            >
+              <Save className="w-3.5 h-3.5" />
+              <span>{saving ? 'Saving...' : 'Save Settings'}</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Main 2-Column Layout */}
@@ -359,14 +431,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <RefreshCw className="w-5 h-5 animate-spin text-[#dad2c1]" />
               <span>Loading project settings...</span>
             </div>
-          ) : !settings ? (
+          ) : !settings && !['all', 'environment', 'updates'].includes(activeTab) ? (
             <div className="flex flex-col items-center justify-center py-20 text-[#aea69c] text-xs gap-3">
               <Settings className="w-8 h-8 text-[#aea69c]" />
               <p>No project selected or config.yaml not found.</p>
-              <p className="text-[11px] text-[#8e8579]">Please select an active project from the top navigation bar.</p>
+              <p className="text-[11px] text-[#8e8579]">Select a project for novel settings, or choose Environment & API Keys or App Updates.</p>
             </div>
           ) : (
-            <form onSubmit={handleSave} className="max-w-4xl w-full space-y-6 pb-16">
+            <div className="max-w-4xl w-full space-y-6 pb-16">
+              {settings && <form onSubmit={handleSave} className="space-y-6">
               {/* Group 1: General Novel Information */}
               {(showAll || activeTab === 'general') && (
                 <div className="bg-[#383330] border border-[#3f3a36] rounded-[4px] p-5 space-y-4">
@@ -1423,17 +1496,181 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </datalist>
 
               {/* Bottom Save Button row */}
-              <div className="pt-4 flex justify-end">
-                <button
-                  type="submit"
-                  disabled={saving || !settings}
-                  className="flex items-center gap-1.5 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold cursor-pointer shadow-lg shadow-indigo-500/20 transition-all disabled:opacity-50"
-                >
-                  <Save className="w-4 h-4" />
-                  {saving ? 'Saving...' : 'Save Settings to config.yaml'}
-                </button>
-              </div>
-            </form>
+              {!['environment', 'updates'].includes(activeTab) && (
+                <div className="pt-4 flex justify-end">
+                  <button
+                    type="submit"
+                    disabled={saving || !settings}
+                    className="flex items-center gap-1.5 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold cursor-pointer shadow-lg shadow-indigo-500/20 transition-all disabled:opacity-50"
+                  >
+                    <Save className="w-4 h-4" />
+                    {saving ? 'Saving...' : 'Save Settings to config.yaml'}
+                  </button>
+                </div>
+              )}
+            </form>}
+
+              {!settings && showAll && (
+                <div className="bg-[#383330] border border-[#3f3a36] rounded-[4px] p-4 text-xs text-[#aea69c]">
+                  No novel is selected. Machine environment settings and release checks are still available below.
+                </div>
+              )}
+
+              {(showAll || activeTab === 'environment') && (
+                <section className="bg-[#383330] border border-[#3f3a36] rounded-[4px] p-5 space-y-5">
+                  <div className="flex items-center gap-2 border-b border-[#4a433e] pb-3">
+                    <KeyRound className="w-4 h-4 text-amber-300" />
+                    <div>
+                      <h2 className="text-sm font-bold text-slate-200">Machine Environment & API Keys</h2>
+                      <p className="text-[11px] text-slate-400 mt-1">Edit supported NouSetsu runtime values in the local .env file.</p>
+                    </div>
+                  </div>
+
+                  {machineEnvironment ? (
+                    <>
+                      <p className="text-[10px] text-slate-500 font-mono break-all">File: {machineEnvironment.env_file_path}</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                        {Object.entries(machineEnvironment.values).map(([key, value]) => (
+                          <label key={key} className="block min-w-0">
+                            <span className="block text-slate-400 mb-1 font-mono">{key}</span>
+                            <input
+                              type="text"
+                              value={value}
+                              onChange={(event) => setMachineEnvironment((current) => current ? {
+                                ...current,
+                                values: { ...current.values, [key]: event.target.value },
+                              } : current)}
+                              className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
+                            />
+                          </label>
+                        ))}
+                      </div>
+
+                      <div className="border-t border-[#4a433e] pt-4 space-y-3">
+                        <div>
+                          <h3 className="text-xs font-semibold text-slate-200">Provider API keys</h3>
+                          <p className="text-[10px] text-slate-400 mt-1">Keys are stored locally and never returned to the browser. Leave blank to keep a saved key; status reflects this .env file, not external process environment variables.</p>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                          {[
+                            ['GEMINI_API_KEY', 'Gemini API key'],
+                            ['GOOGLE_API_KEY', 'Google API key (Gemini alias)'],
+                            ['OPENAI_API_KEY', 'OpenAI API key'],
+                            ['OPENROUTER_API_KEY', 'OpenRouter API key'],
+                          ].map(([key, label]) => {
+                            const configured = Boolean(machineEnvironment.api_key_status[key]);
+                            const markedForRemoval = clearApiKeys.includes(key);
+                            return (
+                              <div key={key} className="bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-3 space-y-2">
+                                <div className="flex items-center justify-between gap-2">
+                                  <label htmlFor={`api-key-${key}`} className="font-medium text-slate-300">{label}</label>
+                                  <span className={configured && !markedForRemoval ? 'text-emerald-400 text-[10px]' : 'text-slate-500 text-[10px]'}>
+                                    {markedForRemoval ? 'Will be removed' : configured ? 'Configured' : 'Not configured'}
+                                  </span>
+                                </div>
+                                <input
+                                  id={`api-key-${key}`}
+                                  type="password"
+                                  autoComplete="new-password"
+                                  value={apiKeyInputs[key] || ''}
+                                  onChange={(event) => {
+                                    setApiKeyInputs((current) => ({ ...current, [key]: event.target.value }));
+                                    setClearApiKeys((current) => current.filter((item) => item !== key));
+                                  }}
+                                  placeholder={configured ? 'Enter a new key to replace the saved one' : 'Paste API key'}
+                                  className="w-full bg-[#2b2622] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
+                                />
+                                {configured && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setClearApiKeys((current) => markedForRemoval ? current.filter((item) => item !== key) : [...current, key]);
+                                      setApiKeyInputs((current) => ({ ...current, [key]: '' }));
+                                    }}
+                                    className="text-[10px] text-rose-300 hover:text-rose-200"
+                                  >
+                                    {markedForRemoval ? 'Undo clear' : 'Clear saved key'}
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="flex justify-end">
+                        <button
+                          type="button"
+                          onClick={handleSaveEnvironment}
+                          disabled={savingEnvironment}
+                          className="btn-primary text-xs flex items-center gap-1.5 disabled:opacity-50"
+                        >
+                          <Save className="w-3.5 h-3.5" />
+                          {savingEnvironment ? 'Saving .env...' : 'Save Environment Settings'}
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex items-center justify-between text-xs text-slate-400">
+                      <span>Could not load the local environment settings.</span>
+                      <button type="button" onClick={loadMachineEnvironment} className="text-indigo-300 hover:text-indigo-200">Retry</button>
+                    </div>
+                  )}
+                </section>
+              )}
+
+              {(showAll || activeTab === 'updates') && (
+                <section className="bg-[#383330] border border-[#3f3a36] rounded-[4px] p-5 space-y-4">
+                  <div className="flex items-center justify-between gap-3 border-b border-[#4a433e] pb-3">
+                    <div className="flex items-center gap-2">
+                      <DownloadCloud className="w-4 h-4 text-sky-300" />
+                      <div>
+                        <h2 className="text-sm font-bold text-slate-200">NouSetsu Desktop Updates</h2>
+                        <p className="text-[11px] text-slate-400 mt-1">Check the latest published GitHub release tag and download its installer.</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleCheckUpdates}
+                      disabled={checkingUpdates}
+                      className="btn-primary text-xs flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${checkingUpdates ? 'animate-spin' : ''}`} />
+                      {checkingUpdates ? 'Checking...' : 'Check for Updates'}
+                    </button>
+                  </div>
+
+                  {updateError && <p role="alert" className="text-xs text-rose-300">{updateError}</p>}
+                  {updateInfo && (
+                    <div className="space-y-3 text-xs">
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-slate-300">
+                        <span>Installed: <strong className="font-mono">{updateInfo.current_version}</strong></span>
+                        <span>Latest: <strong className="font-mono">{updateInfo.latest_version}</strong></span>
+                        <span className={updateInfo.update_available ? 'text-amber-300 font-semibold' : 'text-emerald-300 font-semibold'}>
+                          {updateInfo.update_available ? 'Update available' : 'You are up to date'}
+                        </span>
+                      </div>
+                      <h3 className="font-semibold text-slate-200">{updateInfo.release_name}</h3>
+                      <div className="max-h-64 overflow-y-auto rounded-[3px] bg-[#24201d] border border-[#3f3a36] p-3 whitespace-pre-wrap text-slate-300 leading-relaxed">
+                        {updateInfo.release_notes}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <a href={updateInfo.release_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-indigo-300 hover:text-indigo-200">
+                          Open GitHub release <ExternalLink className="w-3 h-3" />
+                        </a>
+                        {updateInfo.assets.map((asset) => (
+                          <a key={asset.download_url} href={asset.download_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-indigo-300 hover:text-indigo-200">
+                            Download {asset.name} <ExternalLink className="w-3 h-3" />
+                          </a>
+                        ))}
+                      </div>
+                      <p className="text-[10px] text-slate-500">Install the downloaded release manually; its installer updates the frontend and bundled Python backend together. Silent in-app installation requires signed Tauri updater artifacts, which are not configured for this project yet.</p>
+                    </div>
+                  )}
+                  {!updateInfo && !updateError && <p className="text-xs text-slate-400">The release checker compares the latest GitHub release tag with this desktop app version.</p>}
+                </section>
+              )}
+            </div>
           )}
         </main>
       </div>
