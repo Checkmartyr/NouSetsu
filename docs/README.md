@@ -18,6 +18,7 @@ Welcome to the **NouSetsu** (濃説 / 脳説) technical documentation. This dire
 | **Hybrid Search RAG** | [**`hybrid_rag.md`**](./hybrid_rag.md) | In-depth architecture & workflow guide for LoreVault: SQLite FTS5 (BM25), Gemini Embedding 2 (3072-dim), Reciprocal Rank Fusion ($k=60$), LLM Cross-Encoder reranking, and bi-directional pipeline integration. |
 | **Terminal UI (TUI) Guide** | [**`tui_guide.md`**](./tui_guide.md) | Minimal Textual interface, bottom 2-row toolbar, active chapter progress label, Dual Reader inspection, Token Analytics dashboard (`M`), Web Traces hotkey (`W`), Volume Switcher modal (`F`), Stop button (`X`), and Bible editor. |
 | **Novel Scraper Integration** | [**`novel_scraper.md`**](./novel_scraper.md) | Architecture, submodule setup, supported web novel portals (Syosetu, Kakuyomu), title romanization, and Web Studio New Project URL import workflow. |
+| **Windows Code Signing** | [**`windows-code-signing.md`**](./windows-code-signing.md) | Trusted Authenticode certificate setup, opt-in Tauri signing build, and installer signature verification. |
 | **Developer API Reference** | [**`api_reference.md`**](./api_reference.md) | Python API reference for agents, FallbackChatModel, LineSemanticChunker, workflow graph, rate limiter, ArcSummary, NovelBible hierarchy methods, summary migration, DiffPatcher, PromptTracker, HybridSearchEngine, and Pydantic models. |
 
 ---
