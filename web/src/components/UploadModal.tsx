@@ -302,8 +302,13 @@ export const UploadModal: React.FC<UploadModalProps> = ({
       return;
     }
 
-    if (!inspectResult || inspectResult.chapters.length === 0) {
-      setErrorMsg('Please inspect a valid novel URL first.');
+    const requestedUrl = scraperUrl.trim();
+    if (
+      !inspectResult ||
+      inspectResult.chapters.length === 0 ||
+      inspectResult.url.trim() !== requestedUrl
+    ) {
+      setErrorMsg('Please inspect the current novel URL before scraping.');
       return;
     }
 
@@ -338,7 +343,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
 
     try {
       const startRes = await startScraperExtract({
-        url: inspectResult.url,
+        url: requestedUrl,
         projectPath: activeProjectPath,
         folder: targetFolder,
         chapterIndices: indicesToScrape,
@@ -831,7 +836,13 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                   type="url"
                   placeholder="https://ncode.syosetu.com/n2273dh/ or https://kakuyomu.jp/works/..."
                   value={scraperUrl}
-                  onChange={(e) => setScraperUrl(e.target.value)}
+                  onChange={(e) => {
+                    setScraperUrl(e.target.value);
+                    setInspectResult(null);
+                    setSelectedChapterIndices(new Set());
+                    setScraperStatus(null);
+                    setErrorMsg(null);
+                  }}
                   onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleInspectUrl())}
                   disabled={isScraping || isInspecting}
                   className="flex-1 bg-[#24201d] border border-[#3f3a36] rounded-[3px] px-2.5 py-1.5 text-[#f7f5f0] text-xs focus:outline-none focus:border-[#b0a89f] font-mono placeholder:text-[#5c554e]"

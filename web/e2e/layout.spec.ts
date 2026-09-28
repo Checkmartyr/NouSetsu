@@ -61,6 +61,23 @@ test.describe('Layout & Viewport Responsiveness', () => {
     await expect(readerRoot).toBeVisible();
   });
 
+  test('New Project Modal Resets After Closing and Reopening', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForSelector('header');
+
+    const newProjectButtons = page.locator('header button[title*="New Project"], header button:has-text("New Project"), header button:has(.lucide-plus)');
+    test.skip((await newProjectButtons.count()) === 0, 'New Project button is only available when a project is active');
+    const newProjectBtn = newProjectButtons.first();
+    await newProjectBtn.click();
+
+    const titleInput = page.getByPlaceholder('e.g. The Rising of the Shield Hero');
+    await titleInput.fill('Temporary novel title');
+    await page.getByRole('button', { name: 'Cancel' }).click();
+
+    await newProjectBtn.click();
+    await expect(titleInput).toHaveValue('');
+  });
+
   test('New Project Modal Viewport Centering & Responsiveness', async ({ page }) => {
     await page.goto('/');
     await page.waitForSelector('header');

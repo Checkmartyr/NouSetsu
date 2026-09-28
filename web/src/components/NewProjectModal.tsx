@@ -47,7 +47,32 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
 
   useEffect(() => {
     if (!isOpen) return;
-    checkScraperAvailability().then((result) => setScraperAvailable(result.available));
+
+    setTitle('');
+    setFolderName('');
+    setSourceLanguage('Japanese');
+    setTargetLanguage('Thai');
+    setGenre('general');
+    setModel('gemini-3.5-flash-lite');
+    setErrorMsg(null);
+    setImportFromUrl(false);
+    setScraperAvailable(null);
+    setScraperUrl('');
+    setInspectResult(null);
+    setIsInspecting(false);
+    setSelectionMode('all');
+    setRangeStart(1);
+    setRangeEnd(20);
+    setScraperStatus(null);
+    setCreatedProject(null);
+
+    let cancelled = false;
+    checkScraperAvailability().then((result) => {
+      if (!cancelled) setScraperAvailable(result.available);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [isOpen]);
 
   if (!isOpen) return null;
