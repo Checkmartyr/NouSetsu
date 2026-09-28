@@ -43,26 +43,28 @@ interface SettingCategory {
   name: string;
   shortDesc: string;
   icon: React.ElementType;
+  group: 'global' | 'project';
 }
 
 const SETTING_CATEGORIES: SettingCategory[] = [
-  { id: 'all', name: 'All Settings', shortDesc: 'Continuous full view', icon: LayoutGrid },
-  { id: 'general', name: 'Novel Information', shortDesc: 'Metadata, title & language', icon: Sliders },
-  { id: 'models', name: 'Model Routing', shortDesc: 'Agents, API keys & model defaults', icon: Cpu },
-  { id: 'review', name: 'Review & Quality', shortDesc: 'Reflection loops & Diff patch', icon: RefreshCw },
-  { id: 'chunking', name: 'Semantic Chunking', shortDesc: 'Line-based text chunking', icon: Layers },
-  { id: 'memory', name: 'Memory & Bible', shortDesc: 'Cross-folder & reconciliation', icon: BookMarked },
-  { id: 'rag', name: 'Episodic Lore & RAG', shortDesc: 'Tier 4 SQLite hybrid retrieval', icon: Sparkles },
-  { id: 'safety', name: 'Safety & Bisection', shortDesc: 'Recursive safety bisection', icon: ShieldAlert },
-  { id: 'ratelimit', name: 'Rate Limits & Quota', shortDesc: '32k TPM / 60 RPM guard', icon: Zap },
-  { id: 'paths', name: 'Workspace Paths', shortDesc: 'Raw & translated directories', icon: Folder },
-  { id: 'updates', name: 'App Updates', shortDesc: 'Check GitHub releases', icon: Download },
+  { id: 'global', name: 'Environment & API Keys', shortDesc: 'Machine-wide .env defaults', icon: KeyRound, group: 'global' },
+  { id: 'updates', name: 'App Updates', shortDesc: 'Check GitHub releases', icon: Download, group: 'global' },
+  { id: 'all', name: 'All Project Settings', shortDesc: 'Full project configuration', icon: LayoutGrid, group: 'project' },
+  { id: 'general', name: 'Novel Information', shortDesc: 'Metadata, title & language', icon: Sliders, group: 'project' },
+  { id: 'models', name: 'Model Routing', shortDesc: 'Agent models & LLM cascades', icon: Cpu, group: 'project' },
+  { id: 'review', name: 'Review & Quality', shortDesc: 'Reflection loops & Diff patch', icon: RefreshCw, group: 'project' },
+  { id: 'chunking', name: 'Semantic Chunking', shortDesc: 'Line-based text chunking', icon: Layers, group: 'project' },
+  { id: 'memory', name: 'Memory & Bible', shortDesc: 'Cross-folder & reconciliation', icon: BookMarked, group: 'project' },
+  { id: 'rag', name: 'Episodic Lore & RAG', shortDesc: 'Tier 4 SQLite hybrid retrieval', icon: Sparkles, group: 'project' },
+  { id: 'safety', name: 'Safety & Bisection', shortDesc: 'Recursive safety bisection', icon: ShieldAlert, group: 'project' },
+  { id: 'ratelimit', name: 'Rate Limits & Quota', shortDesc: '32k TPM / 60 RPM guard', icon: Zap, group: 'project' },
+  { id: 'paths', name: 'Workspace Paths', shortDesc: 'Raw & translated directories', icon: Folder, group: 'project' },
 ];
 
-const ENV_FIELDS_BY_CATEGORY: Record<string, { title: string; keys: string[] }> = {
+const GLOBAL_ENV_GROUPS: Record<string, { title: string; keys: string[] }> = {
   general: { title: 'Language Defaults', keys: ['SOURCE_LANG', 'TARGET_LANG'] },
   models: {
-    title: 'Machine Model Defaults & API Keys',
+    title: 'Model & Generation Defaults',
     keys: [
       'DEFAULT_MODEL', 'NOVEL_MODEL', 'NOVEL_FALLBACK_MODEL',
       'NOVEL_EXTRACTOR_MODEL', 'NOVEL_DRAFTER_MODEL', 'NOVEL_CRITIC_MODEL',
@@ -84,7 +86,7 @@ const ENV_FIELDS_BY_CATEGORY: Record<string, { title: string; keys: string[] }> 
   rag: { title: 'RAG Model Defaults', keys: ['NOVEL_RAG_EMBEDDING_MODEL', 'NOVEL_RAG_RERANKER_MODEL'] },
   ratelimit: { title: 'Rate Limit Defaults', keys: ['NOVEL_MAX_TPM', 'NOVEL_MAX_RPM'] },
   paths: {
-    title: 'Machine Workspace Paths',
+    title: 'Workspace Defaults',
     keys: ['NOVEL_PROJECTS_DIR', 'NOVEL_SCRAPER_PATH', 'NOVEL_SCRAPER_PYTHON'],
   },
 };
@@ -329,12 +331,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
   };
 
-  const renderMachineEnvironmentSection = (category: string) => {
-    const group = ENV_FIELDS_BY_CATEGORY[category];
-    if (!group || !machineEnvironment) return null;
+  const renderMachineEnvironmentSection = (groupId: string, group: { title: string; keys: string[] }) => {
+    if (!machineEnvironment) return null;
 
     return (
-      <section key={category} className="bg-[#383330] border border-[#3f3a36] rounded-[4px] p-5 space-y-4">
+      <section key={groupId} className="bg-[#383330] border border-[#3f3a36] rounded-[4px] p-5 space-y-4">
         <div className="flex items-center gap-2 border-b border-[#4a433e] pb-3">
           <KeyRound className="w-4 h-4 text-amber-300" />
           <div>
@@ -360,12 +361,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           ))}
         </div>
 
-        {category === 'models' && (
+        {groupId === 'models' && (
           <div className="border-t border-[#4a433e] pt-4 space-y-3">
             <div>
               <h3 className="text-xs font-semibold text-slate-200">Provider API keys</h3>
               <p className="text-[10px] text-slate-400 mt-1">Keys are stored locally and never returned to the browser. Leave blank to keep a saved key; status reflects this .env file.</p>
-              <p className="text-[10px] text-slate-500 mt-1 font-mono break-all">.env: {machineEnvironment.env_file_path}</p>
+
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
               {API_KEY_LABELS.map(({ key, label }) => {
@@ -411,21 +412,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
         )}
 
-        {category === 'paths' && (
+        {groupId === 'paths' && (
           <p className="text-[10px] text-slate-500">On desktop, project/ is created beside the app when writable; otherwise projects use app data. An explicit NOVEL_PROJECTS_DIR takes precedence.</p>
         )}
 
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={handleSaveEnvironment}
-            disabled={savingEnvironment}
-            className="btn-primary text-xs flex items-center gap-1.5 disabled:opacity-50"
-          >
-            <Save className="w-3.5 h-3.5" />
-            {savingEnvironment ? 'Saving .env...' : 'Save .env'}
-          </button>
-        </div>
+
       </section>
     );
   };
@@ -436,10 +427,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
         event.preventDefault();
         if (activeTab === 'updates') return;
-        handleSave();
-        if (activeTab === 'all' || ENV_FIELDS_BY_CATEGORY[activeTab]) {
+        if (activeTab === 'global') {
           handleSaveEnvironment();
+          return;
         }
+        handleSave();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -470,15 +462,23 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           <div className="flex items-center gap-2">
             <Settings className="w-4 h-4 text-[#dad2c1]" />
             <h1 className="text-base font-medium tracking-[-0.3px] text-[#f7f5f0]">
-              Project Settings: {settings?.title || activeProjectTitle}
+              {activeTab === 'global'
+                ? 'Global Settings'
+                : activeTab === 'updates'
+                  ? 'App Updates'
+                  : `Project Settings: ${settings?.title || activeProjectTitle || 'No project selected'}`}
             </h1>
           </div>
           <p className="text-xs text-[#aea69c] mt-0.5">
-            Manage project settings and related machine defaults in <code className="text-[#dad2c1] font-mono">.env</code>
+            {activeTab === 'global'
+              ? 'Machine-wide defaults and provider credentials shared across projects.'
+              : activeTab === 'updates'
+                ? 'Check for NouSetsu desktop releases.'
+                : <>Project-specific options are saved in <code className="text-[#dad2c1] font-mono">.novel/config.yaml</code>.</>}
           </p>
         </div>
 
-        {activeTab !== 'updates' && (
+        {!['global', 'updates'].includes(activeTab) && (
           <div className="flex items-center gap-3">
             <span className="hidden sm:inline-block text-[11px] text-[#aea69c] font-mono">
               Press <kbd className="px-1.5 py-0.5 bg-[#383330] border border-[#3f3a36] rounded-[2px] text-[#dad2c1]">Ctrl+S</kbd> to save
@@ -522,32 +522,41 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
 
           {/* Navigation Category List */}
-          <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
-            {filteredCategories.map((cat) => {
-              const Icon = cat.icon;
-              const isActive = activeTab === cat.id;
+          <div className="flex-1 overflow-y-auto p-2 space-y-3">
+            {(['global', 'project'] as const).map((group) => {
+              const groupCategories = filteredCategories.filter((category) => category.group === group);
+              if (!groupCategories.length) return null;
               return (
-                <button
-                  key={cat.id}
-                  onClick={() => setActiveTab(cat.id)}
-                  className={`w-full text-left px-2.5 py-1.5 rounded-[3px] transition-colors flex items-center gap-2 group cursor-pointer ${
-                    isActive
-                      ? 'bg-[#383330] text-[#f7f5f0] border-l-2 border-[#f7f5f0] font-medium'
-                      : 'hover:bg-[#383330]/50 text-[#c9c0ad] hover:text-[#f7f5f0] border-l-2 border-transparent'
-                  }`}
-                >
-                  <Icon
-                    className={`w-3.5 h-3.5 shrink-0 transition-colors ${
-                      isActive ? 'text-[#f7f5f0]' : 'text-[#aea69c] group-hover:text-[#dad2c1]'
-                    }`}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs truncate">
-                      {cat.name}
-                    </div>
-                    <div className="text-[10px] text-[#aea69c] truncate">{cat.shortDesc}</div>
+                <div key={group} className="space-y-0.5">
+                  <div className="px-2.5 pt-1 pb-1 text-[10px] font-semibold uppercase tracking-wider text-[#8e8579]">
+                    {group === 'global' ? 'Global Settings' : 'Project Settings'}
                   </div>
-                </button>
+                  {groupCategories.map((cat) => {
+                    const Icon = cat.icon;
+                    const isActive = activeTab === cat.id;
+                    return (
+                      <button
+                        key={cat.id}
+                        onClick={() => setActiveTab(cat.id)}
+                        className={`w-full text-left px-2.5 py-1.5 rounded-[3px] transition-colors flex items-center gap-2 group cursor-pointer ${
+                          isActive
+                            ? 'bg-[#383330] text-[#f7f5f0] border-l-2 border-[#f7f5f0] font-medium'
+                            : 'hover:bg-[#383330]/50 text-[#c9c0ad] hover:text-[#f7f5f0] border-l-2 border-transparent'
+                        }`}
+                      >
+                        <Icon
+                          className={`w-3.5 h-3.5 shrink-0 transition-colors ${
+                            isActive ? 'text-[#f7f5f0]' : 'text-[#aea69c] group-hover:text-[#dad2c1]'
+                          }`}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs truncate">{cat.name}</div>
+                          <div className="text-[10px] text-[#aea69c] truncate">{cat.shortDesc}</div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
               );
             })}
           </div>
@@ -568,7 +577,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <RefreshCw className="w-5 h-5 animate-spin text-[#dad2c1]" />
               <span>Loading project settings...</span>
             </div>
-          ) : !settings && !['all', 'updates'].includes(activeTab) && !ENV_FIELDS_BY_CATEGORY[activeTab] ? (
+          ) : !settings && !['global', 'updates'].includes(activeTab) ? (
             <div className="flex flex-col items-center justify-center py-20 text-[#aea69c] text-xs gap-3">
               <Settings className="w-8 h-8 text-[#aea69c]" />
               <p>No project selected or config.yaml not found.</p>
@@ -576,7 +585,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             </div>
           ) : (
             <div className="max-w-4xl w-full space-y-6 pb-16">
-              {settings && <form onSubmit={handleSave} className="space-y-6">
+              {settings && activeTab !== 'global' && <form onSubmit={handleSave} className="space-y-6">
               {/* Group 1: General Novel Information */}
               {(showAll || activeTab === 'general') && (
                 <div className="bg-[#383330] border border-[#3f3a36] rounded-[4px] p-5 space-y-4">
@@ -1633,7 +1642,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </datalist>
 
               {/* Bottom Save Button row */}
-              {activeTab !== 'updates' && (
+              {!['global', 'updates'].includes(activeTab) && (
                 <div className="pt-4 flex justify-end">
                   <button
                     type="submit"
@@ -1647,20 +1656,40 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               )}
             </form>}
 
-              {!settings && showAll && (
-                <div className="bg-[#383330] border border-[#3f3a36] rounded-[4px] p-4 text-xs text-[#aea69c]">
-                  No novel is selected. Machine environment settings and release checks are still available below.
-                </div>
-              )}
-
-              {!machineEnvironment && (showAll || ENV_FIELDS_BY_CATEGORY[activeTab]) && (
-                <section className="bg-[#383330] border border-[#3f3a36] rounded-[4px] p-4 text-xs text-slate-400 flex items-center justify-between">
-                  <span>{loadingEnvironment ? 'Loading local .env settings...' : 'Could not load local .env settings.'}</span>
-                  {!loadingEnvironment && <button type="button" onClick={loadMachineEnvironment} className="text-indigo-300 hover:text-indigo-200">Retry</button>}
-                </section>
-              )}
-              {Object.keys(ENV_FIELDS_BY_CATEGORY).map((category) =>
-                (showAll || activeTab === category) ? renderMachineEnvironmentSection(category) : null
+              {activeTab === 'global' && (
+                <>
+                  {machineEnvironment ? (
+                    <>
+                      <section className="bg-[#383330] border border-[#3f3a36] rounded-[4px] p-5 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <KeyRound className="w-4 h-4 text-amber-300" />
+                          <h2 className="text-sm font-bold text-slate-200">Machine-wide Environment</h2>
+                        </div>
+                        <p className="text-xs text-slate-400">These defaults apply across projects unless a project setting overrides them.</p>
+                        <p className="text-[10px] text-slate-500 font-mono break-all">.env: {machineEnvironment.env_file_path}</p>
+                      </section>
+                      {Object.entries(GLOBAL_ENV_GROUPS).map(([groupId, group]) =>
+                        renderMachineEnvironmentSection(groupId, group)
+                      )}
+                      <div className="flex justify-end">
+                        <button
+                          type="button"
+                          onClick={handleSaveEnvironment}
+                          disabled={savingEnvironment}
+                          className="btn-primary text-xs flex items-center gap-1.5 disabled:opacity-50"
+                        >
+                          <Save className="w-3.5 h-3.5" />
+                          {savingEnvironment ? 'Saving .env...' : 'Save Global Settings'}
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <section className="bg-[#383330] border border-[#3f3a36] rounded-[4px] p-4 text-xs text-slate-400 flex items-center justify-between">
+                      <span>{loadingEnvironment ? 'Loading global environment settings...' : 'Could not load global environment settings.'}</span>
+                      {!loadingEnvironment && <button type="button" onClick={loadMachineEnvironment} className="text-indigo-300 hover:text-indigo-200">Retry</button>}
+                    </section>
+                  )}
+                </>
               )}
 
               {(showAll || activeTab === 'updates') && (
