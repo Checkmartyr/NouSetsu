@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { getVersion } from '@tauri-apps/api/app';
 import { check, type Update } from '@tauri-apps/plugin-updater';
 import {
   Settings,
@@ -404,7 +403,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       }
 
       if (isTauriDesktop()) {
-        const currentVersion = await getVersion();
         try {
           const update = await check();
           if (update) {
@@ -419,24 +417,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               published_at: update.date,
               assets: [],
             });
-          } else {
-            setUpdateInfo({
-              current_version: currentVersion,
-              latest_version: currentVersion,
-              update_available: false,
-              release_name: 'You are up to date',
-              release_notes: 'No newer signed update is available.',
-              release_url: 'https://github.com/Checkmartyr/NouSetsu/releases/latest',
-              assets: [],
-            });
+            return;
           }
         } catch (updaterError) {
           console.warn('Signed desktop update check failed; trying the release API.', updaterError);
-          setUpdateInfo(await checkLatestRelease());
         }
-      } else {
-        setUpdateInfo(await checkLatestRelease());
       }
+
+      setUpdateInfo(await checkLatestRelease());
     } catch (error) {
       setUpdateError(getErrorMessage(error, 'Could not check for updates.'));
     } finally {
