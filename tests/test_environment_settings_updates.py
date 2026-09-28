@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -5,9 +6,38 @@ from dotenv import dotenv_values
 
 import nousetsu.cli.web_server as web_server
 from nousetsu.cli.web_server import create_app
+from nousetsu.storage.repository import get_projects_root_dir
+from nousetsu.utils.env import load_env
 
 
 API_KEYS = ("GEMINI_API_KEY", "GOOGLE_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY")
+
+
+def test_desktop_projects_default_uses_install_project_path(tmp_path: Path, monkeypatch):
+    env_path = tmp_path / ".env"
+    env_path.write_text("NOVEL_MODEL=test-model\n", encoding="utf-8")
+    projects_dir = tmp_path / "install" / "project"
+    monkeypatch.setenv("NOUSETSU_ENV_FILE", str(env_path))
+    monkeypatch.setenv("NOUSETSU_DEFAULT_PROJECTS_DIR", str(projects_dir))
+    monkeypatch.delenv("NOVEL_PROJECTS_DIR", raising=False)
+
+    load_env()
+
+    assert os.environ["NOVEL_PROJECTS_DIR"] == str(projects_dir)
+    assert get_projects_root_dir() == projects_dir.resolve()
+
+
+def test_dotenv_projects_path_overrides_desktop_default(tmp_path: Path, monkeypatch):
+    env_path = tmp_path / ".env"
+    configured_projects = tmp_path / "my-novels"
+    env_path.write_text(f"NOVEL_PROJECTS_DIR={configured_projects}\n", encoding="utf-8")
+    monkeypatch.setenv("NOUSETSU_ENV_FILE", str(env_path))
+    monkeypatch.setenv("NOUSETSU_DEFAULT_PROJECTS_DIR", str(tmp_path / "install" / "project"))
+    monkeypatch.delenv("NOVEL_PROJECTS_DIR", raising=False)
+
+    load_env()
+
+    assert Path(os.environ["NOVEL_PROJECTS_DIR"]) == configured_projects
 
 
 def test_environment_endpoint_saves_allowlisted_values_without_returning_secrets(

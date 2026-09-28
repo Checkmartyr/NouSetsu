@@ -1522,7 +1522,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     <KeyRound className="w-4 h-4 text-amber-300" />
                     <div>
                       <h2 className="text-sm font-bold text-slate-200">Machine Environment & API Keys</h2>
-                      <p className="text-[11px] text-slate-400 mt-1">Edit supported NouSetsu runtime values in the local .env file.</p>
+                      <p className="text-[11px] text-slate-400 mt-1">Edit supported NouSetsu runtime values in the local .env file. Desktop creates project/ beside the app when writable, otherwise it uses app data; an explicit NOVEL_PROJECTS_DIR overrides this default.</p>
                     </div>
                   </div>
 

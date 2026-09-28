@@ -61,6 +61,13 @@ def resolve_env_file() -> Path:
     return find_repo_root() / ".env"
 
 
+def _apply_desktop_projects_default() -> None:
+    """Use the Tauri-provided projects directory unless the user configured one."""
+    default_dir = os.environ.get("NOUSETSU_DEFAULT_PROJECTS_DIR")
+    if default_dir:
+        os.environ.setdefault("NOVEL_PROJECTS_DIR", default_dir)
+
+
 def find_repo_root() -> Path:
     """Locate the codebase root directory containing pyproject.toml, .git, or central .env."""
     current = Path(__file__).resolve().parent
@@ -89,7 +96,9 @@ def load_env(
         env_path = Path(configured_env).expanduser()
         if env_path.is_file():
             dotenv.load_dotenv(env_path, override=override)
+            _apply_desktop_projects_default()
             return env_path
+        _apply_desktop_projects_default()
         return None
 
     # 1. Central repository .env
@@ -114,6 +123,7 @@ def load_env(
             dotenv.load_dotenv(proj_env, override=override)
             loaded_any = proj_env
 
+    _apply_desktop_projects_default()
     return loaded_any
 
 
@@ -160,7 +170,10 @@ def get_env_settings() -> Dict[str, object]:
     parsed = dotenv.dotenv_values(env_path) if env_path.is_file() else {}
     return {
         "env_file_path": str(env_path),
-        "values": {key: parsed.get(key) or "" for key in ENV_CONFIG_KEYS},
+        "values": {
+            key: parsed.get(key) or (os.environ.get(key, "") if key == "NOVEL_PROJECTS_DIR" else "")
+            for key in ENV_CONFIG_KEYS
+        },
         "api_key_status": {key: bool(parsed.get(key)) for key in ENV_SECRET_KEYS},
     }
 

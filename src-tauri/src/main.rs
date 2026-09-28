@@ -2,10 +2,11 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 #[cfg(debug_assertions)]
-use std::{env, path::PathBuf};
+use std::env;
 use std::{
     io::{BufRead, BufReader, Error, ErrorKind, Write},
     net::TcpStream,
+    path::PathBuf,
     process::{Child, Command, Stdio},
     sync::Mutex,
     thread,
@@ -77,6 +78,31 @@ fn backend_is_ready() -> bool {
         && response.split_whitespace().nth(1) == Some("200")
 }
 
+#[cfg(not(debug_assertions))]
+fn prepare_projects_dir(
+    install_dir: &std::path::Path,
+    app_data_dir: &std::path::Path,
+) -> Result<PathBuf, Error> {
+    let install_projects = install_dir.join("project");
+    if std::fs::create_dir_all(&install_projects).is_ok() {
+        let probe_path =
+            install_projects.join(format!(".nousetsu-write-test-{}", std::process::id()));
+        if let Ok(probe) = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&probe_path)
+        {
+            drop(probe);
+            let _ = std::fs::remove_file(probe_path);
+            return Ok(install_projects);
+        }
+    }
+
+    let app_data_projects = app_data_dir.join("project");
+    std::fs::create_dir_all(&app_data_projects)?;
+    Ok(app_data_projects)
+}
+
 fn start_backend(_app: &tauri::App) -> Result<Option<Child>, Error> {
     if backend_is_ready() {
         return Ok(None);
@@ -85,6 +111,7 @@ fn start_backend(_app: &tauri::App) -> Result<Option<Child>, Error> {
     let port = BACKEND_PORT.to_string();
     let mut command;
     let working_dir;
+    let default_projects_dir: Option<PathBuf>;
 
     #[cfg(debug_assertions)]
     {
@@ -124,6 +151,7 @@ fn start_backend(_app: &tauri::App) -> Result<Option<Child>, Error> {
             command.env("PYTHONPATH", joined_paths);
         }
         working_dir = root;
+        default_projects_dir = None;
     }
 
     #[cfg(not(debug_assertions))]
@@ -157,6 +185,11 @@ fn start_backend(_app: &tauri::App) -> Result<Option<Child>, Error> {
             Error::other(format!("Could not locate app data directory: {error}"))
         })?;
         std::fs::create_dir_all(&working_dir)?;
+        let install_dir = std::env::current_exe()?
+            .parent()
+            .map(PathBuf::from)
+            .ok_or_else(|| Error::other("Could not determine the application install directory"))?;
+        default_projects_dir = Some(prepare_projects_dir(&install_dir, &working_dir)?);
     }
 
     command
@@ -166,6 +199,9 @@ fn start_backend(_app: &tauri::App) -> Result<Option<Child>, Error> {
         .env("HOST", BACKEND_HOST)
         .env("NOUSETSU_ENV_FILE", working_dir.join(".env"))
         .env("NOUSETSU_DESKTOP_VERSION", env!("CARGO_PKG_VERSION"));
+    if let Some(projects_dir) = default_projects_dir {
+        command.env("NOUSETSU_DEFAULT_PROJECTS_DIR", projects_dir);
+    }
 
     #[cfg(windows)]
     {
