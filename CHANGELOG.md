@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.6] - 2026-09-29
+
+### Changed
+- Use the Web Studio logo for generated Tauri desktop icons.
+
 ## [0.4.5] - 2026-09-28
 
 ### Fixed
