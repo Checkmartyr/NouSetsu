@@ -61,22 +61,53 @@ const SETTING_CATEGORIES: SettingCategory[] = [
   { id: 'paths', name: 'Workspace Paths', shortDesc: 'Raw & translated directories', icon: Folder, group: 'project' },
 ];
 
-const GLOBAL_ENV_GROUPS: Record<string, { title: string; keys: string[] }> = {
+interface GlobalEnvGroup {
+  title: string;
+  description?: string;
+  keys: string[];
+  agent?: boolean;
+}
+
+const GLOBAL_ENV_GROUPS: Record<string, GlobalEnvGroup> = {
   general: { title: 'Language Defaults', keys: ['SOURCE_LANG', 'TARGET_LANG'] },
   models: {
-    title: 'Model & Generation Defaults',
+    title: 'Shared Model Defaults',
+    description: 'Fallbacks and generation options inherited by agents unless overridden below.',
     keys: [
       'DEFAULT_MODEL', 'NOVEL_MODEL', 'NOVEL_FALLBACK_MODEL',
-      'NOVEL_EXTRACTOR_MODEL', 'NOVEL_DRAFTER_MODEL', 'NOVEL_CRITIC_MODEL',
-      'NOVEL_POLISHER_MODEL', 'NOVEL_CHRONICLER_MODEL',
-      'NOVEL_THINKING_LEVEL', 'NOVEL_EXTRACTOR_THINKING_LEVEL',
-      'NOVEL_DRAFTER_THINKING_LEVEL', 'NOVEL_CRITIC_THINKING_LEVEL',
-      'NOVEL_POLISHER_THINKING_LEVEL', 'NOVEL_CHRONICLER_THINKING_LEVEL',
-      'NOVEL_THINKING_BUDGET', 'NOVEL_EXTRACTOR_THINKING_BUDGET',
-      'NOVEL_DRAFTER_THINKING_BUDGET', 'NOVEL_CRITIC_THINKING_BUDGET',
-      'NOVEL_POLISHER_THINKING_BUDGET', 'NOVEL_CHRONICLER_THINKING_BUDGET',
+      'NOVEL_THINKING_LEVEL', 'NOVEL_THINKING_BUDGET',
       'NOVEL_TEMPERATURE', 'NOVEL_USE_INTERACTIONS',
     ],
+  },
+  agent_extractor: {
+    title: 'Entity Extractor',
+    description: 'Stage 1 · Finds characters and terminology before drafting.',
+    keys: ['NOVEL_EXTRACTOR_MODEL', 'NOVEL_EXTRACTOR_THINKING_LEVEL', 'NOVEL_EXTRACTOR_THINKING_BUDGET'],
+    agent: true,
+  },
+  agent_drafter: {
+    title: 'Context-Aware Drafter',
+    description: 'Stage 2 · Produces the initial literary translation.',
+    keys: ['NOVEL_DRAFTER_MODEL', 'NOVEL_DRAFTER_THINKING_LEVEL', 'NOVEL_DRAFTER_THINKING_BUDGET'],
+    agent: true,
+  },
+  agent_critic: {
+    title: 'Critique Agent',
+    description: 'Stage 3 · Audits fidelity, style, omissions, and terminology.',
+    keys: ['NOVEL_CRITIC_MODEL', 'NOVEL_CRITIC_THINKING_LEVEL', 'NOVEL_CRITIC_THINKING_BUDGET'],
+    agent: true,
+  },
+  agent_polisher: {
+    title: 'Polishing Agent',
+    description: 'Stage 4 · Refines the draft into publication-ready prose.',
+    keys: ['NOVEL_POLISHER_MODEL', 'NOVEL_POLISHER_THINKING_LEVEL', 'NOVEL_POLISHER_THINKING_BUDGET'],
+    agent: true,
+  },
+  agent_chronicler: {
+    title: 'Chronicler Agent',
+    description: 'Stage 5 · Updates summaries, continuity, and series memory.',
+    keys: ['NOVEL_CHRONICLER_MODEL', 'NOVEL_CHRONICLER_THINKING_LEVEL', 'NOVEL_CHRONICLER_THINKING_BUDGET'],
+    agent: true,
   },
   review: { title: 'Quality Defaults', keys: ['NOVEL_MAX_REVIEW_LOOPS', 'NOVEL_QUALITY_THRESHOLD'] },
   memory: {
@@ -89,6 +120,26 @@ const GLOBAL_ENV_GROUPS: Record<string, { title: string; keys: string[] }> = {
     title: 'Workspace Defaults',
     keys: ['NOVEL_PROJECTS_DIR', 'NOVEL_SCRAPER_PATH', 'NOVEL_SCRAPER_PYTHON'],
   },
+};
+
+const GLOBAL_ENV_ENTRIES = Object.entries(GLOBAL_ENV_GROUPS);
+const FIRST_AGENT_ENV_GROUP_INDEX = GLOBAL_ENV_ENTRIES.findIndex(([, group]) => group.agent);
+const AGENT_ENV_GROUPS = GLOBAL_ENV_ENTRIES.filter(([, group]) => group.agent);
+
+const GLOBAL_ENV_LABELS: Record<string, string> = {
+  DEFAULT_MODEL: 'Default model',
+  NOVEL_MODEL: 'Primary model',
+  NOVEL_FALLBACK_MODEL: 'Fallback model',
+  NOVEL_THINKING_LEVEL: 'Default thinking level',
+  NOVEL_THINKING_BUDGET: 'Default thinking budget',
+  NOVEL_TEMPERATURE: 'Generation temperature',
+  NOVEL_USE_INTERACTIONS: 'Use Gemini Interactions API',
+};
+
+const AGENT_ENV_LABELS: Record<string, string> = {
+  MODEL: 'Model',
+  THINKING_LEVEL: 'Thinking level',
+  THINKING_BUDGET: 'Thinking budget',
 };
 
 const API_KEY_LABELS = [
@@ -331,34 +382,44 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
   };
 
-  const renderMachineEnvironmentSection = (groupId: string, group: { title: string; keys: string[] }) => {
+  const renderMachineEnvironmentSection = (groupId: string, group: GlobalEnvGroup) => {
     if (!machineEnvironment) return null;
 
     return (
-      <section key={groupId} className="bg-[#383330] border border-[#3f3a36] rounded-[4px] p-5 space-y-4">
+      <section
+        key={groupId}
+        className={`bg-[#383330] border border-[#3f3a36] rounded-[4px] p-5 space-y-4 ${group.agent ? 'h-full' : ''}`}
+      >
         <div className="flex items-center gap-2 border-b border-[#4a433e] pb-3">
-          <KeyRound className="w-4 h-4 text-amber-300" />
+          {group.agent ? <Bot className="w-4 h-4 shrink-0 text-purple-300" /> : <KeyRound className="w-4 h-4 shrink-0 text-amber-300" />}
           <div>
             <h2 className="text-sm font-bold text-slate-200">{group.title}</h2>
-            <p className="text-[11px] text-slate-400 mt-1">Machine defaults saved in the local .env file.</p>
+            <p className="text-[11px] text-slate-400 mt-1">
+              {group.description || 'Machine defaults saved in the local .env file.'}
+            </p>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-          {group.keys.map((key) => (
-            <label key={key} className="block min-w-0">
-              <span className="block text-slate-400 mb-1 font-mono">{key}</span>
-              <input
-                type="text"
-                value={machineEnvironment.values[key] || ''}
-                onChange={(event) => setMachineEnvironment((current) => current ? {
-                  ...current,
-                  values: { ...current.values, [key]: event.target.value },
-                } : current)}
-                className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
-              />
-            </label>
-          ))}
+        <div className={`grid grid-cols-1 ${group.agent ? 'sm:grid-cols-2 xl:grid-cols-3' : 'sm:grid-cols-2'} gap-3 text-xs`}>
+          {group.keys.map((key) => {
+            const suffix = key.replace(/^NOVEL_[A-Z]+_/, '');
+            const label = group.agent ? AGENT_ENV_LABELS[suffix] || key : GLOBAL_ENV_LABELS[key] || key;
+            return (
+              <label key={key} className="block min-w-0">
+                <span className={`block text-slate-400 mb-1 ${group.agent ? 'font-medium' : 'font-mono'}`}>{label}</span>
+                <input
+                  type="text"
+                  value={machineEnvironment.values[key] || ''}
+                  onChange={(event) => setMachineEnvironment((current) => current ? {
+                    ...current,
+                    values: { ...current.values, [key]: event.target.value },
+                  } : current)}
+                  aria-label={`${group.title} ${label}`}
+                  className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
+                />
+              </label>
+            );
+          })}
         </div>
 
         {groupId === 'models' && (
@@ -1668,9 +1729,28 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         <p className="text-xs text-slate-400">These defaults apply across projects unless a project setting overrides them.</p>
                         <p className="text-[10px] text-slate-500 font-mono break-all">.env: {machineEnvironment.env_file_path}</p>
                       </section>
-                      {Object.entries(GLOBAL_ENV_GROUPS).map(([groupId, group]) =>
+                      {GLOBAL_ENV_ENTRIES.slice(0, FIRST_AGENT_ENV_GROUP_INDEX).map(([groupId, group]) =>
                         renderMachineEnvironmentSection(groupId, group)
                       )}
+                      {AGENT_ENV_GROUPS.length > 0 && (
+                        <section className="space-y-3">
+                          <div className="flex items-center gap-2 px-1">
+                            <Bot className="w-4 h-4 text-purple-300" />
+                            <div>
+                              <h2 className="text-sm font-bold text-slate-200">Pipeline Agent Defaults</h2>
+                              <p className="text-[11px] text-slate-400 mt-0.5">Configure each stage independently; project Model Routing overrides these machine-wide defaults.</p>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+                            {AGENT_ENV_GROUPS.map(([groupId, group]) =>
+                              renderMachineEnvironmentSection(groupId, group)
+                            )}
+                          </div>
+                        </section>
+                      )}
+                      {GLOBAL_ENV_ENTRIES.slice(FIRST_AGENT_ENV_GROUP_INDEX)
+                        .filter(([, group]) => !group.agent)
+                        .map(([groupId, group]) => renderMachineEnvironmentSection(groupId, group))}
                       <div className="flex justify-end">
                         <button
                           type="button"
