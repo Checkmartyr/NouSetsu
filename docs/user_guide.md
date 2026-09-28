@@ -40,8 +40,11 @@ Traditional machine translation tools (e.g. Google Translate, DeepL) process tex
 ## 🛠️ 2. Installation & Setup
 
 ### Prerequisites
-* **Python 3.13+** installed on your system.
+* **Python 3.13+** installed on your system for source and CLI installs.
 * Optional but recommended: [uv](https://github.com/astral-sh/uv) (ultra-fast Python package installer).
+
+### Windows Desktop Installer
+The desktop installer bundles the Python backend, so Python is not required separately. On first launch, NouSetsu copies the packaged `.env.example` to its user-data directory as `.env` if no local environment file exists. Existing `.env` settings and API keys are preserved on later launches and upgrades. Configure real provider API keys in **Settings → Global Settings**; never put live secrets in `.env.example`.
 
 ### Option A: Install from Local Repository / Pip (Recommended)
 You can install NouSetsu directly into your Python environment:

@@ -4,9 +4,10 @@
 #[cfg(debug_assertions)]
 use std::env;
 use std::{
+    fs::{File, OpenOptions},
     io::{BufRead, BufReader, Error, ErrorKind, Write},
     net::TcpStream,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     sync::Mutex,
     thread,
@@ -76,6 +77,59 @@ fn backend_is_ready() -> bool {
     let mut response = String::new();
     BufReader::new(stream).read_line(&mut response).is_ok()
         && response.split_whitespace().nth(1) == Some("200")
+}
+
+fn seed_env_file(template: &Path, local_env: &Path) -> Result<(), Error> {
+    if local_env.exists() {
+        return Ok(());
+    }
+
+    let mut source = File::open(template).map_err(|error| {
+        Error::new(
+            error.kind(),
+            format!(
+                "Could not open bundled environment template {}: {error}",
+                template.display()
+            ),
+        )
+    })?;
+    if let Some(parent) = local_env.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let mut destination = match OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(local_env)
+    {
+        Ok(file) => file,
+        Err(error) if error.kind() == ErrorKind::AlreadyExists => return Ok(()),
+        Err(error) => {
+            return Err(Error::new(
+                error.kind(),
+                format!(
+                    "Could not create local environment file {}: {error}",
+                    local_env.display()
+                ),
+            ));
+        }
+    };
+
+    let copy_result = std::io::copy(&mut source, &mut destination)
+        .and_then(|_| destination.flush())
+        .and_then(|_| destination.sync_all());
+    if let Err(error) = copy_result {
+        drop(destination);
+        let _ = std::fs::remove_file(local_env);
+        return Err(Error::new(
+            error.kind(),
+            format!(
+                "Could not seed local environment file {}: {error}",
+                local_env.display()
+            ),
+        ));
+    }
+
+    Ok(())
 }
 
 #[cfg(not(debug_assertions))]
@@ -185,6 +239,10 @@ fn start_backend(_app: &tauri::App) -> Result<Option<Child>, Error> {
             Error::other(format!("Could not locate app data directory: {error}"))
         })?;
         std::fs::create_dir_all(&working_dir)?;
+        seed_env_file(
+            &resource_dir.join("defaults").join(".env.example"),
+            &working_dir.join(".env"),
+        )?;
         let install_dir = std::env::current_exe()?
             .parent()
             .map(PathBuf::from)
@@ -263,4 +321,48 @@ fn main() {
             app_handle.state::<BackendProcess>().stop();
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::seed_env_file;
+    use std::{
+        fs,
+        path::PathBuf,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    fn temporary_directory() -> PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock should be after the Unix epoch")
+            .as_nanos();
+        let path =
+            std::env::temp_dir().join(format!("nousetsu-env-seed-{}-{nonce}", std::process::id()));
+        fs::create_dir_all(&path).expect("temporary directory should be created");
+        path
+    }
+
+    #[test]
+    fn seeds_missing_env_and_preserves_existing_env() {
+        let directory = temporary_directory();
+        let template = directory.join(".env.example");
+        let local_env = directory.join("user").join(".env");
+        fs::write(&template, "DEFAULT_MODEL=example-model\n").expect("template should be written");
+
+        seed_env_file(&template, &local_env).expect("missing local env should be seeded");
+        assert_eq!(
+            fs::read_to_string(&local_env).expect("seeded env should be readable"),
+            "DEFAULT_MODEL=example-model\n"
+        );
+
+        fs::write(&local_env, "DEFAULT_MODEL=user-model\n").expect("local env should be updated");
+        seed_env_file(&template, &local_env).expect("existing local env should be preserved");
+        assert_eq!(
+            fs::read_to_string(&local_env).expect("local env should be readable"),
+            "DEFAULT_MODEL=user-model\n"
+        );
+
+        fs::remove_dir_all(directory).expect("temporary directory should be removed");
+    }
 }
