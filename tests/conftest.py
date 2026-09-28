@@ -7,6 +7,9 @@ def isolate_test_environment(monkeypatch, tmp_path_factory):
     """Ensure tests run in an isolated, offline mock environment with isolated registry."""
     reg_tmp = tmp_path_factory.mktemp("registry")
     monkeypatch.setenv("NOVEL_REGISTRY_DIR", str(reg_tmp))
+    monkeypatch.setenv("NOUSETSU_ENV_FILE", str(reg_tmp / ".env"))
+    monkeypatch.delenv("NOUSETSU_DEFAULT_PROJECTS_DIR", raising=False)
+    monkeypatch.delenv("NOVEL_PROJECTS_DIR", raising=False)
     monkeypatch.setenv("NOVEL_MODEL", "mock-model")
     monkeypatch.setenv("NOVEL_FALLBACK_MODEL", "mock-model")
     monkeypatch.setenv("NOVEL_EXTRACTOR_MODEL", "mock-model")

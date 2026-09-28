@@ -29,6 +29,7 @@ def test_get_projects_root_dir_test_isolation(tmp_path: Path, monkeypatch: pytes
     """Verifies get_projects_root_dir isolates inside NOVEL_REGISTRY_DIR during tests."""
     reg_dir = tmp_path / "reg"
     monkeypatch.setenv("NOVEL_REGISTRY_DIR", str(reg_dir))
+    monkeypatch.delenv("NOVEL_PROJECTS_DIR", raising=False)
 
     root = get_projects_root_dir()
     assert root == (reg_dir / "projects").resolve()
@@ -186,4 +187,3 @@ def test_cmd_scan_cli(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     # 2. Scan all projects in NOVEL_PROJECTS_DIR
     args_all = argparse.Namespace(project_dir=None, folder=None, all_projects=True)
     cmd_scan(args_all)
-

@@ -13,11 +13,18 @@ from nousetsu.tui.widgets.settings_modal import SettingsModal
 
 
 @pytest.mark.asyncio
-async def test_tui_app_mount_and_widgets():
+async def test_tui_app_mount_and_widgets(tmp_path: Path):
+    repo = NovelRepository(tmp_path)
+    repo.initialize_project("Initial Project")
+    raw_dir = tmp_path / "raw_chapters"
+    (raw_dir / "001.txt").write_text("Chapter one", encoding="utf-8")
+    (raw_dir / "002.txt").write_text("Chapter two", encoding="utf-8")
+
     app = NovelAgentApp(
-        input_dir="raw_chapters",
-        output_dir="translated_chapters",
-        model_name="mock-model"
+        input_dir=str(raw_dir),
+        output_dir=str(tmp_path / "translated_chapters"),
+        model_name="mock-model",
+        project_dir=tmp_path,
     )
     async with app.run_test() as pilot:
         # Verify core widgets mounted
@@ -120,7 +127,7 @@ async def test_tui_checkpoint_inspector_duration_formatting():
     )
     async with app.run_test() as pilot:
         inspector = app.query_one("#inspector", CheckpointInspectorWidget)
-        
+
         # Test duration 846.4s formatted to 14m 6s
         meta = ChapterMetadata(
             chapter_id="ch_format_test",
@@ -411,6 +418,3 @@ async def test_tui_token_analysis_tab(tmp_path: Path):
         btn_tokens.press()
         await pilot.pause()
         assert tabs.active == "tab-tokens"
-
-
-
