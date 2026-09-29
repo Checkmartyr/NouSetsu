@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { getVersion } from '@tauri-apps/api/app';
+import { invoke } from '@tauri-apps/api/core';
 import { check, type Update } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 import {
@@ -721,7 +722,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     let downloadedBytes = 0;
 
     try {
-      await desktopUpdate.downloadAndInstall((event) => {
+      await desktopUpdate.download((event) => {
         if (event.event === 'Started') {
           contentLength = event.data.contentLength;
           setUpdateProgress(contentLength ? 0 : null);
@@ -734,6 +735,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           setUpdateProgress(100);
         }
       });
+      await invoke('stop_backend_before_update');
+      await desktopUpdate.install();
       await relaunch();
     } catch (error) {
       setUpdateError(getErrorMessage(error, 'Could not install the update.'));

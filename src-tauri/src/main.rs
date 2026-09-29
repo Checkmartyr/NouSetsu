@@ -24,14 +24,36 @@ const BACKEND_URL: &str = "http://127.0.0.1:5174";
 struct BackendProcess(Mutex<Option<Child>>);
 
 impl BackendProcess {
-    fn stop(&self) {
-        if let Ok(mut process) = self.0.lock() {
-            if let Some(mut child) = process.take() {
-                let _ = child.kill();
-                let _ = child.wait();
-            }
+    fn stop(&self) -> Result<(), Error> {
+        let mut process = self
+            .0
+            .lock()
+            .map_err(|_| Error::other("Backend process state was poisoned"))?;
+        let Some(child) = process.as_mut() else {
+            return Err(Error::other(
+                "The NouSetsu backend is not managed by this desktop app. Close the existing backend and restart NouSetsu before updating.",
+            ));
+        };
+        if child.try_wait()?.is_none() {
+            child.kill()?;
+            child.wait()?;
         }
+        *process = None;
+        drop(process);
+        if backend_is_ready() {
+            return Err(Error::other(
+                "A NouSetsu backend is still responding after shutdown. Close it before installing updates.",
+            ));
+        }
+        Ok(())
     }
+}
+
+#[tauri::command]
+fn stop_backend_before_update(backend: tauri::State<'_, BackendProcess>) -> Result<(), String> {
+    backend
+        .stop()
+        .map_err(|error| format!("Could not stop the NouSetsu backend before updating: {error}"))
 }
 
 #[cfg(debug_assertions)]
@@ -299,6 +321,7 @@ fn start_backend(_app: &tauri::App) -> Result<Option<Child>, Error> {
 fn main() {
     let app = tauri::Builder::default()
         .manage(BackendProcess::default())
+        .invoke_handler(tauri::generate_handler![stop_backend_before_update])
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
@@ -321,7 +344,7 @@ fn main() {
 
     app.run(|app_handle, event| {
         if matches!(event, tauri::RunEvent::Exit) {
-            app_handle.state::<BackendProcess>().stop();
+            let _ = app_handle.state::<BackendProcess>().stop();
         }
     });
 }
