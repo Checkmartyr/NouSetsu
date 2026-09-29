@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getVersion } from '@tauri-apps/api/app';
 import { check, type Update } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 import {
@@ -44,6 +45,7 @@ import {
 } from '../services/dashboardApi';
 
 const isTauriDesktop = isTauriDesktopRuntime;
+const isLocalUpdaterTest = import.meta.env.VITE_LOCAL_UPDATER_TEST === 'true';
 
 const getErrorMessage = (error: unknown, fallback: string): string => {
   if (error instanceof Error && error.message) return error.message;
@@ -675,9 +677,31 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             });
             return;
           }
+          if (isLocalUpdaterTest) {
+            const currentVersion = await getVersion();
+            setUpdateInfo({
+              current_version: currentVersion,
+              latest_version: currentVersion,
+              update_available: false,
+              release_name: 'Local updater test',
+              release_notes: 'No update is available from the local feed.',
+              release_url: '',
+              assets: [],
+            });
+            return;
+          }
         } catch (updaterError) {
+          if (isLocalUpdaterTest) {
+            setUpdateError(getErrorMessage(updaterError, 'Could not check the local update feed.'));
+            return;
+          }
           console.warn('Signed desktop update check failed; trying the release API.', updaterError);
         }
+      }
+
+      if (isLocalUpdaterTest) {
+        setUpdateError('Local updater test mode requires the desktop app.');
+        return;
       }
 
       setUpdateInfo(await checkLatestRelease());
