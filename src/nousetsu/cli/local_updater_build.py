@@ -34,6 +34,7 @@ def build_local_updater(root: str | Path, version: str | None = None) -> int:
 
     build_env = os.environ.copy()
     build_env["TAURI_SIGNING_PRIVATE_KEY"] = str(key_path.resolve())
+    build_env["TAURI_SIGNING_PRIVATE_KEY_PASSWORD"] = os.environ.get("TAURI_SIGNING_PRIVATE_KEY_PASSWORD") or env_values.get("TAURI_SIGNING_PRIVATE_KEY_PASSWORD")
     build_env["VITE_LOCAL_UPDATER_TEST"] = "true"
     command = [
         "cargo",
