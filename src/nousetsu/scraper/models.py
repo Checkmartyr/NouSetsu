@@ -16,6 +16,7 @@ class ScraperChapterItem(BaseModel):
 class ScraperInspectRequest(BaseModel):
     """Request payload to inspect a webnovel URL."""
     url: str = Field(..., description="Webnovel Table of Contents or chapter URL")
+    project_path: Optional[str] = Field(None, description="Project whose scraper model settings should be used")
 
 
 class ScraperInspectResponse(BaseModel):

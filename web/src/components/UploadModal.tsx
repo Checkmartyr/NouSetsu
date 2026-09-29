@@ -108,7 +108,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
         setDefaultFolder(data.default_folder);
         setSelectedFolder(data.default_folder);
       });
-      checkScraperAvailability().then((res) => {
+      checkScraperAvailability(activeProjectPath).then((res) => {
         setScraperAvailable(res.available);
         setScraperRoute(res.llm_model ? {
           model: res.llm_model,
@@ -268,7 +268,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
     setInspectResult(null);
 
     try {
-      const res = await inspectScraperUrl(trimmed);
+      const res = await inspectScraperUrl(trimmed, activeProjectPath || undefined);
       if (res.success && res.chapters.length > 0) {
         setInspectResult(res);
         setRangeStart(1);

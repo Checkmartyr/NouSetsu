@@ -130,6 +130,25 @@ export interface ModelPreset {
   };
 }
 
+export type ModelProvider = 'gemini' | 'openai' | 'openrouter' | 'custom';
+
+export type GenerationRole = 'extractor' | 'drafter' | 'critic' | 'polisher' | 'chronicler' | 'scraper';
+
+export interface GenerationSettings {
+  temperature?: number | null;
+  thinking_level?: string | null;
+  thinking_budget?: number | null;
+  use_interactions_api?: boolean | null;
+}
+
+export type GenerationSettingsMap = Partial<Record<GenerationRole, GenerationSettings>>;
+
+export interface ModelCatalogResult {
+  provider: string;
+  configured: boolean;
+  models: string[];
+}
+
 export interface MachineEnvironment {
   env_file_path: string;
   values: Record<string, string>;
@@ -175,7 +194,10 @@ export interface ProjectSettings {
   critic_model?: string;
   polisher_model?: string;
   chronicler_model?: string;
-  use_interactions_api?: boolean;
+  scraper_model?: string;
+  use_interactions_api?: boolean | null;
+  generation_settings?: GenerationSettingsMap;
+  effective_generation_settings?: GenerationSettingsMap;
 
   // Presets & Catalogs
   effective_model_name?: string;
@@ -185,6 +207,7 @@ export interface ProjectSettings {
   effective_critic_model?: string;
   effective_polisher_model?: string;
   effective_chronicler_model?: string;
+  effective_scraper_model?: string;
   env_presets?: Record<string, string>;
   available_presets?: ModelPreset[];
   model_catalog?: string[];

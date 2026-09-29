@@ -23,6 +23,8 @@ def configure_provider_test(monkeypatch):
         "GOOGLE_API_KEY",
         "OPENAI_API_KEY",
         "OPENROUTER_API_KEY",
+        "CUSTOM_API_KEY",
+        "CUSTOM_API_BASE_URL",
     ):
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setattr("dotenv.load_dotenv", lambda: None)
@@ -94,6 +96,70 @@ def test_openrouter_prefix_and_bare_openai_model(monkeypatch):
     openai_model = cast(FakeChatOpenAI, get_llm(model_name="gpt-4o"))
     assert openai_model.kwargs["model"] == "openai/gpt-4o"
     assert openai_model.kwargs["base_url"] == "https://openrouter.ai/api/v1"
+
+
+@pytest.mark.parametrize(
+    ("route", "key", "expected_model"),
+    [
+        ("openai:o1", "OPENAI_API_KEY", "o1"),
+        ("openai:o3-mini", "OPENAI_API_KEY", "o3-mini"),
+        ("openai:o4-mini", "OPENAI_API_KEY", "o4-mini"),
+        ("openrouter:openai/o3-mini", "OPENROUTER_API_KEY", "openai/o3-mini"),
+        ("custom:o3-mini", "CUSTOM_API_KEY", "o3-mini"),
+    ],
+)
+def test_openai_reasoning_models_omit_temperature(monkeypatch, route, key, expected_model):
+    configure_provider_test(monkeypatch)
+    monkeypatch.setenv(key, "provider-test-key")
+    if route.startswith("custom:"):
+        monkeypatch.setenv("CUSTOM_API_BASE_URL", "https://custom.example/v1")
+
+    llm = cast(FakeChatOpenAI, get_llm(model_name=route, temperature=0.35))
+
+    assert llm.kwargs["model"] == expected_model
+    assert "temperature" not in llm.kwargs
+
+
+def test_custom_provider_uses_its_model_key_and_base_url(monkeypatch):
+    configure_provider_test(monkeypatch)
+    monkeypatch.setenv("CUSTOM_API_KEY", "custom-test-key")
+    monkeypatch.setenv("CUSTOM_API_BASE_URL", "https://custom.example/v1")
+    monkeypatch.setenv("OPENAI_API_KEY", "must-not-be-used")
+
+    llm = cast(FakeChatOpenAI, get_llm(model_name="custom:my-model"))
+
+    assert llm.kwargs == {
+        "model": "my-model",
+        "api_key": "custom-test-key",
+        "temperature": 1.0,
+        "base_url": "https://custom.example/v1",
+    }
+
+
+@pytest.mark.parametrize(
+    ("api_key", "base_url"),
+    [("custom-test-key", ""), ("", "https://custom.example/v1")],
+)
+def test_custom_route_without_key_or_base_url_stays_offline_mock(monkeypatch, api_key, base_url):
+    configure_provider_test(monkeypatch)
+    if api_key:
+        monkeypatch.setenv("CUSTOM_API_KEY", api_key)
+    if base_url:
+        monkeypatch.setenv("CUSTOM_API_BASE_URL", base_url)
+
+    assert isinstance(get_llm(model_name="custom:my-model"), MockNovelLLM)
+
+
+def test_non_openai_model_with_reasoning_like_name_keeps_temperature(monkeypatch):
+    configure_provider_test(monkeypatch)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "router-test-key")
+
+    llm = cast(
+        FakeChatOpenAI,
+        get_llm(model_name="openrouter:anthropic/o3-mini", temperature=0.35),
+    )
+
+    assert llm.kwargs["temperature"] == 0.35
 
 
 def test_missing_provider_key_keeps_offline_mock(monkeypatch):

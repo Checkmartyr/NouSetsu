@@ -151,6 +151,10 @@ def test_settings_endpoints(client: TestClient, web_test_repo: NovelRepository):
     assert "effective_critic_model" in data
     assert "effective_polisher_model" in data
     assert "effective_chronicler_model" in data
+    assert "effective_scraper_model" in data
+    assert set(data["effective_generation_settings"]) == {
+        "extractor", "drafter", "critic", "polisher", "chronicler", "scraper"
+    }
 
     # 2. PUT /api/settings with top-level fields (including multi-agent routing)
     payload = {
@@ -166,6 +170,16 @@ def test_settings_endpoints(client: TestClient, web_test_repo: NovelRepository):
         "critic_model": "test-critic-model",
         "polisher_model": "test-polisher-model",
         "chronicler_model": "test-chronicler-model",
+        "scraper_model": "openrouter:anthropic/claude-sonnet-4",
+        "generation_settings": {
+            "drafter": {
+                "temperature": 0.55,
+                "thinking_level": "high",
+                "thinking_budget": 512,
+                "use_interactions_api": False,
+            },
+            "scraper": {"temperature": 0.35},
+        },
         "use_interactions_api": False,
         "auto_update_bible": False,
         "max_tpm": 40000,
@@ -207,6 +221,10 @@ def test_settings_endpoints(client: TestClient, web_test_repo: NovelRepository):
     assert cfg_disk.critic_model == "test-critic-model"
     assert cfg_disk.polisher_model == "test-polisher-model"
     assert cfg_disk.chronicler_model == "test-chronicler-model"
+    assert cfg_disk.scraper_model == "openrouter:anthropic/claude-sonnet-4"
+    assert cfg_disk.generation_settings["drafter"].temperature == 0.55
+    assert cfg_disk.generation_settings["drafter"].use_interactions_api is False
+    assert cfg_disk.generation_settings["scraper"].temperature == 0.35
     assert cfg_disk.use_interactions_api is False
     assert cfg_disk.auto_update_bible is False
     assert cfg_disk.max_tpm == 40000
@@ -253,6 +271,9 @@ def test_settings_endpoints(client: TestClient, web_test_repo: NovelRepository):
     assert data2["model_name"] == "test-gemini-pro"
     assert data2["extractor_model"] == "test-extractor-model"
     assert data2["effective_extractor_model"] == "test-extractor-model"
+    assert data2["effective_scraper_model"] == "openrouter:anthropic/claude-sonnet-4"
+    assert data2["effective_generation_settings"]["drafter"]["temperature"] == 0.55
+    assert data2["effective_generation_settings"]["drafter"]["thinking_budget"] == 512
     assert data2["max_review_loops"] == 4
 
     # 6. Verify clearing overrides back to .env defaults with empty strings
@@ -262,6 +283,8 @@ def test_settings_endpoints(client: TestClient, web_test_repo: NovelRepository):
         "critic_model": "",
         "polisher_model": "",
         "chronicler_model": "",
+        "scraper_model": "",
+        "generation_settings": {},
     }
     res_clear = client.put(f"/api/settings?project_path={proj_param}", json=clear_payload)
     assert res_clear.status_code == 200

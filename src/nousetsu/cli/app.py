@@ -77,7 +77,7 @@ def cmd_batch(args: argparse.Namespace) -> None:
     cfg = repo.load_config()
     if getattr(args, "interactions", None) is not None:
         os.environ["NOVEL_USE_INTERACTIONS"] = "1" if args.interactions else "0"
-    elif hasattr(cfg, "use_interactions_api"):
+    elif cfg.use_interactions_api is not None:
         os.environ["NOVEL_USE_INTERACTIONS"] = "1" if cfg.use_interactions_api else "0"
 
     if args.source_lang or args.target_lang:

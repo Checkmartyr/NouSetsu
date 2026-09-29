@@ -8,6 +8,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from nousetsu.agents.llm import extract_text_from_message, extract_usage_from_message, get_llm
 from nousetsu.graph.procedural import ProceduralGraph, get_default_polisher_graph
 from nousetsu.models.bible import CharacterProfile, GlossaryItem, NovelBible
+from nousetsu.models.config import resolve_agent_generation_settings
 from nousetsu.models.metadata import SubdividedBlock, TokenUsage
 from nousetsu.models.trace import PipelineStage
 from nousetsu.prompts.character_formatter import format_character_roster
@@ -52,35 +53,19 @@ class PolishingAgent:
         enable_recursive_subdivision: bool = True,
         subdivision_min_lines: int = 8,
         subdivision_max_depth: int = 4,
+        use_interactions_api: Optional[bool] = None,
     ):
         self.model_name = model_name
         self.fallback_model = fallback_model
-
-        polisher_thinking_level = (
-            thinking_level
-            or os.environ.get("NOVEL_POLISHER_THINKING_LEVEL")
-            or os.environ.get("NOVEL_THINKING_LEVEL")
-        )
-        polisher_thinking_budget = None
-        if thinking_budget is not None:
-            polisher_thinking_budget = thinking_budget
-        elif os.environ.get("NOVEL_POLISHER_THINKING_BUDGET"):
-            try:
-                polisher_thinking_budget = int(os.environ["NOVEL_POLISHER_THINKING_BUDGET"])
-            except ValueError:
-                pass
-        elif os.environ.get("NOVEL_THINKING_BUDGET"):
-            try:
-                polisher_thinking_budget = int(os.environ["NOVEL_THINKING_BUDGET"])
-            except ValueError:
-                pass
+        generation = resolve_agent_generation_settings("polisher")
 
         self.llm = get_llm(
             model_name=model_name,
             fallback_model=fallback_model,
-            temperature=temperature,
-            thinking_level=polisher_thinking_level,
-            thinking_budget=polisher_thinking_budget,
+            temperature=temperature if temperature is not None else generation["temperature"],
+            use_interactions=(use_interactions_api if use_interactions_api is not None else generation["use_interactions_api"]),
+            thinking_level=thinking_level if thinking_level is not None else generation["thinking_level"],
+            thinking_budget=thinking_budget if thinking_budget is not None else generation["thinking_budget"],
         )
         self.last_usage: TokenUsage = TokenUsage()
         self.procedural_graph = procedural_graph or get_default_polisher_graph()

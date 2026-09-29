@@ -6,6 +6,7 @@ from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from pydantic import Field
 from nousetsu.models.metadata import TokenUsage
+from nousetsu.utils.env import load_env
 
 
 def extract_usage_from_message(msg: Any) -> TokenUsage:
@@ -470,6 +471,18 @@ def _is_openai_model(model_name: str) -> bool:
     return name.startswith(("gpt-", "o1", "o3", "o4", "chatgpt-"))
 
 
+def _is_openai_reasoning_model(model_name: str) -> bool:
+    normalized = model_name.strip().lower()
+    if "/" in normalized:
+        provider, normalized = normalized.split("/", 1)
+        if provider != "openai":
+            return False
+    return any(
+        normalized == family or normalized.startswith(f"{family}-")
+        for family in ("o1", "o3", "o4")
+    )
+
+
 def _create_openai_compatible_llm(
     model_name: str,
     api_key: str,
@@ -479,11 +492,9 @@ def _create_openai_compatible_llm(
     """Create OpenAI or OpenAI-compatible chat models (including OpenRouter)."""
     from langchain_openai import ChatOpenAI
 
-    kwargs: dict[str, Any] = {
-        "model": model_name,
-        "api_key": api_key,
-        "temperature": temperature,
-    }
+    kwargs: dict[str, Any] = {"model": model_name, "api_key": api_key}
+    if not _is_openai_reasoning_model(model_name):
+        kwargs["temperature"] = temperature
     if base_url:
         kwargs["base_url"] = base_url
     return ChatOpenAI(**kwargs)
@@ -503,15 +514,24 @@ def _create_single_llm(
     if normalized_model.startswith(("mock", "test")):
         return MockNovelLLM(model_name=requested_model, temperature=resolved_temp)
 
-    import dotenv
-    dotenv.load_dotenv()
+    load_env()
 
     google_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
     openai_key = os.environ.get("OPENAI_API_KEY")
     openrouter_key = os.environ.get("OPENROUTER_API_KEY")
+    custom_key = os.environ.get("CUSTOM_API_KEY")
+    custom_base_url = os.environ.get("CUSTOM_API_BASE_URL", "").strip().rstrip("/")
     openrouter_base_url = "https://openrouter.ai/api/v1"
 
     # Explicit provider prefixes take precedence over all other provider keys.
+    if normalized_model.startswith("custom:"):
+        custom_model = requested_model.split(":", 1)[1].strip()
+        if custom_key and custom_base_url and custom_model:
+            return _create_openai_compatible_llm(
+                custom_model, custom_key, resolved_temp, base_url=custom_base_url
+            )
+        return MockNovelLLM(model_name=requested_model, temperature=resolved_temp)
+
     if normalized_model.startswith("openrouter:"):
         router_model = requested_model.split(":", 1)[1].strip()
         if openrouter_key and router_model:
@@ -599,12 +619,19 @@ def get_llm(
 ) -> BaseChatModel:
     """Factory to instantiate appropriate LLM, optionally wrapped with automatic fallback support."""
     resolved_temp = _resolve_temperature(temperature)
+    resolved_thinking_level = thinking_level or os.environ.get("NOVEL_THINKING_LEVEL")
+    resolved_thinking_budget = thinking_budget
+    if resolved_thinking_budget is None and os.environ.get("NOVEL_THINKING_BUDGET"):
+        try:
+            resolved_thinking_budget = int(os.environ["NOVEL_THINKING_BUDGET"])
+        except ValueError:
+            pass
     primary_llm = _create_single_llm(
         model_name=model_name,
         temperature=resolved_temp,
         use_interactions=use_interactions,
-        thinking_level=thinking_level,
-        thinking_budget=thinking_budget,
+        thinking_level=resolved_thinking_level,
+        thinking_budget=resolved_thinking_budget,
     )
 
     clean_fallback = (fallback_model or "").strip()
@@ -613,8 +640,8 @@ def get_llm(
             model_name=clean_fallback,
             temperature=resolved_temp,
             use_interactions=use_interactions,
-            thinking_level=thinking_level,
-            thinking_budget=thinking_budget,
+            thinking_level=resolved_thinking_level,
+            thinking_budget=resolved_thinking_budget,
         )
         return FallbackChatModel(
             primary=primary_llm,
@@ -710,4 +737,3 @@ def invoke_structured(
         return parsed_obj, raw_msg, None
     except Exception as parse_err:
         return None, raw_msg, parse_err
-

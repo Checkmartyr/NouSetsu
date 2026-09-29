@@ -68,13 +68,15 @@ class NovelTranslationWorkflow:
         prompt_tracker: Optional[PromptTracker] = None,
         enable_patch_polishing: bool = True,
         filter_extractor_entities: bool = True,
-        enable_post_polish_reconciliation: bool = True
+        enable_post_polish_reconciliation: bool = True,
+        generation_settings: Optional[Dict[str, Dict[str, Any]]] = None,
     ):
         self.traces_dir = traces_dir
         self.prompt_tracker = prompt_tracker
         self.enable_patch_polishing = enable_patch_polishing
         self.filter_extractor_entities = filter_extractor_entities
         self.enable_post_polish_reconciliation = enable_post_polish_reconciliation
+        self.generation_settings = generation_settings or {}
         effective_model = model_name or os.environ.get("NOVEL_MODEL") or os.environ.get("DEFAULT_MODEL") or "gemini-3.1-flash-lite"
         self.model_name = effective_model
         is_mock = effective_model.startswith("mock") or effective_model.startswith("test")
@@ -112,7 +114,8 @@ class NovelTranslationWorkflow:
             enable_recursive_subdivision=self.safety_recursive_subdivision,
             subdivision_min_lines=self.safety_subdivision_min_lines,
             subdivision_max_depth=self.safety_subdivision_max_depth,
-            enable_entity_filtering=self.filter_extractor_entities
+            enable_entity_filtering=self.filter_extractor_entities,
+            **self.generation_settings.get("extractor", {}),
         )
         self.drafter = ContextAwareDrafterAgent(
             model_name=self.drafter_model,
@@ -120,7 +123,8 @@ class NovelTranslationWorkflow:
             procedural_graph=drafter_pg,
             enable_recursive_subdivision=self.safety_recursive_subdivision,
             subdivision_min_lines=self.safety_subdivision_min_lines,
-            subdivision_max_depth=self.safety_subdivision_max_depth
+            subdivision_max_depth=self.safety_subdivision_max_depth,
+            **self.generation_settings.get("drafter", {}),
         )
         self.critic = CritiqueAgent(
             model_name=self.critic_model,
@@ -129,7 +133,8 @@ class NovelTranslationWorkflow:
             chunker=self.chunker,
             enable_recursive_subdivision=self.safety_recursive_subdivision,
             subdivision_min_lines=self.safety_subdivision_min_lines,
-            subdivision_max_depth=self.safety_subdivision_max_depth
+            subdivision_max_depth=self.safety_subdivision_max_depth,
+            **self.generation_settings.get("critic", {}),
         )
         self.polisher = PolishingAgent(
             model_name=self.polisher_model,
@@ -137,13 +142,15 @@ class NovelTranslationWorkflow:
             procedural_graph=polisher_pg,
             enable_recursive_subdivision=self.safety_recursive_subdivision,
             subdivision_min_lines=self.safety_subdivision_min_lines,
-            subdivision_max_depth=self.safety_subdivision_max_depth
+            subdivision_max_depth=self.safety_subdivision_max_depth,
+            **self.generation_settings.get("polisher", {}),
         )
         self.drafter.polisher = self.polisher
         self.chronicler = ChroniclerAgent(
             model_name=self.chronicler_model,
             fallback_model=self.fallback_model,
-            procedural_graph=chronicler_pg
+            procedural_graph=chronicler_pg,
+            **self.generation_settings.get("chronicler", {}),
         )
         self.rag_engine = rag_engine
         self.enable_rag = enable_rag
@@ -305,7 +312,7 @@ class NovelTranslationWorkflow:
             prompt_tracker=self.prompt_tracker,
             enable_entity_filtering=self.filter_extractor_entities
         )
-        
+
         all_chars = list(state.novel_bible.characters) + new_chars
         all_glossary = list(state.novel_bible.glossary) + new_terms
 

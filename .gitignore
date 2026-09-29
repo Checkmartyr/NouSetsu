@@ -28,6 +28,7 @@ node_modules/
 !web/dist/
 !web/dist/**
 .agents/private/
+.agents/skills/
 .api-port
 docs/promo/
 

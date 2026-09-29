@@ -2,8 +2,114 @@
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Mapping, Optional
 from pydantic import BaseModel, Field
+
+
+GENERATION_ROLES = ("extractor", "drafter", "critic", "polisher", "chronicler", "scraper")
+DEFAULT_AGENT_MODELS = {
+    "extractor": "gemini-3.1-flash-lite",
+    "drafter": "gemini-3.5-flash-lite",
+    "critic": "gemma-4-26b-a4b-it",
+    "polisher": "gemini-3.5-flash-lite",
+    "chronicler": "gemma-4-26b-a4b-it",
+    "scraper": "gemini-3.1-flash-lite",
+}
+DEFAULT_AGENT_TEMPERATURES = {
+    "extractor": 0.1,
+    "drafter": 1.0,
+    "critic": 0.1,
+    "polisher": 1.0,
+    "chronicler": 0.2,
+    "scraper": 1.0,
+}
+
+
+class AgentGenerationSettings(BaseModel):
+    temperature: Optional[float] = Field(default=None, ge=0, le=2)
+    thinking_level: Optional[str] = None
+    thinking_budget: Optional[int] = Field(default=None, ge=0)
+    use_interactions_api: Optional[bool] = None
+
+
+def _parse_env_float(value: Optional[str]) -> Optional[float]:
+    try:
+        return float(value) if value not in (None, "") else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_env_int(value: Optional[str]) -> Optional[int]:
+    try:
+        return int(value) if value not in (None, "") else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_env_bool(value: Optional[str]) -> Optional[bool]:
+    if value is None or not value.strip():
+        return None
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def resolve_agent_generation_settings(
+    role: str,
+    project_settings: Optional[AgentGenerationSettings | Mapping[str, Any]] = None,
+    legacy_use_interactions: Optional[bool] = None,
+    environ: Optional[Mapping[str, str]] = None,
+) -> Dict[str, Any]:
+    """Resolve a role's controls from project overrides, role env, and shared defaults."""
+    if role not in GENERATION_ROLES:
+        raise ValueError(f"Unknown generation role: {role}")
+    env = os.environ if environ is None else environ
+    if isinstance(project_settings, AgentGenerationSettings):
+        project_values = project_settings.model_dump()
+    else:
+        project_values = dict(project_settings or {})
+    prefix = f"NOVEL_{role.upper()}"
+
+    def project_value(name: str) -> Any:
+        value = project_values.get(name)
+        if isinstance(value, str):
+            return value.strip() or None
+        return value
+
+    temperature = project_value("temperature")
+    if temperature is None:
+        temperature = _parse_env_float(env.get(f"{prefix}_TEMPERATURE"))
+    if temperature is None:
+        temperature = _parse_env_float(env.get("NOVEL_TEMPERATURE"))
+    if temperature is None:
+        temperature = DEFAULT_AGENT_TEMPERATURES[role]
+
+    thinking_level = (
+        project_value("thinking_level")
+        or env.get(f"{prefix}_THINKING_LEVEL")
+        or env.get("NOVEL_THINKING_LEVEL")
+        or ("medium" if role == "critic" else None)
+    )
+    thinking_budget = project_value("thinking_budget")
+    if thinking_budget is None:
+        thinking_budget = _parse_env_int(env.get(f"{prefix}_THINKING_BUDGET"))
+    if thinking_budget is None:
+        thinking_budget = _parse_env_int(env.get("NOVEL_THINKING_BUDGET"))
+
+    use_interactions = project_value("use_interactions_api")
+    if use_interactions is None:
+        use_interactions = legacy_use_interactions
+    if use_interactions is None:
+        use_interactions = _parse_env_bool(env.get(f"{prefix}_USE_INTERACTIONS"))
+    if use_interactions is None:
+        use_interactions = _parse_env_bool(env.get("NOVEL_USE_INTERACTIONS"))
+    if use_interactions is None:
+        use_interactions = True
+
+    return {
+        "temperature": float(temperature),
+        "thinking_level": thinking_level,
+        "thinking_budget": thinking_budget,
+        "use_interactions_api": use_interactions,
+    }
 
 
 class ProjectConfig(BaseModel):
@@ -22,7 +128,9 @@ class ProjectConfig(BaseModel):
     critic_model: Optional[str] = Field(default=None, description="LLM model override for Critique Agent")
     polisher_model: Optional[str] = Field(default=None, description="LLM model override for Polisher Agent")
     chronicler_model: Optional[str] = Field(default=None, description="LLM model override for Chronicler Agent")
-    use_interactions_api: bool = Field(default=True, description="Use Gemini Interactions API for Gemini models")
+    scraper_model: Optional[str] = Field(default=None, description="LLM model override for Novel Scraper")
+    generation_settings: Dict[str, AgentGenerationSettings] = Field(default_factory=dict)
+    use_interactions_api: Optional[bool] = Field(default=None, description="Legacy project-wide Gemini Interactions override")
     auto_update_bible: bool = Field(default=True, description="Automatically merge newly discovered characters, terms, and summaries into Novel Bible")
     max_tpm: int = Field(default=32000, description="Max tokens per minute rate limit quota")
     max_rpm: int = Field(default=60, description="Max requests per minute rate limit quota")
@@ -80,37 +188,46 @@ class ProjectConfig(BaseModel):
             pass
         return candidate
 
-    def get_model_name(self) -> str:
-        """Resolve effective model_name: config override -> .env NOVEL_MODEL -> .env DEFAULT_MODEL -> default."""
-        return (
-            self.model_name
-            or os.environ.get("NOVEL_MODEL")
-            or os.environ.get("DEFAULT_MODEL")
-            or "gemini-3.1-flash-lite"
-        )
+    def get_model_name(self, environ: Optional[Mapping[str, str]] = None) -> str:
+        """Resolve primary route from project, machine defaults, then the built-in default."""
+        env = os.environ if environ is None else environ
+        return self.model_name or env.get("NOVEL_MODEL") or env.get("DEFAULT_MODEL") or "gemini-3.1-flash-lite"
 
-    def get_fallback_model(self) -> Optional[str]:
-        """Resolve effective fallback_model: config override -> .env NOVEL_FALLBACK_MODEL -> default."""
-        return self.fallback_model or os.environ.get("NOVEL_FALLBACK_MODEL") or "gemini-3.5-flash-lite"
+    def get_fallback_model(self, environ: Optional[Mapping[str, str]] = None) -> Optional[str]:
+        """Resolve the shared fallback route from project and machine defaults."""
+        env = os.environ if environ is None else environ
+        return self.fallback_model or env.get("NOVEL_FALLBACK_MODEL") or "gemini-3.5-flash-lite"
 
-    def get_agent_model(self, role: str) -> str:
-        """Return configured model for agent role with priority: project override -> .env -> global model."""
-        role_map = {
-            "extractor": self.extractor_model,
-            "drafter": self.drafter_model,
-            "critic": self.critic_model,
-            "polisher": self.polisher_model,
-            "chronicler": self.chronicler_model,
-        }
-        override = role_map.get(role)
-        if override:
-            return override
+    def get_agent_model(self, role: str, environ: Optional[Mapping[str, str]] = None) -> str:
+        """Resolve a route consistently for the settings UI and batch runtime."""
+        if role not in GENERATION_ROLES:
+            raise ValueError(f"Unknown model role: {role}")
+        env = os.environ if environ is None else environ
+        project_route = getattr(self, f"{role}_model", None)
+        if project_route:
+            return project_route
+        env_route = env.get(f"NOVEL_{role.upper()}_MODEL")
+        if role == "scraper" and env_route:
+            return env_route
         if self.model_name:
             return self.model_name
-        env_val = os.environ.get(f"NOVEL_{role.upper()}_MODEL")
-        if env_val:
-            return env_val
-        return self.get_model_name()
+        if env_route:
+            return env_route
+        env_primary = env.get("NOVEL_MODEL") or env.get("DEFAULT_MODEL")
+        if env_primary:
+            return env_primary
+        return DEFAULT_AGENT_MODELS[role]
+
+    def get_agent_generation_settings(
+        self, role: str, environ: Optional[Mapping[str, str]] = None
+    ) -> Dict[str, Any]:
+        """Resolve project or machine generation controls for one role."""
+        return resolve_agent_generation_settings(
+            role,
+            project_settings=self.generation_settings.get(role),
+            legacy_use_interactions=self.use_interactions_api,
+            environ=environ,
+        )
 
     def get_agent_fallback_model(self, role: Optional[str] = None) -> Optional[str]:
         """Return fallback model for agent role or global fallback_model."""

@@ -25,10 +25,19 @@ import {
   DownloadCloud,
 } from 'lucide-react';
 import { isTauriDesktopRuntime } from '../services/apiBase';
-import { MachineEnvironment, ProjectSettings, UpdateCheckResult } from '../types/dashboard';
+import {
+  GenerationRole,
+  GenerationSettings,
+  MachineEnvironment,
+  ModelCatalogResult,
+  ModelProvider,
+  ProjectSettings,
+  UpdateCheckResult,
+} from '../types/dashboard';
 import {
   checkLatestRelease,
   fetchMachineEnvironment,
+  fetchModelCatalog,
   fetchSettings,
   saveMachineEnvironment,
   updateSettings,
@@ -92,41 +101,46 @@ const GLOBAL_ENV_GROUPS: Record<string, GlobalEnvGroup> = {
   general: { title: 'Language Defaults', keys: ['SOURCE_LANG', 'TARGET_LANG'] },
   models: {
     title: 'Shared Model Defaults',
-    description: 'Fallbacks and generation options inherited by agents unless overridden below.',
+    description: 'Primary, fallback, and shared generation defaults for machine-wide projects.',
     keys: [
-      'DEFAULT_MODEL', 'NOVEL_MODEL', 'NOVEL_FALLBACK_MODEL', 'NOVEL_SCRAPER_MODEL',
-      'NOVEL_THINKING_LEVEL', 'NOVEL_THINKING_BUDGET',
-      'NOVEL_TEMPERATURE', 'NOVEL_USE_INTERACTIONS',
+      'DEFAULT_MODEL', 'NOVEL_MODEL', 'NOVEL_FALLBACK_MODEL',
+      'NOVEL_TEMPERATURE', 'NOVEL_THINKING_LEVEL', 'NOVEL_THINKING_BUDGET', 'NOVEL_USE_INTERACTIONS',
     ],
   },
   agent_extractor: {
     title: 'Entity Extractor',
     description: 'Stage 1 · Finds characters and terminology before drafting.',
-    keys: ['NOVEL_EXTRACTOR_MODEL', 'NOVEL_EXTRACTOR_THINKING_LEVEL', 'NOVEL_EXTRACTOR_THINKING_BUDGET'],
+    keys: ['NOVEL_EXTRACTOR_MODEL', 'NOVEL_EXTRACTOR_TEMPERATURE', 'NOVEL_EXTRACTOR_THINKING_LEVEL', 'NOVEL_EXTRACTOR_THINKING_BUDGET', 'NOVEL_EXTRACTOR_USE_INTERACTIONS'],
     agent: true,
   },
   agent_drafter: {
     title: 'Context-Aware Drafter',
     description: 'Stage 2 · Produces the initial literary translation.',
-    keys: ['NOVEL_DRAFTER_MODEL', 'NOVEL_DRAFTER_THINKING_LEVEL', 'NOVEL_DRAFTER_THINKING_BUDGET'],
+    keys: ['NOVEL_DRAFTER_MODEL', 'NOVEL_DRAFTER_TEMPERATURE', 'NOVEL_DRAFTER_THINKING_LEVEL', 'NOVEL_DRAFTER_THINKING_BUDGET', 'NOVEL_DRAFTER_USE_INTERACTIONS'],
     agent: true,
   },
   agent_critic: {
     title: 'Critique Agent',
     description: 'Stage 3 · Audits fidelity, style, omissions, and terminology.',
-    keys: ['NOVEL_CRITIC_MODEL', 'NOVEL_CRITIC_THINKING_LEVEL', 'NOVEL_CRITIC_THINKING_BUDGET'],
+    keys: ['NOVEL_CRITIC_MODEL', 'NOVEL_CRITIC_TEMPERATURE', 'NOVEL_CRITIC_THINKING_LEVEL', 'NOVEL_CRITIC_THINKING_BUDGET', 'NOVEL_CRITIC_USE_INTERACTIONS'],
     agent: true,
   },
   agent_polisher: {
     title: 'Polishing Agent',
     description: 'Stage 4 · Refines the draft into publication-ready prose.',
-    keys: ['NOVEL_POLISHER_MODEL', 'NOVEL_POLISHER_THINKING_LEVEL', 'NOVEL_POLISHER_THINKING_BUDGET'],
+    keys: ['NOVEL_POLISHER_MODEL', 'NOVEL_POLISHER_TEMPERATURE', 'NOVEL_POLISHER_THINKING_LEVEL', 'NOVEL_POLISHER_THINKING_BUDGET', 'NOVEL_POLISHER_USE_INTERACTIONS'],
     agent: true,
   },
   agent_chronicler: {
     title: 'Chronicler Agent',
     description: 'Stage 5 · Updates summaries, continuity, and series memory.',
-    keys: ['NOVEL_CHRONICLER_MODEL', 'NOVEL_CHRONICLER_THINKING_LEVEL', 'NOVEL_CHRONICLER_THINKING_BUDGET'],
+    keys: ['NOVEL_CHRONICLER_MODEL', 'NOVEL_CHRONICLER_TEMPERATURE', 'NOVEL_CHRONICLER_THINKING_LEVEL', 'NOVEL_CHRONICLER_THINKING_BUDGET', 'NOVEL_CHRONICLER_USE_INTERACTIONS'],
+    agent: true,
+  },
+  agent_scraper: {
+    title: 'Novel Scraper',
+    description: 'Separate route and generation settings for URL chapter extraction.',
+    keys: ['NOVEL_SCRAPER_MODEL', 'NOVEL_SCRAPER_TEMPERATURE', 'NOVEL_SCRAPER_THINKING_LEVEL', 'NOVEL_SCRAPER_THINKING_BUDGET', 'NOVEL_SCRAPER_USE_INTERACTIONS'],
     agent: true,
   },
   review: { title: 'Quality Defaults', keys: ['NOVEL_MAX_REVIEW_LOOPS', 'NOVEL_QUALITY_THRESHOLD'] },
@@ -159,8 +173,222 @@ const GLOBAL_ENV_LABELS: Record<string, string> = {
 
 const AGENT_ENV_LABELS: Record<string, string> = {
   MODEL: 'Model',
+  TEMPERATURE: 'Temperature',
   THINKING_LEVEL: 'Thinking level',
   THINKING_BUDGET: 'Thinking budget',
+  USE_INTERACTIONS: 'Use Gemini Interactions API',
+};
+
+const GENERATION_ROLES: { role: GenerationRole; title: string; stage: string; description: string; modelKey: keyof ProjectSettings; effectiveModelKey: keyof ProjectSettings }[] = [
+  { role: 'extractor', title: 'Entity Extractor', stage: 'Stage 1', description: 'Finds characters and terminology before drafting.', modelKey: 'extractor_model', effectiveModelKey: 'effective_extractor_model' },
+  { role: 'drafter', title: 'Context-Aware Drafter', stage: 'Stage 2', description: 'Produces the initial literary translation.', modelKey: 'drafter_model', effectiveModelKey: 'effective_drafter_model' },
+  { role: 'critic', title: 'Critique Agent', stage: 'Stage 3', description: 'Audits fidelity, style, omissions, and terminology.', modelKey: 'critic_model', effectiveModelKey: 'effective_critic_model' },
+  { role: 'polisher', title: 'Polishing Agent', stage: 'Stage 4', description: 'Refines the draft into publication-ready prose.', modelKey: 'polisher_model', effectiveModelKey: 'effective_polisher_model' },
+  { role: 'chronicler', title: 'Chronicler Agent', stage: 'Stage 5', description: 'Updates summaries, continuity, and series memory.', modelKey: 'chronicler_model', effectiveModelKey: 'effective_chronicler_model' },
+  { role: 'scraper', title: 'Novel Scraper', stage: 'Separate route', description: 'Extracts chapter text from supported novel websites.', modelKey: 'scraper_model', effectiveModelKey: 'effective_scraper_model' },
+];
+
+const MODEL_INPUT_CLASS = 'w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500';
+
+const providerForRoute = (route: string): ModelProvider =>
+  route.startsWith('openai:') ? 'openai'
+    : route.startsWith('openrouter:') ? 'openrouter'
+      : route.startsWith('custom:') ? 'custom' : 'gemini';
+
+const modelIdForRoute = (route: string): string =>
+  route.startsWith('openai:') || route.startsWith('openrouter:') || route.startsWith('custom:')
+    ? route.slice(route.indexOf(':') + 1) : route;
+
+const isOpenAIReasoningModel = (provider: ModelProvider | 'all', model: string): boolean => {
+  const normalized = model.trim().replace(/^openai\//i, '');
+  if (provider === 'openai' || provider === 'custom') return /^(?:o1|o3|o4)(?:$|-)/i.test(normalized);
+  return provider === 'openrouter' && /^openai\/(?:o1|o3|o4)(?:$|-)/i.test(model.trim());
+};
+
+interface ModelRouteControlProps {
+  label: string;
+  value: string;
+  effectiveValue?: string;
+  onChange: (value: string) => void;
+  catalogs: Partial<Record<ModelProvider, ModelCatalogResult>>;
+  loadingCatalogs: Partial<Record<ModelProvider, boolean>>;
+  catalogErrors: Partial<Record<ModelProvider, string>>;
+  apiKeyStatus?: Record<string, boolean>;
+  customBaseUrl?: string;
+  onLoadCatalog: (provider: ModelProvider) => void;
+  inherit?: boolean;
+}
+
+const ModelRouteControl: React.FC<ModelRouteControlProps> = ({
+  label, value, effectiveValue, onChange, catalogs, loadingCatalogs, catalogErrors, apiKeyStatus, customBaseUrl, onLoadCatalog, inherit,
+}) => {
+  const [providerOverride, setProviderOverride] = useState<ModelProvider | null>(null);
+  const provider = providerOverride || providerForRoute(value || effectiveValue || '');
+  const catalog = catalogs[provider];
+  const catalogLoading = Boolean(loadingCatalogs[provider]);
+  const catalogError = catalogErrors[provider];
+  const configured = catalog?.configured ?? (provider === 'gemini'
+    ? apiKeyStatus?.GEMINI_API_KEY || apiKeyStatus?.GOOGLE_API_KEY
+    : provider === 'openai'
+      ? apiKeyStatus?.OPENAI_API_KEY
+      : provider === 'openrouter'
+        ? apiKeyStatus?.OPENROUTER_API_KEY
+        : Boolean(apiKeyStatus?.CUSTOM_API_KEY && customBaseUrl?.trim()));
+  const listId = React.useId();
+
+  useEffect(() => {
+    if (value) setProviderOverride(null);
+  }, [value]);
+
+  const updateModel = (model: string) => {
+    const modelId = model.trim().replace(new RegExp(`^${provider}:`), '');
+    onChange(modelId ? (provider === 'gemini' ? modelId : `${provider}:${modelId}`) : '');
+    if (modelId) setProviderOverride(null);
+  };
+
+  return (
+    <div className="space-y-2 text-xs">
+      <div className="flex items-center justify-between gap-2">
+        <label className="font-semibold text-slate-200">{label}</label>
+        {inherit && (value ? (
+          <button type="button" onClick={() => { setProviderOverride(null); onChange(''); }} className="text-[10px] text-amber-300 hover:text-amber-200">Clear override</button>
+        ) : <span className="text-emerald-300">Inheriting global default</span>)}
+      </div>
+      <div className="grid grid-cols-[minmax(110px,0.45fr)_minmax(0,1fr)] gap-2">
+        <select
+          aria-label={`${label} provider`}
+          value={provider}
+          onChange={(event) => {
+            const nextProvider = event.target.value as ModelProvider;
+            setProviderOverride(nextProvider);
+            onChange('');
+          }}
+          className={MODEL_INPUT_CLASS}
+        >
+          <option value="gemini">Gemini</option>
+          <option value="openai">OpenAI</option>
+          <option value="openrouter">OpenRouter</option>
+          <option value="custom">Custom OpenAI-compatible</option>
+        </select>
+        <input
+          type="text"
+          list={listId}
+          aria-label={`${label} model ID`}
+          value={modelIdForRoute(value)}
+          onChange={(event) => updateModel(event.target.value)}
+          placeholder={effectiveValue && (!providerOverride || providerForRoute(effectiveValue) === provider) ? modelIdForRoute(effectiveValue) : 'Search catalog or enter a model ID'}
+          className={MODEL_INPUT_CLASS}
+        />
+      </div>
+      <datalist id={listId}>
+        {catalog?.models.map((model) => <option key={model} value={model} />)}
+      </datalist>
+      <div className="flex flex-wrap items-center justify-between gap-2 text-[10px]">
+        <span className="text-slate-500">
+          {value ? `Route: ${value}` : effectiveValue ? `Effective: ${effectiveValue}` : 'Enter a model ID or inherit the configured default.'}
+        </span>
+        <button type="button" onClick={() => onLoadCatalog(provider)} disabled={catalogLoading} className="text-indigo-300 hover:text-indigo-200 disabled:opacity-50">
+          {catalogLoading ? 'Loading catalog…' : catalog ? `Refresh ${provider} catalog (${catalog.models.length})` : `Load ${provider} catalog`}
+        </button>
+      </div>
+      {configured === false && <p className="text-amber-300">{provider === 'custom' ? 'Configure CUSTOM_API_KEY and CUSTOM_API_BASE_URL in global settings.' : `No ${provider} API key is configured. You can still enter a model ID and save it after adding a key.`}</p>}
+      {catalogError && <p role="alert" className="text-rose-300">{catalogError}</p>}
+    </div>
+  );
+};
+
+interface GenerationSettingsEditorProps {
+  role: GenerationRole | 'default';
+  provider: ModelProvider | 'all';
+  model?: string;
+  projectValue?: GenerationSettings;
+  effectiveValue?: GenerationSettings;
+  environmentValues?: Record<string, string>;
+  onProjectChange?: (value: GenerationSettings) => void;
+  onEnvironmentChange?: (key: string, value: string) => void;
+}
+
+const GenerationSettingsEditor: React.FC<GenerationSettingsEditorProps> = ({
+  role, provider, model = '', projectValue, effectiveValue, environmentValues, onProjectChange, onEnvironmentChange,
+}) => {
+  const isProject = Boolean(onProjectChange);
+  const prefix = role === 'default' ? 'NOVEL' : `NOVEL_${role.toUpperCase()}`;
+  const interactionKey = role === 'default' ? 'NOVEL_USE_INTERACTIONS' : `${prefix}_USE_INTERACTIONS`;
+  const environmentKey = (field: keyof GenerationSettings) => field === 'use_interactions_api'
+    ? interactionKey
+    : `${prefix}_${field === 'thinking_level' ? 'THINKING_LEVEL' : field === 'thinking_budget' ? 'THINKING_BUDGET' : 'TEMPERATURE'}`;
+  const current = (field: keyof GenerationSettings): string => {
+    if (!isProject) {
+      const value = environmentValues?.[environmentKey(field)] || '';
+      if (field === 'use_interactions_api' && value) {
+        return ['1', 'true', 'yes', 'on'].includes(value.toLowerCase()) ? 'true' : 'false';
+      }
+      return value;
+    }
+    const value = projectValue?.[field];
+    return value === null || value === undefined ? '' : String(value);
+  };
+  const inherited = (field: keyof GenerationSettings): string => {
+    const value = effectiveValue?.[field];
+    return value === null || value === undefined ? '' : String(value);
+  };
+  const update = (field: keyof GenerationSettings, value: string) => {
+    if (isProject) {
+      const parsed: GenerationSettings[keyof GenerationSettings] = value === ''
+        ? null
+        : field === 'temperature' || field === 'thinking_budget'
+          ? Number(value)
+          : field === 'use_interactions_api'
+            ? value === 'true'
+            : value;
+      onProjectChange?.({ ...projectValue, [field]: parsed });
+    } else {
+      onEnvironmentChange?.(environmentKey(field), value);
+    }
+  };
+  const showGeminiControls = provider === 'gemini' || provider === 'all';
+  const showTemperature = !isOpenAIReasoningModel(provider, model);
+  const interactionSetting = current('use_interactions_api')
+    || (isProject ? inherited('use_interactions_api') : environmentValues?.NOVEL_USE_INTERACTIONS || '');
+  const interactionsEnabled = interactionSetting
+    ? ['1', 'true', 'yes', 'on'].includes(interactionSetting.toLowerCase())
+    : true;
+  const inputClass = 'w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 focus:outline-none focus:border-indigo-500';
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+      {showTemperature ? <label className="block">
+        <span className="block text-slate-400 mb-1 font-medium">Temperature</span>
+        <input type="number" min="0" max="2" step="0.1" value={current('temperature')} placeholder={inherited('temperature') || 'Provider default'} onChange={(event) => update('temperature', event.target.value)} className={inputClass} />
+      </label> : <p className="self-center text-slate-500">Temperature is not supported by this model; saved values are preserved.</p>}
+      {showGeminiControls && <>
+        <label className="block">
+          <span className="block text-slate-400 mb-1 font-medium">Thinking level</span>
+          <select value={current('thinking_level')} onChange={(event) => update('thinking_level', event.target.value)} className={inputClass}>
+            <option value="">{isProject ? `Inherit${inherited('thinking_level') ? ` (${inherited('thinking_level')})` : ''}` : 'Provider default'}</option>
+            {!['minimal', 'low', 'medium', 'high'].includes(current('thinking_level')) && current('thinking_level') && <option value={current('thinking_level')}>{current('thinking_level')}</option>}
+            <option value="minimal">Minimal</option>
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+          </select>
+        </label>
+        {!interactionsEnabled && <label className="block">
+          <span className="block text-slate-400 mb-1 font-medium">Thinking budget</span>
+          <input type="number" min="0" step="1" value={current('thinking_budget')} placeholder={inherited('thinking_budget') || 'Provider default'} onChange={(event) => update('thinking_budget', event.target.value)} className={inputClass} />
+        </label>}
+        <label className="sm:col-span-2 flex items-center justify-between gap-3 rounded-[3px] border border-[#3f3a36] bg-[#24201d] p-2">
+          <span className="text-slate-400">Gemini Interactions API</span>
+          <select aria-label="Gemini Interactions API" value={current('use_interactions_api')} onChange={(event) => update('use_interactions_api', event.target.value)} className="bg-[#2b2622] border border-[#3f3a36] rounded px-2 py-1 text-slate-200">
+            <option value="">{isProject ? `Inherit${inherited('use_interactions_api') ? ` (${inherited('use_interactions_api') === 'true' ? 'On' : 'Off'})` : ''}` : 'Default (On)'}</option>
+            <option value="true">On</option>
+            <option value="false">Off</option>
+          </select>
+        </label>
+      </>}
+      {!showGeminiControls && <p className="sm:col-span-2 text-[10px] text-slate-500">Gemini-specific settings are hidden for this provider and retained if you switch back.</p>}
+    </div>
+  );
 };
 
 const API_KEY_LABELS = [
@@ -168,6 +396,7 @@ const API_KEY_LABELS = [
   { key: 'GOOGLE_API_KEY', label: 'Google API key (Gemini alias)' },
   { key: 'OPENAI_API_KEY', label: 'OpenAI API key' },
   { key: 'OPENROUTER_API_KEY', label: 'OpenRouter API key' },
+  { key: 'CUSTOM_API_KEY', label: 'Custom provider API key' },
 ];
 
 interface ToggleSwitchProps {
@@ -213,6 +442,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [apiKeyInputs, setApiKeyInputs] = useState<Record<string, string>>({});
   const [clearApiKeys, setClearApiKeys] = useState<string[]>([]);
   const [savingEnvironment, setSavingEnvironment] = useState(false);
+  const [modelCatalogs, setModelCatalogs] = useState<Partial<Record<ModelProvider, ModelCatalogResult>>>({});
+  const [loadingModelCatalogs, setLoadingModelCatalogs] = useState<Partial<Record<ModelProvider, boolean>>>({});
+  const [modelCatalogErrors, setModelCatalogErrors] = useState<Partial<Record<ModelProvider, string>>>({});
   const [updateInfo, setUpdateInfo] = useState<UpdateCheckResult | null>(null);
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [desktopUpdate, setDesktopUpdate] = useState<Update | null>(null);
@@ -244,6 +476,22 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setLoadingEnvironment(false);
   };
 
+  const loadModelCatalog = async (provider: ModelProvider) => {
+    setLoadingModelCatalogs((current) => ({ ...current, [provider]: true }));
+    setModelCatalogErrors((current) => ({ ...current, [provider]: '' }));
+    try {
+      const catalog = await fetchModelCatalog(provider);
+      setModelCatalogs((current) => ({ ...current, [provider]: catalog }));
+    } catch (error) {
+      setModelCatalogErrors((current) => ({
+        ...current,
+        [provider]: getErrorMessage(error, `Could not load ${provider} model catalog.`),
+      }));
+    } finally {
+      setLoadingModelCatalogs((current) => ({ ...current, [provider]: false }));
+    }
+  };
+
   useEffect(() => {
     loadSettingsData();
   }, [activeProjectPath]);
@@ -256,15 +504,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const handleLoadEnvPresets = () => {
     if (!settings) return;
     const envPres = settings.env_presets || {};
+    const envValues = machineEnvironment?.values || settings.env || {};
     setSettings({
       ...settings,
-      model_name: envPres.model_name || settings.env?.NOVEL_MODEL || 'gemini-3.1-flash-lite',
-      fallback_model: envPres.fallback_model || settings.env?.NOVEL_FALLBACK_MODEL || 'gemini-3.5-flash-lite',
-      extractor_model: envPres.extractor_model || 'gemini-3.1-flash-lite',
-      drafter_model: envPres.drafter_model || 'gemini-3.5-flash-lite',
-      critic_model: envPres.critic_model || 'gemma-4-26b-a4b-it',
-      polisher_model: envPres.polisher_model || 'gemini-3.5-flash-lite',
-      chronicler_model: envPres.chronicler_model || 'gemma-4-26b-a4b-it',
+      model_name: envPres.model_name || envValues.NOVEL_MODEL || 'gemini-3.1-flash-lite',
+      fallback_model: envPres.fallback_model || envValues.NOVEL_FALLBACK_MODEL || 'gemini-3.5-flash-lite',
+      extractor_model: envPres.extractor_model || envValues.NOVEL_EXTRACTOR_MODEL || 'gemini-3.1-flash-lite',
+      drafter_model: envPres.drafter_model || envValues.NOVEL_DRAFTER_MODEL || 'gemini-3.5-flash-lite',
+      critic_model: envPres.critic_model || envValues.NOVEL_CRITIC_MODEL || 'gemma-4-26b-a4b-it',
+      polisher_model: envPres.polisher_model || envValues.NOVEL_POLISHER_MODEL || 'gemini-3.5-flash-lite',
+      chronicler_model: envPres.chronicler_model || envValues.NOVEL_CHRONICLER_MODEL || 'gemma-4-26b-a4b-it',
+      scraper_model: envPres.scraper_model || envValues.NOVEL_SCRAPER_MODEL || '',
     });
     showToast('Loaded model presets from .env into form!');
   };
@@ -297,6 +547,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       critic_model: '',
       polisher_model: '',
       chronicler_model: '',
+      scraper_model: '',
+      generation_settings: {},
     });
     showToast('Cleared all project model overrides (inheriting 100% from .env)');
   };
@@ -387,6 +639,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     if (success) {
       setApiKeyInputs({});
       setClearApiKeys([]);
+      setModelCatalogs({});
+      setModelCatalogErrors({});
       await loadMachineEnvironment();
       showToast('Local environment settings saved.');
     } else {
@@ -467,6 +721,24 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const renderMachineEnvironmentSection = (groupId: string, group: GlobalEnvGroup) => {
     if (!machineEnvironment) return null;
 
+    const roleConfig = groupId.startsWith('agent_')
+      ? GENERATION_ROLES.find((item) => item.role === groupId.slice('agent_'.length))
+      : undefined;
+    const hiddenModelKeys = new Set(group.agent ? group.keys : groupId === 'models'
+      ? ['DEFAULT_MODEL', 'NOVEL_MODEL', 'NOVEL_FALLBACK_MODEL', 'NOVEL_TEMPERATURE', 'NOVEL_THINKING_LEVEL', 'NOVEL_THINKING_BUDGET', 'NOVEL_USE_INTERACTIONS']
+      : []);
+    const visibleKeys = group.keys.filter((key) => !hiddenModelKeys.has(key));
+    const selectedModelRoute = roleConfig
+      ? machineEnvironment.values[`NOVEL_${roleConfig.role.toUpperCase()}_MODEL`]
+        || machineEnvironment.values.NOVEL_MODEL
+        || machineEnvironment.values.DEFAULT_MODEL
+        || ''
+      : '';
+    const updateEnvironmentValue = (key: string, value: string) => setMachineEnvironment((current) => current ? {
+      ...current,
+      values: { ...current.values, [key]: value },
+    } : current);
+
     return (
       <section
         key={groupId}
@@ -482,8 +754,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
         </div>
 
-        <div className={`grid grid-cols-1 ${group.agent ? 'sm:grid-cols-2 xl:grid-cols-3' : 'sm:grid-cols-2'} gap-3 text-xs`}>
-          {group.keys.map((key) => {
+        {visibleKeys.length > 0 && <div className={`grid grid-cols-1 ${group.agent ? 'sm:grid-cols-2 xl:grid-cols-3' : 'sm:grid-cols-2'} gap-3 text-xs`}>
+          {visibleKeys.map((key) => {
             const suffix = key.replace(/^NOVEL_[A-Z]+_/, '');
             const label = group.agent ? AGENT_ENV_LABELS[suffix] || key : GLOBAL_ENV_LABELS[key] || key;
             return (
@@ -492,17 +764,73 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <input
                   type="text"
                   value={machineEnvironment.values[key] || ''}
-                  onChange={(event) => setMachineEnvironment((current) => current ? {
-                    ...current,
-                    values: { ...current.values, [key]: event.target.value },
-                  } : current)}
+                  onChange={(event) => updateEnvironmentValue(key, event.target.value)}
                   aria-label={`${group.title} ${label}`}
                   className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
                 />
               </label>
             );
           })}
-        </div>
+        </div>}
+
+        {groupId === 'models' && (
+          <div className="space-y-4 border-b border-[#4a433e] pb-4">
+            <h3 className="text-xs font-semibold text-slate-200">Global model routes</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {[
+                { key: 'DEFAULT_MODEL', label: 'Default model' },
+                { key: 'NOVEL_MODEL', label: 'Primary model' },
+                { key: 'NOVEL_FALLBACK_MODEL', label: 'Shared fallback model' },
+              ].map(({ key, label }) => (
+                <ModelRouteControl
+                  key={key}
+                  label={label}
+                  value={machineEnvironment.values[key] || ''}
+                  onChange={(value) => updateEnvironmentValue(key, value)}
+                  catalogs={modelCatalogs}
+                  loadingCatalogs={loadingModelCatalogs}
+                  catalogErrors={modelCatalogErrors}
+                  apiKeyStatus={machineEnvironment.api_key_status}
+                  customBaseUrl={machineEnvironment.values.CUSTOM_API_BASE_URL}
+                  onLoadCatalog={loadModelCatalog}
+                />
+              ))}
+            </div>
+            <div className="rounded border border-[#4a433e] p-3 space-y-2">
+              <h3 className="text-xs font-semibold text-slate-200">Shared generation defaults</h3>
+              <p className="text-[10px] text-slate-400">Role-specific values below override these defaults. A shared fallback uses the invoking agent’s generation controls.</p>
+              <GenerationSettingsEditor
+                role="default"
+                provider="all"
+                environmentValues={machineEnvironment.values}
+                onEnvironmentChange={updateEnvironmentValue}
+              />
+            </div>
+          </div>
+        )}
+
+        {roleConfig && (
+          <div className="space-y-3">
+            <ModelRouteControl
+              label="Model route"
+              value={machineEnvironment.values[`NOVEL_${roleConfig.role.toUpperCase()}_MODEL`] || ''}
+              onChange={(value) => updateEnvironmentValue(`NOVEL_${roleConfig.role.toUpperCase()}_MODEL`, value)}
+              catalogs={modelCatalogs}
+              loadingCatalogs={loadingModelCatalogs}
+              catalogErrors={modelCatalogErrors}
+              apiKeyStatus={machineEnvironment.api_key_status}
+              customBaseUrl={machineEnvironment.values.CUSTOM_API_BASE_URL}
+              onLoadCatalog={loadModelCatalog}
+            />
+            <GenerationSettingsEditor
+              role={roleConfig.role}
+              provider={providerForRoute(selectedModelRoute)}
+              model={modelIdForRoute(selectedModelRoute)}
+              environmentValues={machineEnvironment.values}
+              onEnvironmentChange={updateEnvironmentValue}
+            />
+          </div>
+        )}
 
         {groupId === 'models' && (
           <div className="border-t border-[#4a433e] pt-4 space-y-3">
@@ -511,6 +839,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <p className="text-[10px] text-slate-400 mt-1">Keys are stored locally and never returned to the browser. Leave blank to keep a saved key; status reflects this .env file.</p>
 
             </div>
+            <label className="block text-xs">
+              <span className="block font-medium text-slate-300 mb-1">Custom OpenAI-compatible base URL</span>
+              <input
+                type="url"
+                value={machineEnvironment.values.CUSTOM_API_BASE_URL || ''}
+                onChange={(event) => updateEnvironmentValue('CUSTOM_API_BASE_URL', event.target.value)}
+                placeholder="https://provider.example/v1"
+                aria-label="Custom OpenAI-compatible base URL"
+                className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
+              />
+              <span className="block text-[10px] text-slate-500 mt-1">Model discovery uses the OpenAI-compatible /models endpoint; model IDs can also be entered manually.</span>
+            </label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
               {API_KEY_LABELS.map(({ key, label }) => {
                 const configured = Boolean(machineEnvironment.api_key_status[key]);
@@ -884,13 +1224,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       <p className="text-[10px] text-slate-400">
                         Default model across stages unless explicitly overridden below or in .env.
                       </p>
-                      <input
-                        type="text"
-                        list="model-suggestions"
+                      <ModelRouteControl
+                        label="Primary model route"
                         value={settings.model_name || ''}
-                        onChange={(e) => setSettings({ ...settings, model_name: e.target.value })}
-                        className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
-                        placeholder={settings.env_presets?.model_name || 'gemini-3.1-flash-lite'}
+                        effectiveValue={settings.effective_model_name || settings.env_presets?.model_name}
+                        onChange={(value) => setSettings({ ...settings, model_name: value })}
+                        catalogs={modelCatalogs}
+                        loadingCatalogs={loadingModelCatalogs}
+                        catalogErrors={modelCatalogErrors}
+                        apiKeyStatus={machineEnvironment?.api_key_status}
+                        customBaseUrl={machineEnvironment?.values.CUSTOM_API_BASE_URL}
+                        onLoadCatalog={loadModelCatalog}
+                        inherit
                       />
                       <div className="text-[10px] text-slate-500 flex justify-between">
                         <span>
@@ -923,15 +1268,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         )}
                       </div>
                       <p className="text-[10px] text-slate-400">
-                        Automatic failover model when primary LLM encounters HTTP 429 quota exhaustion.
+                        Shared failover route for all stages; it inherits the invoking agent’s generation controls.
                       </p>
-                      <input
-                        type="text"
-                        list="model-suggestions"
+                      <ModelRouteControl
+                        label="Shared fallback route"
                         value={settings.fallback_model || ''}
-                        onChange={(e) => setSettings({ ...settings, fallback_model: e.target.value })}
-                        className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
-                        placeholder={settings.env_presets?.fallback_model || 'gemini-3.5-flash-lite'}
+                        effectiveValue={settings.effective_fallback_model || settings.env_presets?.fallback_model}
+                        onChange={(value) => setSettings({ ...settings, fallback_model: value })}
+                        catalogs={modelCatalogs}
+                        loadingCatalogs={loadingModelCatalogs}
+                        catalogErrors={modelCatalogErrors}
+                        apiKeyStatus={machineEnvironment?.api_key_status}
+                        customBaseUrl={machineEnvironment?.values.CUSTOM_API_BASE_URL}
+                        onLoadCatalog={loadModelCatalog}
+                        inherit
                       />
                       <div className="text-[10px] text-slate-500 flex justify-between">
                         <span>
@@ -949,253 +1299,56 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     </div>
                   </div>
 
-                  {/* Gemini Interactions API Toggle */}
-                  <div className="flex items-center justify-between bg-slate-950/40 border border-slate-800/80 rounded-lg p-3 text-xs">
-                    <div>
-                      <div className="font-semibold text-slate-200">Use Gemini Interactions API</div>
-                      <div className="text-[11px] text-slate-400">
-                        Routes Gemini models to Google's native <code className="text-slate-300 font-mono">/v1beta/interactions</code> endpoint for granular thought tokens.
-                      </div>
-                    </div>
-                    <ToggleSwitch
-                      checked={settings.use_interactions_api !== false}
-                      onChange={(val) => setSettings({ ...settings, use_interactions_api: val })}
-                    />
-                  </div>
-
-                  {/* Five Pipeline Agent Roles */}
                   <div className="space-y-3 pt-2">
-                    <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-                      Five Pipeline Agent Overrides
-                    </h3>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                      {/* Stage 1: Extractor */}
-                      <div className="bg-slate-950/40 border border-slate-800/80 rounded-lg p-3 space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-1.5">
-                            <span className="px-1.5 py-0.5 bg-blue-500/10 text-blue-400 rounded text-[10px] font-semibold">
-                              Stage 1
-                            </span>
-                            <label className="font-semibold text-slate-200">Entity Extractor Agent</label>
+                    <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">Pipeline and scraper routes</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {GENERATION_ROLES.map((roleConfig) => {
+                        const route = String(settings[roleConfig.modelKey] || '');
+                        const effectiveRoute = String(settings[roleConfig.effectiveModelKey] || '');
+                        const selectedRoute = route || effectiveRoute;
+                        const provider = providerForRoute(selectedRoute);
+                        return (
+                          <div key={roleConfig.role} className="bg-slate-950/40 border border-slate-800/80 rounded-lg p-3 space-y-3">
+                            <div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="px-1.5 py-0.5 bg-indigo-500/10 text-indigo-300 rounded text-[10px] font-semibold">{roleConfig.stage}</span>
+                                <span className="font-semibold text-slate-200">{roleConfig.title}</span>
+                              </div>
+                              <p className="text-[10px] text-slate-400 mt-1">{roleConfig.description}</p>
+                            </div>
+                            <ModelRouteControl
+                              label={`${roleConfig.title} model`}
+                              value={route}
+                              effectiveValue={effectiveRoute || undefined}
+                              onChange={(value) => setSettings({ ...settings, [roleConfig.modelKey]: value })}
+                              catalogs={modelCatalogs}
+                              loadingCatalogs={loadingModelCatalogs}
+                              catalogErrors={modelCatalogErrors}
+                              apiKeyStatus={machineEnvironment?.api_key_status}
+                              customBaseUrl={machineEnvironment?.values.CUSTOM_API_BASE_URL}
+                              onLoadCatalog={loadModelCatalog}
+                              inherit
+                            />
+                            <GenerationSettingsEditor
+                              role={roleConfig.role}
+                              provider={provider}
+                              model={modelIdForRoute(selectedRoute)}
+                              projectValue={settings.generation_settings?.[roleConfig.role]}
+                              effectiveValue={settings.effective_generation_settings?.[roleConfig.role]}
+                              onProjectChange={(value) => setSettings({
+                                ...settings,
+                                generation_settings: {
+                                  ...settings.generation_settings,
+                                  [roleConfig.role]: value,
+                                },
+                              })}
+                            />
                           </div>
-                          {settings.extractor_model && (
-                            <button
-                              type="button"
-                              onClick={() => setSettings({ ...settings, extractor_model: '' })}
-                              className="text-[10px] text-slate-500 hover:text-slate-300 flex items-center gap-0.5"
-                            >
-                              <X className="w-3 h-3" /> Clear
-                            </button>
-                          )}
-                        </div>
-                        <p className="text-[10px] text-slate-400">
-                          The Detective: Analyzes raw text before drafting to discover unknown terms & entities.
-                        </p>
-                        <input
-                          type="text"
-                          list="model-suggestions"
-                          value={settings.extractor_model || ''}
-                          onChange={(e) => setSettings({ ...settings, extractor_model: e.target.value })}
-                          className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
-                          placeholder={settings.env_presets?.extractor_model || settings.effective_extractor_model || 'gemini-3.1-flash-lite'}
-                        />
-                        <div className="flex items-center justify-between text-[10px] text-slate-500">
-                          <span>
-                            Active:{' '}
-                            <strong className="text-slate-400 font-mono">
-                              {settings.extractor_model || settings.effective_extractor_model || 'gemini-3.1-flash-lite'}
-                            </strong>
-                          </span>
-                          {settings.extractor_model ? (
-                            <span className="text-purple-400 font-medium">Project Override</span>
-                          ) : (
-                            <span className="text-emerald-400 font-medium">Inheriting from .env</span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Stage 2: Drafter */}
-                      <div className="bg-slate-950/40 border border-slate-800/80 rounded-lg p-3 space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-1.5">
-                            <span className="px-1.5 py-0.5 bg-amber-500/10 text-amber-400 rounded text-[10px] font-semibold">
-                              Stage 2
-                            </span>
-                            <label className="font-semibold text-slate-200">Context-Aware Drafter Agent</label>
-                          </div>
-                          {settings.drafter_model && (
-                            <button
-                              type="button"
-                              onClick={() => setSettings({ ...settings, drafter_model: '' })}
-                              className="text-[10px] text-slate-500 hover:text-slate-300 flex items-center gap-0.5"
-                            >
-                              <X className="w-3 h-3" /> Clear
-                            </button>
-                          )}
-                        </div>
-                        <p className="text-[10px] text-slate-400">
-                          The Wordsmith: Resolves zero-anaphora and produces initial full literary draft.
-                        </p>
-                        <input
-                          type="text"
-                          list="model-suggestions"
-                          value={settings.drafter_model || ''}
-                          onChange={(e) => setSettings({ ...settings, drafter_model: e.target.value })}
-                          className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
-                          placeholder={settings.env_presets?.drafter_model || settings.effective_drafter_model || 'gemini-3.5-flash-lite'}
-                        />
-                        <div className="flex items-center justify-between text-[10px] text-slate-500">
-                          <span>
-                            Active:{' '}
-                            <strong className="text-slate-400 font-mono">
-                              {settings.drafter_model || settings.effective_drafter_model || 'gemini-3.5-flash-lite'}
-                            </strong>
-                          </span>
-                          {settings.drafter_model ? (
-                            <span className="text-purple-400 font-medium">Project Override</span>
-                          ) : (
-                            <span className="text-emerald-400 font-medium">Inheriting from .env</span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Stage 3: Critic */}
-                      <div className="bg-slate-950/40 border border-slate-800/80 rounded-lg p-3 space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-1.5">
-                            <span className="px-1.5 py-0.5 bg-rose-500/10 text-rose-400 rounded text-[10px] font-semibold">
-                              Stage 3
-                            </span>
-                            <label className="font-semibold text-slate-200">Critique & Auditor Agent</label>
-                          </div>
-                          {settings.critic_model && (
-                            <button
-                              type="button"
-                              onClick={() => setSettings({ ...settings, critic_model: '' })}
-                              className="text-[10px] text-slate-500 hover:text-slate-300 flex items-center gap-0.5"
-                            >
-                              <X className="w-3 h-3" /> Clear
-                            </button>
-                          )}
-                        </div>
-                        <p className="text-[10px] text-slate-400">
-                          The Inspector: Line-by-line auditor scoring fidelity and detecting omissions.
-                        </p>
-                        <input
-                          type="text"
-                          list="model-suggestions"
-                          value={settings.critic_model || ''}
-                          onChange={(e) => setSettings({ ...settings, critic_model: e.target.value })}
-                          className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
-                          placeholder={settings.env_presets?.critic_model || settings.effective_critic_model || 'gemma-4-26b-a4b-it'}
-                        />
-                        <div className="flex items-center justify-between text-[10px] text-slate-500">
-                          <span>
-                            Active:{' '}
-                            <strong className="text-slate-400 font-mono">
-                              {settings.critic_model || settings.effective_critic_model || 'gemma-4-26b-a4b-it'}
-                            </strong>
-                          </span>
-                          {settings.critic_model ? (
-                            <span className="text-purple-400 font-medium">Project Override</span>
-                          ) : (
-                            <span className="text-emerald-400 font-medium">Inheriting from .env</span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Stage 4: Polisher */}
-                      <div className="bg-slate-950/40 border border-slate-800/80 rounded-lg p-3 space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-1.5">
-                            <span className="px-1.5 py-0.5 bg-purple-500/10 text-purple-400 rounded text-[10px] font-semibold">
-                              Stage 4
-                            </span>
-                            <label className="font-semibold text-slate-200">Prose Polishing Agent</label>
-                          </div>
-                          {settings.polisher_model && (
-                            <button
-                              type="button"
-                              onClick={() => setSettings({ ...settings, polisher_model: '' })}
-                              className="text-[10px] text-slate-500 hover:text-slate-300 flex items-center gap-0.5"
-                            >
-                              <X className="w-3 h-3" /> Clear
-                            </button>
-                          )}
-                        </div>
-                        <p className="text-[10px] text-slate-400">
-                          The Stylist: Refines drafted prose into publication-quality English prose.
-                        </p>
-                        <input
-                          type="text"
-                          list="model-suggestions"
-                          value={settings.polisher_model || ''}
-                          onChange={(e) => setSettings({ ...settings, polisher_model: e.target.value })}
-                          className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
-                          placeholder={settings.env_presets?.polisher_model || settings.effective_polisher_model || 'gemini-3.5-flash-lite'}
-                        />
-                        <div className="flex items-center justify-between text-[10px] text-slate-500">
-                          <span>
-                            Active:{' '}
-                            <strong className="text-slate-400 font-mono">
-                              {settings.polisher_model || settings.effective_polisher_model || 'gemini-3.5-flash-lite'}
-                            </strong>
-                          </span>
-                          {settings.polisher_model ? (
-                            <span className="text-purple-400 font-medium">Project Override</span>
-                          ) : (
-                            <span className="text-emerald-400 font-medium">Inheriting from .env</span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Stage 5: Chronicler */}
-                      <div className="bg-slate-950/40 border border-slate-800/80 rounded-lg p-3 space-y-1.5 md:col-span-2">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-1.5">
-                            <span className="px-1.5 py-0.5 bg-emerald-500/10 text-emerald-400 rounded text-[10px] font-semibold">
-                              Stage 5
-                            </span>
-                            <label className="font-semibold text-slate-200">Chronicler Lore Memory Agent</label>
-                          </div>
-                          {settings.chronicler_model && (
-                            <button
-                              type="button"
-                              onClick={() => setSettings({ ...settings, chronicler_model: '' })}
-                              className="text-[10px] text-slate-500 hover:text-slate-300 flex items-center gap-0.5"
-                            >
-                              <X className="w-3 h-3" /> Clear
-                            </button>
-                          )}
-                        </div>
-                        <p className="text-[10px] text-slate-400">
-                          The Memory Keeper: Synthesizes 3-tier narrative memory, arc summaries, and reconciles terms.
-                        </p>
-                        <input
-                          type="text"
-                          list="model-suggestions"
-                          value={settings.chronicler_model || ''}
-                          onChange={(e) => setSettings({ ...settings, chronicler_model: e.target.value })}
-                          className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
-                          placeholder={settings.env_presets?.chronicler_model || settings.effective_chronicler_model || 'gemma-4-26b-a4b-it'}
-                        />
-                        <div className="flex items-center justify-between text-[10px] text-slate-500">
-                          <span>
-                            Active:{' '}
-                            <strong className="text-slate-400 font-mono">
-                              {settings.chronicler_model || settings.effective_chronicler_model || 'gemma-4-26b-a4b-it'}
-                            </strong>
-                          </span>
-                          {settings.chronicler_model ? (
-                            <span className="text-purple-400 font-medium">Project Override</span>
-                          ) : (
-                            <span className="text-emerald-400 font-medium">Inheriting from .env</span>
-                          )}
-                        </div>
-                      </div>
+                        );
+                      })}
                     </div>
                   </div>
+
                 </div>
               )}
 

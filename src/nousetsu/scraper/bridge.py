@@ -147,7 +147,9 @@ class NovelScraperBridge:
             logger.exception("Failed to romanize novel title")
             return cleaned_title
 
-    async def inspect_url(self, url: str) -> ScraperInspectResponse:
+    async def inspect_url(
+        self, url: str, env: Optional[Dict[str, str]] = None
+    ) -> ScraperInspectResponse:
         """Inspect a webnovel URL (TOC or chapter), discovering chapter list and metadata."""
         if not self.is_available():
             return ScraperInspectResponse(
@@ -167,6 +169,7 @@ class NovelScraperBridge:
                 cwd=str(working_dir),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                **({"env": env} if env is not None else {}),
             )
 
             stdout_data, stderr_data = await proc.communicate()
@@ -217,6 +220,7 @@ class NovelScraperBridge:
         dest_dir: Path,
         on_progress: Optional[Callable[[ScraperStatusResponse], None]] = None,
         task_id: Optional[str] = None,
+        env: Optional[Dict[str, str]] = None,
     ) -> ScraperStatusResponse:
         """
         Run batch extraction from webnovel URL, saving chapters directly to dest_dir.
@@ -275,6 +279,7 @@ class NovelScraperBridge:
                 cwd=str(working_dir),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                **({"env": env} if env is not None else {}),
             )
             if proc.stdout is None or proc.stderr is None:
                 raise RuntimeError("Scraper worker subprocess streams were not initialized.")

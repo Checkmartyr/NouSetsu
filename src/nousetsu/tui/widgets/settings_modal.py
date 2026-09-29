@@ -84,6 +84,12 @@ class SettingsModal(ModalScreen):
                 env_critic = os.environ.get("NOVEL_CRITIC_MODEL") or "gemma-4-26b-a4b-it"
                 env_polisher = os.environ.get("NOVEL_POLISHER_MODEL") or env_default_model
                 env_chronicler = os.environ.get("NOVEL_CHRONICLER_MODEL") or "gemma-4-26b-a4b-it"
+                env_interactions = os.environ.get("NOVEL_USE_INTERACTIONS", "1").strip().lower() not in ("0", "false", "no")
+                interactions_enabled = (
+                    self.cfg.use_interactions_api
+                    if self.cfg.use_interactions_api is not None
+                    else env_interactions
+                )
 
                 with Container(classes="settings-section"):
                     yield Label("Project & Model Configuration", classes="section-title")
@@ -140,8 +146,8 @@ class SettingsModal(ModalScreen):
                     yield Input(value=str(self.cfg.max_tpm), id="set_max_tpm")
                     yield Label("Max Requests Per Minute (RPM, default 60):", classes="field-label")
                     yield Input(value=str(self.cfg.max_rpm), id="set_max_rpm")
-                    yield Label("Use Gemini Interactions API (true / false):", classes="field-label")
-                    yield Input(value="true" if self.cfg.use_interactions_api else "false", id="set_use_interactions")
+                    yield Label("Legacy project-wide Gemini Interactions override:", classes="field-label")
+                    yield Input(value="true" if interactions_enabled else "false", id="set_use_interactions")
 
                 with Container(classes="settings-section"):
                     yield Label("🔄 Review Loop & Automation", classes="section-title")
@@ -282,8 +288,6 @@ class SettingsModal(ModalScreen):
 
         self.repo.save_config(cfg)
 
-        # Apply environment flag for interactions API
-        os.environ["NOVEL_USE_INTERACTIONS"] = "1" if cfg.use_interactions_api else "0"
 
         # Update active app instance state
         self.app_instance.model_name = cfg.model_name

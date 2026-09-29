@@ -16,7 +16,11 @@ from nousetsu.scraper.detector import (
     get_scraper_info,
 )
 from nousetsu.scraper.bridge import NovelScraperBridge
-from nousetsu.scraper.llm_config import ScraperLLMSettings, resolve_scraper_llm_settings
+from nousetsu.scraper.llm_config import (
+    ScraperLLMSettings,
+    resolve_scraper_llm_settings,
+    scraper_subprocess_environment,
+)
 
 __all__ = [
     "ScraperChapterItem",
@@ -30,4 +34,5 @@ __all__ = [
     "NovelScraperBridge",
     "ScraperLLMSettings",
     "resolve_scraper_llm_settings",
+    "scraper_subprocess_environment",
 ]

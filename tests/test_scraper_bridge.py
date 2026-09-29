@@ -2,10 +2,13 @@
 Unit tests for the Novel-Scraper detector, models, bridge, and FastAPI endpoints.
 """
 
+import os
 import pytest
 from fastapi.testclient import TestClient
 
 from nousetsu.cli.web_server import create_app
+from nousetsu.models.config import AgentGenerationSettings, ProjectConfig
+from nousetsu.storage.repository import NovelRepository
 import nousetsu.scraper.detector as scraper_detector
 from nousetsu.scraper import (
     NovelScraperBridge,
@@ -17,6 +20,8 @@ from nousetsu.scraper import (
     find_scraper_directory,
     find_scraper_python,
     get_scraper_info,
+    resolve_scraper_llm_settings,
+    scraper_subprocess_environment,
 )
 
 
@@ -84,7 +89,7 @@ async def test_packaged_scraper_bridge_uses_sidecar_worker(tmp_path, monkeypatch
             return b'{"success":true,"novel_title":"Test Novel","chapters":[]}', b""
 
     async def fake_create_subprocess_exec(*args, **kwargs):
-        captured.append((args, kwargs["cwd"]))
+        captured.append((args, kwargs["cwd"], kwargs.get("env")))
         return FakeProcess(args)
 
     monkeypatch.setattr(
@@ -93,7 +98,8 @@ async def test_packaged_scraper_bridge_uses_sidecar_worker(tmp_path, monkeypatch
     )
 
     bridge = NovelScraperBridge()
-    result = await bridge.inspect_url("https://example.com/novel/")
+    worker_env = {"NOVEL_TEMPERATURE": "0.35"}
+    result = await bridge.inspect_url("https://example.com/novel/", env=worker_env)
 
     assert result.success is True
     assert bridge.is_available() is True
@@ -106,10 +112,12 @@ async def test_packaged_scraper_bridge_uses_sidecar_worker(tmp_path, monkeypatch
             "https://example.com/novel/",
         ),
         str(app_data.resolve()),
+        worker_env,
     )
     assert captured[1] == (
         (str(backend.resolve()), "--scraper-worker", "romanize", "Test Novel"),
         str(app_data.resolve()),
+        None,
     )
 
 
@@ -245,6 +253,113 @@ def test_scraper_models_serialization():
     )
     assert status.task_id == "abc12345"
     assert status.progress_percent == 50.0
+
+
+def test_scraper_api_uses_project_route_and_generation_settings(tmp_path, monkeypatch):
+    repo = NovelRepository(tmp_path)
+    repo.initialize_project("Scraper route", "Japanese", "English", model_name="mock-main")
+    config = repo.load_config()
+    config.scraper_model = "openrouter:anthropic/claude-sonnet-4"
+    config.generation_settings = {
+        "scraper": AgentGenerationSettings(
+            temperature=0.35,
+            thinking_level="high",
+            thinking_budget=700,
+            use_interactions_api=False,
+        )
+    }
+    repo.save_config(config)
+    monkeypatch.setenv("NOVEL_TEMPERATURE", "0.9")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "private-openrouter-key")
+    monkeypatch.setattr("nousetsu.cli.web_server.get_scraper_info", lambda: (True, "scraper", "python"))
+    captured = {}
+
+    class FakeBridge:
+        def is_available(self):
+            return True
+
+        async def inspect_url(self, url, env=None):
+            captured["url"] = url
+            captured["env"] = env
+            return ScraperInspectResponse(success=True, url=url)
+
+    monkeypatch.setattr("nousetsu.cli.web_server.NovelScraperBridge", FakeBridge)
+    client = TestClient(create_app())
+    project_path = str(repo.root_dir)
+
+    check = client.get(f"/api/scraper/check?project_path={project_path}")
+    inspect = client.post(
+        "/api/scraper/inspect",
+        json={"url": "https://example.com/novel/", "project_path": project_path},
+    )
+
+    assert check.status_code == 200
+    assert check.json()["llm_model"] == "openrouter:anthropic/claude-sonnet-4"
+    assert check.json()["llm_provider"] == "OpenRouter"
+    assert inspect.status_code == 200
+    assert captured["env"]["NOVEL_TEMPERATURE"] == "0.35"
+    assert captured["env"]["NOVEL_THINKING_LEVEL"] == "high"
+    assert captured["env"]["NOVEL_THINKING_BUDGET"] == "700"
+    assert captured["env"]["NOVEL_USE_INTERACTIONS"] == "0"
+    assert os.environ["NOVEL_TEMPERATURE"] == "0.9"
+    assert "private-openrouter-key" not in inspect.text
+
+
+def test_scraper_subprocess_receives_custom_provider_credentials():
+    config = ProjectConfig(scraper_model="custom:local-model")
+    parent_env = {
+        "CUSTOM_API_KEY": "private-custom-key",
+        "CUSTOM_API_BASE_URL": "http://127.0.0.1:8000/v1",
+    }
+
+    child_env = scraper_subprocess_environment(config, parent_env)
+    route = resolve_scraper_llm_settings(child_env)
+
+    assert route.provider == "Custom OpenAI-compatible"
+    assert child_env["CUSTOM_API_KEY"] == "private-custom-key"
+    assert child_env["CUSTOM_API_BASE_URL"] == "http://127.0.0.1:8000/v1"
+    assert parent_env == {
+        "CUSTOM_API_KEY": "private-custom-key",
+        "CUSTOM_API_BASE_URL": "http://127.0.0.1:8000/v1",
+    }
+
+
+def test_scraper_project_environment_is_resolved_without_mutating_parent():
+    config = ProjectConfig(
+        model_name="openai:gpt-4.1-mini",
+        scraper_model="openrouter:anthropic/claude-sonnet-4",
+        fallback_model="openai:gpt-4.1-nano",
+        generation_settings={
+            "scraper": {
+                "temperature": 0.35,
+                "thinking_level": "high",
+                "thinking_budget": 700,
+                "use_interactions_api": False,
+            }
+        },
+    )
+    parent_env = {
+        "NOVEL_TEMPERATURE": "0.9",
+        "NOVEL_THINKING_LEVEL": "low",
+        "OPENROUTER_API_KEY": "private-key",
+    }
+
+    child_env = scraper_subprocess_environment(config, parent_env)
+    route = resolve_scraper_llm_settings(child_env)
+
+    assert child_env["NOVEL_SCRAPER_MODEL"] == "openrouter:anthropic/claude-sonnet-4"
+    assert child_env["NOVEL_FALLBACK_MODEL"] == "openai:gpt-4.1-nano"
+    assert child_env["NOVEL_TEMPERATURE"] == "0.35"
+    assert child_env["NOVEL_THINKING_LEVEL"] == "high"
+    assert child_env["NOVEL_THINKING_BUDGET"] == "700"
+    assert child_env["NOVEL_USE_INTERACTIONS"] == "0"
+    assert route.model == "openrouter:anthropic/claude-sonnet-4"
+    assert route.provider == "OpenRouter"
+    assert parent_env == {
+        "NOVEL_TEMPERATURE": "0.9",
+        "NOVEL_THINKING_LEVEL": "low",
+        "OPENROUTER_API_KEY": "private-key",
+    }
 
 
 def test_scraper_check_api_endpoint(monkeypatch):

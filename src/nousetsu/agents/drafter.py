@@ -7,6 +7,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from nousetsu.agents.llm import extract_text_from_message, extract_usage_from_message, get_llm
 from nousetsu.graph.procedural import ProceduralGraph, get_default_drafter_graph
 from nousetsu.models.bible import CharacterProfile, ChapterSummary, GlossaryItem, NovelBible
+from nousetsu.models.config import resolve_agent_generation_settings
 from nousetsu.models.metadata import SubdividedBlock, TokenUsage
 from nousetsu.models.trace import PipelineStage
 from nousetsu.prompts.character_formatter import format_character_roster
@@ -40,35 +41,19 @@ class ContextAwareDrafterAgent:
         subdivision_max_depth: int = 4,
         thinking_level: Optional[str] = None,
         thinking_budget: Optional[int] = None,
+        use_interactions_api: Optional[bool] = None,
     ):
         self.model_name = model_name
         self.fallback_model = fallback_model
-
-        drafter_thinking_level = (
-            thinking_level
-            or os.environ.get("NOVEL_DRAFTER_THINKING_LEVEL")
-            or os.environ.get("NOVEL_THINKING_LEVEL")
-        )
-        drafter_thinking_budget = None
-        if thinking_budget is not None:
-            drafter_thinking_budget = thinking_budget
-        elif os.environ.get("NOVEL_DRAFTER_THINKING_BUDGET"):
-            try:
-                drafter_thinking_budget = int(os.environ["NOVEL_DRAFTER_THINKING_BUDGET"])
-            except ValueError:
-                pass
-        elif os.environ.get("NOVEL_THINKING_BUDGET"):
-            try:
-                drafter_thinking_budget = int(os.environ["NOVEL_THINKING_BUDGET"])
-            except ValueError:
-                pass
+        generation = resolve_agent_generation_settings("drafter")
 
         self.llm = get_llm(
             model_name=model_name,
             fallback_model=fallback_model,
-            temperature=temperature,
-            thinking_level=drafter_thinking_level,
-            thinking_budget=drafter_thinking_budget,
+            temperature=temperature if temperature is not None else generation["temperature"],
+            use_interactions=(use_interactions_api if use_interactions_api is not None else generation["use_interactions_api"]),
+            thinking_level=thinking_level if thinking_level is not None else generation["thinking_level"],
+            thinking_budget=thinking_budget if thinking_budget is not None else generation["thinking_budget"],
         )
         self.last_usage: TokenUsage = TokenUsage()
         self.procedural_graph = procedural_graph or get_default_drafter_graph()

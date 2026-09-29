@@ -45,6 +45,17 @@ def test_bare_openai_model_uses_openrouter_when_it_is_the_available_provider(mon
     assert settings.provider == "OpenRouter"
 
 
+def test_custom_provider_route_is_reported_as_configured_for_scraper(monkeypatch):
+    monkeypatch.setenv("NOVEL_SCRAPER_MODEL", "custom:local-model")
+    monkeypatch.setenv("CUSTOM_API_KEY", "custom-test-key")
+    monkeypatch.setenv("CUSTOM_API_BASE_URL", "https://custom.example/v1")
+
+    settings = resolve_scraper_llm_settings()
+
+    assert settings.model == "custom:local-model"
+    assert settings.provider == "Custom OpenAI-compatible"
+
+
 def test_scraper_model_route_uses_safe_defaults(monkeypatch):
     monkeypatch.delenv("NOVEL_SCRAPER_MODEL", raising=False)
     monkeypatch.delenv("NOVEL_MODEL", raising=False)

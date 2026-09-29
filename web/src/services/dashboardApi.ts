@@ -18,6 +18,8 @@ import {
   EbookExportOptions,
   EbookPreviewResult,
   MachineEnvironment,
+  ModelCatalogResult,
+  ModelProvider,
   UpdateCheckResult,
 } from '../types/dashboard';
 
@@ -185,6 +187,15 @@ export async function fetchSettings(projectPath?: string): Promise<ProjectSettin
   }
 }
 
+export async function fetchModelCatalog(provider: ModelProvider): Promise<ModelCatalogResult> {
+  const params = new URLSearchParams({ provider });
+  const res = await fetch(`${API_BASE}/api/model-catalog?${params.toString()}`);
+  if (!res.ok) {
+    throw new Error(`Could not load ${provider} model catalog (HTTP ${res.status}).`);
+  }
+  return (await res.json()) as ModelCatalogResult;
+}
+
 export async function fetchMachineEnvironment(): Promise<MachineEnvironment | null> {
   try {
     const res = await fetch(`${API_BASE}/api/environment`);
@@ -335,9 +346,12 @@ export async function uploadChapters(params: {
   return data as UploadChaptersResult;
 }
 
-export async function checkScraperAvailability(): Promise<ScraperCheckResult> {
+export async function checkScraperAvailability(projectPath?: string): Promise<ScraperCheckResult> {
   try {
-    const res = await fetch(`${API_BASE}/api/scraper/check`);
+    const params = new URLSearchParams();
+    if (projectPath) params.set('project_path', projectPath);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    const res = await fetch(`${API_BASE}/api/scraper/check${qs}`);
     if (!res.ok) return { available: false, scraper_dir: null, python_exe: null };
     return (await res.json()) as ScraperCheckResult;
   } catch (e) {
@@ -345,11 +359,11 @@ export async function checkScraperAvailability(): Promise<ScraperCheckResult> {
   }
 }
 
-export async function inspectScraperUrl(url: string): Promise<ScraperInspectResult> {
+export async function inspectScraperUrl(url: string, projectPath?: string): Promise<ScraperInspectResult> {
   const res = await fetch(`${API_BASE}/api/scraper/inspect`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url }),
+    body: JSON.stringify({ url, project_path: projectPath }),
   });
   const data = await res.json();
   if (!res.ok) {

@@ -42,6 +42,7 @@ from nousetsu.scraper import (
     ScraperStatusResponse,
     get_scraper_info,
     resolve_scraper_llm_settings,
+    scraper_subprocess_environment,
 )
 
 from nousetsu.batch.runner import BatchRunner
@@ -59,6 +60,7 @@ from nousetsu.storage.repository import (
 )
 from nousetsu.utils.env import load_env, get_env_snapshot, get_env_settings, save_env_settings
 from nousetsu.utils.language import detect_language
+from nousetsu.utils.model_catalog import fetch_model_catalog
 
 # Ensure environment variables from central .env are loaded into web server process
 load_env()
@@ -873,6 +875,7 @@ async def _run_scraper_task(
     target_folder_name: str,
     task_id: str,
     event_bus: SSEEventBus,
+    subprocess_env: Optional[Dict[str, str]] = None,
 ) -> None:
     """Run scraper extraction in background, reporting progress and invalidating chapter caches."""
     def on_progress(status: ScraperStatusResponse) -> None:
@@ -895,6 +898,7 @@ async def _run_scraper_task(
             dest_dir=dest_dir,
             on_progress=on_progress,
             task_id=task_id,
+            env=subprocess_env,
         )
         _ACTIVE_SCRAPER_JOBS[task_id] = final_status
 
@@ -1423,10 +1427,15 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
     # ------------------------------------------------------------------------
 
     @app.get("/api/scraper/check")
-    async def scraper_check() -> Dict[str, Any]:
+    async def scraper_check(project_path: Optional[str] = Query(None)) -> Dict[str, Any]:
         """Check scraper availability and report its effective non-secret LLM route."""
         available, s_dir, py_exe = get_scraper_info()
-        llm_settings = resolve_scraper_llm_settings()
+        if project_path:
+            cfg = _resolve_repo(project_path).load_config()
+            route_env = scraper_subprocess_environment(cfg)
+            llm_settings = resolve_scraper_llm_settings(route_env)
+        else:
+            llm_settings = resolve_scraper_llm_settings()
         return {
             "available": available,
             "scraper_dir": s_dir,
@@ -1449,7 +1458,12 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
                 status_code=503,
                 detail="Novel-Scraper is not configured or unavailable. Please initialize git submodule in modules/novel_scraper.",
             )
-        res = await bridge.inspect_url(url)
+        if body.project_path:
+            cfg = _resolve_repo(body.project_path).load_config()
+            subprocess_env = scraper_subprocess_environment(cfg)
+        else:
+            subprocess_env = dict(os.environ)
+        res = await bridge.inspect_url(url, env=subprocess_env)
         return res.model_dump()
 
     @app.post("/api/scraper/extract")
@@ -1468,6 +1482,7 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
 
         repo = _resolve_repo(body.project_path)
         cfg = repo.load_config()
+        subprocess_env = scraper_subprocess_environment(cfg)
         raw_dir_name = cfg.raw_dir or "raw_chapters"
 
         folder = body.folder
@@ -1506,6 +1521,7 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
                 target_folder_name=target_folder_name,
                 task_id=task_id,
                 event_bus=event_bus,
+                subprocess_env=subprocess_env,
             )
         )
 
@@ -1843,6 +1859,35 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
     # Machine Environment and Desktop Updates
     # ------------------------------------------------------------------------
 
+    @app.get("/api/model-catalog")
+    async def get_model_catalog(request: Request, provider: str = Query(...)) -> Dict[str, Any]:
+        _require_local_settings_origin(request)
+        load_env()
+        provider = provider.casefold()
+        api_key = {
+            "gemini": os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"),
+            "openai": os.environ.get("OPENAI_API_KEY"),
+            "openrouter": os.environ.get("OPENROUTER_API_KEY"),
+            "custom": os.environ.get("CUSTOM_API_KEY"),
+        }.get(provider)
+        base_url = os.environ.get("CUSTOM_API_BASE_URL", "").strip()
+        if provider not in {"gemini", "openai", "openrouter", "custom"}:
+            raise HTTPException(status_code=400, detail="Unsupported model catalog provider.")
+        if not api_key or (provider == "custom" and not base_url):
+            return {"provider": provider, "configured": False, "models": []}
+        try:
+            if provider == "custom":
+                models = await asyncio.to_thread(
+                    fetch_model_catalog, provider, api_key, base_url
+                )
+            else:
+                models = await asyncio.to_thread(fetch_model_catalog, provider, api_key)
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail="Invalid custom provider base URL.") from error
+        except RuntimeError as error:
+            raise HTTPException(status_code=502, detail="Unable to retrieve model catalog.") from error
+        return {"provider": provider, "configured": True, "models": models}
+
     @app.get("/api/environment")
     async def get_machine_environment(request: Request) -> Dict[str, Any]:
         _require_local_settings_origin(request)
@@ -1925,8 +1970,13 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
         effective_critic = cfg.get_agent_model("critic")
         effective_polisher = cfg.get_agent_model("polisher")
         effective_chronicler = cfg.get_agent_model("chronicler")
+        effective_scraper = cfg.get_agent_model("scraper")
         effective_primary = cfg.get_model_name()
         effective_fallback = cfg.get_fallback_model()
+        effective_generation_settings = {
+            role: cfg.get_agent_generation_settings(role)
+            for role in ("extractor", "drafter", "critic", "polisher", "chronicler", "scraper")
+        }
 
         env_default_model = os.environ.get("NOVEL_MODEL") or os.environ.get("DEFAULT_MODEL") or "gemini-3.1-flash-lite"
         env_fallback_model = os.environ.get("NOVEL_FALLBACK_MODEL") or "gemini-3.5-flash-lite"
@@ -1935,6 +1985,7 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
         env_critic = os.environ.get("NOVEL_CRITIC_MODEL") or "gemma-4-26b-a4b-it"
         env_polisher = os.environ.get("NOVEL_POLISHER_MODEL") or env_default_model
         env_chronicler = os.environ.get("NOVEL_CHRONICLER_MODEL") or "gemma-4-26b-a4b-it"
+        env_scraper = os.environ.get("NOVEL_SCRAPER_MODEL") or env_default_model
 
         env_presets = {
             "model_name": env_default_model,
@@ -1944,6 +1995,7 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
             "critic_model": env_critic,
             "polisher_model": env_polisher,
             "chronicler_model": env_chronicler,
+            "scraper_model": env_scraper,
         }
 
         available_presets = [
@@ -2034,6 +2086,12 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
             "critic_model": cfg.critic_model or "",
             "polisher_model": cfg.polisher_model or "",
             "chronicler_model": cfg.chronicler_model or "",
+            "scraper_model": cfg.scraper_model or "",
+            "generation_settings": {
+                role: settings.model_dump(exclude_unset=True)
+                for role, settings in cfg.generation_settings.items()
+            },
+            "effective_generation_settings": effective_generation_settings,
             "effective_model_name": effective_primary,
             "effective_fallback_model": effective_fallback,
             "effective_extractor_model": effective_extractor,
@@ -2041,6 +2099,7 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
             "effective_critic_model": effective_critic,
             "effective_polisher_model": effective_polisher,
             "effective_chronicler_model": effective_chronicler,
+            "effective_scraper_model": effective_scraper,
             "env_presets": env_presets,
             "available_presets": available_presets,
             "model_catalog": model_catalog,
@@ -2110,10 +2169,24 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
                 val = str(src["fallback_model"]).strip() if src["fallback_model"] is not None else ""
                 cfg.fallback_model = val if val else None
 
-            for m_field in ("extractor_model", "drafter_model", "critic_model", "polisher_model", "chronicler_model"):
+            for m_field in ("extractor_model", "drafter_model", "critic_model", "polisher_model", "chronicler_model", "scraper_model"):
                 if m_field in src:
                     val = str(src[m_field]).strip() if src[m_field] is not None else ""
                     setattr(cfg, m_field, val if val else None)
+
+            if "generation_settings" in src:
+                from nousetsu.models.config import AgentGenerationSettings, GENERATION_ROLES
+
+                raw_settings = src["generation_settings"]
+                if not isinstance(raw_settings, dict) or set(raw_settings) - set(GENERATION_ROLES):
+                    raise ValueError("Invalid generation settings roles.")
+                cfg.generation_settings = {
+                    role: AgentGenerationSettings.model_validate(values)
+                    for role, values in raw_settings.items()
+                    if isinstance(values, dict)
+                }
+                if any(not isinstance(values, dict) for values in raw_settings.values()):
+                    raise ValueError("Invalid generation settings value.")
 
             if "use_interactions_api" in src and src["use_interactions_api"] is not None:
                 cfg.use_interactions_api = bool(src["use_interactions_api"])

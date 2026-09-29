@@ -12,6 +12,7 @@ from nousetsu.agents.llm import extract_text_from_message, extract_usage_from_me
 from nousetsu.graph.procedural import ProceduralGraph, get_default_chronicler_graph
 from nousetsu.models.bible import ChapterSummary, CharacterProfile, GlossaryItem, NovelBible
 from nousetsu.models.schemas import ChroniclerResult
+from nousetsu.models.config import resolve_agent_generation_settings
 from nousetsu.models.metadata import (
     ChapterMetadata,
     CheckpointData,
@@ -43,35 +44,20 @@ class ChroniclerAgent:
         procedural_graph: Optional[ProceduralGraph] = None,
         thinking_level: Optional[str] = None,
         thinking_budget: Optional[int] = None,
+        temperature: Optional[float] = None,
+        use_interactions_api: Optional[bool] = None,
     ):
         self.model_name = model_name
         self.fallback_model = fallback_model
-
-        chronicler_thinking_level = (
-            thinking_level
-            or os.environ.get("NOVEL_CHRONICLER_THINKING_LEVEL")
-            or os.environ.get("NOVEL_THINKING_LEVEL")
-        )
-        chronicler_thinking_budget = None
-        if thinking_budget is not None:
-            chronicler_thinking_budget = thinking_budget
-        elif os.environ.get("NOVEL_CHRONICLER_THINKING_BUDGET"):
-            try:
-                chronicler_thinking_budget = int(os.environ["NOVEL_CHRONICLER_THINKING_BUDGET"])
-            except ValueError:
-                pass
-        elif os.environ.get("NOVEL_THINKING_BUDGET"):
-            try:
-                chronicler_thinking_budget = int(os.environ["NOVEL_THINKING_BUDGET"])
-            except ValueError:
-                pass
+        generation = resolve_agent_generation_settings("chronicler")
 
         self.llm = get_llm(
             model_name=model_name,
             fallback_model=fallback_model,
-            temperature=0.2,
-            thinking_level=chronicler_thinking_level,
-            thinking_budget=chronicler_thinking_budget,
+            temperature=temperature if temperature is not None else generation["temperature"],
+            use_interactions=(use_interactions_api if use_interactions_api is not None else generation["use_interactions_api"]),
+            thinking_level=thinking_level if thinking_level is not None else generation["thinking_level"],
+            thinking_budget=thinking_budget if thinking_budget is not None else generation["thinking_budget"],
         )
         self.last_usage: TokenUsage = TokenUsage()
         self.procedural_graph = procedural_graph or get_default_chronicler_graph()

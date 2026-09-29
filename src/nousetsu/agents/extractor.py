@@ -11,6 +11,7 @@ from nousetsu.graph.procedural import ProceduralGraph, get_default_extractor_gra
 from nousetsu.models.bible import CharacterProfile, GlossaryItem, NovelBible
 from nousetsu.models.metadata import PipelineStage, TokenUsage
 from nousetsu.models.schemas import ExtractorResult
+from nousetsu.models.config import resolve_agent_generation_settings
 from nousetsu.prompts.character_formatter import format_character_roster
 from nousetsu.prompts.templates import EXTRACTION_SYSTEM_PROMPT
 from nousetsu.skills.registry import SkillRegistry
@@ -41,35 +42,20 @@ class EntityExtractorAgent:
         enable_entity_filtering: bool = True,
         thinking_level: Optional[str] = None,
         thinking_budget: Optional[int] = None,
+        temperature: Optional[float] = None,
+        use_interactions_api: Optional[bool] = None,
     ):
         self.model_name = model_name
         self.fallback_model = fallback_model
-
-        extractor_thinking_level = (
-            thinking_level
-            or os.environ.get("NOVEL_EXTRACTOR_THINKING_LEVEL")
-            or os.environ.get("NOVEL_THINKING_LEVEL")
-        )
-        extractor_thinking_budget = None
-        if thinking_budget is not None:
-            extractor_thinking_budget = thinking_budget
-        elif os.environ.get("NOVEL_EXTRACTOR_THINKING_BUDGET"):
-            try:
-                extractor_thinking_budget = int(os.environ["NOVEL_EXTRACTOR_THINKING_BUDGET"])
-            except ValueError:
-                pass
-        elif os.environ.get("NOVEL_THINKING_BUDGET"):
-            try:
-                extractor_thinking_budget = int(os.environ["NOVEL_THINKING_BUDGET"])
-            except ValueError:
-                pass
+        generation = resolve_agent_generation_settings("extractor")
 
         self.llm = get_llm(
             model_name=model_name,
             fallback_model=fallback_model,
-            temperature=0.1,
-            thinking_level=extractor_thinking_level,
-            thinking_budget=extractor_thinking_budget,
+            temperature=temperature if temperature is not None else generation["temperature"],
+            use_interactions=(use_interactions_api if use_interactions_api is not None else generation["use_interactions_api"]),
+            thinking_level=thinking_level if thinking_level is not None else generation["thinking_level"],
+            thinking_budget=thinking_budget if thinking_budget is not None else generation["thinking_budget"],
         )
         self.last_usage: TokenUsage = TokenUsage()
         self.procedural_graph = procedural_graph or get_default_extractor_graph()

@@ -56,9 +56,7 @@ class BatchRunner:
         cfg = self.repo.load_config()
 
         # Resolve primary model
-        env_model = os.environ.get("NOVEL_MODEL") or os.environ.get("DEFAULT_MODEL")
-        cfg_model = getattr(cfg, "model_name", None)
-        resolved_model = model_name or cfg_model or env_model or "gemini-3.1-flash-lite"
+        resolved_model = model_name or cfg.get_model_name()
         self.model_name = resolved_model
 
         # If primary model is a mock/test model, propagate to all agents unless caller explicitly specified otherwise
@@ -66,53 +64,16 @@ class BatchRunner:
         default_agent_model = resolved_model if is_mock else None
 
         # Resolve fallback and per-agent models
-        resolved_fallback = (
-            fallback_model
-            or default_agent_model
-            or getattr(cfg, "fallback_model", None)
-            or os.environ.get("NOVEL_FALLBACK_MODEL")
-            or "gemini-3.5-flash-lite"
-        )
-        resolved_extractor = (
-            extractor_model
-            or default_agent_model
-            or getattr(cfg, "extractor_model", None)
-            or os.environ.get("NOVEL_EXTRACTOR_MODEL")
-            or cfg_model
-            or resolved_model
-        )
-        resolved_drafter = (
-            drafter_model
-            or default_agent_model
-            or getattr(cfg, "drafter_model", None)
-            or os.environ.get("NOVEL_DRAFTER_MODEL")
-            or cfg_model
-            or resolved_model
-        )
-        resolved_critic = (
-            critic_model
-            or default_agent_model
-            or getattr(cfg, "critic_model", None)
-            or os.environ.get("NOVEL_CRITIC_MODEL")
-            or cfg_model
-            or "gemma-4-26b-a4b-it"
-        )
-        resolved_polisher = (
-            polisher_model
-            or default_agent_model
-            or getattr(cfg, "polisher_model", None)
-            or os.environ.get("NOVEL_POLISHER_MODEL")
-            or cfg_model
-            or resolved_model
-        )
-        resolved_chronicler = (
-            chronicler_model
-            or default_agent_model
-            or getattr(cfg, "chronicler_model", None)
-            or os.environ.get("NOVEL_CHRONICLER_MODEL")
-            or cfg_model
-            or "gemma-4-26b-a4b-it"
-        )
+        resolved_fallback = fallback_model or default_agent_model or cfg.get_fallback_model()
+        resolved_extractor = extractor_model or default_agent_model or cfg.get_agent_model("extractor")
+        resolved_drafter = drafter_model or default_agent_model or cfg.get_agent_model("drafter")
+        resolved_critic = critic_model or default_agent_model or cfg.get_agent_model("critic")
+        resolved_polisher = polisher_model or default_agent_model or cfg.get_agent_model("polisher")
+        resolved_chronicler = chronicler_model or default_agent_model or cfg.get_agent_model("chronicler")
+        resolved_generation = {
+            role: cfg.get_agent_generation_settings(role)
+            for role in ("extractor", "drafter", "critic", "polisher", "chronicler")
+        }
 
         self.fallback_model = resolved_fallback
         self.extractor_model = resolved_extractor
@@ -205,7 +166,8 @@ class BatchRunner:
             chronicler_pg=self.repo.load_procedural_graph("chronicler"),
             enable_patch_polishing=getattr(cfg, "enable_patch_polishing", True),
             filter_extractor_entities=resolved_filter_extractor,
-            enable_post_polish_reconciliation=resolved_reconcile
+            enable_post_polish_reconciliation=resolved_reconcile,
+            generation_settings=resolved_generation,
         )
         self.rag_engine = self.workflow.rag_engine
         self.auto_update_bible = auto_update_bible if auto_update_bible is not None else cfg.auto_update_bible
