@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { check, type Update } from '@tauri-apps/plugin-updater';
+import { relaunch } from '@tauri-apps/plugin-process';
 import {
   Settings,
   Cpu,
@@ -454,6 +455,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           setUpdateProgress(100);
         }
       });
+      await relaunch();
     } catch (error) {
       setUpdateError(getErrorMessage(error, 'Could not install the update.'));
       setInstallingUpdate(false);
@@ -1898,7 +1900,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                           className="btn-primary text-xs inline-flex items-center gap-1.5 disabled:opacity-50"
                         >
                           <DownloadCloud className="w-3.5 h-3.5" />
-                          {installingUpdate ? 'Installing update...' : 'Download & Install'}
+                          {installingUpdate ? 'Installing update...' : 'Install Update'}
                         </button>
                       )}
                       {updateInfo.update_available && !isTauriDesktop() && (

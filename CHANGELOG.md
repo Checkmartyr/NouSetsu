@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.7] - 2026-09-29
+
+### Added
+- Add an explicit desktop update installation action and relaunch the app after installation.
+
 ## [0.4.6] - 2026-09-29
 
 ### Changed
