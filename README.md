@@ -309,7 +309,7 @@ Each pipeline agent can be routed to an independent model tailored to its cognit
 - **OpenAI**: use a model such as `gpt-4o` with `OPENAI_API_KEY`; `openai:gpt-4o` explicitly selects OpenAI.
 - **OpenRouter**: use an OpenRouter model ID such as `anthropic/claude-3.7-sonnet` with `OPENROUTER_API_KEY`, or prefix it as `openrouter:anthropic/claude-3.7-sonnet`. A bare OpenAI model name can also use OpenRouter when only `OPENROUTER_API_KEY` is configured.
 
-For example, set `NOVEL_MODEL` or an agent-specific `NOVEL_*_MODEL` to the desired model ID. When OpenAI and OpenRouter keys are both present, bare `gpt-*`/`o1`/`o3`/`o4` model names use OpenAI, while slash-form model IDs use OpenRouter.
+For example, set `NOVEL_MODEL` or an agent-specific `NOVEL_*_MODEL` to the desired model ID. When OpenAI and OpenRouter keys are both present, bare `gpt-*`/`o1`/`o3`/`o4` model names use OpenAI, while slash-form model IDs use OpenRouter. The Novel-Scraper sidecar uses the same provider API keys and `NOVEL_FALLBACK_MODEL`; set `NOVEL_SCRAPER_MODEL` for a scraper-only route, or leave it blank to inherit `NOVEL_MODEL`.
 
 | Agent Stage | Environment Variable | Default Model | Cognitive Responsibility |
 | :--- | :--- | :--- | :--- |
@@ -319,6 +319,7 @@ For example, set `NOVEL_MODEL` or an agent-specific `NOVEL_*_MODEL` to the desir
 | **Stage 4: Polishing Agent** | `NOVEL_POLISHER_MODEL` | `gemini-3.1-flash-lite` | Diff/patch cadence refinement, translationese purging |
 | **Stage 5: Chronicler Agent** | `NOVEL_CHRONICLER_MODEL` | `gemini-3.5-flash-lite` | 3-tier story arc memory, state shifts, term reconciliation |
 | **Global Primary Fallback** | `NOVEL_MODEL` / `DEFAULT_MODEL` | `gemini-3.1-flash-lite` | Default model when stage is not specialized |
+| **Novel Scraper** | `NOVEL_SCRAPER_MODEL` | Inherits `NOVEL_MODEL` | Optional scraper-specific route; uses shared provider keys and global fallback |
 | **Automated 429 Failover** | `NOVEL_FALLBACK_MODEL` | `gemini-3.5-flash-lite` | Activated automatically upon HTTP 429 quota exhaustion |
 
 #### Step 4: Execution, Rate Limiting & Reasoning Tuning

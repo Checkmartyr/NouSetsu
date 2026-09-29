@@ -1,12 +1,20 @@
 """Standalone backend entry point used by the NouSetsu Tauri desktop app."""
 
 import argparse
+import json
 import os
 import shutil
 import sys
 from importlib import import_module
 from typing import Any
 from pathlib import Path
+
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
 
 
 def _frontend_dist() -> Path:
@@ -53,6 +61,25 @@ def _run_scraper_worker(args: list[str]) -> None:
     scraper_config.OBSCURA_BIN_PATH = ""
 
     operation, *operation_args = args
+    if operation == "provider-info":
+        from src.agent.llm import LLMClient
+        from nousetsu.scraper.llm_config import resolve_scraper_llm_settings
+
+        llm_client = LLMClient()
+        settings = resolve_scraper_llm_settings()
+        print(
+            json.dumps(
+                {
+                    "model": llm_client.model,
+                    "provider": settings.provider,
+                    "fallback_model": settings.fallback_model,
+                    "fallback_provider": settings.fallback_provider,
+                    "available": llm_client.is_available,
+                }
+            )
+        )
+        return
+
     if operation == "romanize":
         if len(operation_args) != 1:
             raise SystemExit("Usage: nousetsu-backend --scraper-worker romanize <title>")

@@ -41,6 +41,7 @@ from nousetsu.scraper import (
     ScraperInspectResponse,
     ScraperStatusResponse,
     get_scraper_info,
+    resolve_scraper_llm_settings,
 )
 
 from nousetsu.batch.runner import BatchRunner
@@ -1423,12 +1424,17 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
 
     @app.get("/api/scraper/check")
     async def scraper_check() -> Dict[str, Any]:
-        """Check if Novel-Scraper environment is detected and ready."""
+        """Check scraper availability and report its effective non-secret LLM route."""
         available, s_dir, py_exe = get_scraper_info()
+        llm_settings = resolve_scraper_llm_settings()
         return {
             "available": available,
             "scraper_dir": s_dir,
             "python_exe": py_exe,
+            "llm_model": llm_settings.model,
+            "llm_provider": llm_settings.provider,
+            "llm_fallback_model": llm_settings.fallback_model,
+            "llm_fallback_provider": llm_settings.fallback_provider,
         }
 
     @app.post("/api/scraper/inspect")

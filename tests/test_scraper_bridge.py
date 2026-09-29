@@ -247,8 +247,12 @@ def test_scraper_models_serialization():
     assert status.progress_percent == 50.0
 
 
-def test_scraper_check_api_endpoint():
-    """Test the /api/scraper/check endpoint in FastAPI app."""
+def test_scraper_check_api_endpoint(monkeypatch):
+    """Report the effective model route without exposing provider credentials."""
+    monkeypatch.setenv("NOVEL_SCRAPER_MODEL", "openrouter:anthropic/claude-3.7-sonnet")
+    monkeypatch.setenv("NOVEL_FALLBACK_MODEL", "openai:gpt-4.1-mini")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-openrouter-key")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
     app = create_app()
     client = TestClient(app)
 
@@ -258,6 +262,11 @@ def test_scraper_check_api_endpoint():
     assert data["available"] is True
     assert "novel_scraper" in data["scraper_dir"]
     assert "python" in data["python_exe"].lower()
+    assert data["llm_model"] == "openrouter:anthropic/claude-3.7-sonnet"
+    assert data["llm_provider"] == "OpenRouter"
+    assert data["llm_fallback_model"] == "openai:gpt-4.1-mini"
+    assert data["llm_fallback_provider"] == "OpenAI"
+    assert "OPENROUTER_API_KEY" not in response.text
 
 
 def test_scraper_status_not_found():

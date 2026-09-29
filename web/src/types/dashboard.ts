@@ -255,6 +255,10 @@ export interface ScraperCheckResult {
   available: boolean;
   scraper_dir: string | null;
   python_exe: string | null;
+  llm_model?: string;
+  llm_provider?: string;
+  llm_fallback_model?: string;
+  llm_fallback_provider?: string;
 }
 
 export interface ScraperChapterPreview {

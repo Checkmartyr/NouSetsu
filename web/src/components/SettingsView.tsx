@@ -94,7 +94,7 @@ const GLOBAL_ENV_GROUPS: Record<string, GlobalEnvGroup> = {
     title: 'Shared Model Defaults',
     description: 'Fallbacks and generation options inherited by agents unless overridden below.',
     keys: [
-      'DEFAULT_MODEL', 'NOVEL_MODEL', 'NOVEL_FALLBACK_MODEL',
+      'DEFAULT_MODEL', 'NOVEL_MODEL', 'NOVEL_FALLBACK_MODEL', 'NOVEL_SCRAPER_MODEL',
       'NOVEL_THINKING_LEVEL', 'NOVEL_THINKING_BUDGET',
       'NOVEL_TEMPERATURE', 'NOVEL_USE_INTERACTIONS',
     ],
@@ -150,6 +150,7 @@ const GLOBAL_ENV_LABELS: Record<string, string> = {
   DEFAULT_MODEL: 'Default model',
   NOVEL_MODEL: 'Primary model',
   NOVEL_FALLBACK_MODEL: 'Fallback model',
+  NOVEL_SCRAPER_MODEL: 'Novel scraper model (blank inherits primary)',
   NOVEL_THINKING_LEVEL: 'Default thinking level',
   NOVEL_THINKING_BUDGET: 'Default thinking budget',
   NOVEL_TEMPERATURE: 'Generation temperature',

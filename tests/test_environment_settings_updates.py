@@ -55,12 +55,16 @@ def test_environment_endpoint_saves_allowlisted_values_without_returning_secrets
     assert initial.status_code == 200
     assert "OPENAI_API_KEY" not in initial.json()["values"]
     assert initial.json()["api_key_status"]["OPENAI_API_KEY"] is True
+    assert "NOVEL_SCRAPER_MODEL" in initial.json()["values"]
     assert "old-secret" not in initial.text
 
     response = client.put(
         "/api/environment",
         json={
-            "values": {"NOVEL_MODEL": "gemini-test-model"},
+            "values": {
+                "NOVEL_MODEL": "gemini-test-model",
+                "NOVEL_SCRAPER_MODEL": "openrouter:anthropic/claude-3.7-sonnet",
+            },
             "api_keys": {"OPENAI_API_KEY": "replacement-secret"},
             "clear_api_keys": ["GEMINI_API_KEY"],
         },
@@ -71,6 +75,9 @@ def test_environment_endpoint_saves_allowlisted_values_without_returning_secrets
 
     saved = dotenv_values(env_path)
     assert saved["NOVEL_MODEL"] == "gemini-test-model"
+    assert saved["NOVEL_SCRAPER_MODEL"] == "openrouter:anthropic/claude-3.7-sonnet"
+    assert os.environ["NOVEL_SCRAPER_MODEL"] == "openrouter:anthropic/claude-3.7-sonnet"
+    assert response.json()["values"]["NOVEL_SCRAPER_MODEL"] == "openrouter:anthropic/claude-3.7-sonnet"
     assert saved["OPENAI_API_KEY"] == "replacement-secret"
     assert saved["UNRELATED_SETTING"] == "preserve-me"
     assert "# Keep this comment" in env_path.read_text(encoding="utf-8")

@@ -67,6 +67,12 @@ export const UploadModal: React.FC<UploadModalProps> = ({
   // URL Scraper state
   const [scraperUrl, setScraperUrl] = useState<string>('');
   const [scraperAvailable, setScraperAvailable] = useState<boolean | null>(null);
+  const [scraperRoute, setScraperRoute] = useState<{
+    model: string;
+    provider: string;
+    fallback?: string;
+    fallbackProvider?: string;
+  } | null>(null);
   const [isInspecting, setIsInspecting] = useState(false);
   const [inspectResult, setInspectResult] = useState<ScraperInspectResult | null>(null);
   const [selectionMode, setSelectionMode] = useState<'all' | 'range' | 'custom'>('all');
@@ -104,6 +110,12 @@ export const UploadModal: React.FC<UploadModalProps> = ({
       });
       checkScraperAvailability().then((res) => {
         setScraperAvailable(res.available);
+        setScraperRoute(res.llm_model ? {
+          model: res.llm_model,
+          provider: res.llm_provider || 'LLM',
+          fallback: res.llm_fallback_model,
+          fallbackProvider: res.llm_fallback_provider,
+        } : null);
       });
       setSelectedFiles([]);
       setCustomFolderName('');
@@ -866,6 +878,14 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                   )}
                 </button>
               </div>
+              {scraperRoute && (
+                <p className="text-[10px] text-[#857d75] font-mono">
+                  LLM route: {scraperRoute.provider} · {scraperRoute.model}
+                  {scraperRoute.fallback
+                    ? ` · fallback ${scraperRoute.fallbackProvider || 'LLM'} ${scraperRoute.fallback}`
+                    : ''}
+                </p>
+              )}
             </div>
 
             {/* Discovered Novel Preview Card */}

@@ -70,8 +70,32 @@ def _smoke_test_scraper_worker(backend: Path) -> None:
     with tempfile.TemporaryDirectory(prefix="nousetsu-scraper-smoke-") as data_dir:
         environment = os.environ.copy()
         environment["NOUSETSU_APP_DATA_DIR"] = data_dir
+        environment["NOUSETSU_ENV_FILE"] = str(Path(data_dir) / "settings.env")
+        environment["PYTHON_DOTENV_DISABLED"] = "1"
+        for key in (
+            "DEFAULT_MODEL",
+            "NOVEL_MODEL",
+            "NOVEL_SCRAPER_MODEL",
+            "NOVEL_FALLBACK_MODEL",
+            "GEMINI_API_KEY",
+            "GOOGLE_API_KEY",
+            "OPENAI_API_KEY",
+            "OPENROUTER_API_KEY",
+        ):
+            environment.pop(key, None)
+        environment["NOVEL_SCRAPER_MODEL"] = "openrouter:smoke-test-model"
+        environment["NOVEL_FALLBACK_MODEL"] = "openai:smoke-fallback-model"
         process = subprocess.run(
             [str(backend), "--scraper-worker", "inspect", "--help"],
+            cwd=data_dir,
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=120,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        provider_process = subprocess.run(
+            [str(backend), "--scraper-worker", "provider-info"],
             cwd=data_dir,
             env=environment,
             capture_output=True,
@@ -99,6 +123,27 @@ def _smoke_test_scraper_worker(backend: Path) -> None:
             "Frozen scraper worker did not display the inspect command help:\n"
             f"{process.stdout[-4000:]}"
         )
+    if provider_process.returncode != 0:
+        raise RuntimeError(
+            "Frozen scraper worker could not initialize NouSetsu model routing:\n"
+            f"{provider_process.stdout[-4000:]}\n{provider_process.stderr[-4000:]}"
+        )
+    try:
+        provider_info = json.loads(provider_process.stdout)
+    except json.JSONDecodeError as error:
+        raise RuntimeError(
+            "Frozen scraper worker returned invalid model-routing diagnostics:\n"
+            f"{provider_process.stdout[-4000:]}\n{provider_process.stderr[-4000:]}"
+        ) from error
+    expected_provider_info = {
+        "model": "openrouter:smoke-test-model",
+        "provider": "Unconfigured",
+        "fallback_model": "openai:smoke-fallback-model",
+        "fallback_provider": "Unconfigured",
+        "available": False,
+    }
+    if provider_info != expected_provider_info:
+        raise RuntimeError(f"Frozen scraper worker has unexpected model-routing state: {provider_info}")
     if romanize_process.returncode != 0 or not romanize_process.stdout.strip():
         raise RuntimeError(
             "Frozen scraper worker failed its romanizer smoke test:\n"
