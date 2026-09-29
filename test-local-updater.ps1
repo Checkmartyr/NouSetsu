@@ -37,5 +37,23 @@ New-Item -ItemType Directory -Path $feedDirectory -Force | Out-Null
 Copy-Item -LiteralPath $installer -Destination $feedDirectory -Force
 Copy-Item -LiteralPath $signature -Destination $feedDirectory -Force
 
-Write-Host 'Copied installer and signature into update-feed/.'
-Write-Host "Update latest.json with version $UpdateVersion, the matching signature, and installer URL."
+$manifest = @{
+    version = $UpdateVersion
+    notes = 'Local updater test'
+    pub_date = [DateTime]::UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
+    platforms = @{
+        'windows-x86_64' = @{
+            signature = [System.IO.File]::ReadAllText($signature).Trim()
+            url = "http://127.0.0.1:8765/$([System.IO.Path]::GetFileName($installer))"
+        }
+    }
+}
+$manifestJson = $manifest | ConvertTo-Json -Depth 4
+$manifestPath = Join-Path $feedDirectory 'latest.json'
+[System.IO.File]::WriteAllText(
+    $manifestPath,
+    $manifestJson,
+    [System.Text.UTF8Encoding]::new($false)
+)
+
+Write-Host 'Copied installer and signature and updated update-feed/latest.json.'
