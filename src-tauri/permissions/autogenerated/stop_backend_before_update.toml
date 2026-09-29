@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-stop-backend-before-update"
+description = "Enables the stop_backend_before_update command without any pre-configured scope."
+commands.allow = ["stop_backend_before_update"]
+
+[[permission]]
+identifier = "deny-stop-backend-before-update"
+description = "Denies the stop_backend_before_update command without any pre-configured scope."
+commands.deny = ["stop_backend_before_update"]

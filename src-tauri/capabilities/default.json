@@ -11,6 +11,7 @@
     "core:app:allow-version",
     "shell:allow-open",
     "updater:default",
-    "process:allow-restart"
+    "process:allow-restart",
+    "allow-stop-backend-before-update"
   ]
 }
