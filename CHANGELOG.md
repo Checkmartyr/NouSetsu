@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.9] - 2026-09-29
+
+### Added
+- Support configurable OpenAI-compatible custom providers.
+- Add local signed updater feed generation for Windows testing.
+
+### Fixed
+- Stop the managed backend before installing desktop updates.
+
+### Changed
+- Refresh desktop and Web Studio app branding.
+
 ## [0.4.8] - 2026-09-29
 
 ### Fixed
