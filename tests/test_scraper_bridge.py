@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from nousetsu.cli.web_server import create_app
+import nousetsu.scraper.detector as scraper_detector
 from nousetsu.scraper import (
     NovelScraperBridge,
     ScraperChapterItem,
@@ -19,6 +20,27 @@ from nousetsu.scraper import (
 )
 
 
+def test_frozen_scraper_detector_ignores_external_checkout(tmp_path, monkeypatch):
+    backend = tmp_path / "nousetsu-backend.exe"
+    backend.touch()
+    external_scraper = tmp_path / "external-scraper"
+    external_scraper.mkdir()
+    external_python = tmp_path / "external-python.exe"
+    external_python.touch()
+    monkeypatch.setenv("NOVEL_SCRAPER_PATH", str(external_scraper))
+    monkeypatch.setenv("NOVEL_SCRAPER_PYTHON", str(external_python))
+    monkeypatch.setattr(scraper_detector.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(scraper_detector.sys, "executable", str(backend))
+
+    available, scraper_dir, python_exe = get_scraper_info()
+
+    assert available is True
+    assert scraper_dir == "Bundled Novel-Scraper sidecar"
+    assert python_exe == str(backend.resolve())
+    assert find_scraper_directory() == tmp_path
+    assert find_scraper_python() == backend.resolve()
+
+
 def test_scraper_detector_and_submodule():
     """Verify that scraper detector finds the git submodule and python executable."""
     available, s_dir, py_exe = get_scraper_info()
@@ -30,6 +52,65 @@ def test_scraper_detector_and_submodule():
 
     bridge = NovelScraperBridge()
     assert bridge.is_available() is True
+
+
+@pytest.mark.asyncio
+async def test_packaged_scraper_bridge_uses_sidecar_worker(tmp_path, monkeypatch):
+    backend = tmp_path / "nousetsu-backend.exe"
+    backend.touch()
+    external_scraper = tmp_path / "external-scraper"
+    (external_scraper / "src").mkdir(parents=True)
+    (external_scraper / "src" / "api_bridge.py").touch()
+    external_python = tmp_path / "external-python.exe"
+    external_python.touch()
+    app_data = tmp_path / "app-data"
+    app_data.mkdir()
+    monkeypatch.setenv("NOVEL_SCRAPER_PATH", str(external_scraper))
+    monkeypatch.setenv("NOVEL_SCRAPER_PYTHON", str(external_python))
+    monkeypatch.setenv("NOUSETSU_APP_DATA_DIR", str(app_data))
+    monkeypatch.setattr(scraper_detector.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(scraper_detector.sys, "executable", str(backend))
+    captured = []
+
+    class FakeProcess:
+        returncode = 0
+
+        def __init__(self, command):
+            self.command = command
+
+        async def communicate(self):
+            if "romanize" in self.command:
+                return b"Test Novel", b""
+            return b'{"success":true,"novel_title":"Test Novel","chapters":[]}', b""
+
+    async def fake_create_subprocess_exec(*args, **kwargs):
+        captured.append((args, kwargs["cwd"]))
+        return FakeProcess(args)
+
+    monkeypatch.setattr(
+        "nousetsu.scraper.bridge.asyncio.create_subprocess_exec",
+        fake_create_subprocess_exec,
+    )
+
+    bridge = NovelScraperBridge()
+    result = await bridge.inspect_url("https://example.com/novel/")
+
+    assert result.success is True
+    assert bridge.is_available() is True
+    assert captured[0] == (
+        (
+            str(backend.resolve()),
+            "--scraper-worker",
+            "inspect",
+            "--url",
+            "https://example.com/novel/",
+        ),
+        str(app_data.resolve()),
+    )
+    assert captured[1] == (
+        (str(backend.resolve()), "--scraper-worker", "romanize", "Test Novel"),
+        str(app_data.resolve()),
+    )
 
 
 @pytest.mark.asyncio

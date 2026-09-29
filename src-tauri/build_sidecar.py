@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 import tomllib
 import urllib.error
@@ -19,10 +21,19 @@ ROOT = Path(__file__).resolve().parent.parent
 WEB_DIR = ROOT / "web"
 FRONTEND_DIST = WEB_DIR / "dist"
 ENTRY_POINT = ROOT / "src" / "nousetsu" / "desktop_backend.py"
-SCRAPER_API_BRIDGE = ROOT / "modules" / "novel_scraper" / "src" / "api_bridge.py"
+SCRAPER_ROOT = ROOT / "modules" / "novel_scraper"
+SCRAPER_RECIPES = SCRAPER_ROOT / "src" / "recipes"
 TAURI_BINARIES = ROOT / "src-tauri" / "binaries"
 PYINSTALLER_DIST = ROOT / "src-tauri" / "target" / "backend-dist"
 PYINSTALLER_WORK = ROOT / "src-tauri" / "target" / "backend-work"
+SCRAPER_HIDDEN_IMPORTS = ("src.api_bridge", "src.config")
+SCRAPER_SUBMODULES = (
+    "src.agent",
+    "src.core",
+    "src.handlers",
+    "src.scraper",
+    "src.utils",
+)
 COLLECT_ALL = (
     "nousetsu",
     "uvicorn",
@@ -31,6 +42,14 @@ COLLECT_ALL = (
     "langchain_google_genai",
     "langchain_openai",
     "langgraph",
+    "playwright",
+    "bs4",
+    "lxml",
+    "aiofiles",
+    "google.genai",
+    "pykakasi",
+    "anyascii",
+    "cryptography",
 )
 
 
@@ -45,6 +64,46 @@ def _ensure_pyinstaller() -> None:
         cwd=ROOT,
         check=True,
     )
+
+
+def _smoke_test_scraper_worker(backend: Path) -> None:
+    with tempfile.TemporaryDirectory(prefix="nousetsu-scraper-smoke-") as data_dir:
+        environment = os.environ.copy()
+        environment["NOUSETSU_APP_DATA_DIR"] = data_dir
+        process = subprocess.run(
+            [str(backend), "--scraper-worker", "inspect", "--help"],
+            cwd=data_dir,
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=120,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        romanize_process = subprocess.run(
+            [str(backend), "--scraper-worker", "romanize", "悪役貴族"],
+            cwd=data_dir,
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=120,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+
+    if process.returncode != 0:
+        raise RuntimeError(
+            "Frozen scraper worker failed its import smoke test:\n"
+            f"{process.stdout[-4000:]}\n{process.stderr[-4000:]}"
+        )
+    if "--url" not in process.stdout:
+        raise RuntimeError(
+            "Frozen scraper worker did not display the inspect command help:\n"
+            f"{process.stdout[-4000:]}"
+        )
+    if romanize_process.returncode != 0 or not romanize_process.stdout.strip():
+        raise RuntimeError(
+            "Frozen scraper worker failed its romanizer smoke test:\n"
+            f"{romanize_process.stdout[-4000:]}\n{romanize_process.stderr[-4000:]}"
+        )
 
 
 def _smoke_test_backend(backend: Path) -> None:
@@ -73,6 +132,17 @@ def _smoke_test_backend(backend: Path) -> None:
                     f"http://127.0.0.1:{port}/api/sync-state", timeout=1
                 ) as response:
                     if response.status == 200:
+                        with urllib.request.urlopen(
+                            f"http://127.0.0.1:{port}/api/scraper/check", timeout=5
+                        ) as scraper_response:
+                            scraper_info = json.load(scraper_response)
+                        if (
+                            not scraper_info.get("available")
+                            or scraper_info.get("scraper_dir") != "Bundled Novel-Scraper sidecar"
+                        ):
+                            raise RuntimeError(
+                                f"Frozen backend did not detect its bundled scraper: {scraper_info}"
+                            )
                         return
             except (urllib.error.URLError, TimeoutError, OSError):
                 time.sleep(0.2)
@@ -102,11 +172,14 @@ def main() -> None:
         raise FileNotFoundError(f"Build the web frontend before freezing the backend: {FRONTEND_DIST}")
     if not ENTRY_POINT.is_file():
         raise FileNotFoundError(f"Backend entry point is missing: {ENTRY_POINT}")
-    if not SCRAPER_API_BRIDGE.is_file():
+    scraper_bridge = SCRAPER_ROOT / "src" / "api_bridge.py"
+    if not scraper_bridge.is_file():
         raise FileNotFoundError(
-            f"Novel-Scraper API bridge is missing: {SCRAPER_API_BRIDGE}. "
+            f"Novel-Scraper API bridge is missing: {scraper_bridge}. "
             "Initialize the scraper submodule with git submodule update --init --recursive."
         )
+    if not SCRAPER_RECIPES.is_dir():
+        raise FileNotFoundError(f"Novel-Scraper recipe directory is missing: {SCRAPER_RECIPES}")
 
     TAURI_BINARIES.mkdir(parents=True, exist_ok=True)
     PYINSTALLER_DIST.mkdir(parents=True, exist_ok=True)
@@ -137,11 +210,17 @@ def main() -> None:
         str(PYINSTALLER_WORK),
         "--paths",
         str(ROOT / "src"),
+        "--paths",
+        str(SCRAPER_ROOT),
         "--add-data",
         f"{FRONTEND_DIST}{os.pathsep}web/dist",
         "--add-data",
-        f"{SCRAPER_API_BRIDGE}{os.pathsep}nousetsu/scraper",
+        f"{SCRAPER_RECIPES}{os.pathsep}scraper-data/recipes",
     ]
+    for module in SCRAPER_HIDDEN_IMPORTS:
+        command.extend(["--hidden-import", module])
+    for package in SCRAPER_SUBMODULES:
+        command.extend(["--collect-submodules", package])
     for package in COLLECT_ALL:
         command.extend(["--collect-all", package])
     command.append(str(ENTRY_POINT))
@@ -154,6 +233,7 @@ def main() -> None:
     shutil.copytree(built_backend_dir, packaged_backend_dir)
 
     packaged_executable = packaged_backend_dir / f"nousetsu-backend{extension}"
+    _smoke_test_scraper_worker(packaged_executable)
     _smoke_test_backend(packaged_executable)
     print(f"Built and smoke-tested Tauri backend sidecar: {packaged_executable}")
 

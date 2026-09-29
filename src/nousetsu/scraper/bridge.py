@@ -5,6 +5,7 @@ Scraper Bridge: executes Novel-Scraper commands via subprocess and handles strea
 import asyncio
 import json
 import logging
+import os
 import sys
 import uuid
 from pathlib import Path
@@ -15,6 +16,7 @@ from nousetsu.scraper.detector import (
     find_scraper_python,
     get_repo_root,
     get_scraper_info,
+    is_bundled_scraper_runtime,
 )
 from nousetsu.scraper.models import (
     ScraperChapterItem,
@@ -42,17 +44,33 @@ class NovelScraperBridge:
         scraper_dir: Optional[Path] = None,
         python_exe: Optional[Path] = None,
     ):
+        self._bundled_worker = (
+            scraper_dir is None
+            and python_exe is None
+            and is_bundled_scraper_runtime()
+        )
         self.scraper_dir = scraper_dir or find_scraper_directory()
         self.python_exe = python_exe or find_scraper_python(self.scraper_dir)
 
     def is_available(self) -> bool:
-        """Check if scraper environment and python interpreter are present."""
+        """Check that the bundled worker or external scraper environment is present."""
+        if self._bundled_worker:
+            return self.python_exe is not None and self.python_exe.is_file()
         return (
             self.scraper_dir is not None
             and self.scraper_dir.is_dir()
             and self.python_exe is not None
             and self.python_exe.is_file()
         )
+
+    def _working_directory(self) -> Path:
+        if self._bundled_worker:
+            app_data_dir = os.environ.get("NOUSETSU_APP_DATA_DIR")
+            if app_data_dir:
+                return Path(app_data_dir).resolve()
+        if self.scraper_dir is None:
+            raise RuntimeError("Novel-Scraper is not available.")
+        return self.scraper_dir
 
     def _bundled_api_bridge_path(self) -> Optional[Path]:
         """Find NouSetsu's packaged adapter for companion checkouts without api_bridge.py."""
@@ -67,7 +85,13 @@ class NovelScraperBridge:
         return source_bridge if source_bridge.is_file() else None
 
     def _api_bridge_command(self, operation: str, *args: str) -> List[str]:
-        if self.scraper_dir is None or self.python_exe is None:
+        if self.python_exe is None:
+            raise RuntimeError("Novel-Scraper is not available.")
+
+        if self._bundled_worker:
+            return [str(self.python_exe), "--scraper-worker", operation, *args]
+
+        if self.scraper_dir is None:
             raise RuntimeError("Novel-Scraper is not available.")
 
         companion_bridge = self.scraper_dir / "src" / "api_bridge.py"
@@ -97,17 +121,18 @@ class NovelScraperBridge:
         if not cleaned_title or not self.is_available():
             return cleaned_title
 
-        script = (
-            "from src.utils.romanizer import romanize_text; "
-            "import sys; print(romanize_text(sys.argv[1]))"
-        )
+        if self._bundled_worker:
+            command = [str(self.python_exe), "--scraper-worker", "romanize", cleaned_title]
+        else:
+            script = (
+                "from src.utils.romanizer import romanize_text; "
+                "import sys; print(romanize_text(sys.argv[1]))"
+            )
+            command = [str(self.python_exe), "-c", script, cleaned_title]
         try:
             proc = await asyncio.create_subprocess_exec(
-                str(self.python_exe),
-                "-c",
-                script,
-                cleaned_title,
-                cwd=str(self.scraper_dir),
+                *command,
+                cwd=str(self._working_directory()),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
@@ -133,12 +158,13 @@ class NovelScraperBridge:
 
         cmd = self._api_bridge_command("inspect", "--url", url)
 
-        logger.info("Executing inspect: %s in %s", " ".join(cmd), self.scraper_dir)
+        working_dir = self._working_directory()
+        logger.info("Executing inspect: %s in %s", " ".join(cmd), working_dir)
 
         try:
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
-                cwd=str(self.scraper_dir),
+                cwd=str(working_dir),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
@@ -227,7 +253,8 @@ class NovelScraperBridge:
         if req.include_frontmatter:
             cmd.append("--frontmatter")
 
-        logger.info("Starting scraper extraction [%s]: %s in %s", task_id, " ".join(cmd), self.scraper_dir)
+        working_dir = self._working_directory()
+        logger.info("Starting scraper extraction [%s]: %s in %s", task_id, " ".join(cmd), working_dir)
 
         status_obj = ScraperStatusResponse(
             task_id=task_id,
@@ -245,10 +272,12 @@ class NovelScraperBridge:
         try:
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
-                cwd=str(self.scraper_dir),
+                cwd=str(working_dir),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
+            if proc.stdout is None or proc.stderr is None:
+                raise RuntimeError("Scraper worker subprocess streams were not initialized.")
 
             completed_files: List[str] = []
 

@@ -342,7 +342,7 @@ NouSetsu tracks end-to-end token consumption and execution latency per pipeline 
 24. **Novel-Scraper URL Extraction & Submodule Ingest Engine** ([`src/nousetsu/scraper/`](file:///D:/Code/novel_translation_Agent/src/nousetsu/scraper/), `modules/novel_scraper/`):
     - Integrates the agentic novel scraper repository (`Checkmartyr/Novel-Scraper.git`) as a self-contained Git submodule.
     - Provides headless URL inspection, TOC discovery, and batch chapter extraction across top webnovel portals (Syosetu, Kakuyomu, Dek-D, Nekopost, FreeWebNovel, etc.).
-    - Managed via `NovelScraperBridge` with auto-detection of the submodule virtualenv and Python executable.
+    - Managed via `NovelScraperBridge`: development/CLI mode auto-detects the scraper checkout and Python interpreter, while packaged Tauri builds run the scraper bundled in the backend sidecar and keep Obscura, recipes, and logs under app data.
     - Emits streaming SSE progress events (`scraper_progress`) and writes zero-padded Markdown files (`0001 - Title.md`) directly into `raw_chapters/` or Volume subfolders with automatic cache invalidation.
     - Dual-tab `UploadModal.tsx` in Web Studio allowing users to switch seamlessly between local file drag-and-drop and URL extraction with interactive chapter preview, range filtering, and custom selection.
 25. **Dual-Format eBook Ingestion & Compilation Engine (`nousetsu import` & `nousetsu export`)**:

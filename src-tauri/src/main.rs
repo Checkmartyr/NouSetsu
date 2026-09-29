@@ -256,6 +256,7 @@ fn start_backend(_app: &tauri::App) -> Result<Option<Child>, Error> {
         .stderr(Stdio::null())
         .env("HOST", BACKEND_HOST)
         .env("NOUSETSU_ENV_FILE", working_dir.join(".env"))
+        .env("NOUSETSU_APP_DATA_DIR", &working_dir)
         .env("NOUSETSU_DESKTOP_VERSION", env!("CARGO_PKG_VERSION"));
     if let Some(projects_dir) = default_projects_dir {
         command.env("NOUSETSU_DEFAULT_PROJECTS_DIR", projects_dir);

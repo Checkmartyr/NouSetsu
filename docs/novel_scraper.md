@@ -91,20 +91,21 @@ graph TD
 ```
 
 ### Component Breakdown
-* [`src/nousetsu/scraper/detector.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/scraper/detector.py): Auto-discovers the `modules/novel_scraper` directory across standard repository paths and resolves a working Python interpreter equipped with the scraper's dependencies.
-* [`src/nousetsu/scraper/bridge.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/scraper/bridge.py): Spawns headless sub-processes to execute scraper commands, parses JSON output streams, handles error recovery, and converts East Asian titles into filesystem-safe slugs. Desktop builds bundle NouSetsu's API adapter and use it when an external scraper checkout does not yet provide `src/api_bridge.py`.
+* [`src/nousetsu/scraper/detector.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/scraper/detector.py): Development and CLI runs auto-discover the `modules/novel_scraper` directory and a working Python interpreter. Frozen desktop builds report the scraper bundled into the NouSetsu backend sidecar and ignore external checkout overrides.
+* [`src/nousetsu/scraper/bridge.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/scraper/bridge.py): Spawns headless sub-processes to execute scraper commands, parses JSON output streams, handles error recovery, and converts East Asian titles into filesystem-safe slugs. Desktop builds invoke the backend executable in scraper-worker mode rather than launching a separate Python or external checkout.
 * [`src/nousetsu/scraper/models.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/scraper/models.py): Strongly-typed Pydantic schemas validating inspect requests, TOC chapter items, and extraction jobs.
 
 ---
 
 ## 🐍 4. Python Environment & Auto-Detection
 
-The scraper bridge automatically locates a valid Python execution environment using a 4-tier cascade in [`find_scraper_python`](file:///D:/Code/novel_translation_Agent/src/nousetsu/scraper/detector.py):
+In development and CLI runs, the scraper bridge automatically locates a valid Python execution environment using [`find_scraper_python`](file:///D:/Code/novel_translation_Agent/src/nousetsu/scraper/detector.py):
 
-1. **Submodule Dedicated Virtualenv**: Checks `modules/novel_scraper/.venv/Scripts/python.exe` (Windows) or `modules/novel_scraper/.venv/bin/python` (Unix).
-2. **Main Application Virtualenv**: Checks `.venv/Scripts/python.exe` at the NouSetsu root directory.
-3. **Active Running Interpreter**: Uses `sys.executable` (the currently executing Python process).
-4. **System Path Fallback**: Resolves `python` or `python3` from the system `PATH`.
+1. **Explicit interpreter**: Uses `NOVEL_SCRAPER_PYTHON` when set to an existing file.
+2. **Scraper virtualenv**: Checks `.venv` and `venv` inside the selected scraper checkout.
+3. **Current interpreter**: Falls back to the currently running Python executable.
+
+Packaged Tauri builds do not use this discovery cascade: the scraper engine and runtime dependencies are included in `nousetsu-backend`, which launches its own `--scraper-worker` mode. External `NOVEL_SCRAPER_PATH` and `NOVEL_SCRAPER_PYTHON` settings are ignored by the frozen desktop build.
 
 ### Submodule Initialization
 When cloning NouSetsu for the first time, initialize the submodule:
@@ -112,7 +113,7 @@ When cloning NouSetsu for the first time, initialize the submodule:
 git submodule update --init --recursive
 ```
 
-The desktop app can use an external checkout through `NOVEL_SCRAPER_PATH` and `NOVEL_SCRAPER_PYTHON`. If that checkout does not have `src/api_bridge.py`, the packaged app supplies its compatible adapter and runs it against the checkout's `src` package.
+Development runs can use an external checkout through `NOVEL_SCRAPER_PATH` and `NOVEL_SCRAPER_PYTHON`. The installed desktop app instead runs the pinned scraper source shipped inside its backend sidecar, so it does not depend on a companion repository or Python installation. Downloaded Obscura binaries, learned recipes, and logs are stored under the Tauri application data directory; Obscura is fetched on first use when absent. A system Chrome installation may still be used for the interactive Cloudflare fallback.
 
 If the scraper submodule uses standalone dependencies, you can install them in the main virtual environment:
 ```bash

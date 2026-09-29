@@ -15,6 +15,11 @@ def get_repo_root() -> Path:
     return Path(__file__).resolve().parent.parent.parent.parent
 
 
+def is_bundled_scraper_runtime() -> bool:
+    """Whether scraper commands should run through the frozen desktop sidecar."""
+    return bool(getattr(sys, "frozen", False))
+
+
 def find_scraper_directory() -> Optional[Path]:
     """
     Locate Novel-Scraper directory using 4-tier resolution hierarchy:
@@ -22,6 +27,10 @@ def find_scraper_directory() -> Optional[Path]:
     2. Environment variable `NOVEL_SCRAPER_PATH`
     3. Sibling repositories (`../Novel_scraping_agent`, `../-Novel-Scraper`)
     """
+    if is_bundled_scraper_runtime():
+        executable = Path(sys.executable).resolve()
+        return executable.parent if executable.is_file() else None
+
     repo_root = get_repo_root()
 
     # Tier 1: Git Submodule
@@ -56,6 +65,10 @@ def find_scraper_python(scraper_dir: Optional[Path] = None) -> Optional[Path]:
     2. `.venv` inside `scraper_dir`
     3. Current running Python interpreter (`sys.executable`)
     """
+    if is_bundled_scraper_runtime():
+        executable = Path(sys.executable).resolve()
+        return executable if executable.is_file() else None
+
     # 1. Explicit environment variable
     env_py = os.environ.get("NOVEL_SCRAPER_PYTHON")
     if env_py:
@@ -90,6 +103,12 @@ def get_scraper_info() -> Tuple[bool, Optional[str], Optional[str]]:
     Check if Novel-Scraper is available and configured.
     Returns (is_available, scraper_dir_path, python_path).
     """
+    if is_bundled_scraper_runtime():
+        executable = Path(sys.executable).resolve()
+        if not executable.is_file():
+            return (False, None, None)
+        return (True, "Bundled Novel-Scraper sidecar", str(executable))
+
     s_dir = find_scraper_directory()
     if not s_dir:
         return (False, None, None)
