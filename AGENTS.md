@@ -544,4 +544,18 @@ For the complete in-depth architectural handbook with flowcharts, method contrac
 - **Source File**: [`src/nousetsu/agents/chronicler.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/agents/chronicler.py)
 - **Class**: `ChroniclerAgent` | **Model**: `gemma-4-26b-a4b-it` (Fallback: `gemini-3.5-flash-lite`)
 - **Signature**: `chronicle(chapter_num, chapter_title, translated_text, genre, source_lang, bible, rag_context=None, ...) -> ChapterSummary`
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs live in GitHub Issues for `Checkmartyr/NouSetsu`; use the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Use `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, and `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Use the single-context layout: root `CONTEXT.md` and relevant ADRs in `docs/adr/`. See `docs/agents/domain.md`.
 - **Core Role**: Maintains 3-tier narrative memory (Micro chapter synopsis, Meso ArcSummary, Macro whole_story_summary). Fully bi-directional with RAG: retrieves historical character states ($k=3$) before summarizing, then auto-indexes the resulting summary and 20-line scene chunks into SQLite FTS5 and Gemini Embedding 2 vectors.
