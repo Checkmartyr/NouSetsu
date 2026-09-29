@@ -9,7 +9,8 @@ Welcome to the **NouSetsu** (濃説 / 脳説) technical documentation. This dire
 | Guide | Document | Description |
 | :--- | :--- | :--- |
 | **Five Pipeline Agents** | [**`agents/README.md`**](./agents/README.md) | Dedicated per-agent operational guides with method contracts, RAG roles, cognitive mechanics, and domain skills ([`01_entity_extractor`](./agents/01_entity_extractor.md), [`02_drafter`](./agents/02_drafter.md), [`03_critic`](./agents/03_critic.md), [`04_polisher`](./agents/04_polisher.md), [`05_chronicler`](./agents/05_chronicler.md)). |
-| **End-User Guide** | [**`user_guide.md`**](./user_guide.md) | Complete end-user manual covering installation, minimal TUI dashboard, headless batch automation, per-agent model routing, Novel Bible management, 22 custom domain skills, narrative inspection CLI, Hybrid RAG, Trace Visualizer web app, and safety guards. |
+| **End-User Guide** | [`user_guide.md`](./user_guide.md) | General end-user manual covering installation, the TUI, CLI automation, the Novel Bible, skills, and safety guards. |
+| **Web Studio & Desktop App Guide** | [`web_desktop_guide.md`](./web_desktop_guide.md) | Practical browser and Windows desktop walkthrough: setup, provider keys, projects, chapter imports, translation, review, export, and updates. |
 | **Workflow & Pipeline** | [**`workflow.md`**](./workflow.md) | LangGraph multi-agent execution, reflection review loop, agent functions, line-based semantic chunking, rate limiting (32K TPM / 60 RPM), Hybrid RAG retrieval/indexing, PromptTracker, Diff/Patch engine, and sequence diagrams. |
 | **Agents Deep Dive** | [**`agents_deep_dive.md`**](./agents_deep_dive.md) | Comprehensive cognitive breakdown of all 5 agents (Entity Extractor, Context-Aware Drafter, Critique Agent, Polishing Agent, Chronicler Agent): prompt engineering, 3-tier memory injection, chunking mechanics, nickname discipline, Diff/Patch polishing, PromptTracker, and safety guards. |
 | **System Architecture** | [**`architecture.md`**](./architecture.md) | Layered architecture, component responsibilities, utilities (`rate_limiter`, `chunker`, `formatting`), FallbackChatModel failover, procedural graphs, summary migration, Hybrid RAG SQLite FTS5 engine, PromptTracker, Web Visualizer, and thread-safe cancellation. |
@@ -30,6 +31,7 @@ Welcome to the **NouSetsu** (濃説 / 脳説) technical documentation. This dire
 * Learn how the multi-agent pipeline and review loop produce literary English: [**Workflow Deep Dive**](./workflow.md).
 * Deep-dive into each agent's cognitive role, zero-anaphora resolution, and translationese elimination: [**Agents Deep Dive**](./agents_deep_dive.md).
 * Master the interactive terminal reader, token analytics, stop controls, and Bible editor: [**TUI User Guide**](./tui_guide.md).
+* Use the browser Web Studio or Windows desktop app for project setup, translation, review, export, and updates: [**Web Studio & Desktop App Guide**](./web_desktop_guide.md).
 * Customize character voices, honorifics, and style guides: [**Novel Bible Guide**](./novel_bible.md).
 * Scrape and import online web novels from Syosetu, Kakuyomu, and URL sources: [**Novel Scraper Guide**](./novel_scraper.md).
 

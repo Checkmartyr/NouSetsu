@@ -12,7 +12,7 @@
 [![Framework: LangGraph](https://img.shields.io/badge/agent-LangGraph-FF6F00.svg)](https://github.com/langchain-ai/langgraph)
 [![UI: Textual & Rich](https://img.shields.io/badge/cli-Textual%20%26%20Rich-00C853.svg)](https://textual.textualize.io/)
 [![UI: React 19 + Vite](https://img.shields.io/badge/web-React%2019%20%2B%20Vite-61DAFB.svg?logo=react&logoColor=black)](web/)
-[![Tests: 440 Passed](https://img.shields.io/badge/tests-440%20passed-brightgreen.svg)](tests/)
+[![Tests: 500 Passed](https://img.shields.io/badge/tests-500%20passed-brightgreen.svg)](tests/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
 <p align="center">
@@ -36,7 +36,7 @@
 - [System Architecture](#-system-architecture)
 - [Quick Start](#-quick-start)
 - [Command-Line Interface (CLI) Reference](#-command-line-interface-cli-reference)
-- [Interactive Interfaces: TUI & Web Studio](#-interactive-interfaces-tui--web-studio)
+- [Interactive Interfaces: TUI, Web Studio, and Desktop App](#-interactive-interfaces-tui-web-studio-and-desktop-app)
 - [Project Layout](#-project-layout)
 - [Automated Testing & Quality Verification](#-automated-testing--quality-verification)
 - [Technical Documentation Hub](#-technical-documentation-hub)
@@ -154,6 +154,11 @@ NouSetsu encodes procedural execution rules as explicit attributed graphs $G = (
 * **Native PyMuPDF PDF Compilation (`nousetsu export`)**: Generates publication-ready PDFs in memory via [`PdfWriter`](file:///D:/Code/novel_translation_Agent/src/nousetsu/ebook/writer.py) (`pymupdf.DocumentWriter` + `pymupdf.Story`) with custom fonts, margins, page breaks, and centered bottom page numbering (`- {page} -`).
 * **Thai Typography & Word Wrapping**: Solves Southeast Asian text clipping in PDF/EPUB renderers using PyThaiNLP zero-width space (`\u200b`) boundary insertion ([`src/nousetsu/ebook/typography.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/ebook/typography.py)) and embeds Thai Google Fonts (`Sarabun`, `Prompt`, `Kanit`, `Noto Serif Thai`, `Chakra Petch`).
 * **Live Publication Studio**: Interactive modal in Web Studio with real-time typography adjustments (font family, font size, line spacing), Table of Contents, click-to-preview chapter reader, and automatic resolution to the active volume's translated folder (`<folder>_th`).
+
+### 14. 🔌 Provider-Aware Model Routing
+* **Multiple Providers**: Route agents through Gemini, OpenAI, OpenRouter, or a custom OpenAI-compatible endpoint.
+* **Custom Endpoints**: Configure a base URL and API key once, then choose a model ID globally or per project.
+* **Per-Agent Control**: Assign independent provider/model routes to each pipeline stage while retaining global and project-level fallbacks.
 
 ---
 
@@ -284,6 +289,8 @@ Configure the key(s) for the provider(s) you want to use in `.env`:
 GEMINI_API_KEY=your_gemini_api_key_here
 OPENAI_API_KEY=your_openai_api_key_here
 OPENROUTER_API_KEY=your_openrouter_api_key_here
+CUSTOM_API_BASE_URL=https://provider.example/v1
+CUSTOM_API_KEY=your_custom_provider_api_key_here
 ```
 > [!TIP]
 > Obtain a free or pay-as-you-go key from [Google AI Studio](https://aistudio.google.com/). You can also export keys directly in your terminal environment:
@@ -294,7 +301,7 @@ OPENROUTER_API_KEY=your_openrouter_api_key_here
 > # Linux / macOS Bash
 > export GEMINI_API_KEY="AIzaSy..."
 > ```
-> OpenAI and OpenRouter are supported directly. OpenRouter uses the OpenAI-compatible API; an `ANTHROPIC_API_KEY` alone does not enable Anthropic routing.
+> OpenAI and OpenRouter are supported directly. For another OpenAI-compatible provider, set `CUSTOM_API_BASE_URL` and `CUSTOM_API_KEY`, then select **Custom OpenAI-compatible** and enter its model ID. OpenRouter uses the OpenAI-compatible API; an `ANTHROPIC_API_KEY` alone does not enable Anthropic routing. Keep `.env` private and never commit live credentials.
 
 #### Step 3: Multi-Agent Model Routing & Precedence Cascade
 NouSetsu resolves LLM models via a strict **4-tier precedence hierarchy**:
@@ -308,6 +315,7 @@ Each pipeline agent can be routed to an independent model tailored to its cognit
 - **Gemini**: use a `gemini-*` or `gemma-*` model with `GEMINI_API_KEY` (or `GOOGLE_API_KEY`).
 - **OpenAI**: use a model such as `gpt-4o` with `OPENAI_API_KEY`; `openai:gpt-4o` explicitly selects OpenAI.
 - **OpenRouter**: use an OpenRouter model ID such as `anthropic/claude-3.7-sonnet` with `OPENROUTER_API_KEY`, or prefix it as `openrouter:anthropic/claude-3.7-sonnet`. A bare OpenAI model name can also use OpenRouter when only `OPENROUTER_API_KEY` is configured.
+- **Custom OpenAI-compatible**: set `CUSTOM_API_BASE_URL` and `CUSTOM_API_KEY`, then route through the provider selector as `custom:<model-id>`. The Web Studio and desktop settings add the `custom:` prefix when you select the provider.
 
 For example, set `NOVEL_MODEL` or an agent-specific `NOVEL_*_MODEL` to the desired model ID. When OpenAI and OpenRouter keys are both present, bare `gpt-*`/`o1`/`o3`/`o4` model names use OpenAI, while slash-form model IDs use OpenRouter. The Novel-Scraper sidecar uses the same provider API keys and `NOVEL_FALLBACK_MODEL`; set `NOVEL_SCRAPER_MODEL` for a scraper-only route, or leave it blank to inherit `NOVEL_MODEL`.
 
@@ -367,11 +375,11 @@ NouSetsu provides a full suite of CLI subcommands for headless automation, narra
 | Command | Description | Example Usage |
 | :--- | :--- | :--- |
 | `nousetsu` | Automatically launches interactive Textual TUI dashboard | `nousetsu` |
-| `nousetsu --version` | Displays current version (`nousetsu 0.4.5`) | `nousetsu -v` |
+| `nousetsu --version` | Displays the installed version | `nousetsu -v` |
 | `nousetsu init` | Initializes a new novel project, directory structure, and Novel Bible | `nousetsu init -t "My Novel" -s Japanese -T English` |
 | `nousetsu batch` | Headless folder-to-folder batch translation with natural sorting | `nousetsu batch -p project/Douyara -F Douyara_01 -c 48` |
 | `nousetsu scan` | Fast scan chapter queue and project status in `NOVEL_PROJECTS_DIR` | `nousetsu scan --all-projects` |
-| `nousetsu web` | Launches the interactive Vite + React 19 Trace Visualizer web app | `nousetsu web --host 0.0.0.0 --port 5173` |
+| `nousetsu web` | Launches the local Vite + React 19 Web Studio | `nousetsu web` |
 | `nousetsu narrative` | Renders interactive 3-tier narrative memory tree (Macro > Meso > Micro) | `nousetsu narrative -p project/Douyara` |
 | `nousetsu migrate-summaries` | Upgrades legacy flat summaries into 3-tier story arc hierarchies | `nousetsu migrate-summaries -p project/Douyara` |
 | `nousetsu skills` | Lists and filters active domain skills by agent, language, or genre | `nousetsu skills --agent drafter --genre xianxia` |
@@ -457,12 +465,12 @@ nousetsu export [OPTIONS]
 
 ---
 
-## 🖥️ Interactive Interfaces: TUI & Web Studio
+## 🖥️ Interactive Interfaces: TUI, Web Studio, and Desktop App
 
 ### Reactive Terminal User Interface (Textual + Rich)
 
 ```text
-┌─ NouSetsu v0.4.5 ───────────────────────────────────────────────┐
+┌─ NouSetsu ──────────────────────────────────────────────────────┐
 │ 📁 Project: Douyara (Douyara_01)         🌐 Japanese ➔ English  │
 ├───────────────────────────────┬─────────────────────────────────┤
 │ Chapter List                  │ Dual Reader View                │
@@ -495,7 +503,7 @@ nousetsu export [OPTIONS]
 
 ### Modern Web Studio & Trace Visualizer (React 19 + Vite)
 
-NouSetsu includes an embedded, high-performance web studio (`nousetsu web`) for batch queue control, forensic inspection of pipeline executions, real-time agent thought auditing, translation diff analysis, and token telemetry:
+NouSetsu includes a local Web Studio (`nousetsu web`) for batch queue control, forensic inspection of pipeline executions, translation review, and token telemetry. For step-by-step browser and desktop workflows, see the [Web Studio & Desktop App Guide](docs/web_desktop_guide.md).
 
 <p align="center">
   <img src="docs/images/web_studio_dashboard_demo.png" alt="NouSetsu Web Studio Dashboard" width="100%">
@@ -506,23 +514,24 @@ NouSetsu includes an embedded, high-performance web studio (`nousetsu web`) for 
 * **Side-by-Side Diff Comparison**: Visually inspect line-by-line evolutions from initial draft through multi-pass polishing with unified color-coded diffs.
 * **Immersive Reader**: Distraction-free reading interface with typography controls, themes (Dark, Sepia, Light), and side-by-side original source peek.
 * **Novel Bible & Roster**: Interactive character sheets with romanized aliases, vocal registers, relationships, and canonical glossary.
-* **Settings & Model Routing**: 5-agent LLM cascade selection (`gemini-3.1-flash-lite`, `gemini-3.5-flash-lite`, `gemma-4-26b-a4b-it`), rate limiters (32K TPM / 60 RPM), and chunking thresholds.
+* **Settings & Model Routing**: Configure Gemini, OpenAI, OpenRouter, or a custom OpenAI-compatible provider; tune per-agent routes, rate limits (32K TPM / 60 RPM), and chunking thresholds.
 * **Live Publication Studio**: Preview and customize typography with real-time EPUB3/PDF compilation before downloading.
 * **Zero-Configuration Launch**: Launch directly via CLI (`nousetsu web`) or press `W` from inside the TUI application.
 
-### Native Desktop Installer (Tauri)
+### Native Desktop App (Tauri)
 
-The Windows installer bundles the Python runtime, NouSetsu backend dependencies, and the built web studio. Python does not need to be installed on the destination machine.
+The Windows desktop installer bundles the Python backend and Web Studio, so Python does not need to be installed on the destination machine. It uses the same project, settings, reader, trace, and export workflows as the browser app. Start with the [Web Studio & Desktop App Guide](docs/web_desktop_guide.md) for installation, provider setup, translation, and update instructions.
+
+To build from source:
 
 ```powershell
 uv sync
-cd web
-npm ci
-cd ..\src-tauri
+npm ci --prefix web
+Set-Location src-tauri
 cargo tauri build
 ```
 
-The Tauri build hook builds the web frontend, freezes the API backend with PyInstaller, smoke-tests its API, and bundles it into the installer. MSI and NSIS installers are written under `src-tauri/target/release/bundle/`. Keep model API keys out of the installer; the running app reads them from environment variables or a `.env` file in its application data directory.
+The build hook compiles the web frontend, freezes and smoke-tests the backend, then bundles both into the desktop installer. Local bundles are written under `src-tauri/target/release/bundle/`. The signed Windows NSIS release is published by pushing a version tag; see [Desktop Auto-Updates](docs/desktop-auto-updates.md). API keys stay in the local `.env` file and are never bundled.
 
 ---
 
@@ -576,7 +585,7 @@ NouSetsu/
 │   ├── storage/                    # Repository, project registry, and summary migrator
 │   ├── tui/                        # Textual TUI dashboard, reader, and token analytics
 │   └── utils/                      # Utilities (rate limiter, chunker, diff patcher, language detector)
-└── tests/                          # Hermetic test suite (440 tests across 62 modules)
+└── tests/                          # Hermetic test suite (500 tests across 69 modules)
 ```
 
 ---
@@ -591,11 +600,11 @@ uv run --no-sync pytest -q
 ```
 
 ```text
-440 passed, 1 warning in ~35s
+500 passed, 1 warning in ~38s
 ```
 
 * **Hermetic Isolation**: Tests run in isolated temporary directories (`tmp_path`), protecting real novel projects from mutation.
-* **Deterministic Execution**: Zero live LLM calls during tests via `MockNovelLLM`, achieving high-speed execution (<40s for 440 tests across 62 modules).
+* **Deterministic Execution**: Zero live LLM calls during tests via `MockNovelLLM`, achieving high-speed execution (<40s for 500 tests across 69 modules).
 * **Automated Documentation Auditor**: The built-in [`check_doc_drift.py`](file:///D:/Code/novel_translation_Agent/.agents/skills/doc-updater/scripts/check_doc_drift.py) auditor checks all links, AST symbols, line anchors, and CLI flags with `--strict` verification.
 
 ---
@@ -607,7 +616,8 @@ For exhaustive technical analyses, developer guides, and architectural deep dive
 | Document | Focus Area |
 | :--- | :--- |
 | [**Five Pipeline Agents**](file:///D:/Code/novel_translation_Agent/docs/agents/README.md) | Dedicated operational guides for each pipeline stage: [**`01_entity_extractor`**](file:///D:/Code/novel_translation_Agent/docs/agents/01_entity_extractor.md), [**`02_drafter`**](file:///D:/Code/novel_translation_Agent/docs/agents/02_drafter.md), [**`03_critic`**](file:///D:/Code/novel_translation_Agent/docs/agents/03_critic.md), [**`04_polisher`**](file:///D:/Code/novel_translation_Agent/docs/agents/04_polisher.md), [**`05_chronicler`**](file:///D:/Code/novel_translation_Agent/docs/agents/05_chronicler.md). |
-| [**User Guide**](file:///D:/Code/novel_translation_Agent/docs/user_guide.md) | Complete end-user manual: TUI navigation, CLI batch, Novel Bible, and custom skills. |
+| [**User Guide**](file:///D:/Code/novel_translation_Agent/docs/user_guide.md) | End-user manual for installation, CLI, TUI, project setup, and translation workflows. |
+| [**Web Studio & Desktop App Guide**](docs/web_desktop_guide.md) | Browser and Windows desktop setup, provider configuration, chapter intake, translation, review, export, and updates. |
 | [**Workflow Pipeline**](file:///D:/Code/novel_translation_Agent/docs/workflow.md) | LangGraph stages, sequence diagrams, reflection review loop, and state machine. |
 | [**Agents Deep Dive**](file:///D:/Code/novel_translation_Agent/docs/agents_deep_dive.md) | In-depth breakdown of all 5 specialized agents, prompt templates, and cognitive roles. |
 | [**System Architecture**](file:///D:/Code/novel_translation_Agent/docs/architecture.md) | Layer design, component boundaries, and clean architecture data flow. |

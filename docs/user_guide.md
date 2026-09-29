@@ -1,7 +1,7 @@
 # 📖 NouSetsu User Guide
 
 > **The Complete End-User Manual for Agentic Document-Level Novel Translation**  
-> Powered by LangGraph, Textual, and Rich.
+> Powered by LangGraph, Textual, React 19, Tauri, and Rich.
 
 ---
 
@@ -9,7 +9,7 @@
 
 1. [Introduction](#-1-introduction)
 2. [Installation & Setup](#-2-installation--setup)
-3. [60-Second Quickstart (The Textual TUI Dashboard)](#-3-60-second-quickstart-the-textual-tui-dashboard)
+3. [60-Second Quickstart (The Textual TUI Dashboard)](#-3-60-second-quickstart-the-textual-tui-dashboard) — see the [Web Studio & Desktop App Guide](./web_desktop_guide.md) for app workflows.
 4. [Headless CLI & Batch Automation](#-4-headless-cli--batch-automation)
 5. [Agent Skills System](#-5-agent-skills-system)
 6. [Procedural Graph Execution (Zero-Token Overhead)](#-6-procedural-graph-execution-zero-token-overhead)
@@ -44,7 +44,7 @@ Traditional machine translation tools (e.g. Google Translate, DeepL) process tex
 * Optional but recommended: [uv](https://github.com/astral-sh/uv) (ultra-fast Python package installer).
 
 ### Windows Desktop Installer
-The desktop installer bundles the Python backend, so Python is not required separately. On first launch, NouSetsu copies the packaged `.env.example` to its user-data directory as `.env` if no local environment file exists. Existing `.env` settings and API keys are preserved on later launches and upgrades. Configure real provider API keys in **Settings → Global Settings**; never put live secrets in `.env.example`.
+The Windows desktop installer bundles the Python backend, so Python is not required separately. On first launch, NouSetsu copies the packaged `.env.example` to its application-data directory as `.env` if no local environment file exists. Existing settings are preserved on later launches and upgrades. Configure provider keys in **Settings → Environment & API Keys**; keys are stored locally in `.env`, so protect that file and never put live secrets in `.env.example`. See the [Web Studio & Desktop App Guide](./web_desktop_guide.md) for the complete workflow.
 
 ### Option A: Install from Local Repository / Pip (Recommended)
 You can install NouSetsu directly into your Python environment:
@@ -98,18 +98,20 @@ docker compose run --rm nousetsu batch --project-dir Douyara -c 48
 ```
 
 ### Configuring API Keys
-NouSetsu supports Google Gemini (default), OpenAI, Anthropic, or an offline mock model:
+NouSetsu supports Gemini/Google, OpenAI, OpenRouter, custom OpenAI-compatible endpoints, and an offline mock model. For the browser Web Studio or desktop app, configure credentials in **Settings → Environment & API Keys**. For CLI use, add the variables for your chosen provider to the local `.env` file:
 
-```bash
-# Windows PowerShell
-$env:GEMINI_API_KEY = "AIzaSy..."
-
-# Linux / macOS Bash
-export GEMINI_API_KEY="AIzaSy..."
+```dotenv
+GEMINI_API_KEY=your-gemini-key
+OPENAI_API_KEY=your-openai-key
+OPENROUTER_API_KEY=your-openrouter-key
+CUSTOM_API_BASE_URL=https://provider.example/v1
+CUSTOM_API_KEY=your-custom-provider-key
 ```
 
+For a custom endpoint, also select **Custom OpenAI-compatible** as the model route and specify its model ID. See the [Web Studio & Desktop App Guide](./web_desktop_guide.md#configure-model-providers-and-api-keys) for the full setup steps. Keep `.env` private; never put live keys in `.env.example` or commit them.
+
 > [!NOTE]
-> If no API key is provided, NouSetsu automatically operates with a deterministic offline mock model (`mock-novel-llm`), allowing you to test UI navigation, batch scanning, and checkpoint resumption without consuming API tokens!
+> If no API key is provided, NouSetsu automatically operates with a deterministic offline mock model (`mock-novel-llm`), allowing you to test UI navigation, batch scanning, and checkpoint resumption without consuming API tokens.
 
 ---
 
@@ -175,16 +177,13 @@ If you have an active novel project, it loads immediately. If you are in a new o
 
 ### 🌐 Web Studio & Trace Visualizer (React 19 + Vite)
 
-For visual inspection, web novel scraping, and interactive publishing, NouSetsu provides an integrated **Web Studio** built with React 19 and Vite.
+For visual inspection, web novel scraping, translation, and interactive publishing, NouSetsu provides an integrated **Web Studio** built with React 19 and Vite. For the complete browser workflow and Windows desktop app instructions, see the [Web Studio & Desktop App Guide](./web_desktop_guide.md).
 
 #### Launching the Web Studio
 From your terminal, execute:
 ```bash
-# Launch on default port (http://localhost:5173)
+# Launch on the local machine (http://127.0.0.1:5173)
 nousetsu web
-
-# Or bind to custom host and port
-nousetsu web --host 0.0.0.0 --port 5173
 ```
 *(You can also press `W` from within the running Textual TUI application to open the Web Studio automatically!)*
 
@@ -219,7 +218,7 @@ Inspect real-time token utilization (input, output, thought, cached) and elapsed
 ![NouSetsu Web Studio Token Analytics](images/web_studio_tokens_demo.png)
 
 #### 7. Categorical Settings & Model Routing
-Configure primary and fallback LLM models for each pipeline agent, tune 32K TPM / 60 RPM rate limits, and customize semantic chunking thresholds:
+Configure Gemini, OpenAI, OpenRouter, or a custom OpenAI-compatible provider; set primary and fallback routes for each pipeline agent, tune 32K TPM / 60 RPM rate limits, and customize semantic chunking thresholds:
 
 ![NouSetsu Web Studio Settings View](images/web_studio_settings_demo.png)
 
@@ -431,7 +430,7 @@ nousetsu skills
 nousetsu skills --agent drafter --genre wuxia
 ```
 
-### Built-in Skills (22 Total)
+### Built-in Skills (23 Total)
 
 | Agent | Skill Name | Genre / Language Scope | Description |
 |:---|:---|:---:|:---|
@@ -448,6 +447,7 @@ nousetsu skills --agent drafter --genre wuxia
 | **Critic** | `hallucination_guard` | All genres / All languages | Flags fabricated plot events or unnatural additions. |
 | **Critic** | `nickname_disparity_auditor` | All genres / All languages | Flags unprovoked name/nickname swaps and register mismatches. |
 | **Critic** | `tone_consistency_auditor` | All genres / All languages | Audits narrative register against established tone. |
+| **Critic** | `prose_cadence_auditor` | All genres / All languages | Audits sentence rhythm and flags stiff or repetitive translationese. |
 | **Polisher** | `chapter_header_preservation` | All genres / All languages | Ensures chapter titles, numbers, and structural headings from the draft are strictly retained at the top of the polished output. |
 | **Polisher** | `translationese_filter` | All genres / All languages | Purges clunky passive voice and repetitive translation tropes. |
 | **Polisher** | `prose_cadence_enhancer` | All genres / All languages | Crafts dynamic sentence rhythm and sensory prose. |
