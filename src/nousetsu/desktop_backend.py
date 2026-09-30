@@ -104,7 +104,7 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description="NouSetsu desktop API backend")
     parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=5174)
+    parser.add_argument("--port", type=int, default=15474)
     args = parser.parse_args()
 
     from nousetsu.cli.web_server import run_web_server

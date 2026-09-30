@@ -641,3 +641,14 @@ def test_api_traces_filtering_and_single_chapter(live_server, sample_web_project
         assert len(data["chapters"]) == 1
         assert data["chapters"][0]["chapterNum"] == 1
         assert len(data["chapters"][0]["document"]["traces"]) == 1
+
+
+def test_desktop_runtime_version_endpoint_reports_launcher_version(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    from nousetsu.cli.web_server import create_app
+
+    monkeypatch.setenv("NOUSETSU_DESKTOP_VERSION", "0.5.0-test")
+    response = TestClient(create_app(dist_dir=tmp_path)).get("/api/desktop-info")
+
+    assert response.status_code == 200
+    assert response.json() == {"version": "0.5.0-test"}

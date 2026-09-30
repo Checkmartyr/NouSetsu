@@ -1000,6 +1000,10 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
         allow_headers=["*"],
     )
 
+    @app.get("/api/desktop-info")
+    async def get_desktop_info() -> Dict[str, str]:
+        return {"version": os.environ.get("NOUSETSU_DESKTOP_VERSION", __version__)}
+
     def _resolve_repo(project_path: Optional[str] = None) -> NovelRepository:
         target_path = resolve_project_dir(project_path)
         if not target_path.exists() or not (target_path / ".novel").exists():

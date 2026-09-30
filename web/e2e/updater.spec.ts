@@ -61,11 +61,11 @@ async function openLocalUpdaterSettings(page: Page, outcome: LocalUpdaterOutcome
     });
   }, outcome);
   page.on('request', (request) => {
-    if (request.url() === 'http://127.0.0.1:5174/api/updates/latest') {
+    if (request.url() === 'http://127.0.0.1:15474/api/updates/latest') {
       releaseChecks.push(request.url());
     }
   });
-  await page.route('http://127.0.0.1:5174/**', (route) => route.abort());
+  await page.route('http://127.0.0.1:15474/**', (route) => route.abort());
 
   await page.goto('/');
   await page.getByRole('button', { name: 'Settings', exact: true }).click();

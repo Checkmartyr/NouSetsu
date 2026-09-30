@@ -4,7 +4,7 @@
   "description": "Default capabilities for Nousetsu desktop app",
   "windows": ["main"],
   "remote": {
-    "urls": ["http://127.0.0.1:5174"]
+    "urls": ["http://127.0.0.1:15474"]
   },
   "permissions": [
     "core:default",

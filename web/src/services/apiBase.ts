@@ -1,4 +1,4 @@
-const DESKTOP_BACKEND_URL = 'http://127.0.0.1:5174';
+const DESKTOP_BACKEND_URL = 'http://127.0.0.1:15474';
 
 export function isTauriDesktopRuntime(): boolean {
   if (typeof window === 'undefined') return false;
@@ -18,7 +18,7 @@ export function getApiBaseUrl(
 
   const localBackendOrigin =
     ['127.0.0.1', 'localhost'].includes(window.location.hostname) &&
-    window.location.port === '5174';
+    window.location.port === '15474';
 
   return isDesktop || localBackendOrigin ? DESKTOP_BACKEND_URL : '';
 }

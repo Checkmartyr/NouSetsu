@@ -13,7 +13,7 @@ def test_desktop_capability_grants_updater_to_the_loopback_backend_only():
         (repo_root / "src-tauri" / "capabilities" / "default.json").read_text(encoding="utf-8")
     )
 
-    assert capability["remote"]["urls"] == ["http://127.0.0.1:5174"]
+    assert capability["remote"]["urls"] == ["http://127.0.0.1:15474"]
     assert "updater:default" in capability["permissions"]
 
 

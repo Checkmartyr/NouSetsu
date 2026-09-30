@@ -5,8 +5,8 @@
 use std::env;
 use std::{
     fs::{File, OpenOptions},
-    io::{BufRead, BufReader, Error, ErrorKind, Write},
-    net::TcpStream,
+    io::{BufRead, BufReader, Error, ErrorKind, Read, Write},
+    net::{SocketAddr, TcpStream},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     sync::Mutex,
@@ -16,9 +16,9 @@ use std::{
 use tauri::Manager;
 
 const BACKEND_HOST: &str = "127.0.0.1";
-const BACKEND_PORT: u16 = 5174;
+const BACKEND_PORT: u16 = 15474;
 #[cfg(not(debug_assertions))]
-const BACKEND_URL: &str = "http://127.0.0.1:5174";
+const BACKEND_URL: &str = "http://127.0.0.1:15474";
 
 #[derive(Default)]
 struct BackendProcess(Mutex<Option<Child>>);
@@ -101,6 +101,43 @@ fn backend_is_ready() -> bool {
         && response.split_whitespace().nth(1) == Some("200")
 }
 
+fn backend_version_matches(address: &SocketAddr, expected_version: &str) -> bool {
+    let Ok(mut stream) = TcpStream::connect_timeout(address, Duration::from_millis(250)) else {
+        return false;
+    };
+    let _ = stream.set_read_timeout(Some(Duration::from_millis(500)));
+    let request =
+        format!("GET /api/desktop-info HTTP/1.1\r\nHost: {address}\r\nConnection: close\r\n\r\n");
+    if stream.write_all(request.as_bytes()).is_err() {
+        return false;
+    }
+
+    let mut response = String::new();
+    if BufReader::new(stream)
+        .read_to_string(&mut response)
+        .is_err()
+    {
+        return false;
+    }
+    let Some((headers, body)) = response.split_once("\r\n\r\n") else {
+        return false;
+    };
+    let is_success = headers
+        .lines()
+        .next()
+        .and_then(|status| status.split_whitespace().nth(1))
+        == Some("200");
+    if !is_success {
+        return false;
+    }
+
+    serde_json::from_str::<serde_json::Value>(body)
+        .ok()
+        .and_then(|payload| payload.get("version")?.as_str().map(str::to_owned))
+        .as_deref()
+        == Some(expected_version)
+}
+
 fn seed_env_file(template: &Path, local_env: &Path) -> Result<(), Error> {
     if local_env.exists() {
         return Ok(());
@@ -180,8 +217,15 @@ fn prepare_projects_dir(
 }
 
 fn start_backend(_app: &tauri::App) -> Result<Option<Child>, Error> {
-    if backend_is_ready() {
+    let backend_address = SocketAddr::from(([127, 0, 0, 1], BACKEND_PORT));
+    let expected_version = env!("CARGO_PKG_VERSION");
+    if backend_version_matches(&backend_address, expected_version) {
         return Ok(None);
+    }
+    if backend_is_ready() {
+        return Err(Error::other(format!(
+            "An incompatible NouSetsu backend is already running at {backend_address}. Close existing NouSetsu Web Studio or desktop processes and restart the desktop app."
+        )));
     }
 
     let port = BACKEND_PORT.to_string();
@@ -299,8 +343,15 @@ fn start_backend(_app: &tauri::App) -> Result<Option<Child>, Error> {
 
     let deadline = Instant::now() + Duration::from_secs(90);
     while Instant::now() < deadline {
-        if backend_is_ready() {
+        if backend_version_matches(&backend_address, expected_version) {
             return Ok(Some(child));
+        }
+        if backend_is_ready() {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(Error::other(format!(
+                "An incompatible NouSetsu backend is responding at {backend_address}. Close it and restart the desktop app."
+            )));
         }
         if let Some(status) = child.try_wait()? {
             return Err(Error::other(format!(
@@ -351,10 +402,13 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::seed_env_file;
+    use super::{backend_version_matches, seed_env_file};
     use std::{
         fs,
+        io::{BufRead, BufReader, Write},
+        net::{SocketAddr, TcpListener},
         path::PathBuf,
+        thread,
         time::{SystemTime, UNIX_EPOCH},
     };
 
@@ -390,5 +444,30 @@ mod tests {
         );
 
         fs::remove_dir_all(directory).expect("temporary directory should be removed");
+    }
+
+    #[test]
+    fn does_not_reuse_backend_from_an_older_desktop_release() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("test listener should bind");
+        let address: SocketAddr = listener.local_addr().expect("address should be available");
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("request should connect");
+            let mut request_line = String::new();
+            BufReader::new(&stream)
+                .read_line(&mut request_line)
+                .expect("request should be readable");
+            assert!(request_line.starts_with("GET /api/desktop-info "));
+            let body = r#"{"version":"0.4.9"}"#;
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            )
+            .expect("version response should be written");
+        });
+
+        assert!(!backend_version_matches(&address, "0.5.1"));
+        server.join().expect("test server should finish");
     }
 }

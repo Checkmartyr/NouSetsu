@@ -19,12 +19,12 @@ async function assertProductionReleaseFallback(page: Page, outcome: UpdaterOutco
     });
   }, outcome);
   page.on('request', (request) => {
-    if (request.url() === 'http://127.0.0.1:5174/api/updates/latest') {
+    if (request.url() === 'http://127.0.0.1:15474/api/updates/latest') {
       releaseChecks.push(request.url());
     }
   });
-  await page.route('http://127.0.0.1:5174/**', async (route) => {
-    if (route.request().url() === 'http://127.0.0.1:5174/api/updates/latest') {
+  await page.route('http://127.0.0.1:15474/**', async (route) => {
+    if (route.request().url() === 'http://127.0.0.1:15474/api/updates/latest') {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
