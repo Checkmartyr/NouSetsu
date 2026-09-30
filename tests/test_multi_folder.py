@@ -14,9 +14,9 @@ def test_discover_folders(tmp_path: Path):
 
     # Create folder structure with multiple volumes
     vol4 = tmp_path / "Villainess_04"
-    vol4_out = tmp_path / "Villainess_04_th"
+    vol4_out = tmp_path / "Villainess_04_en"
     vol5 = tmp_path / "Villainess_05"
-    vol5_out = tmp_path / "Villainess_05_th"
+    vol5_out = tmp_path / "Villainess_05_en"
     ignored = tmp_path / ".git"
 
     vol4.mkdir()
@@ -35,15 +35,15 @@ def test_discover_folders(tmp_path: Path):
     raw_names = [f[0] for f in folders]
     assert "Villainess_04" in raw_names
     assert "Villainess_05" in raw_names
-    assert "Villainess_04_th" not in raw_names
+    assert "Villainess_04_en" not in raw_names
     assert ".git" not in raw_names
 
     v4_info = next(f for f in folders if f[0] == "Villainess_04")
-    assert v4_info[1] == "Villainess_04_th"
+    assert v4_info[1] == "Villainess_04_en"
     assert v4_info[2] == 2
 
     v5_info = next(f for f in folders if f[0] == "Villainess_05")
-    assert v5_info[1] == "Villainess_05_th"
+    assert v5_info[1] == "Villainess_05_en"
     assert v5_info[2] == 1
 
 
@@ -122,8 +122,8 @@ def test_metadata_isolation_between_folders(tmp_path: Path):
     repo = NovelRepository(tmp_path)
     repo.initialize_project("Test Novel", "Japanese", "English")
 
-    out_v4 = tmp_path / "Villainess_04_th" / "001_Chapter 1.md"
-    out_v5 = tmp_path / "Villainess_05_th" / "001_Chapter 1.md"
+    out_v4 = tmp_path / "Villainess_04_en" / "001_Chapter 1.md"
+    out_v5 = tmp_path / "Villainess_05_en" / "001_Chapter 1.md"
     out_v4.parent.mkdir()
     out_v5.parent.mkdir()
 
@@ -167,9 +167,9 @@ async def test_tui_folder_selector_modal(tmp_path: Path):
     repo.initialize_project("Test TUI Multi-Folder", "Japanese", "English")
 
     vol4 = tmp_path / "Villainess_04"
-    vol4_out = tmp_path / "Villainess_04_th"
+    vol4_out = tmp_path / "Villainess_04_en"
     vol5 = tmp_path / "Villainess_05"
-    vol5_out = tmp_path / "Villainess_05_th"
+    vol5_out = tmp_path / "Villainess_05_en"
     vol4.mkdir()
     vol4_out.mkdir()
     vol5.mkdir()
@@ -198,7 +198,7 @@ async def test_tui_folder_selector_modal(tmp_path: Path):
         assert isinstance(modal, FolderSelectModal)
 
         # Switch folder to vol5
-        app.switch_folder("Villainess_05", "Villainess_05_th")
+        app.switch_folder("Villainess_05", "Villainess_05_en")
         await pilot.pause()
 
         # Check tasks reloaded with vol5 (2 chapters)

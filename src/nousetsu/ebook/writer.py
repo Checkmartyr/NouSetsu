@@ -618,22 +618,17 @@ def _resolve_export_output_dir(repo: NovelRepository, folder: Optional[str] = No
     if raw_folder and raw_folder not in ("all", "default"):
         clean = raw_folder.strip("/\\")
         direct_cand = repo.root_dir / clean
-        cand_th = repo.root_dir / f"{clean}_th"
-        cand_tr = repo.root_dir / f"{clean}_trans"
+        output_cand = cfg.get_volume_output_path(repo.root_dir, clean)
 
         if direct_cand.is_dir() and any(f.suffix.lower() == ".md" for f in direct_cand.iterdir() if f.is_file()):
             return direct_cand, direct_cand.name
-        if cand_th.is_dir() and any(f.suffix.lower() == ".md" for f in cand_th.iterdir() if f.is_file()):
-            return cand_th, cand_th.name
-        if cand_tr.is_dir() and any(f.suffix.lower() == ".md" for f in cand_tr.iterdir() if f.is_file()):
-            return cand_tr, cand_tr.name
+        if output_cand.is_dir() and any(f.suffix.lower() == ".md" for f in output_cand.iterdir() if f.is_file()):
+            return output_cand, output_cand.name
 
         if direct_cand.is_dir():
             return direct_cand, direct_cand.name
-        if cand_th.is_dir():
-            return cand_th, cand_th.name
-        if cand_tr.is_dir():
-            return cand_tr, cand_tr.name
+        if output_cand.is_dir():
+            return output_cand, output_cand.name
 
         return direct_cand, direct_cand.name
 
@@ -656,7 +651,7 @@ def _resolve_export_output_dir(repo: NovelRepository, folder: Optional[str] = No
 
     if repo.root_dir.exists():
         for child in repo.root_dir.iterdir():
-            if child.is_dir() and (child.name.endswith("_th") or child.name.endswith("_trans") or child.name == "translated_chapters"):
+            if child.is_dir() and cfg.is_volume_output_folder_name(child.name):
                 if not any(c[0] == child for c in candidates):
                     md_cnt = len([f for f in child.iterdir() if f.is_file() and f.suffix.lower() == ".md"])
                     if md_cnt > 0:

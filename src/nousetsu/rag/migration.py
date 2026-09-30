@@ -188,7 +188,7 @@ def migrate_project_to_rag(
     progress_callback: Optional[Callable[[str, int, int], None]] = None
 ) -> MigrationStats:
     """Migrate and backfill existing novel data from .novel into RAG SQLite knowledge store.
-    
+
     Args:
         repository: NovelRepository instance.
         embedding_client: Optional EmbeddingClient for dense vector generation.
@@ -202,7 +202,7 @@ def migrate_project_to_rag(
         embed: Compute dense embeddings with EmbeddingClient (default: True).
         dry_run: Count and preview documents without modifying database.
         progress_callback: Optional callback receiving (stage_name, processed_count, total_count).
-    
+
     Returns:
         MigrationStats with execution metrics.
     """
@@ -270,23 +270,21 @@ def migrate_project_to_rag(
     if include_chunks:
         # Discover output folders
         candidate_dirs: List[tuple[str, Path]] = []
+        cfg = repository.load_config()
         if folder_filter:
-            for cand_name in [f"{folder_filter}_th", f"{folder_filter}_trans", folder_filter]:
-                cand_p = repository.root_dir / cand_name
+            for cand_p in (cfg.get_volume_output_path(repository.root_dir, folder_filter), repository.root_dir / folder_filter):
                 if cand_p.exists() and cand_p.is_dir():
                     candidate_dirs.append((folder_filter, cand_p))
                     break
         else:
             # Check for scanned folders matching output directory patterns
             for fld in sorted(scanned_folders):
-                for cand_name in [f"{fld}_th", f"{fld}_trans", fld]:
-                    cand_p = repository.root_dir / cand_name
+                for cand_p in (cfg.get_volume_output_path(repository.root_dir, fld), repository.root_dir / fld):
                     if cand_p.exists() and cand_p.is_dir():
                         candidate_dirs.append((fld, cand_p))
                         break
 
             # Fallback to configured output directory if no volume directories matched
-            cfg = repository.load_config()
             def_out = cfg.get_output_path(repository.root_dir)
             if def_out.exists() and not candidate_dirs:
                 candidate_dirs.append(("default", def_out))

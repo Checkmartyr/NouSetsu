@@ -1,5 +1,6 @@
 """Project configuration schema."""
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional
@@ -22,6 +23,22 @@ DEFAULT_AGENT_TEMPERATURES = {
     "polisher": 1.0,
     "chronicler": 0.2,
     "scraper": 1.0,
+}
+LANGUAGE_FOLDER_CODES = {
+    "arabic": "ar", "ar": "ar", "bengali": "bn", "bn": "bn",
+    "chinese": "zh", "zh": "zh", "zh_cn": "zh", "zh_tw": "zh",
+    "danish": "da", "da": "da", "dutch": "nl", "nl": "nl",
+    "english": "en", "en": "en", "finnish": "fi", "fi": "fi",
+    "french": "fr", "fr": "fr", "german": "de", "de": "de",
+    "greek": "el", "el": "el", "hindi": "hi", "hi": "hi",
+    "indonesian": "id", "id": "id", "italian": "it", "it": "it",
+    "japanese": "ja", "ja": "ja", "jp": "ja", "korean": "ko", "ko": "ko",
+    "malay": "ms", "ms": "ms", "norwegian": "no", "no": "no",
+    "polish": "pl", "pl": "pl", "portuguese": "pt", "pt": "pt",
+    "russian": "ru", "ru": "ru", "spanish": "es", "es": "es",
+    "swedish": "sv", "sv": "sv", "thai": "th", "th": "th",
+    "turkish": "tr", "tr": "tr", "ukrainian": "uk", "uk": "uk",
+    "vietnamese": "vi", "vi": "vi",
 }
 
 
@@ -171,6 +188,36 @@ class ProjectConfig(BaseModel):
         except ValueError:
             pass
         return candidate
+
+    @property
+    def target_language_code(self) -> str:
+        normalized = re.sub(r"[^a-z0-9]+", "_", self.target_language.strip().lower()).strip("_")
+        base_name = normalized.split("_", 1)[0]
+        return LANGUAGE_FOLDER_CODES.get(normalized) or LANGUAGE_FOLDER_CODES.get(base_name) or normalized or "target"
+
+    def get_volume_output_path(
+        self,
+        base_dir: Path,
+        raw_folder: str,
+        default_output_path: Optional[Path] = None,
+    ) -> Path:
+        target_path = Path(base_dir) / f"{raw_folder}_{self.target_language_code}"
+        suffixes = dict.fromkeys((self.target_language_code, "trans"))
+        for suffix in suffixes:
+            candidate = Path(base_dir) / f"{raw_folder}_{suffix}"
+            if candidate.exists():
+                return candidate
+        return Path(default_output_path) if default_output_path is not None else target_path
+
+    def is_volume_output_folder_name(self, name: str) -> bool:
+        normalized = name.lower()
+        suffix = normalized.rsplit("_", 1)[-1]
+        known_codes = set(LANGUAGE_FOLDER_CODES.values())
+        return (
+            normalized == "translated_chapters"
+            or suffix in known_codes | {"trans", "out"}
+            or normalized.endswith(f"_{self.target_language_code}")
+        )
 
     def get_output_path(self, base_dir: Path) -> Path:
         p = Path(self.output_dir).expanduser()

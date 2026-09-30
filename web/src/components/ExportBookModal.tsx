@@ -113,7 +113,7 @@ export const ExportBookModal: React.FC<ExportBookModalProps> = ({
         // 1. If initialFolder passed from StudioView, resolve matching translated folder
         if (initialFolder && initialFolder !== 'all') {
           const match = tFolders.find(
-            (tf) => tf.folder === initialFolder || tf.folder === `${initialFolder}_th` || tf.folder === `${initialFolder}_trans`
+            (tf) => tf.folder === initialFolder || tf.folder.startsWith(`${initialFolder}_`)
           );
           if (match) {
             setSelectedFolder(match.folder);

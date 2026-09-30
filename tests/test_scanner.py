@@ -113,6 +113,8 @@ def test_scanner_scan_project_multi_volume(tmp_path: Path):
     task_folders = {t.folder for t in all_tasks}
     assert "raw_chapters" in task_folders
     assert "Volume_02" in task_folders
+    volume_task = next(task for task in all_tasks if task.folder == "Volume_02")
+    assert volume_task.output_file == tmp_path / "Volume_02_th" / "0050.md"
 
     # 2. Scan specific volume
     vol2_tasks = scanner.scan_project(folder="Volume_02")
@@ -281,7 +283,3 @@ def test_repository_logger_term_rejection(tmp_path: Path):
     bible = repo.load_bible()
     # Should not crash with NameError, and invalid term should be rejected
     assert not any(t.source == "Sword of Justice" for t in bible.glossary)
-
-
-
-

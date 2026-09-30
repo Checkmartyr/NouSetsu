@@ -8,6 +8,32 @@ from nousetsu.models.metadata import (
     StageArtifacts,
     StageStatus,
 )
+from nousetsu.models.config import ProjectConfig
+
+
+def test_target_language_folder_codes():
+    for language, code in {
+        "English": "en",
+        "Thai": "th",
+        "Japanese": "ja",
+        "Chinese": "zh",
+        "Spanish": "es",
+    }.items():
+        assert ProjectConfig(target_language=language).target_language_code == code
+
+
+def test_volume_output_folder_follows_target_language_and_generic_legacy_suffix(tmp_path):
+    english = ProjectConfig(target_language="English")
+    (tmp_path / "Volume_01_th").mkdir()
+
+    assert english.get_volume_output_path(tmp_path, "Volume_01") == tmp_path / "Volume_01_en"
+
+    generic_legacy = tmp_path / "Volume_01_trans"
+    generic_legacy.mkdir()
+    assert english.get_volume_output_path(tmp_path, "Volume_01") == generic_legacy
+
+    thai = ProjectConfig(target_language="Thai")
+    assert thai.get_volume_output_path(tmp_path, "Volume_01") == tmp_path / "Volume_01_th"
 
 
 def test_novel_bible_models():
@@ -134,4 +160,3 @@ def test_character_pronouns():
     dumped_rel = yaml.safe_dump(char_rel.model_dump(), allow_unicode=True)
     loaded_rel = CharacterProfile.model_validate(yaml.safe_load(dumped_rel))
     assert loaded_rel.pronouns.relational == {"Amelia": "หนู/พี่"}
-

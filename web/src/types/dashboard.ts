@@ -1,5 +1,78 @@
 export type WorkspaceTab = 'studio' | 'reader' | 'bible' | 'traces' | 'settings';
 
+export interface TokenMetricTotals {
+  total_tokens: number;
+  input_tokens: number;
+  output_tokens: number;
+  thought_tokens: number;
+  cached_tokens: number;
+  duration_seconds: number;
+}
+
+export interface TokenStageMetric extends TokenMetricTotals {
+  stage: string;
+  calls: number;
+}
+
+export interface TokenModelMetric extends TokenMetricTotals {
+  model: string;
+  calls: number;
+}
+
+export interface TokenFolderMetric extends TokenMetricTotals {
+  folder: string;
+  chapter_count: number;
+  analyzed_chapters: number;
+}
+
+export interface TokenChapterMetric {
+  chapter_id: string;
+  chapter_num: number;
+  source_file: string;
+  folder: string;
+  total_tokens: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  thought_tokens: number;
+  cached_tokens: number;
+  duration_seconds: number;
+  status: string;
+}
+
+export interface ProjectTokenSummary {
+  total_chapters: number;
+  analyzed_chapters: number;
+  total_tokens: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  thought_tokens: number;
+  cached_tokens: number;
+  total_duration_seconds: number;
+  selected_folder: string | null;
+  available_folders: string[];
+  stage_metrics: TokenStageMetric[];
+  model_metrics: TokenModelMetric[];
+  folder_metrics: TokenFolderMetric[];
+  chapter_rankings: TokenChapterMetric[];
+}
+
+export interface ProjectTokenAnalyticsResponse {
+  project_path: string;
+  project_title: string;
+  selected_folder: string;
+  available_folders: string[];
+  recorded: ProjectTokenSummary;
+  history: ProjectTokenSummary;
+  metadata_snapshot: ProjectTokenSummary;
+  coverage: {
+    known_chapters: number;
+    history_chapters: number;
+    trace_snapshot_chapters: number;
+    snapshot_only_chapters: number;
+    history_complete: boolean;
+  };
+}
+
 export interface ChapterItem {
   chapter_num: number;
   title: string;

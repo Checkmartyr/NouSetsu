@@ -81,7 +81,7 @@ class ChapterTask:
 
 class ChapterScanner:
     """Discovers, prepares, and optimizes chapter translation tasks from novel directories.
-    
+
     Supports single-volume folders, multi-volume projects, and cross-project discovery
     via NOVEL_PROJECTS_DIR.
     """
@@ -150,7 +150,7 @@ class ChapterScanner:
         compute_hashes: bool = False,
     ) -> List[ChapterTask]:
         """High-speed scan of an input directory, matching against metadata and flagging status.
-        
+
         Optimizations applied:
         1. Fast OS directory stream reading via os.scandir (eliminates redundant stat syscalls).
         2. Pre-indexed output directory file existence set (O(1) lookups instead of N disk checks).
@@ -324,7 +324,7 @@ class ChapterScanner:
         compute_hashes: bool = False,
     ) -> List[ChapterTask]:
         """Scan and resolve chapter tasks for this project, supporting multi-folder and volume subdirectories.
-        
+
         If folder is specified and not 'all', scans only that subfolder / volume.
         If folder is None or 'all', scans primary raw chapters and all discovered volume folders in parallel.
         """
@@ -334,14 +334,16 @@ class ChapterScanner:
             folder_cand = self.repo.root_dir / folder
             if folder_cand.exists() and folder_cand.is_dir():
                 raw_path = folder_cand
-                out_cand_th = self.repo.root_dir / f"{folder}_th"
-                out_cand_tr = self.repo.root_dir / f"{folder}_trans"
-                if out_cand_th.exists():
-                    output_path = out_cand_th
-                elif out_cand_tr.exists():
-                    output_path = out_cand_tr
-                else:
-                    output_path = cfg.get_output_path(self.repo.root_dir)
+                default_output = (
+                    cfg.get_output_path(self.repo.root_dir)
+                    if raw_path.resolve() == cfg.get_raw_path(self.repo.root_dir).resolve()
+                    else None
+                )
+                output_path = cfg.get_volume_output_path(
+                    self.repo.root_dir,
+                    folder,
+                    default_output_path=default_output,
+                )
             else:
                 raw_path = cfg.get_raw_path(self.repo.root_dir)
                 output_path = cfg.get_output_path(self.repo.root_dir)
@@ -372,8 +374,7 @@ class ChapterScanner:
                     if (
                         entry.is_dir()
                         and not entry.name.startswith(".")
-                        and not entry.name.endswith("_th")
-                        and not entry.name.endswith("_trans")
+                        and not cfg.is_volume_output_folder_name(entry.name)
                         and entry.name not in ignored_dir_names
                     ):
                         child = Path(entry.path)
@@ -396,9 +397,7 @@ class ChapterScanner:
         # Naturally sort discovered subdirectories for deterministic ordering
         sorted_subdirs = natsorted(discovered_subdirs, key=lambda p: p.name)
         for child in sorted_subdirs:
-            out_th = self.repo.root_dir / f"{child.name}_th"
-            out_tr = self.repo.root_dir / f"{child.name}_trans"
-            sub_out = out_th if out_th.exists() else (out_tr if out_tr.exists() else output_path)
+            sub_out = cfg.get_volume_output_path(self.repo.root_dir, child.name)
             candidate_pairs.append((child, sub_out))
 
         if not candidate_pairs:

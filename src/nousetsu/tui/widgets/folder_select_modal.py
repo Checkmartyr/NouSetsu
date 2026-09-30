@@ -95,7 +95,7 @@ class FolderSelectModal(ModalScreen):
                     classes="custom-input"
                 )
                 yield Input(
-                    placeholder="Custom output folder (e.g. Villainess_05_th)...",
+                    placeholder="Custom output folder (defaults to target-language suffix)...",
                     id="inp_custom_out",
                     classes="custom-input"
                 )
@@ -153,7 +153,8 @@ class FolderSelectModal(ModalScreen):
                 self.app_instance.notify("Please enter a raw folder path.", severity="error")
                 return
             if not out_val:
-                out_val = f"{raw_val}_th"
+                cfg = self.app_instance.repo.load_config()
+                out_val = cfg.get_volume_output_path(self.app_instance.repo.root_dir, raw_val).name
             self._apply_folder(raw_val, out_val)
 
     def _apply_folder(self, raw_folder: str, output_folder: str) -> None:

@@ -45,6 +45,8 @@ from nousetsu.scraper import (
     scraper_subprocess_environment,
 )
 
+from nousetsu import __version__
+from nousetsu.analysis.project_token_analytics import compute_project_token_analytics
 from nousetsu.batch.runner import BatchRunner
 from nousetsu.batch.scanner import ChapterScanner, ChapterTask, extract_chapter_num, LEADING_SEQ_PATTERN
 from nousetsu.models.bible import CharacterProfile, GlossaryItem, NovelBible
@@ -426,6 +428,25 @@ def _get_project_meta(project_path: Path) -> Dict[str, Any]:
     return dict(res)
 
 
+def _project_token_analytics_response(
+    repo: NovelRepository,
+    folder: Optional[str],
+) -> Dict[str, Any]:
+    meta = _get_project_meta(repo.root_dir)
+    config = repo.load_config()
+    analytics = compute_project_token_analytics(
+        repo.novel_dir / "traces",
+        repo.load_all_metadata(),
+        folder_filter=folder,
+        default_folder=config.raw_dir,
+    )
+    return {
+        "project_path": meta["path"],
+        "project_title": meta["title"],
+        **analytics.model_dump(),
+    }
+
+
 def _load_project_traces(
     project_path: Path,
     chapter_num_filter: Optional[int] = None,
@@ -590,8 +611,7 @@ def _find_chapter_files(
                 if (
                     e.is_dir()
                     and not e.name.startswith(".")
-                    and not e.name.endswith("_th")
-                    and not e.name.endswith("_trans")
+                    and not cfg.is_volume_output_folder_name(e.name)
                     and e.name not in ignored
                 ):
                     p = Path(e.path)
@@ -612,15 +632,19 @@ def _find_chapter_files(
                             ch = int(seq_m.group(1)) if seq_m else extract_chapter_num(Path(entry.path), idx)
                             if ch == chapter_num:
                                 src_file = Path(entry.path)
-                                # Resolve output directory
-                                out_dir = None
+                                # Resolve the target-language output directory.
                                 if f_name:
-                                    for suff in ["_th", "_trans", "_en"]:
-                                        cand_out = repo.root_dir / f"{f_name}{suff}"
-                                        if cand_out.is_dir():
-                                            out_dir = cand_out
-                                            break
-                                if not out_dir:
+                                    default_output = (
+                                        cfg.get_output_path(repo.root_dir)
+                                        if r_dir.resolve() == raw_default.resolve()
+                                        else None
+                                    )
+                                    out_dir = cfg.get_volume_output_path(
+                                        repo.root_dir,
+                                        f_name,
+                                        default_output_path=default_output,
+                                    )
+                                else:
                                     out_dir = cfg.get_output_path(repo.root_dir)
                                 out_file = out_dir / f"{src_file.stem}.md"
                                 return (src_file, out_file, f_name, src_file.stem)
@@ -800,6 +824,23 @@ def _get_translated_word_count(file_path: Path) -> int:
         return 0
 
 
+def _ensure_volume_output_dir(repo: NovelRepository, raw_dir: Path, cfg: ProjectConfig) -> None:
+    """Create a translated sibling for a new top-level volume folder."""
+    root_dir = repo.root_dir.resolve()
+    raw_dir = raw_dir.resolve()
+    try:
+        raw_dir.relative_to(root_dir)
+    except ValueError:
+        return
+
+    if raw_dir == cfg.get_raw_path(root_dir).resolve() or raw_dir.parent != root_dir:
+        return
+    if cfg.is_volume_output_folder_name(raw_dir.name):
+        return
+
+    cfg.get_volume_output_path(root_dir, raw_dir.name).mkdir(parents=True, exist_ok=True)
+
+
 def _process_chapter_files(
     repo: NovelRepository,
     folder: Optional[str],
@@ -828,6 +869,7 @@ def _process_chapter_files(
         target_folder_name = clean_folder
 
     dest_dir.mkdir(parents=True, exist_ok=True)
+    _ensure_volume_output_dir(repo, dest_dir, cfg)
 
     uploaded: List[str] = []
     skipped: List[str] = []
@@ -946,7 +988,7 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
     app = FastAPI(
         title="NouSetsu Web Dashboard & API",
         description="REST and SSE API for agentic novel translation, trace inspection, and Novel Bible management.",
-        version="0.4.5",
+        version=__version__,
     )
 
     # CORS configuration
@@ -1108,6 +1150,14 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
             "genre": meta["genre"],
             "chapters": chapters,
         }
+
+    @app.get("/api/token-analytics")
+    async def get_token_analytics(
+        project_path: Optional[str] = Query(None),
+        folder: Optional[str] = Query(None),
+    ) -> Dict[str, Any]:
+        repo = _resolve_repo(project_path)
+        return _project_token_analytics_response(repo, folder)
 
     # ------------------------------------------------------------------------
     # 2. Translation Studio & Chapter Endpoints
@@ -1301,8 +1351,7 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
                 if (
                     child.is_dir()
                     and not child.name.startswith(".")
-                    and not child.name.endswith("_th")
-                    and not child.name.endswith("_trans")
+                    and not cfg.is_volume_output_folder_name(child.name)
                     and child.name not in ignored_dir_names
                 ):
                     folders.append(child.name)
@@ -1343,10 +1392,10 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
         except Exception:
             pass
 
-        # 3. Any directory ending in _th or _trans
+        # 3. Any recognized translated output folder
         if repo.root_dir.exists():
             for child in sorted(repo.root_dir.iterdir()):
-                if child.is_dir() and (child.name.endswith("_th") or child.name.endswith("_trans")):
+                if child.is_dir() and cfg.is_volume_output_folder_name(child.name):
                     if child.name not in seen_trans_names:
                         cnt = len([f for f in child.iterdir() if f.is_file() and f.suffix.lower() == ".md"])
                         translated_folders.append({
@@ -1361,11 +1410,17 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
         default_trans_folder = default_out_name
         if active_job.active_folder:
             af = active_job.active_folder
-            match = next((t["folder"] for t in translated_folders if t["folder"] in (af, f"{af}_th", f"{af}_trans")), None)
+            volume_output = cfg.get_volume_output_path(
+                repo.root_dir,
+                af,
+                default_output_path=def_out_dir,
+            )
+            match = next(
+                (t["folder"] for t in translated_folders if t["folder"] in (af, volume_output.name)),
+                None,
+            )
             if match:
                 default_trans_folder = match
-            elif (repo.root_dir / f"{af}_th").is_dir():
-                default_trans_folder = f"{af}_th"
 
         if not any(t["folder"] == default_trans_folder for t in translated_folders if t["chapter_count"] > 0):
             non_empty = [t for t in translated_folders if t["chapter_count"] > 0]
@@ -1501,6 +1556,7 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
             target_folder_name = clean_folder
 
         dest_dir.mkdir(parents=True, exist_ok=True)
+        _ensure_volume_output_dir(repo, dest_dir, cfg)
         task_id = str(uuid.uuid4())[:8]
 
         init_status = ScraperStatusResponse(
@@ -1598,6 +1654,7 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
             else:
                 dest_dir = cfg.get_raw_path(repo.root_dir)
             dest_dir.mkdir(parents=True, exist_ok=True)
+            _ensure_volume_output_dir(repo, dest_dir, cfg)
 
             # Assets directory for illustrations
             assets_dir = repo.root_dir / "assets"
@@ -1918,7 +1975,7 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
 
     @app.get("/api/updates/latest")
     async def get_latest_release() -> Dict[str, Any]:
-        current_version = os.environ.get("NOUSETSU_DESKTOP_VERSION", "0.4.5")
+        current_version = os.environ.get("NOUSETSU_DESKTOP_VERSION", __version__)
         try:
             release = await asyncio.to_thread(_fetch_latest_github_release)
         except urllib.error.HTTPError as error:
@@ -2388,6 +2445,23 @@ class NousetsuWebHandler(http.server.SimpleHTTPRequestHandler):
                 "traces_count": meta["trace_count"],
                 "latest_trace_mtime": meta["latest_trace_mtime"],
             })
+            return
+
+        if path == "/api/token-analytics":
+            proj_arg = query.get("project_path", [None])[0]
+            folder_arg = query.get("folder", [None])[0]
+            if proj_arg:
+                target_p = Path(proj_arg).resolve()
+            else:
+                registry = ProjectRegistry()
+                target_p = registry.get_last_active_project() or NovelRepository().root_dir
+
+            if not target_p.exists() or not (target_p / ".novel").exists():
+                self._send_json({"error": f"Invalid project path: {target_p}"}, status=400)
+                return
+
+            repo = NovelRepository(target_p)
+            self._send_json(_project_token_analytics_response(repo, folder_arg))
             return
 
         if path == "/api/traces":

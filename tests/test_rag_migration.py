@@ -109,10 +109,10 @@ def test_migrate_bible_entities(tmp_path: Path):
 
 def test_migrate_translated_scene_chunks(tmp_path: Path):
     repo = NovelRepository(tmp_path)
-    repo.initialize_project("Chunk Migration Test", "English", "Thai")
+    repo.initialize_project("Chunk Migration Test", "Japanese", "English")
 
     # Create output directory and translated markdown file
-    out_dir = tmp_path / "Vol_01_th"
+    out_dir = tmp_path / "Vol_01_en"
     out_dir.mkdir()
 
     # 45 lines of prose

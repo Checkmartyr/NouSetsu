@@ -1,4 +1,5 @@
 import { ActiveProjectResponse, SyncState, ProjectTracesResponse, CreateProjectRequest, ProjectMeta } from '../types/trace';
+import { ProjectTokenAnalyticsResponse } from '../types/dashboard';
 import { API_BASE } from './apiBase';
 
 /**
@@ -53,6 +54,23 @@ export async function fetchProjectTraces(
     });
     if (!res.ok) return null;
     return (await res.json()) as ProjectTracesResponse;
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchProjectTokenAnalytics(
+  projectPath: string,
+  folder?: string
+): Promise<ProjectTokenAnalyticsResponse | null> {
+  try {
+    const params = new URLSearchParams({ project_path: projectPath });
+    if (folder) params.set('folder', folder);
+    const res = await fetch(`${API_BASE}/api/token-analytics?${params.toString()}`, {
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as ProjectTokenAnalyticsResponse;
   } catch {
     return null;
   }

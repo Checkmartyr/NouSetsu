@@ -72,7 +72,7 @@ Only one translation job can run at a time. Keep the intended project selected w
 ## Read and review translations
 
 - **Reader** provides chapter navigation, font-size controls, dark/sepia/light themes, and a raw-source peek.
-- **Traces** shows recorded model interactions. Select a chapter, filter by pipeline stage or status, and inspect outputs, prompts, and token/latency details.
+- **Traces** shows recorded model interactions. In **Chapter Traces**, select a chapter, filter by pipeline stage or status, and inspect outputs, prompts, and token/latency details. Switch to **Project Analytics** for project-wide recorded token totals and breakdowns by stage, model, volume folder, and chapter; select a folder to narrow the report. Metadata-only usage snapshots are shown separately from trace history, and incomplete history is clearly marked. These recorded metrics are not a billing ledger and missing usage is not estimated.
 - **Diff Comparison** compares the drafting trace with the polishing trace. It is not a comparison between the original source file and the final translation; it is available after both traces exist.
 - **Novel Bible** provides character profiles, a relationship visualizer, glossary terms, narrative memory, and raw YAML editing.
 

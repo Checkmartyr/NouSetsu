@@ -284,7 +284,7 @@ class ProjectRegistry:
     def list_project_paths(self) -> List[str]:
         """Return list of valid project directory paths without loading Bibles/summaries."""
         paths = self._load_data()
-        
+
         reg_env = os.environ.get("NOVEL_REGISTRY_DIR")
         if reg_env:
             # Under hermetic test isolation, only discover projects in the isolated projects_root
@@ -517,26 +517,20 @@ class NovelRepository:
         for child in self.root_dir.iterdir():
             if not child.is_dir() or child.name in ignored_names:
                 continue
-            # Ignore folders known to be output folders
-            lname = child.name.lower()
-            if lname.endswith("_th") or lname.endswith("_trans") or lname.endswith("_out") or lname == "translated_chapters":
+            if cfg.is_volume_output_folder_name(child.name):
                 continue
 
             # Check if directory contains text/markdown chapters
             chapter_files = [f for f in child.iterdir() if f.is_file() and f.suffix.lower() in [".txt", ".md"]]
             count = len(chapter_files)
             if count > 0:
-                # Infer corresponding output folder
-                out_name = f"{child.name}_th"
-                if (self.root_dir / f"{child.name}_th").exists():
-                    out_name = f"{child.name}_th"
-                elif (self.root_dir / f"{child.name}_trans").exists():
-                    out_name = f"{child.name}_trans"
-                elif cfg.raw_dir in [child.name, str(child)] and cfg.output_dir:
-                    out_name = Path(cfg.output_dir).name
-                elif (self.root_dir / "translated_chapters").exists() and child.name == "raw_chapters":
-                    out_name = "translated_chapters"
-
+                is_default_raw = child.resolve() == cfg.get_raw_path(self.root_dir).resolve()
+                default_output = cfg.get_output_path(self.root_dir) if is_default_raw else None
+                out_name = cfg.get_volume_output_path(
+                    self.root_dir,
+                    child.name,
+                    default_output_path=default_output,
+                ).name
                 results.append((child.name, out_name, count))
 
         from natsort import natsorted

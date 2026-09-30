@@ -14,6 +14,7 @@ import { Navbar } from './components/Navbar';
 import { StagePipeline } from './components/StagePipeline';
 import { TraceTimeline } from './components/TraceTimeline';
 import { TraceDetail, DetailTab } from './components/TraceDetail';
+import { ProjectTokenAnalytics } from './components/ProjectTokenAnalytics';
 import { StudioView } from './components/StudioView';
 import { ReaderView } from './components/ReaderView';
 import { BibleView } from './components/BibleView';
@@ -26,6 +27,7 @@ export const App: React.FC = () => {
   const [activeWorkspace, setActiveWorkspace] = useState<WorkspaceTab>('studio');
   const [readerChapterNum, setReaderChapterNum] = useState<number | null>(null);
   const [readerFolder, setReaderFolder] = useState<string | null>(null);
+  const [traceViewMode, setTraceViewMode] = useState<'chapter-traces' | 'project-analytics'>('chapter-traces');
 
   // Real-time Event Logs from SSE
   const [logs, setLogs] = useState<string[]>([]);
@@ -418,6 +420,7 @@ export const App: React.FC = () => {
         onSelectTab={setActiveWorkspace}
         chapters={chapters}
         selectedChapterId={selectedChapterId}
+        showChapterSelector={traceViewMode === 'chapter-traces'}
         onSelectChapter={handleSelectChapter}
         onOpenDirectory={handleOpenDirectory}
         onLoadFiles={handleLoadFiles}
@@ -495,76 +498,111 @@ export const App: React.FC = () => {
         ) : (
           /* TRACES WORKSPACE */
           <div className="flex flex-col h-full overflow-hidden">
-            <StagePipeline
-              traces={traces}
-              selectedStageFilter={selectedStageFilter}
-              onSelectStageFilter={handleSelectStageFilter}
-            />
-
-            {/* Mobile View Toggle Bar (Only visible on screens < lg) */}
-            <div className="lg:hidden flex items-center justify-between px-3 py-1.5 bg-[#2b2622] border-b border-[#3f3a36]">
-              <span className="text-[11px] font-mono text-[#aea69c]">Trace View:</span>
-              <div className="flex items-center gap-1 bg-[#383330] p-0.5 rounded-[3px] border border-[#3f3a36]">
+            <div className="flex items-center justify-between border-b border-[#3f3a36] bg-[#2b2622] px-3 py-2 sm:px-4">
+              <div role="group" aria-label="Traces view" className="flex items-center gap-1 rounded-[4px] border border-[#3f3a36] bg-[#24201d] p-0.5">
                 <button
                   type="button"
-                  onClick={() => setMobileTraceView('timeline')}
-                  className={`px-2 py-0.5 text-xs rounded-[2px] transition-colors cursor-pointer ${
-                    mobileTraceView === 'timeline'
-                      ? 'bg-[#f7f5f0] text-[#2b2622] font-medium'
-                      : 'text-[#c9c0ad] hover:text-[#f7f5f0]'
-                  }`}
+                  aria-pressed={traceViewMode === 'chapter-traces'}
+                  onClick={() => setTraceViewMode('chapter-traces')}
+                  className={`rounded-[3px] px-3 py-1.5 text-xs transition-colors cursor-pointer ${traceViewMode === 'chapter-traces' ? 'bg-[#383330] text-[#f7f5f0] border border-[#544d47] font-medium' : 'text-[#c9c0ad] hover:bg-[#383330]/50 hover:text-[#f7f5f0]'}`}
                 >
-                  Timeline ({traces.length})
+                  Chapter Traces
                 </button>
                 <button
                   type="button"
-                  onClick={() => setMobileTraceView('detail')}
-                  className={`px-2 py-0.5 text-xs rounded-[2px] transition-colors cursor-pointer ${
-                    mobileTraceView === 'detail'
-                      ? 'bg-[#f7f5f0] text-[#2b2622] font-medium'
-                      : 'text-[#c9c0ad] hover:text-[#f7f5f0]'
-                  }`}
+                  aria-pressed={traceViewMode === 'project-analytics'}
+                  onClick={() => setTraceViewMode('project-analytics')}
+                  className={`rounded-[3px] px-3 py-1.5 text-xs transition-colors cursor-pointer ${traceViewMode === 'project-analytics' ? 'bg-[#383330] text-[#f7f5f0] border border-[#544d47] font-medium' : 'text-[#c9c0ad] hover:bg-[#383330]/50 hover:text-[#f7f5f0]'}`}
                 >
-                  Detail
+                  Project Analytics
                 </button>
               </div>
+              {traceViewMode === 'project-analytics' && activeProject && (
+                <span className="hidden sm:block truncate text-xs text-[#aea69c]">{activeProject.title}</span>
+              )}
             </div>
 
-            <div className="flex-1 flex overflow-hidden">
-              <div className={`${mobileTraceView === 'timeline' ? 'block' : 'hidden'} lg:block w-full lg:w-80 md:w-96 shrink-0 h-full overflow-hidden`}>
-                <TraceTimeline
+            {traceViewMode === 'project-analytics' ? (
+              <ProjectTokenAnalytics
+                key={activeProject?.path || 'project-token-analytics'}
+                projectPath={activeProject?.path || null}
+                projectTitle={activeProject?.title || null}
+                refreshKey={`${activeProject?.latest_trace_mtime || 0}:${activeProject?.trace_count || 0}`}
+              />
+            ) : (
+              <>
+                <StagePipeline
                   traces={traces}
-                  selectedTraceId={selectedTraceId}
-                  onSelectTrace={(id) => {
-                    handleSelectChapter(selectedChapterId || '');
-                    setSelectedTraceId(id);
-                    setMobileTraceView('detail');
-                  }}
                   selectedStageFilter={selectedStageFilter}
+                  onSelectStageFilter={handleSelectStageFilter}
                 />
-              </div>
-              <div className={`${mobileTraceView === 'detail' ? 'flex' : 'hidden'} lg:flex flex-1 flex-col h-full overflow-hidden min-w-0`}>
-                {currentTrace && currentChapter ? (
-                  <TraceDetail
-                    trace={currentTrace}
-                    chapterDoc={currentChapter.document}
-                    activeTab={activeDetailTab}
-                    onTabChange={setActiveDetailTab}
-                  />
-                ) : (
-                  <div className="flex-1 flex flex-col items-center justify-center p-8 text-[#aea69c] text-xs space-y-3">
-                    <p>No traces recorded for this chapter yet.</p>
+
+                {/* Mobile View Toggle Bar (Only visible on screens < lg) */}
+                <div className="lg:hidden flex items-center justify-between px-3 py-1.5 bg-[#2b2622] border-b border-[#3f3a36]">
+                  <span className="text-[11px] font-mono text-[#aea69c]">Trace View:</span>
+                  <div className="flex items-center gap-1 bg-[#383330] p-0.5 rounded-[3px] border border-[#3f3a36]">
                     <button
-                      onClick={handleLoadDemo}
-                      className="btn-primary flex items-center gap-1.5"
+                      type="button"
+                      onClick={() => setMobileTraceView('timeline')}
+                      className={`px-2 py-0.5 text-xs rounded-[2px] transition-colors cursor-pointer ${
+                        mobileTraceView === 'timeline'
+                          ? 'bg-[#f7f5f0] text-[#2b2622] font-medium'
+                          : 'text-[#c9c0ad] hover:text-[#f7f5f0]'
+                      }`}
                     >
-                      <Sparkles className="w-3.5 h-3.5" />
-                      <span>Load Demo Traces</span>
+                      Timeline ({traces.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMobileTraceView('detail')}
+                      className={`px-2 py-0.5 text-xs rounded-[2px] transition-colors cursor-pointer ${
+                        mobileTraceView === 'detail'
+                          ? 'bg-[#f7f5f0] text-[#2b2622] font-medium'
+                          : 'text-[#c9c0ad] hover:text-[#f7f5f0]'
+                      }`}
+                    >
+                      Detail
                     </button>
                   </div>
-                )}
-              </div>
-            </div>
+                </div>
+
+                <div className="flex-1 flex overflow-hidden">
+                  <div className={`${mobileTraceView === 'timeline' ? 'block' : 'hidden'} lg:block w-full lg:w-80 md:w-96 shrink-0 h-full overflow-hidden`}>
+                    <TraceTimeline
+                      traces={traces}
+                      selectedTraceId={selectedTraceId}
+                      onSelectTrace={(id) => {
+                        handleSelectChapter(selectedChapterId || '');
+                        setSelectedTraceId(id);
+                        setMobileTraceView('detail');
+                      }}
+                      selectedStageFilter={selectedStageFilter}
+                    />
+                  </div>
+                  <div className={`${mobileTraceView === 'detail' ? 'flex' : 'hidden'} lg:flex flex-1 flex-col h-full overflow-hidden min-w-0`}>
+                    {currentTrace && currentChapter ? (
+                      <TraceDetail
+                        trace={currentTrace}
+                        chapterDoc={currentChapter.document}
+                        activeTab={activeDetailTab}
+                        onTabChange={setActiveDetailTab}
+                      />
+                    ) : (
+                      <div className="flex-1 flex flex-col items-center justify-center p-8 text-[#aea69c] text-xs space-y-3">
+                        <p>No traces recorded for this chapter yet.</p>
+                        <button
+                          onClick={handleLoadDemo}
+                          className="btn-primary flex items-center gap-1.5"
+                        >
+                          <Sparkles className="w-3.5 h-3.5" />
+                          <span>Load Demo Traces</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>

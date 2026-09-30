@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-30
+
+### Added
+- Add project-level token analytics with optional volume-folder filtering.
+- Create translated volume folders using the project's target-language code.
+- Link to the desktop app download from the README.
+
+### Changed
+- Improve the Web Studio Traces navigation layout and reorganize the README.
+
+### Fixed
+- Keep volume output routing, export, RAG indexing, and realignment aligned with the target-language suffix.
+- Report the package version consistently in the CLI and updater API.
+
 ## [0.4.9] - 2026-09-29
 
 ### Added
@@ -238,6 +252,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Automatic CJK source language detection (Japanese, Chinese, Korean).
 - Console scripts `nousetsu` and `novel`.
 
+[0.5.0]: https://github.com/Checkmartyr/NouSetsu/compare/v0.4.9...v0.5.0
+[0.4.9]: https://github.com/Checkmartyr/NouSetsu/compare/v0.4.8...v0.4.9
 [0.4.5]: https://github.com/Checkmartyr/NouSetsu/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/Checkmartyr/NouSetsu/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/Checkmartyr/NouSetsu/compare/v0.4.2...v0.4.3

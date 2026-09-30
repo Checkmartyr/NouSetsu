@@ -24,6 +24,7 @@ interface NavbarProps {
   onLoadFiles: (files: FileList) => void;
   onLoadDemo: () => void;
   isFileSystemSupported: boolean;
+  showChapterSelector?: boolean;
 
   // TUI Project Synchronization Props
   activeProject: ProjectMeta | null;
@@ -46,6 +47,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onLoadFiles,
   onLoadDemo,
   isFileSystemSupported,
+  showChapterSelector = true,
   activeProject,
   projects,
   onSwitchProject,
@@ -75,7 +77,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <header className="bg-[#2b2622] border-b border-[#3f3a36] sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-2 sm:px-6">
+      <div className="w-full px-2 sm:px-6">
         <div className="flex items-center justify-between h-14 gap-2 sm:gap-4 overflow-hidden">
 
           {/* Left: Logo & Wordmark */}
@@ -119,7 +121,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div className="hidden md:flex items-center gap-2 shrink-0">
 
             {/* Trace Chapter Selector (Only shown on traces tab) */}
-            {activeTab === 'traces' && chapters.length > 0 && (
+            {activeTab === 'traces' && showChapterSelector && chapters.length > 0 && (
               <div className="hidden lg:block w-44">
                 <select
                   value={selectedChapterId || ''}

@@ -227,6 +227,7 @@ def test_ebook_web_api(tmp_path: Path):
     repo = NovelRepository(proj_dir)
     cfg = repo.load_config()
     cfg.title = "Web Novel Adventure"
+    cfg.target_language = "English"
     repo.save_config(cfg)
 
     # Build dummy EPUB for inspect and import
@@ -265,11 +266,12 @@ def test_ebook_web_api(tmp_path: Path):
     assert import_data["success"] is True
     assert import_data["imported_count"] == 2
     assert (proj_dir / "Volume_01").is_dir()
+    assert (proj_dir / "Volume_01_en").is_dir()
     assert len(list((proj_dir / "Volume_01").glob("*.txt"))) == 2
 
     # 3. Export endpoint (EPUB)
     # Populate a translated chapter first
-    trans_dir = proj_dir / "Volume_01_th"
+    trans_dir = proj_dir / "Volume_01_en"
     trans_dir.mkdir(parents=True, exist_ok=True)
     (trans_dir / "0001.md").write_text("# บทที่ 1\n\nเนื้อเรื่องภาษาไทย", encoding="utf-8")
 
@@ -332,8 +334,8 @@ def test_ebook_web_api(tmp_path: Path):
     assert resp_folders.status_code == 200
     f_data = resp_folders.json()
     assert "translated_folders" in f_data
-    assert any(tf["folder"] == "Volume_01_th" for tf in f_data["translated_folders"])
-    assert f_data["default_translated_folder"] == "Volume_01_th"
+    assert any(tf["folder"] == "Volume_01_en" for tf in f_data["translated_folders"])
+    assert f_data["default_translated_folder"] == "Volume_01_en"
 
 
 def test_pdf_writer_and_preview(tmp_path: Path):
@@ -384,6 +386,3 @@ def test_pdf_writer_and_preview(tmp_path: Path):
     pdf_bytes = pdf_writer.build_pdf_bytes()
     assert pdf_bytes.startswith(b"%PDF-")
     assert len(pdf_bytes) > 2000
-
-
-

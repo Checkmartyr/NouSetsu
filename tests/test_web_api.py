@@ -4,6 +4,7 @@ import pytest
 from pathlib import Path
 from fastapi.testclient import TestClient
 
+from nousetsu.batch.scanner import ChapterScanner
 from nousetsu.cli.web_server import create_app, event_bus, active_job
 from nousetsu.storage.repository import NovelRepository
 
@@ -96,6 +97,20 @@ def test_chapters_and_content_endpoints(client: TestClient, web_test_repo: Novel
     assert content["chapter_num"] == 1
     assert "はじめに" in content["source_text"]
     assert "Chapter 1: Prologue" in content["translated_text"]
+
+
+def test_volume_chapter_content_uses_target_language_output_path(client: TestClient, web_test_repo: NovelRepository):
+    volume_dir = web_test_repo.root_dir / "Volume_09"
+    volume_dir.mkdir()
+    (volume_dir / "0009.txt").write_text("Volume chapter", encoding="utf-8")
+
+    response = client.get(
+        "/api/chapters/9/content",
+        params={"project_path": str(web_test_repo.root_dir), "folder": "Volume_09"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["output_file"] == str(web_test_repo.root_dir / "Volume_09_en" / "0009.md")
 
 
 def test_bible_endpoints(client: TestClient, web_test_repo: NovelRepository):
@@ -354,6 +369,7 @@ def test_folders_and_upload_endpoints(client: TestClient, web_test_repo: NovelRe
     raw_dir = web_test_repo.root_dir / "raw_chapters"
     assert (raw_dir / "0002.txt").exists()
     assert "冒険の始まり" in (raw_dir / "0002.txt").read_text(encoding="utf-8")
+    assert not (web_test_repo.root_dir / "raw_chapters_en").exists()
 
     # Verify duplicate upload with overwrite=False skips existing files
     res_skip = client.post("/api/chapters/upload", json={
@@ -402,10 +418,25 @@ def test_folders_and_upload_endpoints(client: TestClient, web_test_repo: NovelRe
     vol_file = web_test_repo.root_dir / "Villainess_05" / "0121.txt"
     assert vol_file.exists()
     assert "悪役令嬢" in vol_file.read_text(encoding="utf-8")
+    assert (web_test_repo.root_dir / "Villainess_05_en").is_dir()
+    volume_tasks = ChapterScanner(web_test_repo).scan_project(folder="Villainess_05", parallel=False)
+    assert volume_tasks[0].output_file.parent == web_test_repo.root_dir / "Villainess_05_en"
 
     # Verify GET /api/folders now includes Villainess_05
     res_folders_after = client.get(f"/api/folders?project_path={proj_param}")
-    assert "Villainess_05" in res_folders_after.json()["folders"]
+    folders_after = res_folders_after.json()
+    assert "Villainess_05" in folders_after["folders"]
+    assert "Villainess_05_en" in {folder["folder"] for folder in folders_after["translated_folders"]}
+
+    # Existing _trans output folders are reused instead of creating a second pair.
+    (web_test_repo.root_dir / "Villainess_06_trans").mkdir()
+    res_existing_pair = client.post("/api/chapters/upload", json={
+        "project_path": proj_param,
+        "folder": "Villainess_06",
+        "files": [{"name": "0122.txt", "content": "第122章。"}],
+    })
+    assert res_existing_pair.status_code == 200
+    assert not (web_test_repo.root_dir / "Villainess_06_th").exists()
 
     # 4. POST /api/chapters/upload-form (multipart)
     res_form = client.post(

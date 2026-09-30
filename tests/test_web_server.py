@@ -4,6 +4,7 @@ import io
 import socketserver
 import threading
 import urllib.request
+from urllib.parse import urlencode
 from pathlib import Path
 import pytest
 
@@ -214,6 +215,178 @@ def test_api_traces(live_server, sample_web_project):
         data = json.loads(res.read().decode("utf-8"))
         assert data["project_title"] == "Test Novel Project"
         assert len(data["chapters"]) == 2
+
+
+def test_api_token_analytics_aggregates_trace_history_and_separates_snapshots(live_server, sample_web_project):
+    from nousetsu.models.metadata import (
+        ChapterMetadata,
+        CheckpointData,
+        PipelineStage,
+        StageStatus,
+        StepTokenUsage,
+        TokenUsage,
+        TranslationStats,
+    )
+
+    project_dir = sample_web_project["proj_dir"]
+    traces_dir = sample_web_project["traces_dir"]
+
+    def trace(trace_id, chapter_id, chapter_num, folder, stage, model, usage, duration):
+        return {
+            "trace_id": trace_id,
+            "chapter_id": chapter_id,
+            "chapter_num": chapter_num,
+            "folder": folder,
+            "stage": stage,
+            "model": model,
+            "token_usage": usage,
+            "duration_seconds": duration,
+        }
+
+    first = trace("root-first", "ch_001", 1, None, "drafting", "mock-drafter", {
+        "input_tokens": 100, "output_tokens": 50, "thought_tokens": 10, "cached_tokens": 20, "total_tokens": 160,
+    }, 2.0)
+    retry = trace("root-retry", "ch_001", 1, None, "drafting", "mock-drafter", {
+        "input_tokens": 40, "output_tokens": 20, "thought_tokens": 0, "cached_tokens": 10, "total_tokens": 60,
+    }, 1.0)
+    volume = trace("volume-first", "ch_002", 2, "Volume_01", "critique", "mock-critic", {
+        "input_tokens": 30, "output_tokens": 20, "thought_tokens": 5, "cached_tokens": 0, "total_tokens": 55,
+    }, 3.0)
+
+    root_doc = traces_dir / "chapter_0001.json"
+    root_doc.write_text(json.dumps({"chapter_id": "ch_001", "chapter_num": 1, "folder": None, "traces": [first]}), encoding="utf-8")
+    (traces_dir / "chapter_0001.jsonl").write_text(
+        chr(10).join(json.dumps(record) for record in (first, retry)) + chr(10),
+        encoding="utf-8",
+    )
+
+    volume_dir = traces_dir / "Volume_01"
+    volume_json = volume_dir / "chapter_0002.json"
+    volume_json.write_text(json.dumps({"chapter_id": "ch_002", "chapter_num": 2, "folder": "Volume_01", "traces": [volume]}), encoding="utf-8")
+    (volume_dir / "chapter_0002.jsonl").write_text(json.dumps(volume) + chr(10), encoding="utf-8")
+
+    metadata = ChapterMetadata(
+        chapter_id="ch_003",
+        chapter_num=3,
+        source_file="Volume_02/0003.txt",
+        source_sha256="test-hash",
+        output_file="Volume_02_en/0003.md",
+        checkpoint=CheckpointData(status=StageStatus.PAUSED),
+        stats=TranslationStats(
+            prompt_tokens=8,
+            completion_tokens=2,
+            total_tokens=10,
+            duration_seconds=0.5,
+            step_usage=[StepTokenUsage(
+                stage=PipelineStage.DRAFTING,
+                step_name="Drafting",
+                model="mock-drafter",
+                duration_seconds=0.5,
+                usage=TokenUsage(input_tokens=8, output_tokens=2, total_tokens=10),
+            )],
+        ),
+    )
+    estimate_only = ChapterMetadata(
+        chapter_id="ch_004",
+        chapter_num=4,
+        source_file="Volume_03/0004.txt",
+        source_sha256="test-hash",
+        output_file="Volume_03_en/0004.md",
+        checkpoint=CheckpointData(status=StageStatus.PAUSED),
+        stats=TranslationStats(prompt_tokens=9, completion_tokens=2, total_tokens=11),
+    )
+    zero_usage = ChapterMetadata(
+        chapter_id="ch_005",
+        chapter_num=5,
+        source_file="Volume_04/0005.txt",
+        source_sha256="test-hash",
+        output_file="Volume_04_en/0005.md",
+        checkpoint=CheckpointData(status=StageStatus.PAUSED),
+        stats=TranslationStats(step_usage=[StepTokenUsage(stage=PipelineStage.DRAFTING)]),
+    )
+    root_metadata = ChapterMetadata(
+        chapter_id="ch_001",
+        chapter_num=1,
+        source_file="raw_chapters/0001.txt",
+        source_sha256="test-hash",
+        output_file="translated_chapters/0001.md",
+        checkpoint=CheckpointData(status=StageStatus.PAUSED),
+        stats=TranslationStats(
+            prompt_tokens=140,
+            completion_tokens=70,
+            thought_tokens=10,
+            cached_tokens=30,
+            total_tokens=220,
+            duration_seconds=3.0,
+            step_usage=[StepTokenUsage(
+                stage=PipelineStage.DRAFTING,
+                step_name="Drafting",
+                model="mock-drafter",
+                duration_seconds=3.0,
+                usage=TokenUsage(
+                    input_tokens=140,
+                    output_tokens=70,
+                    thought_tokens=10,
+                    cached_tokens=30,
+                    total_tokens=220,
+                ),
+            )],
+        ),
+    )
+    repository = NovelRepository(project_dir)
+    repository.save_metadata(root_metadata, project_dir / "translated_chapters" / "0001.md")
+    repository.save_metadata(metadata, project_dir / "Volume_02_en" / "0003.md")
+    repository.save_metadata(estimate_only, project_dir / "Volume_03_en" / "0004.md")
+    repository.save_metadata(zero_usage, project_dir / "Volume_04_en" / "0005.md")
+
+    def get_analytics(**query):
+        url = f"{live_server}/api/token-analytics?{urlencode({'project_path': str(project_dir), **query})}"
+        with urllib.request.urlopen(url) as response:
+            assert response.status == 200
+            assert response.headers.get("Content-Type", "").startswith("application/json")
+            return json.loads(response.read().decode("utf-8"))
+
+    all_data = get_analytics()
+    assert all_data["history"]["total_tokens"] == 275
+    assert all_data["history"]["prompt_tokens"] == 170
+    assert all_data["history"]["completion_tokens"] == 90
+    assert all_data["history"]["thought_tokens"] == 15
+    assert all_data["history"]["cached_tokens"] == 30
+    assert all_data["history"]["total_duration_seconds"] == 6.0
+    assert all_data["history"]["stage_metrics"][0]["total_tokens"] == 220
+    assert all_data["history"]["model_metrics"][0]["total_tokens"] == 220
+    assert all_data["recorded"]["total_tokens"] == 285
+    assert all_data["recorded"]["prompt_tokens"] == 178
+    assert all_data["recorded"]["completion_tokens"] == 92
+    assert all_data["recorded"]["stage_metrics"][0]["total_tokens"] == 230
+    assert all_data["recorded"]["model_metrics"][0]["total_tokens"] == 230
+    assert all_data["recorded"]["total_duration_seconds"] == 6.5
+    assert {item["chapter_num"] for item in all_data["recorded"]["chapter_rankings"]} == {1, 2, 3}
+    assert all_data["metadata_snapshot"]["total_tokens"] == 10
+    assert all_data["metadata_snapshot"]["total_chapters"] == 1
+    assert all_data["metadata_snapshot"]["chapter_rankings"][0]["chapter_num"] == 3
+    assert all_data["coverage"]["history_chapters"] == 2
+    assert all_data["coverage"]["snapshot_only_chapters"] == 3
+    assert all_data["coverage"]["history_complete"] is False
+
+    volume_data = get_analytics(folder="Volume_01")
+    assert volume_data["recorded"]["total_tokens"] == 55
+    assert volume_data["history"]["total_tokens"] == 55
+    assert volume_data["metadata_snapshot"]["total_tokens"] == 0
+    assert volume_data["history"]["chapter_rankings"][0]["chapter_num"] == 2
+    assert volume_data["history"]["chapter_rankings"][0]["chapter_id"] == "ch_002"
+    assert len(volume_data["history"]["folder_metrics"]) == 1
+    assert volume_data["history"]["folder_metrics"][0]["folder"] == "Volume_01"
+
+    from fastapi.testclient import TestClient
+    from nousetsu.cli.web_server import app
+
+    app_response = TestClient(app).get(
+        "/api/token-analytics",
+        params={"project_path": str(project_dir)},
+    )
+    assert app_response.status_code == 200
+    assert app_response.json()["history"]["total_tokens"] == 275
 
 
 def test_api_switch_active_project(live_server, sample_web_project, tmp_path: Path):

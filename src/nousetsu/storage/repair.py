@@ -74,13 +74,11 @@ def realign_project_folder(
         raise FileNotFoundError(f"Folder '{folder}' does not exist in project '{project_dir}'.")
 
     cfg = repository.load_config()
-    output_dir = project_dir / f"{folder}_th"
+    output_dir = cfg.get_volume_output_path(project_dir, folder)
     if not output_dir.exists():
         cand_out = cfg.get_output_path(project_dir)
         if cand_out.exists() and cand_out.name == folder:
             output_dir = cand_out
-        else:
-            output_dir = project_dir / f"{folder}_translated"
 
     # 2. Scan tasks with collision-aware scanner
     scanner = ChapterScanner(repository)

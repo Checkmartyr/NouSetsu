@@ -74,7 +74,7 @@ editing the project version files:
 
 ```powershell
 uv run python -m nousetsu.cli.local_updater_build
-uv run python -m nousetsu.cli.local_updater_build --version 0.4.9
+uv run python -m nousetsu.cli.local_updater_build --version 0.5.1
 ```
 
 The first command uses the configured app version; `--version` sets the Tauri
@@ -86,13 +86,13 @@ alongside a Tauri updater manifest, for example:
 
 ```json
 {
-  "version": "0.4.9",
+  "version": "0.5.1",
   "notes": "Local updater test",
-  "pub_date": "2026-09-29T00:00:00Z",
+  "pub_date": "2026-09-30T00:00:00Z",
   "platforms": {
     "windows-x86_64": {
       "signature": "<contents of the matching installer .sig file>",
-      "url": "http://127.0.0.1:8765/Nousetsu_0.4.9_x64-setup.exe"
+      "url": "http://127.0.0.1:8765/Nousetsu_0.5.1_x64-setup.exe"
     }
   }
 }

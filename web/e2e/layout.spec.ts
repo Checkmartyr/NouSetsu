@@ -29,6 +29,23 @@ test.describe('Layout & Viewport Responsiveness', () => {
     }
   });
 
+  test('Traces tab keeps all navigation tabs visible at screenshot width', async ({ page }) => {
+    await page.setViewportSize({ width: 1328, height: 800 });
+    await page.goto('/');
+    await page.waitForSelector('header');
+
+    const header = page.locator('header');
+    await header.getByRole('button', { name: 'Traces', exact: true }).click();
+    await expect(page.getByRole('combobox', { name: 'Select chapter trace' })).toBeVisible();
+
+    const nav = header.locator('nav');
+    const settingsTab = nav.getByRole('button', { name: 'Settings', exact: true });
+    const navRight = await nav.evaluate((element) => element.getBoundingClientRect().right);
+    const settingsRight = await settingsTab.evaluate((element) => element.getBoundingClientRect().right);
+
+    expect(settingsRight, 'Settings tab should not be clipped by the tab strip').toBeLessThanOrEqual(navRight + 1);
+  });
+
   test('Header and Navigation Elements Remain Accessible', async ({ page }) => {
     await page.goto('/');
     await page.waitForSelector('header');

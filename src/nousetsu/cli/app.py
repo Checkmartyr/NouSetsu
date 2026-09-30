@@ -85,6 +85,7 @@ def cmd_batch(args: argparse.Namespace) -> None:
         if src_lang and src_lang.lower() in ["auto", "autodetect", "detect"]:
             src_lang = "Auto"
         repo.set_languages(source_lang=src_lang, target_lang=args.target_lang)
+        cfg = repo.load_config()
     runner = BatchRunner(
         repo,
         model_name=args.model,
@@ -117,9 +118,7 @@ def cmd_batch(args: argparse.Namespace) -> None:
             if args.output_dir and args.output_dir != "translated_chapters":
                 output_path = Path(args.output_dir) if Path(args.output_dir).is_absolute() else (repo.root_dir / args.output_dir)
             else:
-                out_cand_th = repo.root_dir / f"{folder_arg}_th"
-                out_cand_tr = repo.root_dir / f"{folder_arg}_trans"
-                output_path = out_cand_th if out_cand_th.exists() else (out_cand_tr if out_cand_tr.exists() else out_cand_th)
+                output_path = cfg.get_volume_output_path(repo.root_dir, folder_arg)
             repo.set_active_folder(raw_dir=folder_arg, output_dir=output_path.name)
         else:
             input_path = Path(args.input_dir) if args.input_dir != "raw_chapters" else cfg.get_raw_path(repo.root_dir)
@@ -756,6 +755,7 @@ def cmd_tui(args: argparse.Namespace) -> None:
     repo = NovelRepository(project_dir) if project_dir else NovelRepository()
     if getattr(args, "source_lang", None) or getattr(args, "target_lang", None):
         repo.set_languages(source_lang=args.source_lang, target_lang=args.target_lang)
+    cfg = repo.load_config()
 
     in_dir = getattr(args, "input_dir", None)
     out_dir = getattr(args, "output_dir", None)
@@ -765,9 +765,7 @@ def cmd_tui(args: argparse.Namespace) -> None:
         if raw_cand.exists() and raw_cand.is_dir():
             in_dir = str(raw_cand)
             if not out_dir:
-                out_cand_th = repo.root_dir / f"{folder_arg}_th"
-                out_cand_tr = repo.root_dir / f"{folder_arg}_trans"
-                out_dir = str(out_cand_th if out_cand_th.exists() else (out_cand_tr if out_cand_tr.exists() else out_cand_th))
+                out_dir = str(cfg.get_volume_output_path(repo.root_dir, folder_arg))
             repo.set_active_folder(raw_dir=folder_arg, output_dir=Path(out_dir).name)
 
     app = NovelAgentApp(
@@ -1350,7 +1348,7 @@ def main() -> None:
     p_export = subparsers.add_parser("export", help="Compile translated chapters into EPUB3 or printable HTML/PDF")
     p_export.add_argument("--format", "-f", choices=["epub", "pdf", "html"], default="epub", help="Output format: 'epub', 'pdf' (native binary), or 'html' (default: epub)")
     p_export.add_argument("--project-dir", "-p", default=None, help="Root folder of novel project")
-    p_export.add_argument("--folder", "-F", default=None, help="Translated folder to compile (e.g. Volume_01_th or default)")
+    p_export.add_argument("--folder", "-F", default=None, help="Translated folder to compile (e.g. Volume_01_<language-code> or default)")
     p_export.add_argument("--output", "-o", default=None, help="Output destination file path (.epub, .pdf, or .html)")
     p_export.add_argument("--title", default=None, help="Book title override")
     p_export.add_argument("--author", default=None, help="Author name override")

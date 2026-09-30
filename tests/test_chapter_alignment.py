@@ -11,11 +11,11 @@ from nousetsu.storage.repair import realign_project_folder
 
 def test_realign_project_folder_collided_chapters(tmp_path: Path):
     repo = NovelRepository(tmp_path)
-    repo.initialize_project()
+    repo.initialize_project("Test Novel", "Japanese", "English")
 
     folder = "Volume_01"
     raw_dir = tmp_path / folder
-    out_dir = tmp_path / f"{folder}_th"
+    out_dir = tmp_path / f"{folder}_en"
     raw_dir.mkdir()
     out_dir.mkdir()
 

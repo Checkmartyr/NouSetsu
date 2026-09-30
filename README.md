@@ -15,6 +15,8 @@
 [![Tests: 500 Passed](https://img.shields.io/badge/tests-500%20passed-brightgreen.svg)](tests/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
+**[Download the Windows Desktop App](https://github.com/Checkmartyr/NouSetsu/releases/latest)** · [Desktop App Guide](docs/web_desktop_guide.md)
+
 <p align="center">
   <img src="docs/images/web_studio_dashboard_demo.png" alt="NouSetsu Modern Web Studio & Batch Dashboard" width="100%">
 </p>
@@ -30,11 +32,11 @@
 
 ## 📑 Table of Contents
 - [Executive Overview](#-executive-overview)
+- [Quick Start](#-quick-start)
 - [The Problem: Why Naive Machine Translation Fails](#-the-problem-why-naive-machine-translation-fails)
 - [The 5-Stage Agent Assembly Line](#-the-5-stage-agent-assembly-line)
 - [Key Architectural Innovations](#-key-architectural-innovations)
 - [System Architecture](#-system-architecture)
-- [Quick Start](#-quick-start)
 - [Command-Line Interface (CLI) Reference](#-command-line-interface-cli-reference)
 - [Interactive Interfaces: TUI, Web Studio, and Desktop App](#-interactive-interfaces-tui-web-studio-and-desktop-app)
 - [Project Layout](#-project-layout)
@@ -51,6 +53,160 @@
 Translating literary long-form prose is substantially more complex than converting isolated sentences. Traditional machine translation (Google Translate, DeepL) and naive single-prompt LLM wrappers degrade quickly over multi-hundred chapter novels—swapping character genders, losing running plot context, hallucinating dropped pronouns, dropping chapter headers, and getting halted by commercial AI safety blocks.
 
 NouSetsu orchestrates five specialized agents within a cyclic **LangGraph** reflection review workflow. It maintains persistent cross-chapter narrative memory via a 3-tier **Novel Bible**, enforces strict terminology and distinct character voice registers, adapts to genre tropes with pluggable domain skills, and features built-in API quota protection and thread-safe cancellation.
+
+---
+
+## 🚀 Quick Start
+
+### Windows Desktop App
+
+[Download the latest Windows installer](https://github.com/Checkmartyr/NouSetsu/releases/latest). It bundles the Python backend, so a separate Python installation is not required. See the [Web Studio & Desktop App Guide](docs/web_desktop_guide.md) for setup and updates.
+
+### 1. Install `uv` and NouSetsu
+
+`uv` installs Python versions, manages the project virtual environment, and installs dependencies from `uv.lock`. NouSetsu requires Python 3.13 or newer.
+
+#### Install `uv`
+
+On Windows, run this in PowerShell:
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+On macOS or Linux, run this in a shell:
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+Restart your terminal if needed, then verify that `uv` is on your `PATH`:
+```bash
+uv --version
+```
+
+#### Clone and install NouSetsu
+
+```bash
+# Clone the repository, including the scraper submodule
+git clone --recurse-submodules https://github.com/Checkmartyr/NouSetsu.git
+cd NouSetsu
+
+# Install Python 3.13 using uv (skip if a compatible Python is already available)
+uv python install 3.13
+
+# Create the project environment and install locked dependencies
+uv sync
+
+# Verify the CLI installation
+uv run nousetsu --version
+```
+
+If you already cloned the repository without its submodules, initialize them with `git submodule update --init --recursive` before using the scraper.
+
+### 2. Alternative: Run with Docker Compose
+If you prefer running in a containerized environment without installing Python 3.13 or Node.js on the host:
+
+```bash
+# Copy and configure environment variables
+cp .env.example .env
+
+# Launch the Web Studio container (binds to http://localhost:5173)
+docker compose up -d
+
+# Execute CLI commands inside the container
+docker compose run --rm nousetsu scan --all-projects
+docker compose run --rm nousetsu batch --project-dir Douyara -c 48
+```
+
+### 3. Configure Environment & API Keys
+
+NouSetsu uses a decoupled configuration system: project metadata resides in `.novel/config.yaml`, while machine-level API credentials and model routing reside in your central `.env` file.
+
+#### Step 1: Copy Configuration Template
+Copy the documented template into your project root:
+```bash
+cp .env.example .env
+```
+
+#### Step 2: API Keys & Authentication
+Configure the key(s) for the provider(s) you want to use in `.env`:
+```ini
+GEMINI_API_KEY=your_gemini_api_key_here
+OPENAI_API_KEY=your_openai_api_key_here
+OPENROUTER_API_KEY=your_openrouter_api_key_here
+CUSTOM_API_BASE_URL=https://provider.example/v1
+CUSTOM_API_KEY=your_custom_provider_api_key_here
+```
+> [!TIP]
+> Obtain a free or pay-as-you-go key from [Google AI Studio](https://aistudio.google.com/). You can also export keys directly in your terminal environment:
+> ```bash
+> # Windows PowerShell
+> $env:GEMINI_API_KEY = "AIzaSy..."
+>
+> # Linux / macOS Bash
+> export GEMINI_API_KEY="AIzaSy..."
+> ```
+> OpenAI and OpenRouter are supported directly. For another OpenAI-compatible provider, set `CUSTOM_API_BASE_URL` and `CUSTOM_API_KEY`, then select **Custom OpenAI-compatible** and enter its model ID. OpenRouter uses the OpenAI-compatible API; an `ANTHROPIC_API_KEY` alone does not enable Anthropic routing. Keep `.env` private and never commit live credentials.
+
+#### Step 3: Multi-Agent Model Routing & Precedence Cascade
+NouSetsu resolves LLM models via a strict **4-tier precedence hierarchy**:
+1. **CLI Flag / Constructor Argument**: Explicit runtime override (e.g. `--model`, `--critic-model`).
+2. **Project Config**: Project-specific override in `.novel/config.yaml` (`cfg.model_name` or `cfg.<agent>_model`).
+3. **Central `.env` Variable**: Machine-level routing (`NOVEL_MODEL`, `NOVEL_CRITIC_MODEL`, etc.).
+4. **Built-in Safe Fallback**: Default production model (`gemini-3.1-flash-lite`, `gemma-4-26b-a4b-it`).
+
+Each pipeline agent can be routed to an independent model tailored to its cognitive responsibility. Provider selection is based on the model ID and matching API key, not on whichever key happens to be present:
+
+- **Gemini**: use a `gemini-*` or `gemma-*` model with `GEMINI_API_KEY` (or `GOOGLE_API_KEY`).
+- **OpenAI**: use a model such as `gpt-4o` with `OPENAI_API_KEY`; `openai:gpt-4o` explicitly selects OpenAI.
+- **OpenRouter**: use an OpenRouter model ID such as `anthropic/claude-3.7-sonnet` with `OPENROUTER_API_KEY`, or prefix it as `openrouter:anthropic/claude-3.7-sonnet`. A bare OpenAI model name can also use OpenRouter when only `OPENROUTER_API_KEY` is configured.
+- **Custom OpenAI-compatible**: set `CUSTOM_API_BASE_URL` and `CUSTOM_API_KEY`, then route through the provider selector as `custom:<model-id>`. The Web Studio and desktop settings add the `custom:` prefix when you select the provider.
+
+For example, set `NOVEL_MODEL` or an agent-specific `NOVEL_*_MODEL` to the desired model ID. When OpenAI and OpenRouter keys are both present, bare `gpt-*`/`o1`/`o3`/`o4` model names use OpenAI, while slash-form model IDs use OpenRouter. The Novel-Scraper sidecar uses the same provider API keys and `NOVEL_FALLBACK_MODEL`; set `NOVEL_SCRAPER_MODEL` for a scraper-only route, or leave it blank to inherit `NOVEL_MODEL`.
+
+| Agent Stage | Environment Variable | Default Model | Cognitive Responsibility |
+| :--- | :--- | :--- | :--- |
+| **Stage 1: Entity Extractor** | `NOVEL_EXTRACTOR_MODEL` | `gemini-3.1-flash-lite` | Entity discovery, character profiles, cultivation ranks |
+| **Stage 2: Context-Aware Drafter** | `NOVEL_DRAFTER_MODEL` | `gemini-3.5-flash-lite` | Zero-anaphora pronoun resolution, dialogue registers |
+| **Stage 3: Critique Agent** | `NOVEL_CRITIC_MODEL` | `gemini-3.5-flash-lite` | Fidelity and style evaluation (0–10 scoring), omission audit |
+| **Stage 4: Polishing Agent** | `NOVEL_POLISHER_MODEL` | `gemini-3.1-flash-lite` | Diff/patch cadence refinement, translationese purging |
+| **Stage 5: Chronicler Agent** | `NOVEL_CHRONICLER_MODEL` | `gemini-3.5-flash-lite` | 3-tier story arc memory, state shifts, term reconciliation |
+| **Global Primary Fallback** | `NOVEL_MODEL` / `DEFAULT_MODEL` | `gemini-3.1-flash-lite` | Default model when stage is not specialized |
+| **Novel Scraper** | `NOVEL_SCRAPER_MODEL` | Inherits `NOVEL_MODEL` | Optional scraper-specific route; uses shared provider keys and global fallback |
+| **Automated 429 Failover** | `NOVEL_FALLBACK_MODEL` | `gemini-3.5-flash-lite` | Activated automatically upon HTTP 429 quota exhaustion |
+
+#### Step 4: Execution, Rate Limiting & Reasoning Tuning
+Tune performance, rate quotas, and model reasoning parameters in `.env`:
+
+| Variable | Default | Description |
+| :--- | :---: | :--- |
+| `NOVEL_MAX_TPM` | `32000` | Tokens-per-minute rate limit window guard |
+| `NOVEL_MAX_RPM` | `60` | Requests-per-minute rate limit window guard |
+| `NOVEL_USE_INTERACTIONS` | `1` | Use Gemini Interactions API (`/v1beta/interactions`) for streaming thoughts |
+| `NOVEL_TEMPERATURE` | `1.0` | Sampling temperature for creative and fluent prose drafting/polishing |
+| `NOVEL_MAX_REVIEW_LOOPS` | `3` | Maximum reflection review passes between Critic and Polisher (bounds: 1–5) |
+| `NOVEL_QUALITY_THRESHOLD` | `8.5` | Quality score threshold (both fidelity & style $\ge 8.5$) triggering early exit |
+| `NOVEL_FILTER_EXTRACTOR_ENTITIES` | `true` | Filter known characters and terms per chunk in Entity Extractor |
+| `NOVEL_THINKING_LEVEL` | `medium` | Gemini reasoning level (`minimal`, `low`, `medium`, `high`, `off`) |
+| `NOVEL_THINKING_BUDGET` | `2048` | Optional maximum thinking token budget for reasoning models |
+| `NOVEL_PROJECTS_DIR` | `project` | Default directory where novel projects are stored |
+| `NOVEL_SCRAPER_PATH` | *(Auto)* | Optional path override for `modules/novel_scraper` submodule |
+| `NOVEL_SCRAPER_PYTHON` | *(Auto)* | Optional Python interpreter override for web novel scraping |
+
+#### Step 5: Zero-Token Offline Mock Testing
+If no matching provider API key is configured (or when using models prefixed with `"mock"` / `"test"`), NouSetsu operates with a deterministic offline mock model (`mock-novel-llm`). This enables full testing of TUI navigation, project creation, batch scanning, and checkpoint resumption without consuming API tokens or requiring an internet connection.
+
+### 4. Launching NouSetsu
+Launch the interactive Terminal User Interface (TUI):
+
+```bash
+nousetsu
+```
+*(Or use the shorthand alias `novel`).*
+
+To launch the Web Studio & Trace Visualizer:
+```bash
+nousetsu web
+```
 
 ---
 
@@ -212,156 +368,6 @@ flowchart TD
     Drafter -.-> BisectionEngine
     BisectionEngine -.-> GTFallback
     Extractor & Drafter & Critic & Polisher & Chronicler -.-> Tracker
-```
-
----
-
-## 🚀 Quick Start
-
-### 1. Install `uv` and NouSetsu
-
-`uv` installs Python versions, manages the project virtual environment, and installs dependencies from `uv.lock`. NouSetsu requires Python 3.13 or newer.
-
-#### Install `uv`
-
-On Windows, run this in PowerShell:
-```powershell
-powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-```
-
-On macOS or Linux, run this in a shell:
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
-
-Restart your terminal if needed, then verify that `uv` is on your `PATH`:
-```bash
-uv --version
-```
-
-#### Clone and install NouSetsu
-
-```bash
-# Clone the repository, including the scraper submodule
-git clone --recurse-submodules https://github.com/Checkmartyr/NouSetsu.git
-cd NouSetsu
-
-# Install Python 3.13 using uv (skip if a compatible Python is already available)
-uv python install 3.13
-
-# Create the project environment and install locked dependencies
-uv sync
-
-# Verify the CLI installation
-uv run nousetsu --version
-```
-
-If you already cloned the repository without its submodules, initialize them with `git submodule update --init --recursive` before using the scraper.
-
-### 2. Alternative: Run with Docker Compose
-If you prefer running in a containerized environment without installing Python 3.13 or Node.js on the host:
-
-```bash
-# Copy and configure environment variables
-cp .env.example .env
-
-# Launch the Web Studio container (binds to http://localhost:5173)
-docker compose up -d
-
-# Execute CLI commands inside the container
-docker compose run --rm nousetsu scan --all-projects
-docker compose run --rm nousetsu batch --project-dir Douyara -c 48
-```
-
-### 3. Configure Environment & API Keys
-
-NouSetsu uses a decoupled configuration system: project metadata resides in `.novel/config.yaml`, while machine-level API credentials and model routing reside in your central `.env` file.
-
-#### Step 1: Copy Configuration Template
-Copy the documented template into your project root:
-```bash
-cp .env.example .env
-```
-
-#### Step 2: API Keys & Authentication
-Configure the key(s) for the provider(s) you want to use in `.env`:
-```ini
-GEMINI_API_KEY=your_gemini_api_key_here
-OPENAI_API_KEY=your_openai_api_key_here
-OPENROUTER_API_KEY=your_openrouter_api_key_here
-CUSTOM_API_BASE_URL=https://provider.example/v1
-CUSTOM_API_KEY=your_custom_provider_api_key_here
-```
-> [!TIP]
-> Obtain a free or pay-as-you-go key from [Google AI Studio](https://aistudio.google.com/). You can also export keys directly in your terminal environment:
-> ```bash
-> # Windows PowerShell
-> $env:GEMINI_API_KEY = "AIzaSy..."
-> 
-> # Linux / macOS Bash
-> export GEMINI_API_KEY="AIzaSy..."
-> ```
-> OpenAI and OpenRouter are supported directly. For another OpenAI-compatible provider, set `CUSTOM_API_BASE_URL` and `CUSTOM_API_KEY`, then select **Custom OpenAI-compatible** and enter its model ID. OpenRouter uses the OpenAI-compatible API; an `ANTHROPIC_API_KEY` alone does not enable Anthropic routing. Keep `.env` private and never commit live credentials.
-
-#### Step 3: Multi-Agent Model Routing & Precedence Cascade
-NouSetsu resolves LLM models via a strict **4-tier precedence hierarchy**:
-1. **CLI Flag / Constructor Argument**: Explicit runtime override (e.g. `--model`, `--critic-model`).
-2. **Project Config**: Project-specific override in `.novel/config.yaml` (`cfg.model_name` or `cfg.<agent>_model`).
-3. **Central `.env` Variable**: Machine-level routing (`NOVEL_MODEL`, `NOVEL_CRITIC_MODEL`, etc.).
-4. **Built-in Safe Fallback**: Default production model (`gemini-3.1-flash-lite`, `gemma-4-26b-a4b-it`).
-
-Each pipeline agent can be routed to an independent model tailored to its cognitive responsibility. Provider selection is based on the model ID and matching API key, not on whichever key happens to be present:
-
-- **Gemini**: use a `gemini-*` or `gemma-*` model with `GEMINI_API_KEY` (or `GOOGLE_API_KEY`).
-- **OpenAI**: use a model such as `gpt-4o` with `OPENAI_API_KEY`; `openai:gpt-4o` explicitly selects OpenAI.
-- **OpenRouter**: use an OpenRouter model ID such as `anthropic/claude-3.7-sonnet` with `OPENROUTER_API_KEY`, or prefix it as `openrouter:anthropic/claude-3.7-sonnet`. A bare OpenAI model name can also use OpenRouter when only `OPENROUTER_API_KEY` is configured.
-- **Custom OpenAI-compatible**: set `CUSTOM_API_BASE_URL` and `CUSTOM_API_KEY`, then route through the provider selector as `custom:<model-id>`. The Web Studio and desktop settings add the `custom:` prefix when you select the provider.
-
-For example, set `NOVEL_MODEL` or an agent-specific `NOVEL_*_MODEL` to the desired model ID. When OpenAI and OpenRouter keys are both present, bare `gpt-*`/`o1`/`o3`/`o4` model names use OpenAI, while slash-form model IDs use OpenRouter. The Novel-Scraper sidecar uses the same provider API keys and `NOVEL_FALLBACK_MODEL`; set `NOVEL_SCRAPER_MODEL` for a scraper-only route, or leave it blank to inherit `NOVEL_MODEL`.
-
-| Agent Stage | Environment Variable | Default Model | Cognitive Responsibility |
-| :--- | :--- | :--- | :--- |
-| **Stage 1: Entity Extractor** | `NOVEL_EXTRACTOR_MODEL` | `gemini-3.1-flash-lite` | Entity discovery, character profiles, cultivation ranks |
-| **Stage 2: Context-Aware Drafter** | `NOVEL_DRAFTER_MODEL` | `gemini-3.5-flash-lite` | Zero-anaphora pronoun resolution, dialogue registers |
-| **Stage 3: Critique Agent** | `NOVEL_CRITIC_MODEL` | `gemini-3.5-flash-lite` | Fidelity and style evaluation (0–10 scoring), omission audit |
-| **Stage 4: Polishing Agent** | `NOVEL_POLISHER_MODEL` | `gemini-3.1-flash-lite` | Diff/patch cadence refinement, translationese purging |
-| **Stage 5: Chronicler Agent** | `NOVEL_CHRONICLER_MODEL` | `gemini-3.5-flash-lite` | 3-tier story arc memory, state shifts, term reconciliation |
-| **Global Primary Fallback** | `NOVEL_MODEL` / `DEFAULT_MODEL` | `gemini-3.1-flash-lite` | Default model when stage is not specialized |
-| **Novel Scraper** | `NOVEL_SCRAPER_MODEL` | Inherits `NOVEL_MODEL` | Optional scraper-specific route; uses shared provider keys and global fallback |
-| **Automated 429 Failover** | `NOVEL_FALLBACK_MODEL` | `gemini-3.5-flash-lite` | Activated automatically upon HTTP 429 quota exhaustion |
-
-#### Step 4: Execution, Rate Limiting & Reasoning Tuning
-Tune performance, rate quotas, and model reasoning parameters in `.env`:
-
-| Variable | Default | Description |
-| :--- | :---: | :--- |
-| `NOVEL_MAX_TPM` | `32000` | Tokens-per-minute rate limit window guard |
-| `NOVEL_MAX_RPM` | `60` | Requests-per-minute rate limit window guard |
-| `NOVEL_USE_INTERACTIONS` | `1` | Use Gemini Interactions API (`/v1beta/interactions`) for streaming thoughts |
-| `NOVEL_TEMPERATURE` | `1.0` | Sampling temperature for creative and fluent prose drafting/polishing |
-| `NOVEL_MAX_REVIEW_LOOPS` | `3` | Maximum reflection review passes between Critic and Polisher (bounds: 1–5) |
-| `NOVEL_QUALITY_THRESHOLD` | `8.5` | Quality score threshold (both fidelity & style $\ge 8.5$) triggering early exit |
-| `NOVEL_FILTER_EXTRACTOR_ENTITIES` | `true` | Filter known characters and terms per chunk in Entity Extractor |
-| `NOVEL_THINKING_LEVEL` | `medium` | Gemini reasoning level (`minimal`, `low`, `medium`, `high`, `off`) |
-| `NOVEL_THINKING_BUDGET` | `2048` | Optional maximum thinking token budget for reasoning models |
-| `NOVEL_PROJECTS_DIR` | `project` | Default directory where novel projects are stored |
-| `NOVEL_SCRAPER_PATH` | *(Auto)* | Optional path override for `modules/novel_scraper` submodule |
-| `NOVEL_SCRAPER_PYTHON` | *(Auto)* | Optional Python interpreter override for web novel scraping |
-
-#### Step 5: Zero-Token Offline Mock Testing
-If no matching provider API key is configured (or when using models prefixed with `"mock"` / `"test"`), NouSetsu operates with a deterministic offline mock model (`mock-novel-llm`). This enables full testing of TUI navigation, project creation, batch scanning, and checkpoint resumption without consuming API tokens or requiring an internet connection.
-
-### 4. Launching NouSetsu
-Launch the interactive Terminal User Interface (TUI):
-
-```bash
-nousetsu
-```
-*(Or use the shorthand alias `novel`).*
-
-To launch the Web Studio & Trace Visualizer:
-```bash
-nousetsu web
 ```
 
 ---
