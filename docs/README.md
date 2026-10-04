@@ -22,6 +22,7 @@ Welcome to the **NouSetsu** (濃説 / 脳説) technical documentation. This dire
 | **Windows Code Signing** | [**`windows-code-signing.md`**](./windows-code-signing.md) | Trusted Authenticode certificate setup, opt-in Tauri signing build, and installer signature verification. |
 | **Desktop Auto-Updates** | [**`desktop-auto-updates.md`**](./desktop-auto-updates.md) | Signed Tauri updater configuration, in-app install flow, GitHub release workflow, and required updater key secrets. |
 | **Developer API Reference** | [**`api_reference.md`**](./api_reference.md) | Python API reference for agents, FallbackChatModel, LineSemanticChunker, workflow graph, rate limiter, ArcSummary, NovelBible hierarchy methods, summary migration, DiffPatcher, PromptTracker, HybridSearchEngine, and Pydantic models. |
+| **Feature Proposals** | [**`proposals/literary_style_transfer.md`**](./proposals/literary_style_transfer.md) | Design specification for Literary Style Transfer & Tone Presets: switchable narrative voices, 4 stylistic levers, 5 built-in presets, and anti-purple-prose audits. |
 
 ---
 
