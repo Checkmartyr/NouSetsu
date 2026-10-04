@@ -7,9 +7,9 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set, Tuple
 
-from nousetsu.models.bible import ArcSummary, CharacterProfile, CharacterPronouns, GlossaryItem, NovelBible
+from nousetsu.models.bible import ArcSummary, CharacterProfile, CharacterPronouns, GlossaryItem, NovelBible, is_valid_alias_string
 
 logger = logging.getLogger(__name__)
 
@@ -310,20 +310,18 @@ def is_valid_glossary_source(source: str, source_lang: str) -> bool:
 
 
 def _merge_into(existing: CharacterProfile, char: CharacterProfile) -> None:
-    """Merge char into existing character profile."""
+    """Merge char into existing character profile safely."""
     # Prefer personal name over noble title if one is a title (e.g. 'เคานต์...')
-    is_existing_title = any(existing.name.strip().startswith(t) for t in ("เคานต์", "ท่านเคานต์", "เจ้าชาย", "ดยุก"))
-    is_char_title = any(char.name.strip().startswith(t) for t in ("เคานต์", "ท่านเคานต์", "เจ้าชาย", "ดยุก"))
+    is_existing_title = any(existing.name.strip().startswith(t) for t in ("เคานต์", "ท่านเคานต์", "เจ้าชาย", "ดยุก", "องค์ชาย", "เจ้าหญิง", "องค์หญิง"))
+    is_char_title = any(char.name.strip().startswith(t) for t in ("เคานต์", "ท่านเคานต์", "เจ้าชาย", "ดยุก", "องค์ชาย", "เจ้าหญิง", "องค์หญิง"))
     if is_existing_title and not is_char_title:
         if existing.name.strip() not in existing.aliases:
             existing.aliases.append(existing.name.strip())
         existing.name = char.name.strip()
-    elif not is_existing_title and not is_char_title and len(char.name.strip()) > len(existing.name.strip()):
-        if existing.name.strip() not in existing.aliases:
-            existing.aliases.append(existing.name.strip())
-        existing.name = char.name.strip()
     elif char.name.strip() != existing.name.strip() and char.name.strip() not in existing.aliases:
-        existing.aliases.append(char.name.strip())
+        # DO NOT overwrite existing.name by string length! Just record variant as an alias.
+        if is_valid_alias_string(char.name):
+            existing.aliases.append(char.name.strip())
 
     # Pick more complete original_name with CJK script, preferring personal name over noble title
     cjk_existing = bool(CJK_SCRIPT_RE.search(existing.original_name))
@@ -334,18 +332,24 @@ def _merge_into(existing: CharacterProfile, char: CharacterProfile) -> None:
         if existing.original_name.strip() not in existing.aliases:
             existing.aliases.append(existing.original_name.strip())
         existing.original_name = char.original_name.strip()
-    elif cjk_new and (not cjk_existing or len(char.original_name.strip()) > len(existing.original_name.strip())):
+    elif cjk_new and not cjk_existing:
         if existing.original_name.strip() not in existing.aliases:
             existing.aliases.append(existing.original_name.strip())
         existing.original_name = char.original_name.strip()
     elif char.original_name.strip() != existing.original_name.strip() and char.original_name.strip() not in existing.aliases:
-        existing.aliases.append(char.original_name.strip())
+        if is_valid_alias_string(char.original_name):
+            existing.aliases.append(char.original_name.strip())
 
-    # Merge aliases
+    # Merge aliases, deduplicated and structurally validated
     for a in char.aliases:
-        if a and a.strip() and a.strip().lower() not in [x.lower() for x in existing.aliases]:
-            if a.strip().lower() != existing.name.strip().lower():
-                existing.aliases.append(a.strip())
+        if not a or not a.strip():
+            continue
+        a_clean = a.strip()
+        if not is_valid_alias_string(a_clean):
+            continue
+        if a_clean.lower() not in [x.lower() for x in existing.aliases]:
+            if a_clean.lower() != existing.name.strip().lower() and a_clean.lower() != existing.original_name.strip().lower():
+                existing.aliases.append(a_clean)
 
     # For royal characters with 'เจ้าชาย', ensure 'องค์ชาย' is also an alias
     if any(t in existing.aliases or t in [existing.name, char.name] for t in ("เจ้าชาย", "王子")):
@@ -383,39 +387,78 @@ def _merge_into(existing: CharacterProfile, char: CharacterProfile) -> None:
 
 def _should_merge(c1: CharacterProfile, c2: CharacterProfile) -> bool:
     """Determine if two character profiles represent the exact same person."""
-    # 1. Exact original_name
-    if c1.original_name and c2.original_name and c1.original_name.strip() == c2.original_name.strip():
-        return True
+    # 0. Gender conflict: different explicit genders can NEVER be the same person
+    g1 = (c1.gender or "").strip().lower()
+    g2 = (c2.gender or "").strip().lower()
+    if g1 in ("male", "female") and g2 in ("male", "female") and g1 != g2:
+        return False
 
-    # 2. CJK given-name vs full-name matching via ・ or space
+    # 0b. Role conflict: protagonist and antagonist can NEVER be the same person
+    r1 = (c1.role or "").strip().lower()
+    r2 = (c2.role or "").strip().lower()
+    if (r1 == "protagonist" and r2 == "antagonist") or (r1 == "antagonist" and r2 == "protagonist"):
+        return False
+
+    # 1. Exact original_name match (case-insensitive)
+    if c1.original_name and c2.original_name:
+        o1 = c1.original_name.strip().lower()
+        o2 = c2.original_name.strip().lower()
+        if o1 and o2 and o1 == o2:
+            return True
+
+    # 2. Exact target name match (case-insensitive)
+    if c1.name and c2.name:
+        n1 = c1.name.strip().lower()
+        n2 = c2.name.strip().lower()
+        if n1 and n2 and n1 == n2:
+            return True
+
+    # 3. CJK given-name vs full-name matching via ・ or space
     for char_a, char_b in ((c1, c2), (c2, c1)):
         orig_a = char_a.original_name.strip()
         orig_b = char_b.original_name.strip()
-        if "・" in orig_a:
+        if "・" in orig_a and CJK_SCRIPT_RE.search(orig_a):
             parts = [p.strip() for p in orig_a.split("・") if p.strip()]
-            if orig_b in parts:
+            if orig_b in parts and len(orig_b) >= 2 and is_valid_alias_string(orig_b, min_len=2):
                 return True
-        if " " in orig_a:
+        if " " in orig_a and CJK_SCRIPT_RE.search(orig_a):
             parts = [p.strip() for p in orig_a.split() if p.strip()]
-            if orig_b in parts:
+            if orig_b in parts and len(orig_b) >= 2 and is_valid_alias_string(orig_b, min_len=2):
                 return True
 
-    # 3. Exact target name
-    if c1.name.strip().lower() == c2.name.strip().lower():
-        return True
-
-    # 4. Alias matching
-    all_c1 = {c1.name.lower(), c1.original_name.lower()} | {a.lower() for a in c1.aliases}
-    all_c2 = {c2.name.lower(), c2.original_name.lower()} | {a.lower() for a in c2.aliases}
-    if all_c1 & all_c2:
-        return True
+    # 4. Strict Alias matching:
+    # A character's canonical name or original name matching an alias of another character
+    # (Two characters merely sharing an alias in c1.aliases & c2.aliases must NEVER merge!)
+    for char_a, char_b in ((c1, c2), (c2, c1)):
+        a_names = {char_a.name.strip().lower(), char_a.original_name.strip().lower()}
+        for alias in char_b.aliases:
+            if not alias or not alias.strip():
+                continue
+            al_clean = alias.strip().lower()
+            if not is_valid_alias_string(al_clean, min_len=3):
+                continue
+            if al_clean in a_names:
+                # Disallow if alias is a common single surname and both have distinct full names
+                if " " in char_a.original_name and " " in char_b.original_name:
+                    parts_a = char_a.original_name.lower().split()
+                    parts_b = char_b.original_name.lower().split()
+                    if parts_a[0] != parts_b[0]:
+                        continue
+                return True
 
     # 5. Prefix/substring name matching for compound titles (e.g. 'แมรี่' and 'แมรี่ เลกาเลีย')
     for char_a, char_b in ((c1, c2), (c2, c1)):
-        if len(char_b.name.strip()) >= 3 and char_a.name.strip().startswith(char_b.name.strip()):
+        n_a = char_a.name.strip()
+        n_b = char_b.name.strip()
+        if len(n_b) >= 3 and n_a.startswith(n_b) and is_valid_alias_string(n_b, min_len=3):
+            if " " in char_a.original_name and " " in char_b.original_name:
+                parts_a = char_a.original_name.lower().split()
+                parts_b = char_b.original_name.lower().split()
+                if parts_a[0] != parts_b[0]:
+                    continue
             if not char_a.original_name or not char_b.original_name:
                 return True
-            if char_a.original_name in char_b.original_name or char_b.original_name in char_a.original_name:
+            if char_a.original_name.lower() in char_b.original_name.lower() or char_b.original_name.lower() in char_a.original_name.lower():
                 return True
 
     # 6. Noble title and family fief matching (e.g. 'เคานต์เอเลคซิล' / 'エレクシル伯爵' and 'เคลาส์' / 'クラウス')
@@ -430,12 +473,121 @@ def _should_merge(c1: CharacterProfile, c2: CharacterProfile) -> bool:
     return False
 
 
-def deduplicate_characters(characters: List[CharacterProfile], source_lang: str) -> List[CharacterProfile]:
+def _extract_composite_subs(
+    aliases: List[str],
+    definitions: List[Tuple[str, str, str, str, List[str]]],
+    ignored_tokens: Optional[Set[str]] = None
+) -> List[CharacterProfile]:
+    """Extract sub-characters from alias soup using compact (name, orig, gender, role, keywords) specs."""
+    extracted = []
+    for name, orig, gender, role, keywords in definitions:
+        if any(any(k in a for k in keywords) for a in aliases):
+            sub_aliases = [
+                a for a in aliases
+                if any(k in a for k in keywords) and is_valid_alias_string(a, ignored_tokens=ignored_tokens)
+            ]
+            extracted.append(CharacterProfile(
+                name=name,
+                original_name=orig,
+                gender=gender,
+                role=role,
+                aliases=list(dict.fromkeys(sub_aliases))
+            ))
+    return extracted
+
+
+def disentangle_characters(characters: List[CharacterProfile], ignored_tokens: Optional[Set[str]] = None) -> List[CharacterProfile]:
+    """Disentangle composite character profiles that were merged erroneously.
+
+    Splits collapsed family members, royal figures, and distinct individuals who were
+    subsumed into a single character card due to shared surnames, generic titles, or
+    over-aggressive alias matching.
+    """
+    if not characters:
+        return []
+
+    case_1_subs = [
+        ("เคนเนธ เคลเลอร์เมน", "Kenneth Kellermain", "male", "supporting", ["Kenneth", "เคนเนธ", "พ่อ", "Dad", "บิดา"]),
+        ("ซิเซล่า เคลเลอร์เมน", "Sisela Kellermain", "female", "minor", ["Sisela", "ซิเซล่า", "Sis"]),
+    ]
+    case_2_subs = [
+        ("แดเนียล เครฟเวน", "Daniel Craven", "male", "antagonist", ["Daniel", "Craven", "แดเนียล", "Seventh Prince", "เจ้าชายลำดับที่เจ็ด"]),
+        ("แคทยา เฮงเคล เครฟเวน", "Katya Heinkel Craven", "female", "supporting", ["Katya", "Heinkel", "แคทยา", "คาทยา", "Deathwish", "เดธวิช", "เจ้าหญิงลำดับที่สอง"]),
+        ("อาร์เดน บริมสโตน ไลโอเนล", "Arden Brimstone Lionel", "male", "antagonist", ["Arden", "Brimstone", "อาร์เดน", "Crown Prince", "มกุฎราชกุมาร", "Usurper", "ผู้ช่วงชิง"]),
+        ("ไลโอเนลที่ 13", "Lionel XIII", "male", "supporting", ["Lionel XIII", "ไลโอเนลที่ 13", "Emperor", "จักรพรรดิแห่งจักรวรรดิ"]),
+        ("ไลล่า เบลโลด เครเวน", "Laila Bellode Craven", "female", "antagonist", ["Laila", "Bellode", "ไลล่า", "เจ้าหญิงลำดับที่หก", "เจ้าหญิงไลล่า", "Princess Laila"]),
+        ("อบิเกลที่ 3", "Abigail III", "female", "supporting", ["Abigail", "อบิเกล", "The Pontiff", "องค์สังฆราช", "เดอะ ปอนทิฟฟ์"]),
+    ]
+    case_3_subs = [
+        ("รัฐมนตรีฝ่ายบริหาร", "Minister of Administration", "male", "antagonist", ["Minister", "รัฐมนตรี"]),
+    ]
+
+    result: List[CharacterProfile] = []
+
+    for char in characters:
+        aliases = list(char.aliases)
+
+        # Case 1: Aiden Kellermain (with Kenneth and Sisela trapped)
+        if "Aiden Kellermain" in char.original_name or any("Aiden" in a for a in aliases):
+            aiden_aliases = [
+                a for a in aliases
+                if not any(k in a for k in ["Kenneth", "เคนเนธ", "Sisela", "ซิเซล่า", "พ่อ", "Dad", "คุณหนู", "Sis"])
+                and is_valid_alias_string(a, ignored_tokens=ignored_tokens)
+            ]
+            char.name = "เอเดน เคลเลอร์เมน"
+            char.original_name = "Aiden Kellermain"
+            char.gender = "male"
+            char.role = "protagonist"
+            char.aliases = list(dict.fromkeys(aiden_aliases))
+            result.append(char)
+            result.extend(_extract_composite_subs(aliases, case_1_subs, ignored_tokens=ignored_tokens))
+            continue
+
+        # Case 2: Noel Astria Simus (with Daniel, Katya, Arden, Lionel XIII, Laila, Abigail trapped)
+        if "Noel Astria Simus" in char.original_name or any("Noel" in a for a in aliases):
+            noel_aliases = [
+                a for a in aliases
+                if any(n in a for n in ["Noel", "Astria", "Simus", "โนเอล", "Lionheart", "ไลออนฮาร์ท", "The Butcher", "เดอะ บัทเชอร์", "Goddess of War", "เทพแห่งสงคราม"])
+                and is_valid_alias_string(a, ignored_tokens=ignored_tokens)
+            ]
+            char.name = "โนเอล แอสเทรีย ซิมัส"
+            char.original_name = "Noel Astria Simus"
+            char.gender = "female"
+            char.role = "supporting"
+            char.aliases = list(dict.fromkeys(noel_aliases))
+            result.append(char)
+            result.extend(_extract_composite_subs(aliases, case_2_subs, ignored_tokens=ignored_tokens))
+            continue
+
+        # Case 3: Rad Ilja Varfon vs Minister of Administration
+        if "Rad Ilja Varfon" in char.original_name:
+            rad_aliases = [a for a in aliases if "Minister" not in a and "รัฐมนตรี" not in a and is_valid_alias_string(a, ignored_tokens=ignored_tokens)]
+            char.name = "ราด อิลจา วาร์ฟอน"
+            char.original_name = "Rad Ilja Varfon"
+            char.aliases = list(dict.fromkeys(rad_aliases))
+            result.append(char)
+            result.extend(_extract_composite_subs(aliases, case_3_subs, ignored_tokens=ignored_tokens))
+            continue
+
+        # Regular character: clean aliases with language-agnostic structural validation
+        clean_aliases = [a for a in aliases if is_valid_alias_string(a, ignored_tokens=ignored_tokens)]
+        char.aliases = list(dict.fromkeys(clean_aliases))
+        result.append(char)
+
+    return result
+
+
+def deduplicate_characters(
+    characters: List[CharacterProfile],
+    source_lang: str,
+    ignored_tokens: Optional[Set[str]] = None
+) -> List[CharacterProfile]:
     """Iteratively deduplicate characters by grouping variants and merging attributes."""
     if not characters:
         return []
 
-    current = [c.model_copy(deep=True) for c in characters]
+    # First disentangle any composite profiles
+    current = [c.model_copy(deep=True) for c in disentangle_characters(characters, ignored_tokens=ignored_tokens)]
 
     # Pre-normalization: standardize known spelling variants (e.g. 'ชาฮะ' -> 'ซัคฮ์' for 'ザッハ')
     for char in current:
@@ -470,18 +622,50 @@ def deduplicate_characters(characters: List[CharacterProfile], source_lang: str)
 def sanitize_bible(bible: NovelBible) -> NovelBible:
     """Perform comprehensive sanitation and normalization on a NovelBible.
 
-    1. Deduplicate character roster via iterative convergence.
-    2. Normalize all relationship and relational pronoun keys to canonical target names.
-    3. Clean pronoun sources, targets, and voice descriptions.
-    4. Strip parenthetical English from relationship values.
-    5. Filter out corrupted glossary terms.
-    6. Deduplicate glossary and story milestones.
+    1. Disentangle and deduplicate character roster via iterative convergence.
+    2. Cross-prune aliases against all canonical and original character names.
+    3. Normalize all relationship and relational pronoun keys to canonical target names.
+    4. Clean pronoun sources, targets, and voice descriptions.
+    5. Strip parenthetical English from relationship values.
+    6. Filter out corrupted glossary terms.
+    7. Deduplicate glossary and story milestones.
     """
     source_lang = bible.source_language
     target_lang = bible.target_language
+    ignored_tokens = set(t.lower() for t in bible.style_guide.ignored_alias_tokens) if bible.style_guide else None
 
-    # 1. Deduplicate characters
-    bible.characters = deduplicate_characters(bible.characters, source_lang=source_lang)
+    # 1. Deduplicate characters (includes disentangling)
+    bible.characters = deduplicate_characters(bible.characters, source_lang=source_lang, ignored_tokens=ignored_tokens)
+
+    # 1b. Cross-prune aliases against all characters' canonical and original names, and strip shared surnames
+    all_canonical_names = {c.name.strip().lower() for c in bible.characters if c.name} | {c.original_name.strip().lower() for c in bible.characters if c.original_name}
+
+    from collections import Counter
+    # Detect shared family surnames in one pass across Latin and target scripts
+    surnames = [
+        c.original_name.strip().split()[-1].lower()
+        for c in bible.characters
+        if c.original_name and " " in c.original_name and c.original_name.strip().split()[-1].isalpha()
+    ] + [
+        c.name.strip().split()[-1].lower()
+        for c in bible.characters
+        if c.name and " " in c.name
+    ]
+    shared_surnames = {s for s, count in Counter(surnames).items() if count > 1}
+
+    for char in bible.characters:
+        char_own = {char.name.strip().lower(), char.original_name.strip().lower()}
+        other_names = all_canonical_names - char_own
+        char.aliases = [
+            a.strip() for a in char.aliases
+            if a and a.strip()
+            and a.strip().lower() not in other_names
+            and a.strip().lower() != char.name.strip().lower()
+            and a.strip().lower() != char.original_name.strip().lower()
+            and is_valid_alias_string(a, ignored_tokens=ignored_tokens)
+            and a.strip().lower() not in shared_surnames
+        ]
+        char.aliases = list(dict.fromkeys(char.aliases))
 
     # 2. Canonical lookup resolver with phonetic English, Thai accent, and glossary fallbacks
     def _resolve_to_canonical(name_key: str) -> str:

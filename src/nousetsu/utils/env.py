@@ -2,6 +2,7 @@
 import logging
 import os
 import stat
+import sys
 from pathlib import Path
 from typing import Dict, Optional, Union
 import dotenv
@@ -79,14 +80,36 @@ def resolve_env_file() -> Path:
 
 
 def _apply_desktop_projects_default() -> None:
-    """Use the Tauri-provided projects directory unless the user configured one."""
+    """Use the Tauri-provided projects directory unless the user configured a custom one."""
     default_dir = os.environ.get("NOUSETSU_DEFAULT_PROJECTS_DIR")
-    if default_dir:
-        os.environ.setdefault("NOVEL_PROJECTS_DIR", default_dir)
+    if not default_dir:
+        return
+    current_val = os.environ.get("NOVEL_PROJECTS_DIR")
+    # If not set, empty, or still set to the default template placeholder, override with Tauri default
+    if not current_val or current_val.strip() in ("project", "projects", "./project", ".\\project"):
+        os.environ["NOVEL_PROJECTS_DIR"] = default_dir
 
 
 def find_repo_root() -> Path:
     """Locate the codebase root directory containing pyproject.toml, .git, or central .env."""
+    install_dir = os.environ.get("NOUSETSU_INSTALL_DIR")
+    if install_dir and Path(install_dir).is_dir():
+        return Path(install_dir).resolve()
+
+    default_projects = os.environ.get("NOUSETSU_DEFAULT_PROJECTS_DIR")
+    if default_projects:
+        p_parent = Path(default_projects).resolve().parent
+        if p_parent.is_dir():
+            return p_parent
+
+    if getattr(sys, "frozen", False):
+        exe = Path(sys.executable).resolve()
+        if exe.parent.name == "nousetsu-backend" and exe.parent.parent.name == "binaries":
+            return exe.parent.parent.parent.resolve()
+        if exe.parent.name == "binaries":
+            return exe.parent.parent.resolve()
+        return exe.parent.resolve()
+
     current = Path(__file__).resolve().parent
     for parent in [current] + list(current.parents):
         if (parent / "pyproject.toml").is_file() or (parent / ".git").exists() or (parent / ".env").is_file():

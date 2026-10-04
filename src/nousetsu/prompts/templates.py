@@ -242,6 +242,11 @@ Examine any provisional terms and characters extracted prior to translation agai
   * `target` MUST be the final localized term strictly in {target_lang} actually used in prose.
   * `notes` MUST be in English.
   * Exclude any false-positive terms that were not actually used or translated as specific lore.
+## CHARACTER IDENTITY & ALIAS INTEGRITY RULES:
+- NEVER MERGE DISTINCT INDIVIDUALS: Even if characters share a family surname (e.g. siblings, parent/child), a noble/royal title (e.g. Prince/Princess, King/Emperor), or a military rank, they are COMPLETELY SEPARATE ENTITIES with separate character profiles.
+- NEVER PUT OTHER CHARACTERS' NAMES IN ALIASES: The `aliases` list for a character must ONLY contain genuine nicknames or alternative titles referring directly to THAT specific individual. NEVER put relatives, family members, or other characters into `aliases`.
+- NO GENERIC WORDS/TITLES AS ALIASES: Never add generic single words (e.g. "The", "Prince", "Princess", "Father", "Dad", "Sister", "Minister", "Knight", "III") or bare family surnames as standalone aliases.
+- GENDER INTEGRITY: Ensure the `gender` matches the character. Never merge or confuse male and female characters.
 ## INTERNAL MEMORY LANGUAGE RULE:
 All narrative memory fields — `synopsis`, `key_events`, `character_state_changes`, `arc_update` (title, core_conflict, synopsis, milestones), and `story_update` — MUST be written in **English**.
 These fields serve as internal rolling context for downstream agents, NOT end-user prose. English maximizes token efficiency and cross-model comprehension.

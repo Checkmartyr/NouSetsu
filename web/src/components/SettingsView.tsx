@@ -25,6 +25,8 @@ import {
   Info,
   KeyRound,
   DownloadCloud,
+  FileText,
+  FolderOpen,
 } from 'lucide-react';
 import { isTauriDesktopRuntime } from '../services/apiBase';
 import {
@@ -35,6 +37,7 @@ import {
   ModelProvider,
   ProjectSettings,
   UpdateCheckResult,
+  LogsInfoResult,
 } from '../types/dashboard';
 import {
   checkLatestRelease,
@@ -43,6 +46,8 @@ import {
   fetchSettings,
   saveMachineEnvironment,
   updateSettings,
+  fetchLogsInfo,
+  openLogsDirectory,
 } from '../services/dashboardApi';
 
 const isTauriDesktop = isTauriDesktopRuntime;
@@ -81,6 +86,7 @@ interface SettingCategory {
 const SETTING_CATEGORIES: SettingCategory[] = [
   { id: 'global', name: 'Environment & API Keys', shortDesc: 'Machine-wide .env defaults', icon: KeyRound, group: 'global' },
   { id: 'updates', name: 'App Updates', shortDesc: 'Install updates in the app', icon: Download, group: 'global' },
+  { id: 'logs', name: 'Logs & Diagnostics', shortDesc: 'Local application log files', icon: FileText, group: 'global' },
   { id: 'all', name: 'All Project Settings', shortDesc: 'Full project configuration', icon: LayoutGrid, group: 'project' },
   { id: 'general', name: 'Novel Information', shortDesc: 'Metadata, title & language', icon: Sliders, group: 'project' },
   { id: 'models', name: 'Model Routing', shortDesc: 'Agent models & LLM cascades', icon: Cpu, group: 'project' },
@@ -454,6 +460,42 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [checkingUpdates, setCheckingUpdates] = useState(false);
   const [installingUpdate, setInstallingUpdate] = useState(false);
   const [updateProgress, setUpdateProgress] = useState<number | null>(null);
+  const [logsInfo, setLogsInfo] = useState<LogsInfoResult | null>(null);
+  const [loadingLogs, setLoadingLogs] = useState(false);
+  const [openingLogsFolder, setOpeningLogsFolder] = useState(false);
+
+  const loadLogsInfo = async () => {
+    setLoadingLogs(true);
+    try {
+      const data = await fetchLogsInfo();
+      setLogsInfo(data);
+    } finally {
+      setLoadingLogs(false);
+    }
+  };
+
+  const handleOpenLogsFolder = async () => {
+    setOpeningLogsFolder(true);
+    try {
+      if (isTauriDesktop()) {
+        try {
+          await invoke('open_logs_directory');
+          showToast('Opened logs folder in Explorer');
+          return;
+        } catch {
+          // Fall back to HTTP endpoint
+        }
+      }
+      const success = await openLogsDirectory();
+      if (success) {
+        showToast('Opened logs folder');
+      } else {
+        showToast('Could not open logs folder');
+      }
+    } finally {
+      setOpeningLogsFolder(false);
+    }
+  };
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -502,6 +544,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   useEffect(() => {
     loadMachineEnvironment();
   }, []);
+
+  useEffect(() => {
+    if (activeTab === 'logs' || activeTab === 'all') {
+      void loadLogsInfo();
+    }
+  }, [activeTab]);
 
 
   const handleLoadEnvPresets = () => {
@@ -936,7 +984,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
         event.preventDefault();
-        if (activeTab === 'updates') return;
+        if (activeTab === 'updates' || activeTab === 'logs') return;
         if (activeTab === 'global') {
           handleSaveEnvironment();
           return;
@@ -976,7 +1024,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 ? 'Global Settings'
                 : activeTab === 'updates'
                   ? 'App Updates'
-                  : `Project Settings: ${settings?.title || activeProjectTitle || 'No project selected'}`}
+                  : activeTab === 'logs'
+                    ? 'Logs & Diagnostics'
+                    : `Project Settings: ${settings?.title || activeProjectTitle || 'No project selected'}`}
             </h1>
           </div>
           <p className="text-xs text-[#aea69c] mt-0.5">
@@ -984,11 +1034,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               ? 'Machine-wide defaults and provider credentials shared across projects.'
               : activeTab === 'updates'
                 ? 'Check for NouSetsu desktop releases.'
-                : <>Project-specific options are saved in <code className="text-[#dad2c1] font-mono">.novel/config.yaml</code>.</>}
+                : activeTab === 'logs'
+                  ? 'View local persistent log files for debugging and diagnostics.'
+                  : <>Project-specific options are saved in <code className="text-[#dad2c1] font-mono">.novel/config.yaml</code>.</>}
           </p>
         </div>
 
-        {!['global', 'updates'].includes(activeTab) && (
+        {!['global', 'updates', 'logs'].includes(activeTab) && (
           <div className="flex items-center gap-3">
             <span className="hidden sm:inline-block text-[11px] text-[#aea69c] font-mono">
               Press <kbd className="px-1.5 py-0.5 bg-[#383330] border border-[#3f3a36] rounded-[2px] text-[#dad2c1]">Ctrl+S</kbd> to save
@@ -2133,6 +2185,135 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         ? 'NouSetsu checks for signed releases and installs updates directly in the app.'
                         : 'In-app updates are available from the installed NouSetsu desktop application.'}
                     </p>
+                  )}
+                </section>
+              )}
+
+              {(showAll || activeTab === 'logs') && (
+                <section className="bg-[#383330] border border-[#3f3a36] rounded-[4px] p-5 space-y-4">
+                  <div className="flex items-center justify-between gap-3 border-b border-[#4a433e] pb-3">
+                    <div className="flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-emerald-300" />
+                      <div>
+                        <h2 className="text-sm font-bold text-slate-200">Local Logs & Diagnostics</h2>
+                        <p className="text-[11px] text-slate-400 mt-1">
+                          Persistent rotating log files (up to 10 MB per file, 5 backups) tracking backend execution, frontend errors, and desktop lifecycle.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={loadLogsInfo}
+                        disabled={loadingLogs}
+                        className="btn-secondary text-xs flex items-center gap-1.5 disabled:opacity-50"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${loadingLogs ? 'animate-spin' : ''}`} />
+                        {loadingLogs ? 'Refreshing...' : 'Refresh'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleOpenLogsFolder}
+                        disabled={openingLogsFolder}
+                        className="btn-primary text-xs flex items-center gap-1.5 disabled:opacity-50"
+                      >
+                        <FolderOpen className="w-3.5 h-3.5" />
+                        {openingLogsFolder ? 'Opening...' : 'Open Logs Folder'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {logsInfo ? (
+                    <div className="space-y-4 text-xs">
+                      <div className="rounded-[3px] bg-[#24201d] border border-[#3f3a36] p-3 text-slate-300">
+                        <span className="text-slate-400">Log Directory:</span>{' '}
+                        <code className="text-[#dad2c1] font-mono select-all ml-1">{logsInfo.logs_dir}</code>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        {/* backend.log card */}
+                        <div className="rounded-[4px] bg-[#2a2624] border border-[#3f3a36] p-3.5 flex flex-col justify-between space-y-3">
+                          <div>
+                            <div className="flex items-center justify-between">
+                              <span className="font-mono font-bold text-sky-300 text-xs">backend.log</span>
+                              <span
+                                className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                                  logsInfo.files['backend.log']?.exists
+                                    ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                                    : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
+                                }`}
+                              >
+                                {logsInfo.files['backend.log']?.exists ? logsInfo.files['backend.log'].size_display : 'Not Created'}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-400 mt-2 leading-relaxed">
+                              FastAPI server, translation pipeline agents, LLM prompts/responses, rate limiter events, and uncaught crash traces.
+                            </p>
+                          </div>
+                          {logsInfo.files['backend.log']?.modified_time && (
+                            <div className="text-[10px] text-slate-500 pt-1 border-t border-[#383330]">
+                              Modified: {new Date(logsInfo.files['backend.log'].modified_time * 1000).toLocaleString()}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* frontend.log card */}
+                        <div className="rounded-[4px] bg-[#2a2624] border border-[#3f3a36] p-3.5 flex flex-col justify-between space-y-3">
+                          <div>
+                            <div className="flex items-center justify-between">
+                              <span className="font-mono font-bold text-emerald-300 text-xs">frontend.log</span>
+                              <span
+                                className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                                  logsInfo.files['frontend.log']?.exists
+                                    ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                                    : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
+                                }`}
+                              >
+                                {logsInfo.files['frontend.log']?.exists ? logsInfo.files['frontend.log'].size_display : 'Not Created'}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-400 mt-2 leading-relaxed">
+                              Web UI runtime console warnings, errors, and unhandled window exceptions forwarded from the browser/webview.
+                            </p>
+                          </div>
+                          {logsInfo.files['frontend.log']?.modified_time && (
+                            <div className="text-[10px] text-slate-500 pt-1 border-t border-[#383330]">
+                              Modified: {new Date(logsInfo.files['frontend.log'].modified_time * 1000).toLocaleString()}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* desktop.log card */}
+                        <div className="rounded-[4px] bg-[#2a2624] border border-[#3f3a36] p-3.5 flex flex-col justify-between space-y-3">
+                          <div>
+                            <div className="flex items-center justify-between">
+                              <span className="font-mono font-bold text-purple-300 text-xs">desktop.log</span>
+                              <span
+                                className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                                  logsInfo.files['desktop.log']?.exists
+                                    ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                                    : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
+                                }`}
+                              >
+                                {logsInfo.files['desktop.log']?.exists ? logsInfo.files['desktop.log'].size_display : 'Not Created'}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-400 mt-2 leading-relaxed">
+                              Tauri desktop launcher initialization, install path resolution, sidecar process PID, health check status, and shutdown.
+                            </p>
+                          </div>
+                          {logsInfo.files['desktop.log']?.modified_time && (
+                            <div className="text-[10px] text-slate-500 pt-1 border-t border-[#383330]">
+                              Modified: {new Date(logsInfo.files['desktop.log'].modified_time * 1000).toLocaleString()}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-xs text-slate-400">
+                      {loadingLogs ? 'Loading logs status...' : 'Click "Refresh" to view log file sizes and statuses.'}
+                    </div>
                   )}
                 </section>
               )}

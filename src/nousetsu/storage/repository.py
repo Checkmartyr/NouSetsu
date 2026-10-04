@@ -11,7 +11,7 @@ import sys
 import time
 from typing import Any, Dict, List, Optional, Tuple
 import yaml
-from nousetsu.models.bible import ArcSummary, ChapterSummary, CharacterProfile, GlossaryItem, NovelBible, StyleGuide
+from nousetsu.models.bible import ArcSummary, ChapterSummary, CharacterProfile, GlossaryItem, NovelBible, StyleGuide, is_valid_alias_string
 from nousetsu.models.config import ProjectConfig
 from nousetsu.models.metadata import ChapterMetadata, CheckpointData, PipelineStage, ProjectMetadataDocument, StageStatus
 from nousetsu.models.trace import ChapterTraceDocument
@@ -91,8 +91,44 @@ def atomic_write_yaml(file_path: Path, data: Any) -> None:
 
 
 def get_codebase_root() -> Path:
-    """Return the absolute path to the repository root directory."""
-    return Path(__file__).resolve().parent.parent.parent.parent
+    """Return the absolute path to the repository or application installation directory."""
+    # 1. Desktop explicit install directory from Tauri
+    install_dir = os.environ.get("NOUSETSU_INSTALL_DIR")
+    if install_dir and Path(install_dir).is_dir():
+        return Path(install_dir).resolve()
+
+    # 2. Desktop default projects directory parent (<install_dir>/project -> <install_dir>)
+    default_projects = os.environ.get("NOUSETSU_DEFAULT_PROJECTS_DIR")
+    if default_projects:
+        p_parent = Path(default_projects).resolve().parent
+        if p_parent.is_dir():
+            return p_parent
+
+    # 3. PyInstaller frozen binary
+    if getattr(sys, "frozen", False):
+        exe = Path(sys.executable).resolve()
+        if exe.parent.name == "nousetsu-backend" and exe.parent.parent.name == "binaries":
+            return exe.parent.parent.parent.resolve()
+        if exe.parent.name == "binaries":
+            return exe.parent.parent.resolve()
+        return exe.parent.resolve()
+
+    # 4. Check if __file__ is inside bundled binaries directory
+    file_path = Path(__file__).resolve()
+    parts = file_path.parts
+    if "binaries" in parts and "nousetsu-backend" in parts:
+        idx = parts.index("binaries")
+        cand = Path(*parts[:idx]).resolve()
+        if cand.is_dir():
+            return cand
+
+    # 5. Normal source repo root: walk up looking for pyproject.toml, .git, or .env
+    curr = file_path.parent
+    for p in [curr] + list(curr.parents):
+        if (p / "pyproject.toml").is_file() or (p / ".git").exists() or (p / ".env").is_file():
+            return p.resolve()
+
+    return file_path.parent.parent.parent.parent.resolve()
 
 
 def get_projects_root_dir() -> Path:
@@ -110,12 +146,22 @@ def get_projects_root_dir() -> Path:
         test_projects.mkdir(parents=True, exist_ok=True)
         return test_projects
 
+    default_desktop_dir = os.environ.get("NOUSETSU_DEFAULT_PROJECTS_DIR")
     env_dir = os.environ.get("NOVEL_PROJECTS_DIR")
+
+    # If running inside desktop with default/unconfigured NOVEL_PROJECTS_DIR, prioritize NOUSETSU_DEFAULT_PROJECTS_DIR
+    if default_desktop_dir and (not env_dir or env_dir.strip() in ("project", "projects", "./project", ".\\project")):
+        return Path(default_desktop_dir).resolve()
+
     if env_dir:
         p = Path(env_dir)
         if not p.is_absolute():
             p = (get_codebase_root() / p).resolve()
         return p
+
+    if default_desktop_dir:
+        return Path(default_desktop_dir).resolve()
+
     repo_root = get_codebase_root()
     if (repo_root / "project").exists():
         return (repo_root / "project").resolve()
@@ -704,15 +750,22 @@ class NovelRepository:
         bible = self.load_bible(folder=folder)
 
         cjk_script_re = re.compile(r'[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af]')
+        from nousetsu.storage.bible_sanitizer import _should_merge
+
+        def _cjk_dot_aliases(orig: str) -> List[str]:
+            if orig and cjk_script_re.search(orig) and ("・" in orig or "·" in orig):
+                return [p.strip() for p in re.split(r"[・·]+", orig) if is_valid_alias_string(p.strip())]
+            return []
+
         for new_char in new_characters:
             existing = bible.find_character(new_char.name) or bible.find_character(new_char.original_name)
+            if existing and not _should_merge(existing, new_char):
+                existing = None
+
             if not existing:
-                # Auto-register source compound components as aliases
-                if new_char.original_name:
-                    for part in re.split(r"[・·\s/_\-]+", new_char.original_name):
-                        p_clean = part.strip()
-                        if len(p_clean) >= 2 and p_clean.lower() not in [a.lower() for a in new_char.aliases]:
-                            new_char.aliases.append(p_clean)
+                for p in _cjk_dot_aliases(new_char.original_name):
+                    if p.lower() not in [a.lower() for a in new_char.aliases]:
+                        new_char.aliases.append(p)
                 bible.characters.append(new_char)
             else:
                 # Evolve original_name only if existing is empty/Latin and new has true source script
@@ -723,18 +776,22 @@ class NovelRepository:
                     existing.original_name = new_char.original_name
                 # If new_char has a name variation, register as alias
                 if new_char.name and new_char.name.strip().lower() != existing.name.strip().lower():
-                    if new_char.name.strip().lower() not in [a.lower() for a in existing.aliases]:
-                        existing.aliases.append(new_char.name.strip())
-                # Auto-register source compound components as aliases on existing character
-                if existing.original_name:
-                    for part in re.split(r"[・·\s/_\-]+", existing.original_name):
-                        p_clean = part.strip()
-                        if len(p_clean) >= 2 and p_clean.lower() not in [a.lower() for a in existing.aliases]:
-                            existing.aliases.append(p_clean)
-                # Merge new aliases deduplicated
+                    n_clean = new_char.name.strip()
+                    if is_valid_alias_string(n_clean) and n_clean.lower() not in [a.lower() for a in existing.aliases]:
+                        existing.aliases.append(n_clean)
+                for p in _cjk_dot_aliases(existing.original_name):
+                    if p.lower() not in [a.lower() for a in existing.aliases]:
+                        existing.aliases.append(p)
+                # Merge new aliases deduplicated and structurally validated
                 for alias in new_char.aliases:
-                    if alias and alias.lower() not in [a.lower() for a in existing.aliases]:
-                        existing.aliases.append(alias)
+                    if not alias or not alias.strip():
+                        continue
+                    a_clean = alias.strip()
+                    if not is_valid_alias_string(a_clean):
+                        continue
+                    if a_clean.lower() not in [x.lower() for x in existing.aliases]:
+                        if a_clean.lower() != existing.name.strip().lower() and a_clean.lower() != existing.original_name.strip().lower():
+                            existing.aliases.append(a_clean)
                 # Evolve voice if existing was default/neutral or blank and new is informative
                 if (not existing.voice or existing.voice.lower() in ["neutral", "unspecified", "default"]) and new_char.voice and new_char.voice.lower() not in ["neutral", "unspecified", "default"]:
                     existing.voice = new_char.voice

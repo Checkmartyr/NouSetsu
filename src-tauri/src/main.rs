@@ -56,6 +56,41 @@ fn stop_backend_before_update(backend: tauri::State<'_, BackendProcess>) -> Resu
         .map_err(|error| format!("Could not stop the NouSetsu backend before updating: {error}"))
 }
 
+#[derive(Clone)]
+struct DesktopLogsDir(PathBuf);
+
+#[tauri::command]
+fn open_logs_directory(logs_dir: tauri::State<'_, DesktopLogsDir>) -> Result<(), String> {
+    let path = &logs_dir.0;
+    if !path.exists() {
+        let _ = std::fs::create_dir_all(path);
+    }
+    #[cfg(windows)]
+    {
+        Command::new("explorer")
+            .arg(path)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .arg(path)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+    #[cfg(all(not(windows), not(target_os = "macos")))]
+    {
+        Command::new("xdg-open")
+            .arg(path)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+}
+
 #[cfg(debug_assertions)]
 fn project_root() -> Result<PathBuf, Error> {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -138,6 +173,7 @@ fn backend_version_matches(address: &SocketAddr, expected_version: &str) -> bool
         == Some(expected_version)
 }
 
+#[cfg_attr(debug_assertions, allow(dead_code))]
 fn seed_env_file(template: &Path, local_env: &Path) -> Result<(), Error> {
     if local_env.exists() {
         return Ok(());
@@ -216,22 +252,87 @@ fn prepare_projects_dir(
     Ok(app_data_projects)
 }
 
-fn start_backend(_app: &tauri::App) -> Result<Option<Child>, Error> {
-    let backend_address = SocketAddr::from(([127, 0, 0, 1], BACKEND_PORT));
-    let expected_version = env!("CARGO_PKG_VERSION");
-    if backend_version_matches(&backend_address, expected_version) {
-        return Ok(None);
-    }
-    if backend_is_ready() {
-        return Err(Error::other(format!(
-            "An incompatible NouSetsu backend is already running at {backend_address}. Close existing NouSetsu Web Studio or desktop processes and restart the desktop app."
-        )));
+#[cfg_attr(debug_assertions, allow(dead_code))]
+fn prepare_logs_dir(
+    install_dir: &std::path::Path,
+    app_data_dir: &std::path::Path,
+) -> Result<PathBuf, Error> {
+    let install_logs = install_dir.join("logs");
+    if std::fs::create_dir_all(&install_logs).is_ok() {
+        let probe_path =
+            install_logs.join(format!(".nousetsu-log-probe-{}", std::process::id()));
+        if let Ok(probe) = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&probe_path)
+        {
+            drop(probe);
+            let _ = std::fs::remove_file(probe_path);
+            return Ok(install_logs);
+        }
     }
 
+    let app_data_logs = app_data_dir.join("logs");
+    std::fs::create_dir_all(&app_data_logs)?;
+    Ok(app_data_logs)
+}
+
+fn current_utc_timestamp() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let sec = secs % 60;
+    let min = (secs / 60) % 60;
+    let hour = (secs / 3600) % 24;
+    let mut days = secs / 86400;
+
+    let mut year = 1970;
+    loop {
+        let leap = (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
+        let days_in_year = if leap { 366 } else { 365 };
+        if days < days_in_year {
+            break;
+        }
+        days -= days_in_year;
+        year += 1;
+    }
+    let leap = (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
+    let days_in_months = [
+        31,
+        if leap { 29 } else { 28 },
+        31, 30, 31, 30, 31, 31, 30, 31, 30, 31,
+    ];
+    let mut month = 1;
+    for &dim in &days_in_months {
+        if days < dim {
+            break;
+        }
+        days -= dim;
+        month += 1;
+    }
+    let day = days + 1;
+    format!("{year:04}-{month:02}-{day:02} {hour:02}:{min:02}:{sec:02}")
+}
+
+fn write_desktop_log(logs_dir: &Path, level: &str, message: &str) {
+    let log_path = logs_dir.join("desktop.log");
+    let ts = current_utc_timestamp();
+    let line = format!("[{ts} UTC] [{level}] {message}\n");
+    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(log_path) {
+        let _ = file.write_all(line.as_bytes());
+    }
+}
+
+fn start_backend(_app: &tauri::App) -> Result<(Option<Child>, PathBuf), Error> {
+    let backend_address = SocketAddr::from(([127, 0, 0, 1], BACKEND_PORT));
+    let expected_version = env!("CARGO_PKG_VERSION");
     let port = BACKEND_PORT.to_string();
     let mut command;
     let working_dir;
     let default_projects_dir: Option<PathBuf>;
+    let logs_dir: PathBuf;
 
     #[cfg(debug_assertions)]
     {
@@ -270,8 +371,11 @@ fn start_backend(_app: &tauri::App) -> Result<Option<Child>, Error> {
         if let Ok(joined_paths) = env::join_paths(python_paths) {
             command.env("PYTHONPATH", joined_paths);
         }
+        command.env("NOUSETSU_INSTALL_DIR", &root);
         working_dir = root;
         default_projects_dir = None;
+        logs_dir = working_dir.join("logs");
+        let _ = std::fs::create_dir_all(&logs_dir);
     }
 
     #[cfg(not(debug_assertions))]
@@ -314,15 +418,64 @@ fn start_backend(_app: &tauri::App) -> Result<Option<Child>, Error> {
             .map(PathBuf::from)
             .ok_or_else(|| Error::other("Could not determine the application install directory"))?;
         default_projects_dir = Some(prepare_projects_dir(&install_dir, &working_dir)?);
+        logs_dir = prepare_logs_dir(&install_dir, &working_dir)?;
+        command.env("NOUSETSU_INSTALL_DIR", &install_dir);
+    }
+
+    write_desktop_log(
+        &logs_dir,
+        "INFO",
+        &format!("NouSetsu desktop v{expected_version} initializing"),
+    );
+    write_desktop_log(
+        &logs_dir,
+        "INFO",
+        &format!("Logs directory: {}", logs_dir.display()),
+    );
+
+    if backend_version_matches(&backend_address, expected_version) {
+        write_desktop_log(
+            &logs_dir,
+            "INFO",
+            &format!("Reusing existing compatible backend on {backend_address}"),
+        );
+        return Ok((None, logs_dir));
+    }
+    if backend_is_ready() {
+        write_desktop_log(
+            &logs_dir,
+            "ERROR",
+            &format!("Incompatible backend detected on {backend_address}"),
+        );
+        return Err(Error::other(format!(
+            "An incompatible NouSetsu backend is already running at {backend_address}. Close existing NouSetsu Web Studio or desktop processes and restart the desktop app."
+        )));
+    }
+
+    let backend_log_path = logs_dir.join("backend.log");
+    let stdout_file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&backend_log_path);
+    let stderr_file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&backend_log_path);
+
+    if let (Ok(out), Ok(err)) = (stdout_file, stderr_file) {
+        command.stdout(Stdio::from(out));
+        command.stderr(Stdio::from(err));
+    } else {
+        command.stdout(Stdio::null());
+        command.stderr(Stdio::null());
     }
 
     command
         .current_dir(&working_dir)
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
         .env("HOST", BACKEND_HOST)
         .env("NOUSETSU_ENV_FILE", working_dir.join(".env"))
         .env("NOUSETSU_APP_DATA_DIR", &working_dir)
+        .env("NOUSETSU_LOGS_DIR", &logs_dir)
         .env("NOUSETSU_DESKTOP_VERSION", env!("CARGO_PKG_VERSION"));
     if let Some(projects_dir) = default_projects_dir {
         command.env("NOUSETSU_DEFAULT_PROJECTS_DIR", projects_dir);
@@ -335,25 +488,51 @@ fn start_backend(_app: &tauri::App) -> Result<Option<Child>, Error> {
     }
 
     let mut child = command.spawn().map_err(|error| {
+        write_desktop_log(
+            &logs_dir,
+            "ERROR",
+            &format!("Could not start the NouSetsu backend: {error}"),
+        );
         Error::new(
             error.kind(),
             format!("Could not start the NouSetsu backend: {error}"),
         )
     })?;
 
+    write_desktop_log(
+        &logs_dir,
+        "INFO",
+        &format!("Backend child process spawned with PID {}", child.id()),
+    );
+
     let deadline = Instant::now() + Duration::from_secs(90);
     while Instant::now() < deadline {
         if backend_version_matches(&backend_address, expected_version) {
-            return Ok(Some(child));
+            write_desktop_log(
+                &logs_dir,
+                "INFO",
+                "Backend became ready and verified successfully.",
+            );
+            return Ok((Some(child), logs_dir));
         }
         if backend_is_ready() {
             let _ = child.kill();
             let _ = child.wait();
+            write_desktop_log(
+                &logs_dir,
+                "ERROR",
+                "Incompatible backend responded during startup wait loop.",
+            );
             return Err(Error::other(format!(
                 "An incompatible NouSetsu backend is responding at {backend_address}. Close it and restart the desktop app."
             )));
         }
         if let Some(status) = child.try_wait()? {
+            write_desktop_log(
+                &logs_dir,
+                "ERROR",
+                &format!("The NouSetsu backend exited before becoming ready ({status})."),
+            );
             return Err(Error::other(format!(
                 "The NouSetsu backend exited before becoming ready ({status})."
             )));
@@ -363,6 +542,11 @@ fn start_backend(_app: &tauri::App) -> Result<Option<Child>, Error> {
 
     let _ = child.kill();
     let _ = child.wait();
+    write_desktop_log(
+        &logs_dir,
+        "ERROR",
+        "The NouSetsu backend did not become ready within 90 seconds.",
+    );
     Err(Error::new(
         ErrorKind::TimedOut,
         "The NouSetsu backend did not become ready within 90 seconds.",
@@ -372,12 +556,16 @@ fn start_backend(_app: &tauri::App) -> Result<Option<Child>, Error> {
 fn main() {
     let app = tauri::Builder::default()
         .manage(BackendProcess::default())
-        .invoke_handler(tauri::generate_handler![stop_backend_before_update])
+        .invoke_handler(tauri::generate_handler![
+            stop_backend_before_update,
+            open_logs_directory
+        ])
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
-            let process = start_backend(app)?;
+            let (process, logs_dir) = start_backend(app)?;
+            app.manage(DesktopLogsDir(logs_dir));
             *app.state::<BackendProcess>()
                 .0
                 .lock()
@@ -395,6 +583,9 @@ fn main() {
 
     app.run(|app_handle, event| {
         if matches!(event, tauri::RunEvent::Exit) {
+            if let Some(logs_state) = app_handle.try_state::<DesktopLogsDir>() {
+                write_desktop_log(&logs_state.0, "INFO", "Desktop application exiting.");
+            }
             let _ = app_handle.state::<BackendProcess>().stop();
         }
     });

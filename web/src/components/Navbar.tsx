@@ -10,21 +10,15 @@ import {
   Play,
   Plus
 } from 'lucide-react';
-import { LoadedChapter, ProjectMeta } from '../types/trace';
+import { ProjectMeta } from '../types/trace';
 import { WorkspaceTab } from '../types/dashboard';
 
 interface NavbarProps {
   activeTab: WorkspaceTab;
   onSelectTab: (tab: WorkspaceTab) => void;
-
-  chapters: LoadedChapter[];
-  selectedChapterId: string | null;
-  onSelectChapter: (id: string) => void;
   onOpenDirectory: () => void;
   onLoadFiles: (files: FileList) => void;
-  onLoadDemo: () => void;
   isFileSystemSupported: boolean;
-  showChapterSelector?: boolean;
 
   // TUI Project Synchronization Props
   activeProject: ProjectMeta | null;
@@ -40,14 +34,9 @@ interface NavbarProps {
 export const Navbar: React.FC<NavbarProps> = ({
   activeTab,
   onSelectTab,
-  chapters,
-  selectedChapterId,
-  onSelectChapter,
   onOpenDirectory,
   onLoadFiles,
-  onLoadDemo,
   isFileSystemSupported,
-  showChapterSelector = true,
   activeProject,
   projects,
   onSwitchProject,
@@ -58,14 +47,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   onManualSync,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Group chapters by folder
-  const groupedChapters = chapters.reduce((acc, ch) => {
-    const group = ch.folder || 'Root (Main Traces)';
-    if (!acc[group]) acc[group] = [];
-    acc[group].push(ch);
-    return acc;
-  }, {} as Record<string, LoadedChapter[]>);
 
   const navTabs: { id: WorkspaceTab; label: string; icon: React.ReactNode }[] = [
     { id: 'studio', label: 'Studio', icon: <Play className="w-3 h-3 fill-current" /> },
@@ -119,28 +100,6 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Right Column: Project & Trace Controls */}
           <div className="hidden md:flex items-center gap-2 shrink-0">
-
-            {/* Trace Chapter Selector (Only shown on traces tab) */}
-            {activeTab === 'traces' && showChapterSelector && chapters.length > 0 && (
-              <div className="hidden lg:block w-44">
-                <select
-                  value={selectedChapterId || ''}
-                  onChange={(e) => onSelectChapter(e.target.value)}
-                  aria-label="Select chapter trace"
-                  className="w-full bg-[#383330] border border-[#3f3a36] rounded-[3px] px-2 py-1 text-xs text-[#f7f5f0] focus:outline-none focus:border-[#dad2c1] truncate cursor-pointer font-mono"
-                >
-                  {Object.entries(groupedChapters).map(([group, groupList]) => (
-                    <optgroup label={`📁 ${group}`} key={group} className="bg-[#2b2622] text-[#c9c0ad] font-semibold">
-                      {groupList.map((ch) => (
-                        <option key={ch.id} value={ch.id} className="bg-[#383330] text-[#f7f5f0] py-1 font-normal">
-                          Ch.{ch.chapterNum} ({ch.document.total_interactions} acts)
-                        </option>
-                      ))}
-                    </optgroup>
-                  ))}
-                </select>
-              </div>
-            )}
 
             {/* TUI Project Selector Dropdown & New Project Button */}
             {activeProject && projects.length > 0 ? (
@@ -241,14 +200,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                   title="Upload trace files"
                 >
                   <FileText className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={onLoadDemo}
-                  className="px-2 py-1 bg-[#383330] hover:bg-[#453f3a] text-[#c9c0ad] hover:text-[#f7f5f0] border border-[#3f3a36] rounded-[3px] text-xs font-medium cursor-pointer transition-colors"
-                  title="Load demo traces"
-                >
-                  Demo
                 </button>
               </div>
             )}

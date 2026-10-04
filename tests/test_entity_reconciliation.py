@@ -461,4 +461,51 @@ def test_update_bible_memory_preserves_and_upgrades_glossary_source_script(tmp_p
     assert term.source == "三八式歩兵銃"
 
 
+def test_update_bible_memory_does_not_merge_family_members_or_opposite_genders(tmp_path: Path):
+    """Verify update_bible_memory keeps family members with shared surnames and characters of opposing genders separate."""
+    repo = NovelRepository(tmp_path)
+    aiden = CharacterProfile(
+        name="เอเดน เคลเลอร์เมน",
+        original_name="Aiden Kellermain",
+        gender="male",
+        role="protagonist",
+        aliases=["Aiden"]
+    )
+    repo.save_bible(NovelBible(characters=[aiden]))
+
+    # Next chapter introduces his sister Sisela Kellermain
+    sisela = CharacterProfile(
+        name="ซิเซล่า เคลเลอร์เมน",
+        original_name="Sisela Kellermain",
+        gender="female",
+        role="minor",
+        aliases=["Sisela"]
+    )
+    # And father Kenneth Kellermain
+    kenneth = CharacterProfile(
+        name="เคนเนธ เคลเลอร์เมน",
+        original_name="Kenneth Kellermain",
+        gender="male",
+        role="supporting",
+        aliases=["Kenneth"]
+    )
+    repo.update_bible_memory(new_characters=[sisela, kenneth], new_terms=[], summary=None)
+
+    updated_bible = repo.load_bible()
+    assert len(updated_bible.characters) == 3
+    char_names = {c.name for c in updated_bible.characters}
+    assert "เอเดน เคลเลอร์เมน" in char_names
+    assert "ซิเซล่า เคลเลอร์เมน" in char_names
+    assert "เคนเนธ เคลเลอร์เมน" in char_names
+
+    # Check that Aiden did not absorb Sisela or Kenneth as aliases
+    aiden_updated = updated_bible.find_character("เอเดน เคลเลอร์เมน")
+    assert "Sisela Kellermain" not in aiden_updated.aliases
+    assert "ซิเซล่า เคลเลอร์เมน" not in aiden_updated.aliases
+    assert "Kenneth Kellermain" not in aiden_updated.aliases
+    assert "เคนเนธ เคลเลอร์เมน" not in aiden_updated.aliases
+    assert "Kellermain" not in aiden_updated.aliases
+
+
+
 

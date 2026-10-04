@@ -652,3 +652,62 @@ def test_desktop_runtime_version_endpoint_reports_launcher_version(tmp_path, mon
 
     assert response.status_code == 200
     assert response.json() == {"version": "0.5.0-test"}
+
+
+def test_load_project_traces_active_chapter_retention(tmp_path):
+    """Verify that active_chapter retains full traces for the designated chapter when total > 5."""
+    from fastapi.testclient import TestClient
+    from nousetsu.cli.web_server import _load_project_traces, create_app
+
+    proj_dir = tmp_path / "multi_chapter_proj"
+    proj_dir.mkdir(parents=True)
+    traces_dir = proj_dir / ".novel" / "traces"
+    traces_dir.mkdir(parents=True)
+
+    # Create 7 chapters of traces
+    for ch_idx in range(1, 8):
+        doc = {
+            "chapter_id": f"chapter_{str(ch_idx).zfill(4)}",
+            "chapter_num": ch_idx,
+            "folder": None,
+            "total_interactions": 1,
+            "total_duration_seconds": 1.0,
+            "total_token_usage": {"total_tokens": 100},
+            "traces": [
+                {
+                    "trace_id": f"trace_ch{ch_idx}_01",
+                    "stage": "drafting",
+                    "prompt": f"Draft chapter {ch_idx}",
+                    "response": f"Response chapter {ch_idx}",
+                }
+            ],
+        }
+        with open(traces_dir / f"chapter_{str(ch_idx).zfill(4)}.json", "w", encoding="utf-8") as f:
+            json.dump(doc, f)
+
+    # 1. Default load without active_chapter or all: only chapter 1 has traces, others stripped
+    loaded_default = _load_project_traces(proj_dir)
+    assert len(loaded_default) == 7
+    ch1 = next(c for c in loaded_default if c["chapterNum"] == 1)
+    ch4 = next(c for c in loaded_default if c["chapterNum"] == 4)
+    assert len(ch1["document"]["traces"]) == 1
+    assert len(ch4["document"]["traces"]) == 0
+
+    # 2. Load with active_chapter=4: both chapter 1 and chapter 4 have full traces, others stripped
+    loaded_with_active = _load_project_traces(proj_dir, active_chapter=4)
+    ch1_active = next(c for c in loaded_with_active if c["chapterNum"] == 1)
+    ch4_active = next(c for c in loaded_with_active if c["chapterNum"] == 4)
+    ch3_active = next(c for c in loaded_with_active if c["chapterNum"] == 3)
+    assert len(ch1_active["document"]["traces"]) == 1
+    assert len(ch4_active["document"]["traces"]) == 1
+    assert len(ch3_active["document"]["traces"]) == 0
+
+    # 3. Test through FastAPI route /api/traces?active_chapter=4
+    app = create_app(dist_dir=tmp_path)
+    client = TestClient(app)
+    resp = client.get(f"/api/traces?project_path={proj_dir}&active_chapter=4")
+    assert resp.status_code == 200
+    data = resp.json()
+    resp_ch4 = next(c for c in data["chapters"] if c["chapterNum"] == 4)
+    assert len(resp_ch4["document"]["traces"]) == 1
+    assert resp_ch4["document"]["traces"][0]["trace_id"] == "trace_ch4_01"

@@ -62,6 +62,12 @@ from nousetsu.storage.repository import (
 )
 from nousetsu.utils.env import load_env, get_env_snapshot, get_env_settings, save_env_settings
 from nousetsu.utils.language import detect_language
+from nousetsu.utils.logging import (
+    setup_backend_file_logging,
+    append_frontend_log,
+    get_logs_info,
+    open_logs_folder,
+)
 from nousetsu.utils.model_catalog import fetch_model_catalog
 
 # Ensure environment variables from central .env are loaded into web server process
@@ -280,6 +286,18 @@ class EbookExportRequest(EbookExportOptions):
     preview_chapter_index: Optional[int] = Field(1, description="1-based chapter index for live preview prose")
 
 
+class FrontendLogItem(BaseModel):
+    timestamp: Optional[str] = None
+    level: str = "INFO"
+    source: Optional[str] = "ui"
+    message: str
+    stack: Optional[str] = None
+
+
+class FrontendLogBatch(BaseModel):
+    logs: List[FrontendLogItem]
+
+
 
 
 # ============================================================================
@@ -452,6 +470,7 @@ def _load_project_traces(
     chapter_num_filter: Optional[int] = None,
     folder_filter: Optional[str] = None,
     include_all: bool = False,
+    active_chapter: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     """Scan and parse chapter trace documents (.json and .jsonl) for a project with memoized caching."""
     traces_dir = project_path / ".novel" / "traces"
@@ -459,7 +478,7 @@ def _load_project_traces(
         return []
 
     p_str = str(project_path.resolve())
-    cache_key = (p_str, chapter_num_filter, folder_filter, include_all)
+    cache_key = (p_str, chapter_num_filter, folder_filter, include_all, active_chapter)
     now = time.time()
     if cache_key in _TRACES_CACHE:
         cached_ts, cached_traces = _TRACES_CACHE[cache_key]
@@ -490,7 +509,8 @@ def _load_project_traces(
 
     total_chapters_count = len(matched_chapter_nums)
     # When large project (>5 chapters) and single chapter not requested and not include_all:
-    # only include full trace prompts/outputs for the first chapter, stripping large trace lists for the others
+    # only include full trace prompts/outputs for the first chapter or the active chapter,
+    # stripping large trace lists for the others to optimize bandwidth.
     strip_heavy_traces = (total_chapters_count > 5 and chapter_num_filter is None and not include_all)
 
     chapters_map: Dict[str, Dict[str, Any]] = {}
@@ -512,10 +532,15 @@ def _load_project_traces(
             if key in chapters_map and tf.suffix == ".jsonl":
                 continue
 
+            is_retained = (
+                (active_chapter is not None and chapter_num == active_chapter)
+                or is_first_chapter
+            )
+
             if tf.suffix == ".json":
                 with open(tf, "r", encoding="utf-8") as f:
                     doc = json.load(f)
-                if strip_heavy_traces and not is_first_chapter:
+                if strip_heavy_traces and not is_retained:
                     doc = dict(doc)
                     doc["traces"] = []
                 else:
@@ -549,9 +574,9 @@ def _load_project_traces(
                     "total_duration_seconds": round(total_duration, 3),
                     "total_token_usage": tok,
                     "stage_breakdown": stage_bd,
-                    "traces": [] if (strip_heavy_traces and not is_first_chapter) else traces,
+                    "traces": [] if (strip_heavy_traces and not is_retained) else traces,
                 }
-                if not (strip_heavy_traces and not is_first_chapter):
+                if not (strip_heavy_traces and not is_retained):
                     is_first_chapter = False
 
             chapters_map[key] = {
@@ -1139,6 +1164,7 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
         chapter: Optional[int] = Query(None),
         folder: Optional[str] = Query(None),
         all: bool = Query(False),
+        active_chapter: Optional[int] = Query(None),
     ) -> Dict[str, Any]:
         repo = _resolve_repo(project_path)
         meta = _get_project_meta(repo.root_dir)
@@ -1147,6 +1173,7 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
             chapter_num_filter=chapter,
             folder_filter=folder,
             include_all=all,
+            active_chapter=active_chapter,
         )
         return {
             "project_path": meta["path"],
@@ -2350,6 +2377,41 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
             raise HTTPException(status_code=400, detail=f"Invalid settings payload: {e}")
 
     # ------------------------------------------------------------------------
+    # 5.6 Logging & Diagnostics
+    # ------------------------------------------------------------------------
+
+    @app.post("/api/logs/frontend")
+    async def post_frontend_logs(request: Request) -> Dict[str, Any]:
+        try:
+            body = await request.json()
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Invalid JSON payload: {e}")
+
+        items = []
+        if isinstance(body, list):
+            items = body
+        elif isinstance(body, dict):
+            if "logs" in body and isinstance(body["logs"], list):
+                items = body["logs"]
+            else:
+                items = [body]
+
+        for item in items:
+            if isinstance(item, dict):
+                append_frontend_log(item)
+
+        return {"status": "ok", "count": len(items)}
+
+    @app.get("/api/logs/info")
+    async def get_logs_information() -> Dict[str, Any]:
+        return get_logs_info()
+
+    @app.post("/api/logs/open-folder")
+    async def open_logs_dir() -> Dict[str, Any]:
+        success = open_logs_folder()
+        return {"success": success}
+
+    # ------------------------------------------------------------------------
     # 6. Static File Serving & SPA Fallback
     # ------------------------------------------------------------------------
 
@@ -2474,6 +2536,8 @@ class NousetsuWebHandler(http.server.SimpleHTTPRequestHandler):
             chapter_num = int(chapter_arg) if chapter_arg and chapter_arg.isdigit() else None
             folder_arg = query.get("folder", [None])[0]
             all_arg = query.get("all", ["false"])[0].lower() in ("true", "1")
+            active_chapter_arg = query.get("active_chapter", [None])[0]
+            active_chapter_num = int(active_chapter_arg) if active_chapter_arg and active_chapter_arg.isdigit() else None
 
             if proj_arg:
                 target_p = Path(proj_arg).resolve()
@@ -2491,6 +2555,7 @@ class NousetsuWebHandler(http.server.SimpleHTTPRequestHandler):
                 chapter_num_filter=chapter_num,
                 folder_filter=folder_arg,
                 include_all=all_arg,
+                active_chapter=active_chapter_num,
             )
 
             self._send_json({
@@ -2499,6 +2564,10 @@ class NousetsuWebHandler(http.server.SimpleHTTPRequestHandler):
                 "genre": meta["genre"],
                 "chapters": chapters,
             })
+            return
+
+        if path == "/api/logs/info":
+            self._send_json(get_logs_info())
             return
 
         clean_path = path.lstrip("/")
@@ -2525,6 +2594,32 @@ class NousetsuWebHandler(http.server.SimpleHTTPRequestHandler):
     def do_POST(self) -> None:
         parsed_url = urllib.parse.urlparse(self.path)
         path = parsed_url.path
+
+        if path == "/api/logs/frontend":
+            try:
+                length = int(self.headers.get("Content-Length", 0))
+                raw_data = self.rfile.read(length).decode("utf-8")
+                body = json.loads(raw_data) if raw_data else {}
+                items = []
+                if isinstance(body, list):
+                    items = body
+                elif isinstance(body, dict):
+                    if "logs" in body and isinstance(body["logs"], list):
+                        items = body["logs"]
+                    else:
+                        items = [body]
+                for item in items:
+                    if isinstance(item, dict):
+                        append_frontend_log(item)
+                self._send_json({"status": "ok", "count": len(items)})
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=400)
+            return
+
+        if path == "/api/logs/open-folder":
+            success = open_logs_folder()
+            self._send_json({"success": success})
+            return
 
         if path == "/api/active-project":
             try:
@@ -2569,6 +2664,7 @@ def run_web_server(
 ) -> None:
     """Run the Nousetsu web server hosting the dashboard and trace sync API."""
     load_env()
+    setup_backend_file_logging()
     server_app = create_app(dist_dir=dist_dir)
     url = f"http://{host}:{port}"
 

@@ -21,6 +21,7 @@ import {
   ModelCatalogResult,
   ModelProvider,
   UpdateCheckResult,
+  LogsInfoResult,
 } from '../types/dashboard';
 
 export async function fetchChapters(projectPath?: string, folder?: string): Promise<ChapterItem[]> {
@@ -483,6 +484,34 @@ export async function previewEbook(
     throw new Error(data.detail || data.error || 'Failed to preview eBook');
   }
   return data as EbookPreviewResult;
+}
+
+export async function fetchLogsInfo(): Promise<LogsInfoResult | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/logs/info`, {
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as LogsInfoResult;
+  } catch (e) {
+    console.error('Failed to fetch logs info:', e);
+    return null;
+  }
+}
+
+export async function openLogsDirectory(): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE}/api/logs/open-folder`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    return Boolean(data.success);
+  } catch (e) {
+    console.error('Failed to open logs folder:', e);
+    return false;
+  }
 }
 
 

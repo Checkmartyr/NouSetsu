@@ -1,6 +1,6 @@
 """Novel Bible data models for characters, glossary, style rules, and narrative memory."""
 import re
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Set, Union
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 
@@ -169,6 +169,7 @@ class StyleGuide(BaseModel):
     pov: str = Field(default="third_person", description="Point of view: first_person, third_person, limited, omniscient")
     honorific_mode: str = Field(default="retain", description="Honorific handling: retain (-san/-sama), adapt (Lord/Lady), or drop")
     custom_rules: List[str] = Field(default_factory=list, description="Specialized stylistic directives")
+    ignored_alias_tokens: List[str] = Field(default_factory=list, description="Optional novel-specific tokens/titles to ignore as aliases")
 
 
 class ChapterSummary(BaseModel):
@@ -203,6 +204,45 @@ class ArcSummary(BaseModel):
     key_milestones: List[str] = Field(default_factory=list, description="Key milestones achieved during arc")
 
 
+ROMAN_NUMERAL_OR_NUMBER_RE = re.compile(r"^(\d+|[ivxlcdm]+)$", re.IGNORECASE)
+
+
+GRAMMATICAL_PARTICLES: Set[str] = {
+    "the", "a", "an", "and", "or", "of", "in", "to", "for", "with", "on", "at", "by", "from", "as", "is", "it"
+}
+
+
+def is_valid_alias_string(alias: str, min_len: int = 2, ignored_tokens: Optional[Set[str]] = None) -> bool:
+    """Validate if a string is structurally acceptable as an alias without hardcoded language dictionaries.
+
+    Rejects:
+    - Empty strings or pure whitespace
+    - Strings shorter than min_len
+    - Closed-class grammatical particles ('the', 'a', 'an', 'of', 'in', 'to', etc.)
+    - Pure numbers or Roman numerals ('13', 'III', 'IV')
+    - Tokens explicitly declared in novel-specific ignored_tokens
+    """
+    if not alias:
+        return False
+    s = alias.strip()
+    if len(s) < min_len:
+        return False
+    s_lower = s.lower()
+    if s_lower in GRAMMATICAL_PARTICLES:
+        return False
+    if ignored_tokens and s_lower in ignored_tokens:
+        return False
+    if ROMAN_NUMERAL_OR_NUMBER_RE.match(s_lower):
+        return False
+    if s.isascii() and len(s) <= 2:
+        return False
+    return True
+
+
+# Backward-compatibility alias (empty set; language-agnostic validation used instead)
+GENERIC_STOPWORDS_TITLES: Set[str] = set()
+
+
 class NovelBible(BaseModel):
     title: str = Field(default="Ascendance of a Bookworm", description="Novel title")
     source_language: str = Field(default="English", description="Source text language")
@@ -223,42 +263,67 @@ class NovelBible(BaseModel):
         target = str(name_or_alias).strip()
         target_lower = target.lower()
 
-        # 1. Exact match on name, original_name, or aliases
+        # 1. Exact match on name or original_name
         for char in self.characters:
             if char.name.lower() == target_lower or char.original_name.lower() == target_lower:
                 return char
-            if any(alias.lower() == target_lower for alias in char.aliases):
-                return char
 
-        # 2. Match structured name components (source & target: given, middle, surname)
-        for char in self.characters:
-            if char.names:
-                src = char.names.source
-                tgt = char.names.target
-                src_parts = [src.name, src.m_name, src.s_name]
-                tgt_parts = [tgt.name, tgt.m_name, tgt.s_name]
-                if any(p and p.strip().lower() == target_lower for p in src_parts + tgt_parts):
-                    return char
+        ignored = set(t.lower() for t in self.style_guide.ignored_alias_tokens) if self.style_guide else None
 
-        # 3. Match Japanese/CJK name components (e.g. 'メアリィ' in 'メアリィ・レガリヤ')
-        for char in self.characters:
-            orig = char.original_name.strip()
-            if "・" in orig:
-                parts = [p.strip().lower() for p in orig.split("・") if p.strip()]
-                if target_lower in parts:
-                    return char
-            if " " in orig:
-                parts = [p.strip().lower() for p in orig.split() if p.strip()]
-                if target_lower in parts:
-                    return char
+        # 2. Match on aliases (ambiguity-guarded: unique match only)
+        if is_valid_alias_string(target, ignored_tokens=ignored):
+            alias_matches = [
+                char for char in self.characters
+                if any(alias.strip().lower() == target_lower for alias in char.aliases)
+            ]
+            if len(alias_matches) == 1:
+                return alias_matches[0]
 
-        # 3. Match target language compound name components (e.g. given name prefix)
-        for char in self.characters:
-            c_name = char.name.strip()
-            if " " in c_name:
-                parts = [p.strip().lower() for p in c_name.split() if p.strip()]
-                if target_lower in parts:
-                    return char
+        # 3. Match structured name components (source & target: given, middle, surname)
+        if is_valid_alias_string(target, ignored_tokens=ignored):
+            for char in self.characters:
+                if char.names:
+                    src = char.names.source
+                    tgt = char.names.target
+                    src_parts = [p.strip().lower() for p in [src.name, src.m_name, src.s_name] if p and p.strip()]
+                    tgt_parts = [p.strip().lower() for p in [tgt.name, tgt.m_name, tgt.s_name] if p and p.strip()]
+                    if target_lower in (src_parts + tgt_parts):
+                        matches = [
+                            c for c in self.characters
+                            if c.names and (
+                                target_lower in [c.names.source.s_name.strip().lower(), c.names.target.s_name.strip().lower()]
+                            )
+                        ]
+                        if len(matches) <= 1:
+                            return char
+
+        # 4. Match Japanese/CJK name components (e.g. 'メアリィ' in 'メアリィ・レガリヤ')
+        if len(target_lower) >= 2 and is_valid_alias_string(target, min_len=2, ignored_tokens=ignored):
+            cjk_matches = []
+            for char in self.characters:
+                orig = char.original_name.strip()
+                if "・" in orig:
+                    parts = [p.strip().lower() for p in orig.split("・") if p.strip()]
+                    if target_lower in parts:
+                        cjk_matches.append(char)
+                elif " " in orig and re.search(r"[\u3040-\u30ff\u4e00-\u9fff\uac00-\ud7af]", orig):
+                    parts = [p.strip().lower() for p in orig.split() if p.strip()]
+                    if target_lower in parts:
+                        cjk_matches.append(char)
+            if len(cjk_matches) == 1:
+                return cjk_matches[0]
+
+        # 5. Match target language compound name components (e.g. given name prefix)
+        if len(target_lower) >= 3 and is_valid_alias_string(target, min_len=3, ignored_tokens=ignored):
+            tgt_matches = []
+            for char in self.characters:
+                c_name = char.name.strip()
+                if " " in c_name:
+                    parts = [p.strip().lower() for p in c_name.split() if p.strip()]
+                    if parts and target_lower == parts[0]:
+                        tgt_matches.append(char)
+            if len(tgt_matches) == 1:
+                return tgt_matches[0]
 
         return None
 

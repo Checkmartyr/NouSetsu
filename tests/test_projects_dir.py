@@ -187,3 +187,58 @@ def test_cmd_scan_cli(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     # 2. Scan all projects in NOVEL_PROJECTS_DIR
     args_all = argparse.Namespace(project_dir=None, folder=None, all_projects=True)
     cmd_scan(args_all)
+
+
+def test_get_codebase_root_with_desktop_install_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Verify get_codebase_root respects NOUSETSU_INSTALL_DIR."""
+    from nousetsu.storage.repository import get_codebase_root
+    install_dir = tmp_path / "app_install"
+    install_dir.mkdir(parents=True)
+    monkeypatch.setenv("NOUSETSU_INSTALL_DIR", str(install_dir))
+
+    assert get_codebase_root() == install_dir.resolve()
+
+
+def test_get_codebase_root_with_desktop_default_projects_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Verify get_codebase_root derives install dir from NOUSETSU_DEFAULT_PROJECTS_DIR parent."""
+    from nousetsu.storage.repository import get_codebase_root
+    install_dir = tmp_path / "app_install"
+    projects_dir = install_dir / "project"
+    projects_dir.mkdir(parents=True)
+    monkeypatch.delenv("NOUSETSU_INSTALL_DIR", raising=False)
+    monkeypatch.setenv("NOUSETSU_DEFAULT_PROJECTS_DIR", str(projects_dir))
+
+    assert get_codebase_root() == install_dir.resolve()
+
+
+def test_get_codebase_root_with_frozen_sidecar(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Verify get_codebase_root steps up past binaries/nousetsu-backend when running in frozen mode."""
+    import sys
+    from nousetsu.storage.repository import get_codebase_root
+
+    install_dir = tmp_path / "Nousetsu"
+    backend_dir = install_dir / "binaries" / "nousetsu-backend"
+    backend_dir.mkdir(parents=True)
+    exe_file = backend_dir / "nousetsu-backend.exe"
+    exe_file.touch()
+
+    monkeypatch.delenv("NOUSETSU_INSTALL_DIR", raising=False)
+    monkeypatch.delenv("NOUSETSU_DEFAULT_PROJECTS_DIR", raising=False)
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(exe_file))
+
+    assert get_codebase_root() == install_dir.resolve()
+
+
+def test_get_projects_root_dir_custom_relative_resolves_inside_install_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Verify that a custom relative NOVEL_PROJECTS_DIR resolves inside install dir, not sidecar."""
+    install_dir = tmp_path / "Nousetsu"
+    install_dir.mkdir(parents=True)
+    monkeypatch.delenv("NOVEL_REGISTRY_DIR", raising=False)
+    monkeypatch.setenv("NOUSETSU_INSTALL_DIR", str(install_dir))
+    monkeypatch.setenv("NOVEL_PROJECTS_DIR", "custom_novels")
+
+    root = get_projects_root_dir()
+    assert root == (install_dir / "custom_novels").resolve()
+    assert "binaries" not in str(root)
+

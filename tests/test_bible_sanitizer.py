@@ -1,6 +1,6 @@
 """Unit tests for Novel Bible Sanitizer and Language Integrity Normalizer."""
 import pytest
-from nousetsu.models.bible import ArcSummary, CharacterProfile, CharacterPronouns, GlossaryItem, NovelBible
+from nousetsu.models.bible import ArcSummary, CharacterProfile, CharacterPronouns, GlossaryItem, NovelBible, StyleGuide
 from nousetsu.storage.bible_sanitizer import (
     clean_pronoun_source,
     clean_pronoun_target,
@@ -44,7 +44,7 @@ class TestBibleSanitizer:
         c2 = CharacterProfile(
             name="แมรี่",
             original_name="メアリィ",
-            aliases=["คุณหนู"],
+            aliases=["หนูแมรี่"],
             role="protagonist",
             gender="female",
         )
@@ -54,7 +54,7 @@ class TestBibleSanitizer:
         assert res.name == "แมรี่ เลกาเลีย"
         assert res.original_name == "メアリィ・レガリヤ"
         assert "แมรี่" in res.aliases
-        assert "คุณหนู" in res.aliases
+        assert "หนูแมรี่" in res.aliases
         assert "คุณหนูแมรี่" in res.aliases
 
     def test_sanitize_bible_normalizes_relationship_keys(self):
@@ -186,3 +186,91 @@ class TestBibleSanitizer:
         assert res.original_name == "クラウス"
         assert "เคานต์เอเลคซิล" in res.aliases
         assert "エレクシル伯爵" in res.aliases
+
+    def test_disentangle_and_prevent_merging_family_members(self):
+        composite = CharacterProfile(
+            name="ซิเซล่า เคลเลอร์เมน",
+            original_name="Aiden Kellermain",
+            aliases=["Kenneth Kellermain", "เคนเนธ เคลเลอร์เมน", "Sisela Kellermain", "Aiden", "เอเดน", "พ่อ", "Dad"],
+            gender="male",
+            role="protagonist"
+        )
+        from nousetsu.storage.bible_sanitizer import disentangle_characters
+        disentangled = disentangle_characters([composite])
+        assert len(disentangled) == 3
+        names = {c.name for c in disentangled}
+        assert "เอเดน เคลเลอร์เมน" in names
+        assert "เคนเนธ เคลเลอร์เมน" in names
+        assert "ซิเซล่า เคลเลอร์เมน" in names
+
+        aiden = next(c for c in disentangled if c.name == "เอเดน เคลเลอร์เมน")
+        assert aiden.role == "protagonist"
+        assert aiden.gender == "male"
+        assert aiden.original_name == "Aiden Kellermain"
+
+        sisela = next(c for c in disentangled if c.name == "ซิเซล่า เคลเลอร์เมน")
+        assert sisela.gender == "female"
+        assert sisela.original_name == "Sisela Kellermain"
+
+        kenneth = next(c for c in disentangled if c.name == "เคนเนธ เคลเลอร์เมน")
+        assert kenneth.gender == "male"
+        assert kenneth.original_name == "Kenneth Kellermain"
+
+    def test_gender_conflict_prevents_merging(self):
+        c_male = CharacterProfile(
+            name="แดเนียล เครฟเวน",
+            original_name="Daniel Craven",
+            aliases=["Craven", "Seventh Prince"],
+            gender="male",
+            role="antagonist"
+        )
+        c_female = CharacterProfile(
+            name="แคทยา เฮงเคล เครฟเวน",
+            original_name="Katya Heinkel Craven",
+            aliases=["Craven", "Deathwish"],
+            gender="female",
+            role="supporting"
+        )
+        merged = deduplicate_characters([c_male, c_female], source_lang="English")
+        assert len(merged) == 2
+
+    def test_alias_cross_pruning_in_sanitize_bible(self):
+        bible = NovelBible(
+            title="Prune Test",
+            source_language="English",
+            target_language="Thai",
+            style_guide=StyleGuide(ignored_alias_tokens=["Prince"]),
+            characters=[
+                CharacterProfile(
+                    name="เอเดน เคลเลอร์เมน",
+                    original_name="Aiden Kellermain",
+                    aliases=["Aiden", "Sisela Kellermain", "เคนเนธ เคลเลอร์เมน", "The", "Prince"],
+                    gender="male",
+                    role="protagonist"
+                ),
+                CharacterProfile(
+                    name="ซิเซล่า เคลเลอร์เมน",
+                    original_name="Sisela Kellermain",
+                    aliases=["Sisela", "เอเดน เคลเลอร์เมน"],
+                    gender="female",
+                    role="minor"
+                ),
+                CharacterProfile(
+                    name="เคนเนธ เคลเลอร์เมน",
+                    original_name="Kenneth Kellermain",
+                    aliases=["Kenneth"],
+                    gender="male",
+                    role="supporting"
+                ),
+            ],
+            glossary=[]
+        )
+        sanitized = sanitize_bible(bible)
+        aiden = sanitized.find_character("เอเดน เคลเลอร์เมน")
+        assert "Sisela Kellermain" not in aiden.aliases
+        assert "เคนเนธ เคลเลอร์เมน" not in aiden.aliases
+        assert "The" not in aiden.aliases
+        assert "Prince" not in aiden.aliases
+
+        sisela = sanitized.find_character("ซิเซล่า เคลเลอร์เมน")
+        assert "เอเดน เคลเลอร์เมน" not in sisela.aliases

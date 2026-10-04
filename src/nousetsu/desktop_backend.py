@@ -102,6 +102,9 @@ def main() -> None:
         _run_scraper_worker(sys.argv[2:])
         return
 
+    from nousetsu.utils.logging import setup_backend_file_logging
+    setup_backend_file_logging()
+
     parser = argparse.ArgumentParser(description="NouSetsu desktop API backend")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=15474)

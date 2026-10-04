@@ -484,6 +484,20 @@ export interface EbookPreviewResult {
   sample_chapter_text: string;
 }
 
+export interface LogFileInfo {
+  exists: boolean;
+  path: string;
+  size_bytes: number;
+  size_display: string;
+  modified_time?: number;
+}
 
-
-
+export interface LogsInfoResult {
+  logs_dir: string;
+  files: {
+    'backend.log': LogFileInfo;
+    'frontend.log': LogFileInfo;
+    'desktop.log': LogFileInfo;
+    [key: string]: LogFileInfo;
+  };
+}

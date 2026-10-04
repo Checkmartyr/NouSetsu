@@ -27,6 +27,21 @@ def test_desktop_projects_default_uses_install_project_path(tmp_path: Path, monk
     assert get_projects_root_dir() == projects_dir.resolve()
 
 
+def test_desktop_projects_default_overrides_template_placeholder_in_env(tmp_path: Path, monkeypatch):
+    """Even if .env was seeded with NOVEL_PROJECTS_DIR=project, desktop default must take precedence."""
+    env_path = tmp_path / ".env"
+    env_path.write_text("NOVEL_PROJECTS_DIR=project\nNOVEL_MODEL=test-model\n", encoding="utf-8")
+    projects_dir = tmp_path / "install" / "project"
+    monkeypatch.setenv("NOUSETSU_ENV_FILE", str(env_path))
+    monkeypatch.setenv("NOUSETSU_DEFAULT_PROJECTS_DIR", str(projects_dir))
+    monkeypatch.delenv("NOVEL_PROJECTS_DIR", raising=False)
+
+    load_env()
+
+    assert os.environ["NOVEL_PROJECTS_DIR"] == str(projects_dir)
+    assert get_projects_root_dir() == projects_dir.resolve()
+
+
 def test_dotenv_projects_path_overrides_desktop_default(tmp_path: Path, monkeypatch):
     env_path = tmp_path / ".env"
     configured_projects = tmp_path / "my-novels"

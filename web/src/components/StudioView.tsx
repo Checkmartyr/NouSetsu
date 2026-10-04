@@ -32,6 +32,7 @@ interface StudioViewProps {
   activeProjectTitle: string | null;
   onNavigateToReader: (chapterNum: number, folder?: string | null) => void;
   logs: string[];
+  initialChapters?: ChapterItem[];
 }
 
 export const StudioView: React.FC<StudioViewProps> = ({
@@ -39,9 +40,14 @@ export const StudioView: React.FC<StudioViewProps> = ({
   activeProjectTitle,
   onNavigateToReader,
   logs,
+  initialChapters = [],
 }) => {
-  const [chapters, setChapters] = useState<ChapterItem[]>([]);
-  const [selectedChapter, setSelectedChapter] = useState<{ num: number; folder?: string | null } | null>(null);
+  const [chapters, setChapters] = useState<ChapterItem[]>(initialChapters);
+  const [selectedChapter, setSelectedChapter] = useState<{ num: number; folder?: string | null } | null>(
+    initialChapters.length > 0
+      ? { num: initialChapters[0].chapter_num, folder: initialChapters[0].folder }
+      : null
+  );
   const [chapterContent, setChapterContent] = useState<ChapterContent | null>(null);
   const [loadingContent, setLoadingContent] = useState(false);
   const [status, setStatus] = useState<TranslationStatus | null>(null);
