@@ -22,6 +22,7 @@ import { SettingsView } from './components/SettingsView';
 import { NewProjectModal } from './components/NewProjectModal';
 import { StartupLoadingScreen } from './components/StartupLoadingScreen';
 import { UploadCloud, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { getReadingBookmark } from './utils/readerStorage';
 
 export const App: React.FC = () => {
   // Startup Readiness State
@@ -495,12 +496,23 @@ export const App: React.FC = () => {
     return <StartupLoadingScreen onReady={handleStartupReady} />;
   }
 
+  const handleSelectWorkspaceTab = (tab: WorkspaceTab) => {
+    if (tab === 'reader' && !readerChapterNum) {
+      const bm = getReadingBookmark(activeProject?.path || null);
+      if (bm) {
+        setReaderChapterNum(bm.chapter_num);
+        setReaderFolder(bm.folder || null);
+      }
+    }
+    setActiveWorkspace(tab);
+  };
+
   return (
     <div className="flex flex-col h-screen bg-[#2b2622] text-[#f7f5f0] overflow-hidden font-sans relative">
       {/* Top Navigation */}
       <Navbar
         activeTab={activeWorkspace}
-        onSelectTab={setActiveWorkspace}
+        onSelectTab={handleSelectWorkspaceTab}
         onOpenDirectory={handleOpenDirectory}
         onLoadFiles={handleLoadFiles}
         isFileSystemSupported={isFileSystemSupported}

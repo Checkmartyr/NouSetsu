@@ -306,10 +306,12 @@ NouSetsu tracks end-to-end token consumption and execution latency per pipeline 
     - In Stage 5 (`ChroniclerAgent`), the agent inspects provisional terms and characters discovered before translation against the final polished publication text.
     - Reconciles refined terminology (e.g. provisional `"Cyan Lightning Sword"` $\rightarrow$ polished `"Azure Thunder Blade"`), registers updated character spellings and active aliases, and prunes false-positive terms before persisting to `NovelBible` (`bible.yaml`).
     - Configurable across the 4-tier cascade: CLI flag (`--reconcile-terms` / `--no-reconcile-terms`), `ProjectConfig.enable_post_polish_reconciliation`, environment variable `NOVEL_POST_POLISH_RECONCILIATION`, and built-in safe fallback (`True`).
-17. **Procedural Graphs (arXiv:2609.09153v1) & Offline Self-Evolution Engine**:
+17. **Procedural Graphs (arXiv:2609.09153v1) & Online/Offline Self-Evolution Engine**:
     - Equips all five pipeline agents (`EntityExtractorAgent`, `ContextAwareDrafterAgent`, `CritiqueAgent`, `PolishingAgent`, `ChroniclerAgent`) with compact, graph-directed action paths and deterministic cognitive checkpoints.
     - Zero-token-overhead deterministic edge localization: runtime logic selects the active transition edge based on pipeline state (e.g. `Scene_Init` vs `Boundary_Continuity` for Drafter, `Inspect_Critique` for Polisher, `Chapter_Deconstruction` for Chronicler) and injects only $<80$ tokens of targeted guidance and pitfall warnings.
     - Invariant KV prefix preservation: procedural guidance is anchored after task formatting rules to maintain Gemini KV context caching hits.
+    - **Online Learning at Story Arc Boundaries & Chapter Intervals**: Automatically triggers self-evolution during batch translation upon detecting story arc boundaries (`arc_completed=True`) or every $N$ chapters (default: 15, `NOVEL_PROCEDURAL_LEARNING_INTERVAL`). Analyzes diagnostic traces and refines procedural edges for agents exceeding failure thresholds.
+    - **History Archiving & Regression Rollback Guard**: Archives snapshots to `.novel/procedural_graphs/history/<agent>_{timestamp}.json` and logs mutations to `evolution_log.json`. Evaluates rolling quality audits and automatically rolls back to previous snapshots if subsequent chapter fidelity regresses.
     - `nousetsu graph-info`: Rich tree visualization of nodes, transition edges, actions, and anti-bloat pitfalls across all agents (`-a all` or `-a <agent>`).
     - `nousetsu learn-graph`: Offline self-evolution loop that analyzes diagnostic audit traces from `.novel/traces/`, detects repetitive failure modes or omissions, and synthesizes localized graph mutations.
 18. **Chapter Numbering Collision Realignment Engine**:

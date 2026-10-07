@@ -14,7 +14,8 @@ import {
   FolderOpen,
   Sparkles,
   BookOpen,
-  Upload
+  Upload,
+  Bookmark
 } from 'lucide-react';
 import { ChapterItem, ChapterContent, TranslationStatus } from '../types/dashboard';
 import {
@@ -26,6 +27,7 @@ import {
 } from '../services/dashboardApi';
 import { UploadModal } from './UploadModal';
 import { ExportBookModal } from './ExportBookModal';
+import { getReadingBookmark, ReadingBookmark } from '../utils/readerStorage';
 
 interface StudioViewProps {
   activeProjectPath: string | null;
@@ -51,6 +53,9 @@ export const StudioView: React.FC<StudioViewProps> = ({
   const [chapterContent, setChapterContent] = useState<ChapterContent | null>(null);
   const [loadingContent, setLoadingContent] = useState(false);
   const [status, setStatus] = useState<TranslationStatus | null>(null);
+  const [savedBookmark, setSavedBookmark] = useState<ReadingBookmark | null>(() =>
+    getReadingBookmark(activeProjectPath)
+  );
 
   // Filters & Controls
   const [searchQuery, setSearchQuery] = useState('');
@@ -71,6 +76,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
   // Load chapters & translation status
   const refreshData = async () => {
     if (!activeProjectPath) return;
+    setSavedBookmark(getReadingBookmark(activeProjectPath));
     const [chList, transStat] = await Promise.all([
       fetchChapters(activeProjectPath),
       fetchTranslationStatus(),
@@ -361,6 +367,17 @@ export const StudioView: React.FC<StudioViewProps> = ({
             >
               {mdFileName}
             </span>
+            {savedBookmark &&
+              savedBookmark.chapter_num === ch.chapter_num &&
+              (savedBookmark.folder || null) === (ch.folder || null) && (
+                <span
+                  title="Current reading bookmark"
+                  className="flex items-center gap-0.5 text-[9px] font-mono px-1 py-0.2 bg-amber-950/40 text-amber-300 border border-amber-800/50 rounded-[2px] shrink-0"
+                >
+                  <Bookmark className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
+                  <span>Saved</span>
+                </span>
+              )}
             {!inFolder && ch.folder && (
               <span className="text-[10px] font-mono px-1.5 py-0.2 bg-[#383330] text-[#aea69c] border border-[#3f3a36] rounded-[2px] shrink-0">
                 {ch.folder}
@@ -785,7 +802,18 @@ export const StudioView: React.FC<StudioViewProps> = ({
               </div>
             </div>
 
-            <div className="flex items-center gap-3 shrink-0">
+            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+              {savedBookmark && (
+                <button
+                  type="button"
+                  onClick={() => onNavigateToReader(savedBookmark.chapter_num, savedBookmark.folder)}
+                  title={`Resume reading from saved bookmark Chapter ${savedBookmark.chapter_num}`}
+                  className="btn-secondary text-xs px-2.5 py-1 flex items-center gap-1.5 text-amber-300 border-amber-800/50 hover:bg-amber-950/30"
+                >
+                  <Bookmark className="w-3.5 h-3.5 text-amber-400 fill-amber-400/30" />
+                  <span>Resume Ch.{savedBookmark.chapter_num}</span>
+                </button>
+              )}
               {(chapterContent?.has_translated || Boolean(chapterContent?.translated_text?.trim())) && (
                 <button
                   onClick={() =>

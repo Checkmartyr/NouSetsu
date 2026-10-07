@@ -198,6 +198,7 @@ class ArcSummary(BaseModel):
     synopsis: str = Field(default="", description="Summary of narrative progression in this arc")
     core_conflict: str = Field(default="", description="Central conflict or goal of this arc")
     status: str = Field(default="active", description="'active' or 'completed'")
+    arc_completed: Optional[bool] = Field(default=None, description="Optional boolean flag for completed arc")
     start_chapter: int = Field(default=1, description="Starting chapter number of arc")
     end_chapter: Optional[int] = Field(default=None, description="Ending chapter number if completed")
     folder: Optional[str] = Field(default=None, description="Volume/folder scope")

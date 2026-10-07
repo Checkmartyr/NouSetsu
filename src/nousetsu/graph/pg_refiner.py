@@ -7,6 +7,7 @@ Executes an offline diagnostic loop:
 4. Validation Gating: Commits candidate graphs only when structural integrity and validation criteria are met.
 5. Zero Token Overhead at runtime: Runs completely offline or on-demand without affecting translation inference tokens.
 """
+from datetime import datetime, timezone
 import json
 import logging
 from pathlib import Path
@@ -129,6 +130,57 @@ class ProceduralGraphRefiner:
         """Executes Step 2 (Mutation) and Step 3 (Validation Gating) over input traces."""
         evolved, _ = self.refine(graph, traces)
         return evolved
+
+    def check_score_regression(
+        self,
+        recent_traces: List[DiagnosticTrace],
+        window_size: int = 3,
+        threshold_drop: float = 1.0,
+        baseline_score: float = 8.5,
+    ) -> bool:
+        """Evaluate if recent chapters experienced quality regression below threshold."""
+        if not recent_traces or len(recent_traces) < window_size:
+            return False
+
+        recent_window = recent_traces[-window_size:]
+        avg_score = sum(t.fidelity_score for t in recent_window) / len(recent_window)
+        if avg_score < (baseline_score - threshold_drop):
+            logger.warning(
+                f"Score regression detected: recent window average {avg_score:.2f} "
+                f"is significantly lower than baseline {baseline_score:.2f}."
+            )
+            return True
+        return False
+
+    def evolve_and_persist(
+        self,
+        graph: ProceduralGraph,
+        traces: List[DiagnosticTrace],
+        repo: Any,
+        agent_name: str,
+        folder: Optional[str] = None,
+        trigger_type: str = "interval",
+        chapter_num: int = 0
+    ) -> Tuple[Optional[ProceduralGraph], List[GraphEditOperation]]:
+        """Evolve graph from traces, persist to repository, archive history, and log evolution event."""
+        evolved, edits = self.refine(graph, traces)
+        if not edits:
+            return None, []
+
+        saved_path = repo.save_procedural_graph(evolved, agent_name, folder=folder, archive_previous=True)
+        log_entry = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "agent_name": agent_name,
+            "chapter_num": chapter_num,
+            "trigger_type": trigger_type,
+            "edits_count": len(edits),
+            "edits": [e.model_dump() for e in edits],
+            "saved_path": str(saved_path),
+            "status": "COMMITTED"
+        }
+        repo.log_procedural_graph_evolution(log_entry, folder=folder)
+        return evolved, edits
+
 
     def _propose_mutations(
         self,

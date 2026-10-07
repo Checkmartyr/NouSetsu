@@ -9,6 +9,7 @@ import shutil
 import stat
 import sys
 import time
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 import yaml
 from nousetsu.models.bible import ArcSummary, ChapterSummary, CharacterProfile, GlossaryItem, NovelBible, StyleGuide, is_valid_alias_string
@@ -430,13 +431,81 @@ class NovelRepository:
                 return None
         return None
 
-    def save_procedural_graph(self, graph: Any, agent_name: str, folder: Optional[str] = None) -> Path:
-        """Persist an evolved procedural graph to disk."""
+    def save_procedural_graph(self, graph: Any, agent_name: str, folder: Optional[str] = None, archive_previous: bool = True) -> Path:
+        """Persist an evolved procedural graph to disk, optionally archiving previous version."""
         target_dir = self.procedural_graphs_dir / folder if folder else self.procedural_graphs_dir
         target_dir.mkdir(parents=True, exist_ok=True)
+        if archive_previous:
+            self.archive_procedural_graph(agent_name, folder=folder)
         path = target_dir / f"{agent_name}.json"
         atomic_write_json(path, graph.model_dump())
         return path
+
+    def archive_procedural_graph(self, agent_name: str, folder: Optional[str] = None) -> Optional[Path]:
+        """Archive existing procedural graph snapshot to the history directory."""
+        target_dir = self.procedural_graphs_dir / folder if folder else self.procedural_graphs_dir
+        path = target_dir / f"{agent_name}.json"
+        if not path.exists():
+            return None
+        history_dir = target_dir / "history"
+        history_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        backup_path = history_dir / f"{agent_name}_{timestamp}.json"
+        try:
+            shutil.copy2(path, backup_path)
+            return backup_path
+        except Exception as e:
+            logger.warning(f"Failed to archive procedural graph {path}: {e}")
+            return None
+
+    def list_procedural_graph_history(self, agent_name: str, folder: Optional[str] = None) -> List[Path]:
+        """List historical procedural graph versions for an agent sorted newest to oldest."""
+        target_dir = self.procedural_graphs_dir / folder if folder else self.procedural_graphs_dir
+        history_dir = target_dir / "history"
+        if not history_dir.exists():
+            return []
+        files = list(history_dir.glob(f"{agent_name}_*.json"))
+        return sorted(files, key=lambda p: p.stat().st_mtime, reverse=True)
+
+    def rollback_procedural_graph(self, agent_name: str, folder: Optional[str] = None) -> Optional[Any]:
+        """Roll back to the most recent historical snapshot of an agent's procedural graph."""
+        from nousetsu.graph.procedural import ProceduralGraph
+        history_files = self.list_procedural_graph_history(agent_name, folder=folder)
+        if not history_files:
+            logger.info(f"No history snapshots available to roll back procedural graph for '{agent_name}'.")
+            return None
+
+        latest_backup = history_files[0]
+        try:
+            with open(latest_backup, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            restored_graph = ProceduralGraph.model_validate(data)
+
+            target_dir = self.procedural_graphs_dir / folder if folder else self.procedural_graphs_dir
+            path = target_dir / f"{agent_name}.json"
+            atomic_write_json(path, restored_graph.model_dump())
+            logger.info(f"Successfully rolled back procedural graph for '{agent_name}' to snapshot {latest_backup.name}")
+            return restored_graph
+        except Exception as e:
+            logger.error(f"Failed to roll back procedural graph for '{agent_name}' from {latest_backup}: {e}")
+            return None
+
+    def log_procedural_graph_evolution(self, log_entry: Dict[str, Any], folder: Optional[str] = None) -> Path:
+        """Append an entry to the procedural graph evolution audit log."""
+        target_dir = self.procedural_graphs_dir / folder if folder else self.procedural_graphs_dir
+        target_dir.mkdir(parents=True, exist_ok=True)
+        log_path = target_dir / "evolution_log.json"
+        entries = []
+        if log_path.exists():
+            try:
+                with open(log_path, "r", encoding="utf-8") as f:
+                    entries = json.load(f)
+            except Exception:
+                entries = []
+        entries.append(log_entry)
+        atomic_write_json(log_path, entries)
+        return log_path
+
 
     def get_rag_engine(self) -> Any:
         """Get or create the HybridSearchEngine for this project."""

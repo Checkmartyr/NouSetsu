@@ -16,6 +16,9 @@ from nousetsu.storage.repository import NovelRepository
 from nousetsu.utils.env import load_env
 from nousetsu.utils.language import detect_language
 from nousetsu.utils.rate_limiter import SlidingWindowRateLimiter
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class BatchRunner:
@@ -45,6 +48,11 @@ class BatchRunner:
         enable_rag_reranker: Optional[bool] = None,
         filter_extractor_entities: Optional[bool] = None,
         enable_post_polish_reconciliation: Optional[bool] = None,
+        enable_procedural_graph_learning: Optional[bool] = None,
+        procedural_learning_cadence: Optional[str] = None,
+        procedural_learning_interval: Optional[int] = None,
+        procedural_learning_min_failures: Optional[int] = None,
+        procedural_refiner_model: Optional[str] = None,
         console: Optional[Console] = None
     ):
         if isinstance(repository, NovelRepository):
@@ -174,6 +182,69 @@ class BatchRunner:
         self.stop_event = threading.Event()
         self.batch_token_usage = TokenUsage()
         self.task_token_usage: dict[str, TokenUsage] = {}
+
+        self.enable_procedural_graph_learning = (
+            enable_procedural_graph_learning
+            if enable_procedural_graph_learning is not None
+            else (
+                cfg.get_enable_procedural_graph_learning()
+                if hasattr(cfg, "get_enable_procedural_graph_learning")
+                else getattr(cfg, "enable_procedural_graph_learning", True)
+            )
+        )
+        self.procedural_learning_cadence = (
+            procedural_learning_cadence
+            if procedural_learning_cadence is not None
+            else (
+                cfg.get_procedural_learning_cadence()
+                if hasattr(cfg, "get_procedural_learning_cadence")
+                else getattr(cfg, "procedural_learning_cadence", "both")
+            )
+        )
+        self.procedural_learning_interval = (
+            procedural_learning_interval
+            if procedural_learning_interval is not None
+            else (
+                cfg.get_procedural_learning_interval()
+                if hasattr(cfg, "get_procedural_learning_interval")
+                else getattr(cfg, "procedural_learning_interval", 15)
+            )
+        )
+        self.procedural_learning_min_failures = (
+            procedural_learning_min_failures
+            if procedural_learning_min_failures is not None
+            else (
+                cfg.get_procedural_learning_min_failures()
+                if hasattr(cfg, "get_procedural_learning_min_failures")
+                else getattr(cfg, "procedural_learning_min_failures", 2)
+            )
+        )
+        self.procedural_refiner_model = (
+            default_agent_model
+            if is_mock
+            else (
+                procedural_refiner_model
+                or (
+                    cfg.get_procedural_refiner_model()
+                    if hasattr(cfg, "get_procedural_refiner_model")
+                    else getattr(cfg, "procedural_refiner_model", "gemini-3.5-flash-lite")
+                )
+            )
+        )
+        self._refiner = None
+
+    @property
+    def refiner(self):
+        """Lazy-loaded ProceduralGraphRefiner instance."""
+        if self._refiner is None:
+            from nousetsu.graph.pg_refiner import ProceduralGraphRefiner
+            rejection_path = self.repo.procedural_graphs_dir / "rejection_memory.json"
+            self._refiner = ProceduralGraphRefiner(
+                model_name=self.procedural_refiner_model,
+                rejection_memory_path=rejection_path
+            )
+        return self._refiner
+
 
     def stop(self) -> None:
         """Signal batch runner to gracefully halt translation."""
@@ -404,7 +475,20 @@ class BatchRunner:
                 self.batch_token_usage = self.batch_token_usage.add(tok_use)
 
                 self.repo.save_metadata(final_state.metadata, task.output_file)
+
+                # Check and handle online procedural graph learning
+                try:
+                    self._handle_procedural_graph_learning(
+                        completed_chapter_num=task.chapter_num,
+                        folder=task_folder,
+                        final_state=final_state,
+                        notify_callback=notify_callback,
+                    )
+                except Exception as e:
+                    logger.warning(f"Error during procedural graph learning check: {e}")
+
                 return final_state.metadata
+
 
             return None
 
@@ -615,3 +699,110 @@ class BatchRunner:
                 self.console.print(token_table)
             except Exception:
                 pass
+
+    def _handle_procedural_graph_learning(
+        self,
+        completed_chapter_num: int,
+        folder: Optional[str],
+        final_state: TranslationState,
+        notify_callback: Optional[Callable[[str], None]] = None,
+    ) -> None:
+        """Evaluate triggers and execute online learning/rollback for Procedural Graphs."""
+        if not self.enable_procedural_graph_learning:
+            return
+
+        cadence = (self.procedural_learning_cadence or "both").lower()
+        interval = self.procedural_learning_interval or 15
+
+        # Check triggers
+        is_arc_trigger = False
+        if cadence in ("arc", "both"):
+            arc_sum = getattr(final_state, "arc_summary", None)
+            if arc_sum and (getattr(arc_sum, "arc_completed", False) is True or getattr(arc_sum, "status", "").lower() == "completed"):
+                is_arc_trigger = True
+            ch_sum = getattr(final_state, "new_chapter_summary", None)
+            if ch_sum and getattr(ch_sum, "arc_update", None):
+                arc_up = ch_sum.arc_update
+                if isinstance(arc_up, dict) and (arc_up.get("arc_completed") is True or str(arc_up.get("status", "")).lower() == "completed"):
+                    is_arc_trigger = True
+
+        is_interval_trigger = False
+        if cadence in ("interval", "both"):
+            if completed_chapter_num > 0 and (completed_chapter_num % interval == 0):
+                is_interval_trigger = True
+
+        if not (is_arc_trigger or is_interval_trigger):
+            return
+
+        trigger_type = "arc" if is_arc_trigger else "interval"
+        msg = f"🔄 Evaluating Procedural Graph online learning ({trigger_type} boundary at Ch.{completed_chapter_num})..."
+        logger.info(msg)
+        if notify_callback:
+            notify_callback(msg)
+
+        from nousetsu.graph.pg_refiner import collect_traces_from_repository
+        from nousetsu.graph.procedural import (
+            get_default_chronicler_graph,
+            get_default_critic_graph,
+            get_default_drafter_graph,
+            get_default_extractor_graph,
+            get_default_polisher_graph,
+        )
+
+        default_graph_factory = {
+            "extractor": get_default_extractor_graph,
+            "drafter": get_default_drafter_graph,
+            "critic": get_default_critic_graph,
+            "polisher": get_default_polisher_graph,
+            "chronicler": get_default_chronicler_graph,
+        }
+
+        # Collect recent diagnostic traces (capped to 2*interval)
+        traces = collect_traces_from_repository(
+            repo=self.repo,
+            folder=folder,
+            stage="all",
+            max_traces=max(20, interval * 2)
+        )
+        if not traces:
+            return
+
+        # Check for regression and rollback first across all agents
+        for agent_name in ["drafter", "polisher", "extractor", "critic", "chronicler"]:
+            agent_traces = [t for t in traces if t.stage == agent_name]
+            if len(agent_traces) >= 3 and self.refiner.check_score_regression(agent_traces, window_size=3):
+                restored = self.repo.rollback_procedural_graph(agent_name, folder=folder)
+                if restored:
+                    self.workflow.update_procedural_graph(agent_name, restored)
+                    rollback_msg = f"⚠️ Regression detected for {agent_name}; rolled back to previous Procedural Graph version."
+                    logger.warning(rollback_msg)
+                    if notify_callback:
+                        notify_callback(rollback_msg)
+
+        # Iterate agents and check if failure count >= min_failures
+        min_failures = self.procedural_learning_min_failures or 2
+        for agent_name, factory_fn in default_graph_factory.items():
+            agent_traces = [t for t in traces if t.stage == agent_name]
+            failures = [t for t in agent_traces if not t.is_success]
+            if len(failures) < min_failures:
+                continue
+
+            current_g = self.repo.load_procedural_graph(agent_name, folder=folder) or factory_fn()
+            try:
+                evolved_g, edits = self.refiner.evolve_and_persist(
+                    graph=current_g,
+                    traces=agent_traces,
+                    repo=self.repo,
+                    agent_name=agent_name,
+                    folder=folder,
+                    trigger_type=trigger_type,
+                    chapter_num=completed_chapter_num
+                )
+                if evolved_g and edits:
+                    self.workflow.update_procedural_graph(agent_name, evolved_g)
+                    success_msg = f"✨ Online evolved Procedural Graph for {agent_name} ({len(edits)} edits applied)!"
+                    logger.info(success_msg)
+                    if notify_callback:
+                        notify_callback(success_msg)
+            except Exception as e:
+                logger.warning(f"Procedural graph evolution failed for {agent_name}: {e}")

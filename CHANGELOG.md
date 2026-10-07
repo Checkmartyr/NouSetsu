@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-07
+
+### Added
+- Evolve procedural graphs during batch translation at story arc boundaries or configured chapter intervals, with graph history, evolution logs, and regression rollback.
+- Save and resume Web Studio reading bookmarks, including scroll position, per-project reader preferences, and an auto-save option.
+
+### Fixed
+- Detect and explain stale or incompatible desktop backends during startup.
+
 ## [0.5.1] - 2026-09-30
 
 ### Fixed
@@ -258,6 +267,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Automatic CJK source language detection (Japanese, Chinese, Korean).
 - Console scripts `nousetsu` and `novel`.
 
+[0.6.0]: https://github.com/Checkmartyr/NouSetsu/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/Checkmartyr/NouSetsu/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/Checkmartyr/NouSetsu/compare/v0.4.9...v0.5.0
 [0.4.9]: https://github.com/Checkmartyr/NouSetsu/compare/v0.4.8...v0.4.9
