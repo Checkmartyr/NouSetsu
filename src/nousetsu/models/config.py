@@ -171,6 +171,11 @@ class ProjectConfig(BaseModel):
     filter_extractor_entities: Optional[bool] = Field(default=None, description="Filter known characters and glossary per chunk/chapter in Entity Extractor to save tokens and avoid quota exhaustion")
     enable_patch_polishing: bool = Field(default=True, description="Enable search/replace diff patching for secondary polish passes to save output tokens")
     enable_post_polish_reconciliation: bool = Field(default=True, description="Enable post-polish term and entity reconciliation by Chronicler Agent")
+    enable_procedural_graph_learning: Optional[bool] = Field(default=None, description="Enable periodic or arc-boundary online learning of Procedural Graphs")
+    procedural_learning_cadence: Optional[str] = Field(default=None, description="Cadence for graph evolution: 'arc', 'interval', or 'both'")
+    procedural_learning_interval: Optional[int] = Field(default=None, ge=1, description="Interval in chapters for periodic graph evolution")
+    procedural_learning_min_failures: Optional[int] = Field(default=None, ge=1, description="Minimum failure traces before triggering refiner LLM")
+    procedural_refiner_model: Optional[str] = Field(default=None, description="LLM model override for ProceduralGraphRefiner (defaults to gemini-3.5-flash-lite)")
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     def get_raw_path(self, base_dir: Path) -> Path:
@@ -313,3 +318,53 @@ class ProjectConfig(BaseModel):
         if env_val is not None:
             return env_val.strip().lower() in ("true", "1", "yes")
         return True
+
+    def get_enable_procedural_graph_learning(self) -> bool:
+        """Resolve effective enable_procedural_graph_learning: config override -> .env -> default (True)."""
+        if self.enable_procedural_graph_learning is not None:
+            return self.enable_procedural_graph_learning
+        env_val = os.environ.get("NOVEL_ENABLE_PROCEDURAL_GRAPH_LEARNING")
+        if env_val is not None:
+            return env_val.strip().lower() in ("true", "1", "yes")
+        return True
+
+    def get_procedural_learning_cadence(self) -> str:
+        """Resolve effective procedural_learning_cadence: config override -> .env -> default ('both')."""
+        if self.procedural_learning_cadence is not None:
+            return self.procedural_learning_cadence
+        env_val = os.environ.get("NOVEL_PROCEDURAL_LEARNING_CADENCE")
+        if env_val:
+            return env_val.strip().lower()
+        return "both"
+
+    def get_procedural_learning_interval(self) -> int:
+        """Resolve effective procedural_learning_interval: config override -> .env -> default (15)."""
+        if self.procedural_learning_interval is not None:
+            return self.procedural_learning_interval
+        env_val = os.environ.get("NOVEL_PROCEDURAL_LEARNING_INTERVAL")
+        if env_val:
+            try:
+                return max(1, int(env_val.strip()))
+            except ValueError:
+                pass
+        return 15
+
+    def get_procedural_learning_min_failures(self) -> int:
+        """Resolve effective procedural_learning_min_failures: config override -> .env -> default (2)."""
+        if self.procedural_learning_min_failures is not None:
+            return self.procedural_learning_min_failures
+        env_val = os.environ.get("NOVEL_PROCEDURAL_LEARNING_MIN_FAILURES")
+        if env_val:
+            try:
+                return max(1, int(env_val.strip()))
+            except ValueError:
+                pass
+        return 2
+
+    def get_procedural_refiner_model(self) -> str:
+        """Resolve effective procedural_refiner_model: config override -> .env -> default."""
+        return (
+            self.procedural_refiner_model
+            or os.environ.get("NOVEL_PROCEDURAL_REFINER_MODEL")
+            or "gemini-3.5-flash-lite"
+        )

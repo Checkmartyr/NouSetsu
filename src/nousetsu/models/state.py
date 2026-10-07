@@ -1,7 +1,7 @@
 """LangGraph state schema for novel translation workflow."""
 from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
-from nousetsu.models.bible import CharacterProfile, ChapterSummary, GlossaryItem, NovelBible
+from nousetsu.models.bible import ArcSummary, CharacterProfile, ChapterSummary, GlossaryItem, NovelBible
 from nousetsu.models.metadata import ChapterMetadata, PipelineStage, QualityAudit, StepTokenUsage, SubdividedBlock
 from nousetsu.models.trace import AgentPromptTrace
 from nousetsu.rag.models import SearchResult
@@ -33,6 +33,7 @@ class TranslationState(BaseModel):
     quality_audit: QualityAudit = Field(default_factory=QualityAudit)
     polished_text: str = Field(default="")
     new_chapter_summary: Optional[ChapterSummary] = None
+    arc_summary: Optional[ArcSummary] = Field(default=None, description="Current or completed story arc summary")
     reconciled_terms: List[GlossaryItem] = Field(default_factory=list, description="Terms reconciled against final polished prose")
     reconciled_characters: List[CharacterProfile] = Field(default_factory=list, description="Characters reconciled against final polished prose")
     rag_retrieved_lore: List[SearchResult] = Field(default_factory=list, description="Historical lore snippets retrieved via Hybrid Search RAG")

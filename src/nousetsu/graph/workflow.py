@@ -183,6 +183,22 @@ class NovelTranslationWorkflow:
             except Exception:
                 pass
 
+    def update_procedural_graph(self, agent_name: str, procedural_graph: Any) -> bool:
+        """Hot-reload an evolved procedural graph into the corresponding agent."""
+        agent_map = {
+            "extractor": self.extractor,
+            "drafter": self.drafter,
+            "critic": self.critic,
+            "polisher": self.polisher,
+            "chronicler": self.chronicler,
+        }
+        target = agent_map.get(agent_name.lower())
+        if target is not None:
+            target.procedural_graph = procedural_graph
+            return True
+        return False
+
+
     def _build_graph(self):
         builder = StateGraph(TranslationState)
 

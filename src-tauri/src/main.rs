@@ -116,15 +116,18 @@ fn project_root() -> Result<PathBuf, Error> {
     Ok(root)
 }
 
-fn backend_is_ready() -> bool {
-    let address = format!("{BACKEND_HOST}:{BACKEND_PORT}");
-    let Ok(mut stream) = TcpStream::connect_timeout(
-        &address.parse().expect("valid backend socket address"),
-        Duration::from_millis(250),
-    ) else {
+#[derive(Debug, PartialEq, Eq)]
+enum BackendProbe {
+    Ready,
+    Starting,
+    Incompatible(String),
+}
+
+fn probe_legacy_sync_state(address: &SocketAddr) -> bool {
+    let Ok(mut stream) = TcpStream::connect_timeout(address, Duration::from_millis(500)) else {
         return false;
     };
-    let _ = stream.set_read_timeout(Some(Duration::from_millis(500)));
+    let _ = stream.set_read_timeout(Some(Duration::from_millis(1500)));
     let request =
         format!("GET /api/sync-state HTTP/1.1\r\nHost: {address}\r\nConnection: close\r\n\r\n");
     if stream.write_all(request.as_bytes()).is_err() {
@@ -136,41 +139,99 @@ fn backend_is_ready() -> bool {
         && response.split_whitespace().nth(1) == Some("200")
 }
 
-fn backend_version_matches(address: &SocketAddr, expected_version: &str) -> bool {
-    let Ok(mut stream) = TcpStream::connect_timeout(address, Duration::from_millis(250)) else {
-        return false;
+fn probe_backend_status(address: &SocketAddr, expected_version: &str) -> BackendProbe {
+    let Ok(mut stream) = TcpStream::connect_timeout(address, Duration::from_millis(500)) else {
+        return BackendProbe::Starting;
     };
-    let _ = stream.set_read_timeout(Some(Duration::from_millis(500)));
+    let _ = stream.set_read_timeout(Some(Duration::from_millis(2000)));
     let request =
         format!("GET /api/desktop-info HTTP/1.1\r\nHost: {address}\r\nConnection: close\r\n\r\n");
     if stream.write_all(request.as_bytes()).is_err() {
-        return false;
+        return BackendProbe::Starting;
     }
 
-    let mut response = String::new();
-    if BufReader::new(stream)
-        .read_to_string(&mut response)
-        .is_err()
-    {
-        return false;
+    let mut response = Vec::new();
+    let mut reader = BufReader::new(stream);
+    let mut buf = [0u8; 1024];
+    loop {
+        match reader.read(&mut buf) {
+            Ok(0) => break,
+            Ok(n) => {
+                response.extend_from_slice(&buf[..n]);
+                if response.len() > 16384 {
+                    break;
+                }
+            }
+            Err(ref e) if e.kind() == ErrorKind::TimedOut || e.kind() == ErrorKind::WouldBlock => {
+                return BackendProbe::Starting;
+            }
+            Err(_) => return BackendProbe::Starting,
+        }
     }
-    let Some((headers, body)) = response.split_once("\r\n\r\n") else {
-        return false;
+
+    let Ok(response_str) = std::str::from_utf8(&response) else {
+        return BackendProbe::Incompatible("Non-UTF8 response from port".to_string());
     };
-    let is_success = headers
+
+    let Some((headers, body)) = response_str.split_once("\r\n\r\n") else {
+        return BackendProbe::Starting;
+    };
+
+    let status_code = headers
         .lines()
         .next()
-        .and_then(|status| status.split_whitespace().nth(1))
-        == Some("200");
-    if !is_success {
-        return false;
-    }
+        .and_then(|status| status.split_whitespace().nth(1));
 
-    serde_json::from_str::<serde_json::Value>(body)
-        .ok()
-        .and_then(|payload| payload.get("version")?.as_str().map(str::to_owned))
-        .as_deref()
-        == Some(expected_version)
+    match status_code {
+        Some("200") => {
+            if let Ok(payload) = serde_json::from_str::<serde_json::Value>(body.trim()) {
+                if let Some(version) = payload.get("version").and_then(|v| v.as_str()) {
+                    if version == expected_version {
+                        BackendProbe::Ready
+                    } else {
+                        BackendProbe::Incompatible(format!(
+                            "Version mismatch: found '{version}', expected '{expected_version}'"
+                        ))
+                    }
+                } else {
+                    BackendProbe::Incompatible(
+                        "Missing 'version' key in /api/desktop-info payload".to_string(),
+                    )
+                }
+            } else {
+                BackendProbe::Incompatible("Invalid JSON body from /api/desktop-info".to_string())
+            }
+        }
+        Some("404") => {
+            if probe_legacy_sync_state(address) {
+                BackendProbe::Incompatible(
+                    "Legacy NouSetsu backend detected without /api/desktop-info (pre-0.5.1)"
+                        .to_string(),
+                )
+            } else {
+                BackendProbe::Incompatible(
+                    "Received 404 from unknown service running on backend port".to_string(),
+                )
+            }
+        }
+        Some("500") | Some("502") | Some("503") => BackendProbe::Starting,
+        _ => BackendProbe::Starting,
+    }
+}
+
+fn backend_version_matches(address: &SocketAddr, expected_version: &str) -> bool {
+    matches!(
+        probe_backend_status(address, expected_version),
+        BackendProbe::Ready
+    )
+}
+
+fn backend_is_ready() -> bool {
+    let backend_address = SocketAddr::from(([127, 0, 0, 1], BACKEND_PORT));
+    !matches!(
+        probe_backend_status(&backend_address, env!("CARGO_PKG_VERSION")),
+        BackendProbe::Starting
+    )
 }
 
 #[cfg_attr(debug_assertions, allow(dead_code))]
@@ -433,23 +494,28 @@ fn start_backend(_app: &tauri::App) -> Result<(Option<Child>, PathBuf), Error> {
         &format!("Logs directory: {}", logs_dir.display()),
     );
 
-    if backend_version_matches(&backend_address, expected_version) {
-        write_desktop_log(
-            &logs_dir,
-            "INFO",
-            &format!("Reusing existing compatible backend on {backend_address}"),
-        );
-        return Ok((None, logs_dir));
-    }
-    if backend_is_ready() {
-        write_desktop_log(
-            &logs_dir,
-            "ERROR",
-            &format!("Incompatible backend detected on {backend_address}"),
-        );
-        return Err(Error::other(format!(
-            "An incompatible NouSetsu backend is already running at {backend_address}. Close existing NouSetsu Web Studio or desktop processes and restart the desktop app."
-        )));
+    match probe_backend_status(&backend_address, expected_version) {
+        BackendProbe::Ready => {
+            write_desktop_log(
+                &logs_dir,
+                "INFO",
+                &format!("Reusing existing compatible backend on {backend_address}"),
+            );
+            return Ok((None, logs_dir));
+        }
+        BackendProbe::Incompatible(reason) => {
+            write_desktop_log(
+                &logs_dir,
+                "ERROR",
+                &format!("Incompatible backend detected on {backend_address}: {reason}"),
+            );
+            return Err(Error::other(format!(
+                "An incompatible NouSetsu backend is already running at {backend_address}: {reason}. Close existing NouSetsu Web Studio or desktop processes and restart the desktop app."
+            )));
+        }
+        BackendProbe::Starting => {
+            // Port is free or not yet responding; proceed to spawn backend child process.
+        }
     }
 
     let backend_log_path = logs_dir.join("backend.log");
@@ -507,26 +573,32 @@ fn start_backend(_app: &tauri::App) -> Result<(Option<Child>, PathBuf), Error> {
 
     let deadline = Instant::now() + Duration::from_secs(90);
     while Instant::now() < deadline {
-        if backend_version_matches(&backend_address, expected_version) {
-            write_desktop_log(
-                &logs_dir,
-                "INFO",
-                "Backend became ready and verified successfully.",
-            );
-            return Ok((Some(child), logs_dir));
+        match probe_backend_status(&backend_address, expected_version) {
+            BackendProbe::Ready => {
+                write_desktop_log(
+                    &logs_dir,
+                    "INFO",
+                    "Backend became ready and verified successfully.",
+                );
+                return Ok((Some(child), logs_dir));
+            }
+            BackendProbe::Incompatible(reason) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                write_desktop_log(
+                    &logs_dir,
+                    "ERROR",
+                    &format!("Incompatible backend responded during startup wait loop: {reason}"),
+                );
+                return Err(Error::other(format!(
+                    "An incompatible NouSetsu backend responded at {backend_address}: {reason}. Close it and restart the desktop app."
+                )));
+            }
+            BackendProbe::Starting => {
+                // Backend is still initializing or connection timed out; continue waiting.
+            }
         }
-        if backend_is_ready() {
-            let _ = child.kill();
-            let _ = child.wait();
-            write_desktop_log(
-                &logs_dir,
-                "ERROR",
-                "Incompatible backend responded during startup wait loop.",
-            );
-            return Err(Error::other(format!(
-                "An incompatible NouSetsu backend is responding at {backend_address}. Close it and restart the desktop app."
-            )));
-        }
+
         if let Some(status) = child.try_wait()? {
             write_desktop_log(
                 &logs_dir,
@@ -537,7 +609,7 @@ fn start_backend(_app: &tauri::App) -> Result<(Option<Child>, PathBuf), Error> {
                 "The NouSetsu backend exited before becoming ready ({status})."
             )));
         }
-        thread::sleep(Duration::from_millis(100));
+        thread::sleep(Duration::from_millis(200));
     }
 
     let _ = child.kill();
@@ -593,7 +665,7 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{backend_version_matches, seed_env_file};
+    use super::{backend_version_matches, probe_backend_status, seed_env_file, BackendProbe};
     use std::{
         fs,
         io::{BufRead, BufReader, Write},
@@ -660,5 +732,117 @@ mod tests {
 
         assert!(!backend_version_matches(&address, "0.5.1"));
         server.join().expect("test server should finish");
+    }
+
+    #[test]
+    fn probe_status_matches_compatible_backend() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("test listener should bind");
+        let address: SocketAddr = listener.local_addr().expect("address should be available");
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("request should connect");
+            let mut request_line = String::new();
+            BufReader::new(&stream)
+                .read_line(&mut request_line)
+                .expect("request should be readable");
+            assert!(request_line.starts_with("GET /api/desktop-info "));
+            let body = r#"{"version":"0.5.1"}"#;
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            )
+            .expect("version response should be written");
+        });
+
+        assert_eq!(
+            probe_backend_status(&address, "0.5.1"),
+            BackendProbe::Ready
+        );
+        server.join().expect("test server should finish");
+    }
+
+    #[test]
+    fn probe_status_rejects_version_mismatch() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("test listener should bind");
+        let address: SocketAddr = listener.local_addr().expect("address should be available");
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("request should connect");
+            let mut request_line = String::new();
+            BufReader::new(&stream)
+                .read_line(&mut request_line)
+                .expect("request should be readable");
+            assert!(request_line.starts_with("GET /api/desktop-info "));
+            let body = r#"{"version":"0.4.9"}"#;
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            )
+            .expect("version response should be written");
+        });
+
+        let status = probe_backend_status(&address, "0.5.1");
+        assert!(
+            matches!(status, BackendProbe::Incompatible(ref msg) if msg.contains("Version mismatch")),
+            "Expected Incompatible with version mismatch, got {:?}",
+            status
+        );
+        server.join().expect("test server should finish");
+    }
+
+    #[test]
+    fn probe_status_detects_legacy_backend_via_sync_state() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("test listener should bind");
+        let address: SocketAddr = listener.local_addr().expect("address should be available");
+        let server = thread::spawn(move || {
+            // First probe: GET /api/desktop-info returns 404
+            let (mut stream1, _) = listener.accept().expect("first request should connect");
+            let mut request_line1 = String::new();
+            BufReader::new(&stream1)
+                .read_line(&mut request_line1)
+                .expect("first request line should be readable");
+            assert!(request_line1.starts_with("GET /api/desktop-info "));
+            write!(
+                stream1,
+                "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+            )
+            .expect("404 response should be written");
+            drop(stream1);
+
+            // Second probe (fallback check): GET /api/sync-state returns 200
+            let (mut stream2, _) = listener.accept().expect("second request should connect");
+            let mut request_line2 = String::new();
+            BufReader::new(&stream2)
+                .read_line(&mut request_line2)
+                .expect("second request line should be readable");
+            assert!(request_line2.starts_with("GET /api/sync-state "));
+            write!(
+                stream2,
+                "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+            )
+            .expect("200 sync-state response should be written");
+        });
+
+        let status = probe_backend_status(&address, "0.5.1");
+        assert!(
+            matches!(status, BackendProbe::Incompatible(ref msg) if msg.contains("Legacy NouSetsu backend")),
+            "Expected legacy backend detection, got {:?}",
+            status
+        );
+        server.join().expect("test server should finish");
+    }
+
+    #[test]
+    fn probe_status_returns_starting_on_closed_port() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("test listener should bind");
+        let address: SocketAddr = listener.local_addr().expect("address should be available");
+        drop(listener);
+
+        assert_eq!(
+            probe_backend_status(&address, "0.5.1"),
+            BackendProbe::Starting
+        );
     }
 }
