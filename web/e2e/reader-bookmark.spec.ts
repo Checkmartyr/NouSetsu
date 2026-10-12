@@ -1,4 +1,7 @@
 import { test, expect } from '@playwright/test';
+import { mockBackend } from './helpers/mockBackend';
+
+test.beforeEach(async ({ page }) => { await mockBackend(page); });
 
 test.describe('Reader Bookmark & Progress Persistence', () => {
   test('Save Chapter bookmark button toggles and persists in localStorage', async ({ page }) => {

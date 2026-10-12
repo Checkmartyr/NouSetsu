@@ -1,37 +1,18 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useSyncExternalStore } from 'react';
 import {
-  CheckCircle2,
-  AlertCircle,
-  Loader2,
-  Clock,
-  Server,
-  BookOpen,
-  Radio,
-  Cpu,
-  Layers,
-  RefreshCw,
-  ShieldAlert
+  CheckCircle2, AlertCircle, Loader2, Clock, Server, BookOpen,
+  Radio, Cpu, Layers, RefreshCw, ShieldAlert,
 } from 'lucide-react';
 import {
-  ServiceCheckItem,
-  ServiceCheckId,
-  INITIAL_SERVICE_CHECKS,
-  pollBackendReady,
-  verifyEventStream,
-  verifyEnvironment,
+  type ServiceCheckId,
+  type StartupData,
+  getStartupSnapshot,
+  subscribeStartup,
+  startVerification,
 } from '../services/serviceChecker';
-import { fetchActiveProject } from '../services/apiClient';
-import { fetchChapters } from '../services/dashboardApi';
-import { isTauriDesktopRuntime } from '../services/apiBase';
-import { ProjectMeta } from '../types/trace';
-import { ChapterItem } from '../types/dashboard';
 
 interface StartupLoadingScreenProps {
-  onReady: (data: {
-    activeProject: ProjectMeta | null;
-    projects: ProjectMeta[];
-    chapters: ChapterItem[];
-  }) => void;
+  onReady: (data: StartupData) => void;
 }
 
 const CHECK_ICONS: Record<ServiceCheckId, React.ComponentType<{ className?: string }>> = {
@@ -43,176 +24,57 @@ const CHECK_ICONS: Record<ServiceCheckId, React.ComponentType<{ className?: stri
 };
 
 export const StartupLoadingScreen: React.FC<StartupLoadingScreenProps> = ({ onReady }) => {
-  const [checks, setChecks] = useState<ServiceCheckItem[]>(INITIAL_SERVICE_CHECKS);
-  const [progress, setProgress] = useState(0);
-  const [statusMessage, setStatusMessage] = useState('Initializing NouSetsu services (=^･ω･^=)...');
-  const [hasFatalError, setHasFatalError] = useState(false);
+  const snapshot = useSyncExternalStore(subscribeStartup, getStartupSnapshot);
+  const { checks, progress, message: statusMessage, error: diagnosticDetails } = snapshot;
+  const hasFatalError = snapshot.status === 'error';
   const [isFadingOut, setIsFadingOut] = useState(false);
-  const [diagnosticDetails, setDiagnosticDetails] = useState<string | null>(null);
+  const onReadyRef = useRef(onReady);
+  onReadyRef.current = onReady;
+  const transitionTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
-  // Store gathered data
-  const dataRef = useRef<{
-    activeProject: ProjectMeta | null;
-    projects: ProjectMeta[];
-    chapters: ChapterItem[];
-  }>({
-    activeProject: null,
-    projects: [],
-    chapters: [],
-  });
-
-  const updateCheck = useCallback(
-    (id: ServiceCheckId, update: Partial<ServiceCheckItem>) => {
-      setChecks((prev) =>
-        prev.map((c) => (c.id === id ? { ...c, ...update } : c))
-      );
-    },
-    []
-  );
-
-  const runVerification = useCallback(async () => {
-    setHasFatalError(false);
-    setDiagnosticDetails(null);
-    setProgress(5);
-    setStatusMessage('Pinging Python backend gateway on port 15474...');
-
-    // 1. Backend API Gateway
-    updateCheck('backend', { status: 'checking', error: undefined });
-    const backendRes = await pollBackendReady();
-    if (!backendRes.ready) {
-      updateCheck('backend', {
-        status: 'error',
-        error: backendRes.error || 'Backend gateway unreachable',
-      });
-      setHasFatalError(true);
-      setStatusMessage(
-        isTauriDesktopRuntime()
-          ? 'Backend service offline or failed to start.'
-          : 'Backend offline (running in browser preview mode).'
-      );
-      setDiagnosticDetails(
-        isTauriDesktopRuntime()
-          ? 'Make sure the Python backend process is running or has permission to bind to 127.0.0.1:15474.'
-          : 'No local backend detected on port 15474. You can skip to inspect the UI with demo traces.'
-      );
-      return;
-    }
-    updateCheck('backend', {
-      status: 'ready',
-      latencyMs: backendRes.latencyMs,
-    });
-    setProgress(25);
-    setStatusMessage('Backend online! Connecting to project workspace...');
-
-    // 2. Project Registry & Active Project
-    updateCheck('project', { status: 'checking', error: undefined });
-    const projStart = Date.now();
-    try {
-      const activeRes = await fetchActiveProject();
-      const projLatency = Date.now() - projStart;
-      if (activeRes && activeRes.active_project) {
-        dataRef.current.activeProject = activeRes.active_project;
-        dataRef.current.projects = activeRes.projects || [];
-        updateCheck('project', {
-          status: 'ready',
-          latencyMs: projLatency,
-        });
-        setProgress(50);
-        setStatusMessage(
-          `Project "${activeRes.active_project.title || activeRes.active_project.name}" primed!`
-        );
-      } else {
-        updateCheck('project', {
-          status: 'ready',
-          latencyMs: projLatency,
-        });
-        setProgress(50);
-        setStatusMessage('No active project configured yet. Workspace ready.');
-      }
-    } catch (err: any) {
-      updateCheck('project', {
-        status: 'error',
-        error: err?.message || 'Failed to resolve active project registry.',
-      });
-      setDiagnosticDetails('Could not read project registry from .novel cache.');
-    }
-
-    // 3. Real-Time Event Stream (SSE)
-    updateCheck('events', { status: 'checking', error: undefined });
-    setStatusMessage('Testing real-time SSE event pipeline...');
-    const eventRes = await verifyEventStream();
-    updateCheck('events', {
-      status: eventRes.ready ? 'ready' : 'ready', // Non-fatal, fallback to ready
-      latencyMs: eventRes.latencyMs,
-    });
-    setProgress(75);
-
-    // 4. AI Environment & Models
-    updateCheck('models', { status: 'checking', error: undefined });
-    setStatusMessage('Checking AI model credentials & rate limiters...');
-    const envRes = await verifyEnvironment();
-    updateCheck('models', {
-      status: envRes.ready ? 'ready' : 'error',
-      latencyMs: envRes.latencyMs,
-      error: envRes.error,
-    });
-    setProgress(90);
-
-    // 5. Chapter Roster & Cache
-    updateCheck('chapters', { status: 'checking', error: undefined });
-    setStatusMessage('Priming chapter roster & Bible caches...');
-    const chapStart = Date.now();
-    try {
-      if (dataRef.current.activeProject?.path) {
-        const chList = await fetchChapters(dataRef.current.activeProject.path);
-        dataRef.current.chapters = chList;
-        updateCheck('chapters', {
-          status: 'ready',
-          latencyMs: Date.now() - chapStart,
-        });
-      } else {
-        updateCheck('chapters', {
-          status: 'ready',
-          latencyMs: Date.now() - chapStart,
-        });
-      }
-    } catch {
-      updateCheck('chapters', {
-        status: 'ready', // Non-fatal, chapter list will refresh on view
-        latencyMs: Date.now() - chapStart,
-      });
-    }
-
-    setProgress(100);
-    setStatusMessage('All services verified! Welcome Master nya~! (=^･ω･^=)★');
-
-    // Smooth transition
-    setTimeout(() => {
-      setIsFadingOut(true);
-      setTimeout(() => {
-        onReady({
-          activeProject: dataRef.current.activeProject,
-          projects: dataRef.current.projects,
-          chapters: dataRef.current.chapters,
-        });
-      }, 400);
-    }, 500);
-  }, [onReady, updateCheck]);
+  const clearTransitionTimers = useCallback(() => {
+    transitionTimers.current.forEach(clearTimeout);
+    transitionTimers.current = [];
+  }, []);
 
   useEffect(() => {
-    runVerification();
-  }, [runVerification]);
+    void startVerification();
+    return clearTransitionTimers;
+  }, [clearTransitionTimers]);
+
+  useEffect(() => {
+    if (snapshot.status !== 'ready') return;
+    transitionTimers.current.push(setTimeout(() => {
+      setIsFadingOut(true);
+      transitionTimers.current.push(setTimeout(() => {
+        onReadyRef.current(snapshot.data);
+      }, snapshot.lightweight ? 0 : 400));
+    }, snapshot.lightweight ? 0 : 500));
+    return clearTransitionTimers;
+  }, [snapshot.status, snapshot.data, snapshot.lightweight, clearTransitionTimers]);
+
+  const runVerification = () => {
+    clearTransitionTimers();
+    setIsFadingOut(false);
+    void startVerification(true);
+  };
 
   const handleBypass = () => {
+    clearTransitionTimers();
     setIsFadingOut(true);
-    setTimeout(() => {
-      onReady({
-        activeProject: dataRef.current.activeProject,
-        projects: dataRef.current.projects,
-        chapters: dataRef.current.chapters,
-      });
-    }, 300);
+    transitionTimers.current.push(setTimeout(() => {
+      onReadyRef.current(snapshot.data);
+    }, 300));
   };
+
+  if (snapshot.lightweight && !hasFatalError) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#2b2622] text-[#f7f5f0]" role="status">
+        <Loader2 className="w-5 h-5 animate-spin mr-3" />
+        <span>Connecting to novel workspace...</span>
+      </div>
+    );
+  }
 
   return (
     <div

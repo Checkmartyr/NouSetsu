@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { AlertCircle, CheckCircle2, Download, FolderPlus, LoaderCircle, Search, Sparkles, X } from 'lucide-react';
 import { createProject } from '../services/apiClient';
 import {
@@ -44,6 +44,7 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
   const [rangeEnd, setRangeEnd] = useState(20);
   const [scraperStatus, setScraperStatus] = useState<ScraperStatusResult | null>(null);
   const [createdProject, setCreatedProject] = useState<ProjectMeta | null>(null);
+  const inspectionGeneration = useRef(0);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -72,6 +73,7 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
     });
     return () => {
       cancelled = true;
+      inspectionGeneration.current += 1;
     };
   }, [isOpen]);
 
@@ -84,11 +86,13 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
       return;
     }
 
+    const generation = ++inspectionGeneration.current;
     setIsInspecting(true);
     setErrorMsg(null);
     setInspectResult(null);
     try {
       const result = await inspectScraperUrl(trimmed);
+      if (generation !== inspectionGeneration.current) return;
       if (!result.success || result.chapters.length === 0) {
         setErrorMsg(result.error || 'No chapters were found at this URL.');
         return;
@@ -96,17 +100,17 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
       setInspectResult(result);
       setRangeStart(1);
       setRangeEnd(Math.min(result.total_chapters || result.chapters.length, 20));
-      if (result.novel_title && result.novel_title !== 'Unknown Novel') {
-        const projectTitle = title.trim() || result.novel_title;
-        if (!title.trim()) setTitle(result.novel_title);
-        if (!folderName.trim()) {
-          setFolderName(generateProjectName(result.romanized_title || projectTitle));
-        }
+      const projectTitle = result.romanized_title?.trim() || result.novel_title?.trim();
+      if (projectTitle && projectTitle !== 'Unknown Novel') {
+        setTitle((current) => current.trim() ? current : projectTitle);
+        setFolderName((current) => current.trim() ? current : generateProjectName(projectTitle));
       }
     } catch (err: any) {
-      setErrorMsg(err.message || 'Failed to inspect novel URL.');
+      if (generation === inspectionGeneration.current) {
+        setErrorMsg(err.message || 'Failed to inspect novel URL.');
+      }
     } finally {
-      setIsInspecting(false);
+      if (generation === inspectionGeneration.current) setIsInspecting(false);
     }
   };
 
@@ -205,6 +209,7 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
 
   const handleClose = () => {
     if (isSubmitting) return;
+    inspectionGeneration.current += 1;
     setCreatedProject(null);
     setErrorMsg(null);
     onClose();
@@ -251,10 +256,11 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
 
           {/* Novel Title */}
           <div>
-            <label className="block text-[#b0a89f] font-mono text-[11px] mb-1">
+            <label htmlFor="new-project-title" className="block text-[#b0a89f] font-mono text-[11px] mb-1">
               Novel Title <span className="text-[#cf6659]">*</span>
             </label>
             <input
+              id="new-project-title"
               type="text"
               required
               autoFocus
@@ -267,11 +273,12 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
 
           {/* Folder Name */}
           <div>
-            <label className="block text-[#b0a89f] font-mono text-[11px] mb-1">
+            <label htmlFor="new-project-name" className="block text-[#b0a89f] font-mono text-[11px] mb-1">
               Project Name <span className="text-[#857d75] font-normal">(auto-generated, editable)</span>
             </label>
             <div className="relative">
               <input
+                id="new-project-name"
                 type="text"
                 value={folderName}
                 onChange={(e) => setFolderName(e.target.value)}
@@ -380,8 +387,11 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
                     type="url"
                     value={scraperUrl}
                     onChange={(e) => {
+                      inspectionGeneration.current += 1;
                       setScraperUrl(e.target.value);
                       setInspectResult(null);
+                      setIsInspecting(false);
+                      setErrorMsg(null);
                       setScraperStatus(null);
                     }}
                     disabled={isSubmitting || Boolean(createdProject)}

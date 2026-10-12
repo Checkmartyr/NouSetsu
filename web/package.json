@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "test:e2e": "playwright test && playwright test --config playwright.production.config.ts",
+    "test:bundle": "npm run build && playwright test --config playwright.bundle.config.ts",
     "audit:ui": "node ./scripts/run_audit.mjs"
   },
   "dependencies": {

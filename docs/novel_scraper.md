@@ -162,16 +162,18 @@ The React 19 Web Studio (`nousetsu web`) provides a graphical setup flow in the 
 
 ### Steps to Ingest a Novel:
 1. Open the Web Studio in your browser (`http://localhost:5173`) and click **`+ New Project`**.
-2. Select the **Import from Web URL** tab.
-3. Paste the webnovel series landing page URL and click the **Inspect (🔍)** button.
-4. The backend calls `POST /api/scraper/inspect`, returning the book title, author, description, and TOC list.
+2. Enable **Import chapters from a novel URL into raw_chapters**.
+3. Paste the webnovel series landing page URL and click **Inspect**.
+4. `POST /api/scraper/inspect` returns the original and romanized titles, author, description, and TOC list. Empty **Novel Title** and **Project Name** fields use the trimmed romanized title (or original title when unavailable); existing manual text is preserved. The preview retains the original title.
 5. Specify the **Chapter Range** (e.g. `1` to `50` for Volume 1, or `1` to all).
-6. Click **`⚡ Import Novel`**. The backend will:
+6. Click **Create & Import Chapters**. The backend will:
    - Scrape the selected chapter text and clean HTML tags.
-   - Format chapters into `raw_chapters/{index:04d}_{title}.txt`.
+   - Save zero-padded chapter Markdown files into `raw_chapters/`.
    - Initialize `.novel/config.yaml` with title, languages, and genre.
    - Initialize `.novel/bible/bible.yaml` with initial series metadata.
    - Automatically switch Web Studio to the newly created project!
+
+If extraction fails after project creation, **Retry Chapter Import** retries into the same project. Changing the URL requires a new inspection; outdated inspection responses cannot autofill the form.
 
 ---
 

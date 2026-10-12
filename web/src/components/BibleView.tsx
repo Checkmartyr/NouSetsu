@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Users,
   BookMarked,
@@ -30,10 +30,13 @@ import {
 } from '../services/dashboardApi';
 import { CharacterVisualizer } from './CharacterVisualizer';
 import { Pagination } from './Pagination';
+import { useSessionState } from '../services/navigation';
 
 interface BibleViewProps {
   activeProjectPath: string | null;
   activeProjectTitle: string | null;
+  section?: string;
+  onSectionChange?: (section: string) => void;
 }
 
 type BibleTab = 'characters' | 'visualizer' | 'glossary' | 'memory' | 'raw';
@@ -41,30 +44,34 @@ type BibleTab = 'characters' | 'visualizer' | 'glossary' | 'memory' | 'raw';
 export const BibleView: React.FC<BibleViewProps> = ({
   activeProjectPath,
   activeProjectTitle,
+  section,
+  onSectionChange,
 }) => {
-  const [activeTab, setActiveTab] = useState<BibleTab>('characters');
+  const [localTab, setLocalTab] = useState<BibleTab>('characters');
+  const activeTab = (section || localTab) as BibleTab;
+  const setActiveTab = (tab: BibleTab) => { setLocalTab(tab); onSectionChange?.(tab); };
   const [bible, setBible] = useState<BibleData | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
   // Selected character for visualizer
-  const [selectedCharIndex, setSelectedCharIndex] = useState<number | null>(0);
+  const [selectedCharIndex, setSelectedCharIndex] = useSessionState<number | null>(activeProjectPath, 'bible', 'character', 0);
 
   // Raw YAML Mode
   const [rawYaml, setRawYaml] = useState('');
   const [loadingRaw, setLoadingRaw] = useState(false);
 
   // Search & Filter
-  const [searchChar, setSearchChar] = useState('');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [termCategoryFilter, setTermCategoryFilter] = useState('all');
+  const [searchChar, setSearchChar] = useSessionState(activeProjectPath, 'bible', 'characterSearch', '');
+  const [searchTerm, setSearchTerm] = useSessionState(activeProjectPath, 'bible', 'termSearch', '');
+  const [termCategoryFilter, setTermCategoryFilter] = useSessionState(activeProjectPath, 'bible', 'termCategory', 'all');
 
   // Pagination State
-  const [charPage, setCharPage] = useState(1);
-  const [charPageSize, setCharPageSize] = useState(12);
-  const [glossaryPage, setGlossaryPage] = useState(1);
-  const [glossaryPageSize, setGlossaryPageSize] = useState(25);
+  const [charPage, setCharPage] = useSessionState(activeProjectPath, 'bible', 'characterPage', 1);
+  const [charPageSize, setCharPageSize] = useSessionState(activeProjectPath, 'bible', 'characterPageSize', 12);
+  const [glossaryPage, setGlossaryPage] = useSessionState(activeProjectPath, 'bible', 'glossaryPage', 1);
+  const [glossaryPageSize, setGlossaryPageSize] = useSessionState(activeProjectPath, 'bible', 'glossaryPageSize', 25);
 
   // Character Modal / Form
   const [isCharModalOpen, setIsCharModalOpen] = useState(false);
@@ -97,10 +104,13 @@ export const BibleView: React.FC<BibleViewProps> = ({
   });
 
   // Narrative Story Arcs State
-  const [expandedArcIndices, setExpandedArcIndices] = useState<Set<number>>(new Set());
-  const [activeArcExpanded, setActiveArcExpanded] = useState<boolean>(true);
+  const [expandedArcs, setExpandedArcs] = useSessionState<number[]>(activeProjectPath, 'bible', 'expandedArcs', []);
+  const expandedArcIndices = new Set(expandedArcs);
+  const setExpandedArcIndices = (action: React.SetStateAction<Set<number>>) => setExpandedArcs((previous) =>
+    Array.from(typeof action === 'function' ? action(new Set(previous)) : action));
+  const [activeArcExpanded, setActiveArcExpanded] = useSessionState(activeProjectPath, 'bible', 'activeArcExpanded', true);
   const [selectedArcModal, setSelectedArcModal] = useState<BibleArc | null>(null);
-  const [searchArc, setSearchArc] = useState('');
+  const [searchArc, setSearchArc] = useSessionState(activeProjectPath, 'bible', 'arcSearch', '');
 
   const toggleArcExpanded = (index: number) => {
     setExpandedArcIndices((prev) => {
@@ -145,16 +155,18 @@ export const BibleView: React.FC<BibleViewProps> = ({
 
   useEffect(() => {
     loadBibleData();
-    setCharPage(1);
-    setGlossaryPage(1);
   }, [activeProjectPath]);
 
+  const previousCharacterSearch = useRef(searchChar);
   useEffect(() => {
-    setCharPage(1);
+    if (previousCharacterSearch.current !== searchChar) setCharPage(1);
+    previousCharacterSearch.current = searchChar;
   }, [searchChar]);
 
+  const previousTermSearch = useRef({ searchTerm, termCategoryFilter });
   useEffect(() => {
-    setGlossaryPage(1);
+    if (previousTermSearch.current.searchTerm !== searchTerm || previousTermSearch.current.termCategoryFilter !== termCategoryFilter) setGlossaryPage(1);
+    previousTermSearch.current = { searchTerm, termCategoryFilter };
   }, [searchTerm, termCategoryFilter]);
 
   useEffect(() => {

@@ -422,6 +422,42 @@ def test_spa_fallback(live_server):
         assert "Visualizer" in content
 
 
+@pytest.mark.parametrize("route", ["/", "/studio", "/reader", "/traces", "/bible", "/settings"])
+def test_fastapi_production_spa_deep_links(tmp_path, route):
+    """Production route refreshes serve the SPA independently of Vite fallback."""
+    from fastapi.testclient import TestClient
+    from nousetsu.cli.web_server import create_app
+
+    index = "<!doctype html><html><body>Production SPA</body></html>"
+    (tmp_path / "index.html").write_text(index, encoding="utf-8")
+    response = TestClient(create_app(dist_dir=tmp_path)).get(
+        route, params={"project": "C:/novels/A novel & 世界", "chapter": "1", "folder": "Volume 01"}
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert response.text == index
+
+
+def test_fastapi_production_spa_preserves_api_404_and_static_assets(tmp_path):
+    from fastapi.testclient import TestClient
+    from nousetsu.cli.web_server import create_app
+
+    (tmp_path / "index.html").write_text("Production SPA", encoding="utf-8")
+    assets = tmp_path / "assets"
+    assets.mkdir()
+    (assets / "app.js").write_text("console.log('SPA')", encoding="utf-8")
+    client = TestClient(create_app(dist_dir=tmp_path))
+
+    unknown_api = client.get("/api/does-not-exist")
+    assert unknown_api.status_code == 404
+    assert unknown_api.headers["content-type"].startswith("application/json")
+    assert unknown_api.json()["detail"] == "API endpoint not found"
+    asset = client.get("/assets/app.js")
+    assert asset.status_code == 200
+    assert asset.text == "console.log('SPA')"
+
+
 def test_cmd_web_panel_renders(sample_web_project):
     """Ensure the launch banner renders with Rich console without MissingStyle error."""
     from rich.panel import Panel

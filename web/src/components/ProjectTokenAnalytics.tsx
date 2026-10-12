@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { AlertTriangle, BarChart3, Clock3, Cpu, Database, Layers3, RefreshCw } from 'lucide-react';
 import { fetchProjectTokenAnalytics } from '../services/apiClient';
+import { useSessionState } from '../services/navigation';
 import { ProjectTokenAnalyticsResponse, ProjectTokenSummary, TokenMetricTotals } from '../types/dashboard';
 
 interface ProjectTokenAnalyticsProps {
@@ -105,7 +106,7 @@ function MetricTable({ summary, kind }: { summary: ProjectTokenSummary; kind: 's
 }
 
 export const ProjectTokenAnalytics: React.FC<ProjectTokenAnalyticsProps> = ({ projectPath, projectTitle, refreshKey }) => {
-  const [folder, setFolder] = useState('ALL');
+  const [folder, setFolder] = useSessionState(projectPath, 'traces', 'analyticsFolder', 'ALL');
   const [analytics, setAnalytics] = useState<ProjectTokenAnalyticsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);

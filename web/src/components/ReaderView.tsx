@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { ChapterItem, ChapterContent } from '../types/dashboard';
 import { fetchChapters, fetchChapterContent } from '../services/dashboardApi';
+import { useSessionState } from '../services/navigation';
 import {
   getReadingBookmark,
   saveReadingBookmark,
@@ -29,6 +30,7 @@ interface ReaderViewProps {
   activeProjectPath: string | null;
   initialChapterNum?: number | null;
   initialFolder?: string | null;
+  onChapterChange?: (chapter: number, folder: string | null, replace?: boolean) => void;
   onBackToStudio: () => void;
 }
 
@@ -36,12 +38,14 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
   activeProjectPath,
   initialChapterNum,
   initialFolder,
+  onChapterChange,
   onBackToStudio,
 }) => {
   const [chapters, setChapters] = useState<ChapterItem[]>([]);
-  const [currentChapterNum, setCurrentChapterNum] = useState<number>(initialChapterNum || 1);
-  const [currentFolder, setCurrentFolder] = useState<string | null>(initialFolder || null);
-  const [content, setContent] = useState<ChapterContent | null>(null);
+  const [localChapter, setLocalChapter] = useState<{ num: number; folder: string | null } | null>(
+    initialChapterNum ? { num: initialChapterNum, folder: initialFolder || null } : null
+  );
+  const [loadedContent, setContent] = useState<ChapterContent | null>(null);
   const [loading, setLoading] = useState(false);
 
   // Persistent Reader Customization & Bookmark State
@@ -49,7 +53,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
   const [theme, setTheme] = useState<ReaderTheme>(initialPrefs.theme);
   const [fontSize, setFontSize] = useState<FontSize>(initialPrefs.fontSize);
   const [autoSave, setAutoSave] = useState<boolean>(initialPrefs.autoSave);
-  const [showOriginalPeek, setShowOriginalPeek] = useState(false);
+  const [showOriginalPeek, setShowOriginalPeek] = useSessionState(activeProjectPath, 'reader', 'showOriginalPeek', false);
   const [savedBookmark, setSavedBookmark] = useState<ReadingBookmark | null>(() =>
     getReadingBookmark(activeProjectPath)
   );
@@ -67,90 +71,80 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
     }, 2500);
   }, []);
 
-  // Sync savedBookmark whenever activeProjectPath changes
+  // Load the roster once per project. Route changes are resolved against this roster.
   useEffect(() => {
+    let active = true;
+    setChapters([]);
+    setContent(null);
+    setSavedBookmark(getReadingBookmark(activeProjectPath));
     if (!activeProjectPath) return;
-    const bm = getReadingBookmark(activeProjectPath);
-    setSavedBookmark(bm);
-
     fetchChapters(activeProjectPath).then((list) => {
-      setChapters(list);
-      if (list.length > 0) {
-        if (
-          !initialChapterNum ||
-          !list.some(
-            (c) =>
-              c.chapter_num === currentChapterNum &&
-              (initialFolder ? c.folder === initialFolder : true)
-          )
-        ) {
-          // If a saved bookmark exists for this project, prioritize it!
-          const bookmarkTarget = bm
-            ? list.find(
-                (c) =>
-                  c.chapter_num === bm.chapter_num &&
-                  (bm.folder ? c.folder === bm.folder : true)
-              )
-            : null;
-          const matching = initialFolder
-            ? list.find((c) => c.folder === initialFolder && (c.is_completed || c.translated_exists))
-            : null;
-          const firstCompleted = matching || list.find((c) => c.is_completed || c.translated_exists);
-          const target =
-            bookmarkTarget ||
-            firstCompleted ||
-            (initialFolder ? list.find((c) => c.folder === initialFolder) : null) ||
-            list[0];
-          setCurrentChapterNum(target.chapter_num);
-          setCurrentFolder(target.folder || null);
-        }
-      }
+      if (active) setChapters(list);
     });
-  }, [activeProjectPath, initialChapterNum, initialFolder]);
+    return () => { active = false; };
+  }, [activeProjectPath]);
+
+  const requested = onChapterChange && initialChapterNum
+    ? { num: initialChapterNum, folder: initialFolder || null }
+    : localChapter;
+  const currentChapter = chapters.find((c) => c.chapter_num === requested?.num && (c.folder || null) === (requested?.folder || null))
+    || (!initialChapterNum && savedBookmark
+      ? chapters.find((c) => c.chapter_num === savedBookmark.chapter_num && (c.folder || null) === (savedBookmark.folder || null))
+      : undefined)
+    || chapters.find((c) => c.is_completed || c.translated_exists)
+    || chapters[0];
+  const currentChapterNum = currentChapter?.chapter_num || 0;
+  const currentFolder = currentChapter?.folder || null;
+  const content = loadedContent?.chapter_num === currentChapterNum && (loadedContent?.folder || null) === currentFolder ? loadedContent : null;
+
+  // Defaults and invalid route selections replace history only after roster hydration.
+  useEffect(() => {
+    if (!currentChapter || !onChapterChange) return;
+    if (initialChapterNum !== currentChapterNum || (initialFolder || null) !== currentFolder) {
+      onChapterChange(currentChapterNum, currentFolder, true);
+    }
+  }, [currentChapter, currentChapterNum, currentFolder, initialChapterNum, initialFolder, onChapterChange]);
+
+  const selectChapter = (num: number, folder: string | null) => {
+    setContent(null);
+    setLocalChapter({ num, folder });
+    onChapterChange?.(num, folder);
+  };
 
   // Fetch chapter content
   useEffect(() => {
-    if (!activeProjectPath || !currentChapterNum) return;
+    let active = true;
+    setContent(null);
+    if (!activeProjectPath || !currentChapterNum) { setLoading(false); return; }
     setLoading(true);
-    const curChap =
-      chapters.find(
-        (c) =>
-          c.chapter_num === currentChapterNum &&
-          (currentFolder ? c.folder === currentFolder : true)
-      ) || chapters.find((c) => c.chapter_num === currentChapterNum);
-
-    fetchChapterContent(currentChapterNum, activeProjectPath, curChap?.folder || undefined).then(
+    fetchChapterContent(currentChapterNum, activeProjectPath, currentFolder || undefined).then(
       (res) => {
-        setContent(res);
+        if (!active) return;
+        setContent(res && res.chapter_num === currentChapterNum && (res.folder || null) === currentFolder ? res : null);
         setLoading(false);
       }
     );
-  }, [currentChapterNum, currentFolder, activeProjectPath, chapters]);
+    return () => { active = false; };
+  }, [currentChapterNum, currentFolder, activeProjectPath]);
 
   // Auto-save reading chapter when reading content is loaded
   useEffect(() => {
-    if (!activeProjectPath || !currentChapterNum || !autoSave || loading) return;
-    const curChap =
-      chapters.find(
-        (c) =>
-          c.chapter_num === currentChapterNum &&
-          (currentFolder ? c.folder === currentFolder : true)
-      ) || chapters.find((c) => c.chapter_num === currentChapterNum);
+    if (!activeProjectPath || !currentChapterNum || !autoSave || loading || !content || content.chapter_num !== currentChapterNum || (content.folder || null) !== currentFolder) return;
 
     const newBm: ReadingBookmark = {
       chapter_num: currentChapterNum,
       folder: currentFolder,
-      title: curChap?.title,
+      title: currentChapter?.title,
       timestamp: Date.now(),
     };
     saveReadingBookmark(activeProjectPath, newBm);
     setSavedBookmark(newBm);
-  }, [activeProjectPath, currentChapterNum, currentFolder, autoSave, loading, chapters]);
+  }, [activeProjectPath, currentChapterNum, currentFolder, autoSave, loading, content, currentChapter]);
 
   const currentIndex = chapters.findIndex(
     (c) =>
       c.chapter_num === currentChapterNum &&
-      (currentFolder ? c.folder === currentFolder : true)
+      (c.folder || null) === currentFolder
   );
   const hasPrev = currentIndex > 0;
   const hasNext = currentIndex >= 0 && currentIndex < chapters.length - 1;
@@ -158,16 +152,14 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
   const handlePrev = () => {
     if (hasPrev) {
       const prevCh = chapters[currentIndex - 1];
-      setCurrentChapterNum(prevCh.chapter_num);
-      setCurrentFolder(prevCh.folder || null);
+      selectChapter(prevCh.chapter_num, prevCh.folder || null);
     }
   };
 
   const handleNext = () => {
     if (hasNext) {
       const nextCh = chapters[currentIndex + 1];
-      setCurrentChapterNum(nextCh.chapter_num);
-      setCurrentFolder(nextCh.folder || null);
+      selectChapter(nextCh.chapter_num, nextCh.folder || null);
     }
   };
 
@@ -179,17 +171,10 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
 
   const handleToggleBookmark = () => {
     if (!activeProjectPath) return;
-    const curChap =
-      chapters.find(
-        (c) =>
-          c.chapter_num === currentChapterNum &&
-          (currentFolder ? c.folder === currentFolder : true)
-      ) || chapters.find((c) => c.chapter_num === currentChapterNum);
-
     const newBm: ReadingBookmark = {
       chapter_num: currentChapterNum,
       folder: currentFolder,
-      title: curChap?.title,
+      title: currentChapter?.title,
       timestamp: Date.now(),
     };
     saveReadingBookmark(activeProjectPath, newBm);
@@ -199,8 +184,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
 
   const handleResumeBookmark = () => {
     if (!savedBookmark) return;
-    setCurrentChapterNum(savedBookmark.chapter_num);
-    setCurrentFolder(savedBookmark.folder || null);
+    selectChapter(savedBookmark.chapter_num, savedBookmark.folder || null);
     triggerToast(`Resumed Chapter ${savedBookmark.chapter_num}`);
   };
 
@@ -244,6 +228,10 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
       scroll_ratio: Number(ratio.toFixed(3)),
     });
   }, [activeProjectPath, currentChapterNum, currentFolder, isCurrentBookmarked]);
+
+  useEffect(() => () => {
+    if (toastTimeoutRef.current) window.clearTimeout(toastTimeoutRef.current);
+  }, []);
 
   // Theme styling configurations
   const themeClasses: Record<ReaderTheme, { bg: string; text: string; subtext: string; border: string; header: string }> = {
@@ -299,8 +287,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
               onChange={(e) => {
                 const val = e.target.value;
                 const [f, numStr] = val.split('::');
-                setCurrentFolder(f || null);
-                setCurrentChapterNum(Number(numStr));
+                selectChapter(Number(numStr), f || null);
               }}
               aria-label="Select chapter to read"
               className={`text-xs font-medium rounded-[3px] px-2.5 py-1 border cursor-pointer focus:outline-none ${curTheme.bg} ${curTheme.border} ${curTheme.text}`}

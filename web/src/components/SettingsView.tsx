@@ -29,6 +29,7 @@ import {
   FolderOpen,
 } from 'lucide-react';
 import { isTauriDesktopRuntime } from '../services/apiBase';
+import { useSessionState } from '../services/navigation';
 import {
   GenerationRole,
   GenerationSettings,
@@ -73,6 +74,8 @@ interface SettingsViewProps {
   activeProjectPath: string | null;
   activeProjectTitle: string | null;
   onProjectUpdated?: () => void;
+  section?: string;
+  onSectionChange?: (section: string) => void;
 }
 
 interface SettingCategory {
@@ -439,13 +442,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   activeProjectPath,
   activeProjectTitle,
   onProjectUpdated,
+  section,
+  onSectionChange,
 }) => {
   const [settings, setSettings] = useState<ProjectSettings | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<string>('general');
-  const [categorySearch, setCategorySearch] = useState<string>('');
+  const [localTab, setLocalTab] = useState('general');
+  const activeTab = section || localTab;
+  const setActiveTab = (tab: string) => { setLocalTab(tab); onSectionChange?.(tab); };
+  const [categorySearch, setCategorySearch] = useSessionState(activeProjectPath, 'settings', 'categorySearch', '');
   const [machineEnvironment, setMachineEnvironment] = useState<MachineEnvironment | null>(null);
   const [loadingEnvironment, setLoadingEnvironment] = useState(true);
   const [apiKeyInputs, setApiKeyInputs] = useState<Record<string, string>>({});

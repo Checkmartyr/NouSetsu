@@ -1,4 +1,7 @@
 import { test, expect } from '@playwright/test';
+import { mockBackend } from './helpers/mockBackend';
+
+test.beforeEach(async ({ page }) => { await mockBackend(page); });
 
 const projectPath = 'C:/projects/TestNovel';
 

@@ -1,4 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
+import { mockBackend } from './helpers/mockBackend';
+
+test.beforeEach(async ({ page }) => { await mockBackend(page); });
 
 type LocalUpdaterOutcome = 'available' | 'none' | 'error';
 
@@ -65,7 +68,8 @@ async function openLocalUpdaterSettings(page: Page, outcome: LocalUpdaterOutcome
       releaseChecks.push(request.url());
     }
   });
-  await page.route('http://127.0.0.1:15474/**', (route) => route.abort());
+  await page.route('http://127.0.0.1:15474/**', (route) =>
+    new URL(route.request().url()).pathname === '/api/updates/latest' ? route.abort() : route.fallback());
 
   await page.goto('/');
   await page.getByRole('button', { name: 'Settings', exact: true }).click();

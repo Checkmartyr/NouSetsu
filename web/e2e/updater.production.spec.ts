@@ -1,4 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
+import { mockBackend } from './helpers/mockBackend';
+
+test.beforeEach(async ({ page }) => { await mockBackend(page); });
 
 type UpdaterOutcome = 'none' | 'error';
 
@@ -41,7 +44,7 @@ async function assertProductionReleaseFallback(page: Page, outcome: UpdaterOutco
       });
       return;
     }
-    await route.abort();
+    await route.fallback();
   });
 
   await page.goto('/');

@@ -22,388 +22,276 @@ import { SettingsView } from './components/SettingsView';
 import { NewProjectModal } from './components/NewProjectModal';
 import { StartupLoadingScreen } from './components/StartupLoadingScreen';
 import { UploadCloud, AlertCircle, CheckCircle2 } from 'lucide-react';
-import { getReadingBookmark } from './utils/readerStorage';
+import { getNavigationRevision, getRoute, navigateRoute, navigateWorkspace, patchRoute, useSessionState, useWorkspaceRoute, WorkspaceRoute } from './services/navigation';
+import type { StartupData } from './services/serviceChecker';
+
+const sameProject = (a?: string | null, b?: string | null) =>
+  (a || '').replace(/\\/g, '/').toLowerCase() === (b || '').replace(/\\/g, '/').toLowerCase();
 
 export const App: React.FC = () => {
-  // Startup Readiness State
+  const route = useWorkspaceRoute();
+  const activeWorkspace = route.workspace;
   const [isAppReady, setIsAppReady] = useState(false);
   const [primedChapters, setPrimedChapters] = useState<ChapterItem[]>([]);
-
-  // Navigation & Workspace State
-  const [activeWorkspace, setActiveWorkspace] = useState<WorkspaceTab>('studio');
-  const [readerChapterNum, setReaderChapterNum] = useState<number | null>(null);
-  const [readerFolder, setReaderFolder] = useState<string | null>(null);
-  const [traceViewMode, setTraceViewMode] = useState<'chapter-traces' | 'project-analytics'>('chapter-traces');
-
-  // Real-time Event Logs from SSE
   const [logs, setLogs] = useState<string[]>([]);
-
-  // Trace State
-  const [chapters, setChapters] = useState<LoadedChapter[]>([
-    {
-      id: 'demo_chapter_1',
-      fileName: 'chapter_0001.json',
-      folder: 'Villainess_05',
-      chapterNum: 1,
-      document: DEMO_CHAPTER_TRACE,
-    },
-  ]);
-
-  const [selectedChapterId, setSelectedChapterId] = useState<string | null>('demo_chapter_1');
-  const [selectedTraceId, setSelectedTraceId] = useState<string | null>(
-    DEMO_CHAPTER_TRACE.traces[0]?.trace_id || null
-  );
-  const [selectedStageFilter, setSelectedStageFilter] = useState<string | null>(null);
-  const [activeDetailTab, setActiveDetailTab] = useState<DetailTab>('output');
-  const [mobileTraceView, setMobileTraceView] = useState<'timeline' | 'detail'>('detail');
-  const [isDraggingOver, setIsDraggingOver] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  // Synchronized refs to avoid stale closure during async polling
-  const selectedChapterIdRef = useRef<string | null>(selectedChapterId);
-  const selectedTraceIdRef = useRef<string | null>(selectedTraceId);
-  const selectedStageFilterRef = useRef<string | null>(selectedStageFilter);
-  const chaptersRef = useRef<LoadedChapter[]>(chapters);
-  const lastLoadedProjectPathRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    selectedChapterIdRef.current = selectedChapterId;
-  }, [selectedChapterId]);
-
-  useEffect(() => {
-    selectedTraceIdRef.current = selectedTraceId;
-  }, [selectedTraceId]);
-
-  useEffect(() => {
-    selectedStageFilterRef.current = selectedStageFilter;
-  }, [selectedStageFilter]);
-
-  useEffect(() => {
-    chaptersRef.current = chapters;
-  }, [chapters]);
-
-  // TUI Project Synchronization State
+  const [chapters, setChapters] = useState<LoadedChapter[]>([{
+    id: 'demo_chapter_1', fileName: 'chapter_0001.json', folder: 'Villainess_05',
+    chapterNum: 1, document: DEMO_CHAPTER_TRACE,
+  }]);
   const [activeProject, setActiveProject] = useState<ProjectMeta | null>(null);
   const [projects, setProjects] = useState<ProjectMeta[]>([]);
-  const [projectsDirName, setProjectsDirName] = useState<string>('project');
+  const [projectsDirName, setProjectsDirName] = useState('project');
   const [isNewProjectModalOpen, setIsNewProjectModalOpen] = useState(false);
   const [autoSync, setAutoSync] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isSwitching, setIsSwitching] = useState(false);
   const [syncToast, setSyncToast] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const [mobileTraceView, setMobileTraceView] = useSessionState<'timeline' | 'detail'>(activeProject?.path || null, 'traces', 'mobileView', 'detail');
+  const projectRef = useRef<ProjectMeta | null>(null);
+  const backendProjectRef = useRef<ProjectMeta | null>(null);
+  const projectsRef = useRef<ProjectMeta[]>([]);
+  const switchingRef = useRef(false);
+  const traceGeneration = useRef(0);
+  const localTracesRef = useRef(false);
   const lastSyncRef = useRef<SyncState | null>(null);
+  const chaptersRef = useRef(chapters);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  chaptersRef.current = chapters;
+  projectsRef.current = projects;
 
-  const isFileSystemSupported = typeof window !== 'undefined' && 'showDirectoryPicker' in window;
-
-  const currentChapter = chapters.find((c) => c.id === selectedChapterId) || chapters[0];
+  const traceViewMode = route.mode || 'chapter-traces';
+  const selectedStageFilter = route.stage || null;
+  const activeDetailTab: DetailTab = route.detail || 'output';
+  const setTraceViewMode = (mode: WorkspaceRoute['mode']) => patchRoute({ mode });
+  const setActiveDetailTab = (detail: DetailTab) => patchRoute({ detail });
+  const setSelectedTraceId = (trace: string | null) => patchRoute({ trace: trace || undefined });
+  const currentChapter = chapters.find((ch) => ch.chapterNum === route.chapter && (ch.folder || null) === (route.folder || null)) || chapters[0];
+  const selectedChapterId = currentChapter?.id || null;
   const traces = currentChapter?.document.traces || [];
-  const currentTrace = traces.find((t) => t.trace_id === selectedTraceId) || traces[0];
+  const currentTrace = traces.find((trace) => trace.trace_id === route.trace) || traces.find((trace) => !route.stage || trace.stage === route.stage) || traces[0];
+  const selectedTraceId = currentTrace?.trace_id || null;
+  const isFileSystemSupported = 'showDirectoryPicker' in window;
+  const groupedChapters = React.useMemo(() => chapters.reduce<Record<string, LoadedChapter[]>>((acc, ch) => {
+    (acc[ch.folder || 'Root (Main Traces)'] ||= []).push(ch);
+    return acc;
+  }, {}), [chapters]);
 
-  // Group chapters by volume / folder for navigation inside Traces view
-  const groupedChapters = React.useMemo(() => {
-    return chapters.reduce<Record<string, LoadedChapter[]>>((acc, ch) => {
-      const group = ch.folder || 'Root (Main Traces)';
-      if (!acc[group]) acc[group] = [];
-      acc[group].push(ch);
-      return acc;
-    }, {});
-  }, [chapters]);
+  const triggerToast = useCallback((message: string) => {
+    clearTimeout(toastTimer.current);
+    setSyncToast(message);
+    toastTimer.current = setTimeout(() => setSyncToast(null), 4000);
+  }, []);
+  useEffect(() => () => clearTimeout(toastTimer.current), []);
 
-  // Helper to show transient sync toasts
-  const triggerToast = (msg: string) => {
-    setSyncToast(msg);
-    setTimeout(() => setSyncToast(null), 4000);
-  };
+  const applyProject = useCallback((project: ProjectMeta | null, roster: ChapterItem[] = []) => {
+    if (!sameProject(projectRef.current?.path, project?.path)) {
+      traceGeneration.current++;
+      localTracesRef.current = false;
+      setChapters([]);
+      chaptersRef.current = [];
+      setLogs([]);
+    }
+    projectRef.current = project;
+    setActiveProject(project);
+    setPrimedChapters(roster);
+    lastSyncRef.current = project ? {
+      active_project_path: project.path, active_project_title: project.title,
+      traces_count: project.trace_count, latest_trace_mtime: project.latest_trace_mtime,
+    } : null;
+  }, []);
 
-  // Load traces from API for a project with smart state retention
   const loadTracesFromBackend = useCallback(async (projectPath?: string, chapterNumToRefresh?: number) => {
-    const targetPath = projectPath || activeProject?.path;
+    const targetPath = projectPath || projectRef.current?.path;
+    if (!targetPath || switchingRef.current || localTracesRef.current) return;
+    const generation = ++traceGeneration.current;
+    const requested = getRoute();
+    if (requested.project && !sameProject(requested.project, targetPath)) return;
+    const valid = () => {
+      const latest = getRoute();
+      return generation === traceGeneration.current && sameProject(projectRef.current?.path, targetPath)
+        && sameProject(latest.project, requested.project) && latest.chapter === requested.chapter
+        && (latest.folder || null) === (requested.folder || null) && !switchingRef.current;
+    };
     setIsSyncing(true);
     try {
-      const currentChapterId = selectedChapterIdRef.current;
-      const currentCh = chaptersRef.current.find((c) => c.id === currentChapterId);
-      const activeChapterNum = chapterNumToRefresh !== undefined ? chapterNumToRefresh : currentCh?.chapterNum;
-
-      const res = await fetchProjectTraces(targetPath, undefined, undefined, false, activeChapterNum);
-      if (res && res.chapters.length > 0) {
-        const prevChapters = chaptersRef.current;
-        const prevMap = new Map(prevChapters.map((c) => [c.id, c]));
-        const isSameProject = targetPath && lastLoadedProjectPathRef.current === targetPath;
-        lastLoadedProjectPathRef.current = targetPath || null;
-
-        const mergedChapters: LoadedChapter[] = !isSameProject
-          ? res.chapters
-          : res.chapters.map((newCh) => {
-              const prevCh = prevMap.get(newCh.id);
-              if (!prevCh) return newCh;
-
-              // If this chapter was explicitly refreshed and new payload has traces, prefer the new traces!
-              if (
-                chapterNumToRefresh !== undefined &&
-                newCh.chapterNum === chapterNumToRefresh &&
-                newCh.document?.traces &&
-                newCh.document.traces.length > 0
-              ) {
-                return newCh;
-              }
-
-              const newTraces = newCh.document?.traces;
-              const prevTraces = prevCh.document?.traces;
-
-              // If incoming payload has stripped/empty traces but we already had traces in memory, keep them!
-              if ((!newTraces || newTraces.length === 0) && prevTraces && prevTraces.length > 0) {
-                return {
-                  ...newCh,
-                  document: {
-                    ...newCh.document,
-                    traces: prevTraces,
-                  },
-                };
-              }
-              return newCh;
-            });
-
-        setChapters(mergedChapters);
-
-        // After state update, check target chapter in merged list
-        let targetChapter = mergedChapters.find((c) => c.id === currentChapterId);
-        if (!targetChapter) {
-          targetChapter = mergedChapters[0];
-          if (targetChapter) {
-            setSelectedChapterId(targetChapter.id);
-          }
-        }
-
-        // If target chapter traces are still missing, lazy-load them on-demand
-        if (targetChapter && (!targetChapter.document.traces || targetChapter.document.traces.length === 0)) {
-          try {
-            const lazyRes = await fetchProjectTraces(
-              targetPath,
-              targetChapter.chapterNum,
-              targetChapter.folder || undefined
-            );
-            if (lazyRes && lazyRes.chapters && lazyRes.chapters.length > 0) {
-              const loadedCh = lazyRes.chapters.find((c) => c.id === targetChapter!.id) || lazyRes.chapters[0];
-              if (loadedCh && loadedCh.document?.traces && loadedCh.document.traces.length > 0) {
-                targetChapter = { ...targetChapter, document: loadedCh.document };
-                setChapters((prev) => prev.map((c) => (c.id === targetChapter!.id ? targetChapter! : c)));
-              }
-            }
-          } catch (lazyErr) {
-            console.warn('Could not lazy-load traces for target chapter in loadTracesFromBackend:', lazyErr);
-          }
-        }
-
-        const targetTraces = targetChapter?.document.traces || [];
-        const currentTraceId = selectedTraceIdRef.current;
-        const currentStageFilter = selectedStageFilterRef.current;
-
-        if (targetTraces.length > 0) {
-          const traceStillExists = targetTraces.some((t) => t.trace_id === currentTraceId);
-          const currentTraceObj = targetTraces.find((t) => t.trace_id === currentTraceId);
-
-          if (traceStillExists) {
-            if (currentStageFilter && currentTraceObj && currentTraceObj.stage !== currentStageFilter) {
-              const matchingStageTrace = targetTraces.find((t) => t.stage === currentStageFilter);
-              if (matchingStageTrace) {
-                setSelectedTraceId(matchingStageTrace.trace_id);
-                return;
-              }
-            }
-            // Trace still exists and matches stage filter (or no filter) - keep it!
-            return;
-          } else {
-            if (currentStageFilter) {
-              const matchingStageTrace = targetTraces.find((t) => t.stage === currentStageFilter);
-              if (matchingStageTrace) {
-                setSelectedTraceId(matchingStageTrace.trace_id);
-                return;
-              }
-            }
-            setSelectedTraceId(targetTraces[0].trace_id);
-          }
-        } else {
-          setSelectedTraceId(null);
+      const res = await fetchProjectTraces(targetPath, undefined, undefined, false, chapterNumToRefresh ?? requested.chapter);
+      if (!res || !valid()) return;
+      const previous = new Map(chaptersRef.current.map((chapter) => [chapter.id, chapter]));
+      const loaded = res.chapters.map((chapter) => {
+        const cached = previous.get(chapter.id);
+        return !chapter.document.traces.length && cached?.document.traces.length
+          ? { ...chapter, document: cached.document } : chapter;
+      });
+      let target = loaded.find((chapter) => chapter.chapterNum === requested.chapter && (chapter.folder || null) === (requested.folder || null)) || loaded[0];
+      let traceDetailsKnown = !target || Boolean(target.document.traces.length);
+      if (target && !target.document.traces.length) {
+        const lazy = await fetchProjectTraces(targetPath, target.chapterNum, target.folder || undefined);
+        if (!valid()) return;
+        const full = lazy?.chapters.find((chapter) => chapter.chapterNum === target!.chapterNum && (chapter.folder || null) === (target!.folder || null));
+        if (full) {
+          traceDetailsKnown = true;
+          target = { ...target, document: full.document };
+          const index = loaded.findIndex((chapter) => chapter.id === target!.id);
+          loaded[index] = target;
         }
       }
-    } catch (err: any) {
-      console.warn('Could not load traces from backend:', err);
+      if (!valid()) return;
+      setChapters(loaded);
+      chaptersRef.current = loaded;
+      const latest = getRoute();
+      if (latest.workspace === 'traces') {
+        const available = target?.document.traces || [];
+        const selected = available.find((trace) => trace.trace_id === latest.trace && (!latest.stage || trace.stage === latest.stage))
+          || available.find((trace) => !latest.stage || trace.stage === latest.stage) || available[0];
+        if (target && traceDetailsKnown) patchRoute({
+          chapter: target.chapterNum, folder: target.folder || undefined, trace: selected?.trace_id,
+        }, true);
+        else if (!target) patchRoute({ chapter: undefined, folder: undefined, trace: undefined }, true);
+      }
     } finally {
+      if (generation === traceGeneration.current) setIsSyncing(false);
+    }
+  }, []);
+
+  const handleSelectChapter = (id: string) => {
+    const target = chaptersRef.current.find((chapter) => chapter.id === id);
+    if (target) patchRoute({ chapter: target.chapterNum, folder: target.folder || undefined, trace: undefined });
+  };
+  const handleSelectStageFilter = (stage: string | null) => {
+    const target = traces.find((trace) => trace.trace_id === selectedTraceId && (!stage || trace.stage === stage))
+      || traces.find((trace) => !stage || trace.stage === stage);
+    patchRoute({ stage: stage || undefined, trace: target?.trace_id });
+  };
+
+  // Serialize POSTs: an old response must never leave the registry on an old destination.
+  const reconcileProject = useCallback(async () => {
+    if (switchingRef.current) return;
+    switchingRef.current = true;
+    setIsSwitching(true);
+    traceGeneration.current++;
+    try {
+      while (true) {
+        const desired = getRoute().project;
+        if (!desired) { navigateWorkspace(getRoute().workspace, backendProjectRef.current?.path, true); break; }
+        const matched = projectsRef.current.find((project) => sameProject(project.path, desired));
+        if (!matched) {
+          setErrorMessage('Requested project is not registered.');
+          navigateWorkspace(getRoute().workspace, backendProjectRef.current?.path, true);
+          break;
+        }
+        if (sameProject(backendProjectRef.current?.path, matched.path)) break;
+        if (!await switchActiveProject(matched.path)) {
+          if (!sameProject(getRoute().project, matched.path)) continue;
+          setErrorMessage(`Failed to switch project to ${matched.title}`);
+          navigateWorkspace(getRoute().workspace, backendProjectRef.current?.path, true);
+          break;
+        }
+        backendProjectRef.current = matched;
+        // The newest history destination is read after every response.
+      }
+      applyProject(backendProjectRef.current);
+      if (backendProjectRef.current && getRoute().project !== backendProjectRef.current.path) patchRoute({ project: backendProjectRef.current.path }, true);
+    } finally {
+      switchingRef.current = false;
+      setIsSwitching(false);
       setIsSyncing(false);
     }
-  }, [activeProject?.path]);
+    await loadTracesFromBackend(backendProjectRef.current?.path);
+  }, [applyProject, loadTracesFromBackend]);
 
-  // If chapter changes, preserve active stage filter or select first trace (with on-demand trace fetching)
-  const handleSelectChapter = async (id: string) => {
-    setSelectedChapterId(id);
-    let target = chaptersRef.current.find((c) => c.id === id) || chapters.find((c) => c.id === id);
-    if (!target) return;
-
-    if (!target.document.traces || target.document.traces.length === 0) {
-      try {
-        const res = await fetchProjectTraces(activeProject?.path, target.chapterNum, target.folder || undefined);
-        if (res && res.chapters && res.chapters.length > 0) {
-          const loadedCh = res.chapters.find((c) => c.id === id) || res.chapters[0];
-          if (loadedCh && loadedCh.document?.traces && loadedCh.document.traces.length > 0) {
-            target = { ...target, document: loadedCh.document };
-            setChapters((prev) => prev.map((c) => (c.id === id ? target! : c)));
-          }
-        }
-      } catch (err) {
-        console.warn('Could not lazy-load chapter traces:', err);
-      }
-    }
-
-    if (target && target.document.traces && target.document.traces.length > 0) {
-      if (selectedStageFilter) {
-        const matchingStageTrace = target.document.traces.find((t) => t.stage === selectedStageFilter);
-        if (matchingStageTrace) {
-          setSelectedTraceId(matchingStageTrace.trace_id);
-          return;
-        }
-      }
-      setSelectedTraceId(target.document.traces[0].trace_id);
-    } else {
-      setSelectedTraceId(null);
-    }
-  };
-
-  // When user clicks a stage in the pipeline progression ribbon
-  const handleSelectStageFilter = (stage: string | null) => {
-    setSelectedStageFilter(stage);
-    if (stage) {
-      const stageTraces = traces.filter((t) => t.stage === stage);
-      if (stageTraces.length > 0) {
-        const currentInStage = stageTraces.some((t) => t.trace_id === selectedTraceId);
-        if (!currentInStage) {
-          setSelectedTraceId(stageTraces[0].trace_id);
-        }
-      }
-    }
-  };
-
-  // Connect to SSE stream
   useEffect(() => {
-    const disconnect = connectSSE((event, data) => {
+    if (!isAppReady) return;
+    if (!sameProject(route.project, backendProjectRef.current?.path)) void reconcileProject();
+    else if (!route.project && backendProjectRef.current) patchRoute({ project: backendProjectRef.current.path }, true);
+  }, [isAppReady, route.project, reconcileProject]);
+
+  useEffect(() => {
+    if (isAppReady && !isSwitching && activeWorkspace === 'traces') void loadTracesFromBackend();
+  }, [isAppReady, isSwitching, activeWorkspace, route.project, route.chapter, route.folder, loadTracesFromBackend]);
+
+  // Route changes use refs rather than reopening the main event stream.
+  useEffect(() => {
+    if (!isAppReady) return;
+    return connectSSE((event, data) => {
       const ts = new Date().toLocaleTimeString();
-      let logMsg = `[${ts}] ${event}`;
-
-      if (event === 'log' && typeof data === 'object' && data.message) {
-        logMsg = `[${ts}] ${data.message}`;
-      } else if (event === 'stage_progress' && typeof data === 'object') {
-        logMsg = `[${ts}] Ch.${data.chapter_num ?? '?'}: [${data.stage}] ${data.message || ''}`;
+      let message = `[${ts}] ${event}`;
+      if (event === 'stage_progress' && typeof data === 'object') {
+        message = `[${ts}] Ch.${data.chapter_num ?? '?'}: [${data.stage}] ${data.message || ''}`;
       } else if (event === 'chapter_finished' && typeof data === 'object') {
-        const finishedCh = typeof data.chapter_num === 'number' ? data.chapter_num : undefined;
-        logMsg = `[${ts}] ✓ Finished Ch.${data.chapter_num ?? '?'}`;
-        // Automatically reload traces on chapter completion with targeted refresh for finished chapter
-        if (activeProject?.path) {
-          loadTracesFromBackend(activeProject.path, finishedCh);
-        }
-      } else if (typeof data === 'object' && data.message) {
-        logMsg = `[${ts}] [${event}] ${data.message}`;
+        message = `[${ts}] ✓ Finished Ch.${data.chapter_num ?? '?'}`;
+      } else if (typeof data === 'object' && data?.message) {
+        message = `[${ts}] [${event}] ${data.message}`;
       }
-
-      setLogs((prev) => [...prev.slice(-300), logMsg]);
+      setLogs((prev) => [...prev.slice(-300), message]);
+      if (event === 'chapter_finished') void loadTracesFromBackend(projectRef.current?.path, data?.chapter_num);
     });
+  }, [isAppReady, loadTracesFromBackend]);
 
-    return () => {
-      disconnect();
-    };
-  }, [activeProject, loadTracesFromBackend]);
-
-  // Poll sync state
-  const syncWithBackend = useCallback(async (force: boolean = false) => {
+  const syncWithBackend = useCallback(async (force = false) => {
+    if (switchingRef.current || !sameProject(getRoute().project, backendProjectRef.current?.path)) return;
+    const startedAt = getNavigationRevision();
+    const valid = () => !switchingRef.current && getNavigationRevision() === startedAt;
     try {
-      const syncState = await fetchSyncState();
-      if (!syncState) return;
-
+      const sync = await fetchSyncState();
+      if (!sync || !valid()) return;
       const last = lastSyncRef.current;
-      const projectChanged = !last || last.active_project_path !== syncState.active_project_path;
-      const tracesUpdated = last && (last.latest_trace_mtime !== syncState.latest_trace_mtime || last.traces_count !== syncState.traces_count);
-
-      if (projectChanged || tracesUpdated || force) {
-        lastSyncRef.current = syncState;
-
-        const activeRes = await fetchActiveProject();
-        if (activeRes) {
-          setActiveProject(activeRes.active_project);
-          setProjects(activeRes.projects);
-          if (activeRes.projects_dir) {
-            const dirParts = activeRes.projects_dir.split(/[/\\]/);
-            setProjectsDirName(dirParts[dirParts.length - 1] || 'project');
-          }
-        }
-
-        if (projectChanged) {
-          triggerToast(`(=^･ω･^=) Connected to project: ${syncState.active_project_title || 'Novel'}`);
-        }
-
-        await loadTracesFromBackend(syncState.active_project_path || undefined);
+      const changed = !sameProject(last?.active_project_path, sync.active_project_path);
+      const updated = !last || last.latest_trace_mtime !== sync.latest_trace_mtime || last.traces_count !== sync.traces_count;
+      if (!changed && !updated && !force) return;
+      const registry = await fetchActiveProject();
+      if (!registry || !valid()) return;
+      setProjects(registry.projects);
+      projectsRef.current = registry.projects;
+      backendProjectRef.current = registry.active_project;
+      if (registry.projects_dir) setProjectsDirName(registry.projects_dir.split(/[/\\]/).pop() || 'project');
+      if (changed) {
+        applyProject(registry.active_project);
+        navigateWorkspace(getRoute().workspace, registry.active_project?.path, true);
+        triggerToast(`Connected to project: ${registry.active_project?.title || 'Novel'}`);
+      } else {
+        projectRef.current = registry.active_project;
+        setActiveProject(registry.active_project);
       }
-    } catch {
-      // Backend unavailable or offline
+      lastSyncRef.current = sync;
+      await loadTracesFromBackend(registry.active_project?.path);
+    } catch { /* Polling retries while offline. */ }
+  }, [applyProject, loadTracesFromBackend, triggerToast]);
+
+  const handleStartupReady = useCallback((data: StartupData) => {
+    projectsRef.current = [...data.projects];
+    if (data.activeProject && !projectsRef.current.some((project) => sameProject(project.path, data.activeProject?.path))) projectsRef.current.push(data.activeProject);
+    setProjects(projectsRef.current);
+    backendProjectRef.current = data.activeProject;
+    applyProject(data.activeProject, data.chapters);
+    if (data.projectsDir) setProjectsDirName(data.projectsDir.split(/[/\\]/).pop() || 'project');
+    const incoming = getRoute();
+    if (!incoming.project) {
+      if (Object.keys(incoming).length === 1) navigateWorkspace(incoming.workspace, data.activeProject?.path, true);
+      else patchRoute({ project: data.activeProject?.path }, true);
     }
-  }, [loadTracesFromBackend]);
+    setIsAppReady(true);
+  }, [applyProject]);
 
-  // Handle successful startup service verification
-  const handleStartupReady = useCallback(
-    async (data: {
-      activeProject: ProjectMeta | null;
-      projects: ProjectMeta[];
-      chapters: ChapterItem[];
-    }) => {
-      if (data.activeProject) {
-        setActiveProject(data.activeProject);
-        lastSyncRef.current = {
-          active_project_path: data.activeProject.path,
-          active_project_title: data.activeProject.title,
-          traces_count: data.activeProject.trace_count,
-          latest_trace_mtime: data.activeProject.latest_trace_mtime,
-        };
-        await loadTracesFromBackend(data.activeProject.path);
-      }
-      if (data.projects && data.projects.length > 0) {
-        setProjects(data.projects);
-      }
-      if (data.chapters && data.chapters.length > 0) {
-        setPrimedChapters(data.chapters);
-      }
-      setIsAppReady(true);
-    },
-    [loadTracesFromBackend]
-  );
-
-  // Handle project created via modal
   const handleProjectCreated = async (created: ProjectMeta) => {
-    setActiveProject(created);
+    backendProjectRef.current = created;
+    const registered = [...projectsRef.current.filter((project) => !sameProject(project.path, created.path)), created];
+    projectsRef.current = registered;
+    setProjects(registered);
+    applyProject(created);
+    navigateWorkspace('studio', created.path, true);
     await syncWithBackend(true);
-    triggerToast(`(=^･ω･^=) Created and switched to: ${created.title}!`);
+    triggerToast(`Created and switched to: ${created.title}!`);
   };
 
-  // Background sync polling (every 3s, only active after startup verification)
   useEffect(() => {
     if (!autoSync || !isAppReady) return;
-    const interval = setInterval(() => {
-      syncWithBackend(false);
-    }, 3000);
+    const interval = setInterval(() => { void syncWithBackend(); }, 3000);
     return () => clearInterval(interval);
   }, [autoSync, isAppReady, syncWithBackend]);
 
-  // Switch project
-  const handleSwitchProject = async (targetPath: string) => {
-    const matched = projects.find(
-      (p) => p.path.replace(/\\/g, '/').toLowerCase() === targetPath.replace(/\\/g, '/').toLowerCase()
-    );
-    if (matched) {
-      setActiveProject(matched);
-    }
-    const ok = await switchActiveProject(targetPath);
-    if (ok) {
-      await syncWithBackend(true);
-      triggerToast(`Switched active project!`);
-    } else {
-      setErrorMessage(`Failed to switch project to ${targetPath}`);
-    }
-  };
+  const handleSwitchProject = (targetPath: string) => navigateWorkspace(getRoute().workspace, targetPath);
 
   // Open directory via File System Access API
   const handleOpenDirectory = async () => {
@@ -416,9 +304,12 @@ export const App: React.FC = () => {
       }
       const loaded = groupFilesIntoChapters(files);
       if (loaded.length > 0) {
+        localTracesRef.current = true;
+        traceGeneration.current++;
+        setIsSyncing(false);
         setChapters(loaded);
-        setSelectedChapterId(loaded[0].id);
-        setSelectedTraceId(loaded[0].document.traces[0]?.trace_id || null);
+        chaptersRef.current = loaded;
+        navigateRoute({ workspace: 'traces', project: activeProject?.path, chapter: loaded[0].chapterNum, folder: loaded[0].folder || undefined, trace: loaded[0].document.traces[0]?.trace_id });
         triggerToast(`Loaded ${loaded.length} chapters from local folder!`);
       }
     } catch (err: any) {
@@ -449,9 +340,12 @@ export const App: React.FC = () => {
 
       const loaded = groupFilesIntoChapters(files);
       if (loaded.length > 0) {
+        localTracesRef.current = true;
+        traceGeneration.current++;
+        setIsSyncing(false);
         setChapters(loaded);
-        setSelectedChapterId(loaded[0].id);
-        setSelectedTraceId(loaded[0].document.traces[0]?.trace_id || null);
+        chaptersRef.current = loaded;
+        navigateRoute({ workspace: 'traces', project: activeProject?.path, chapter: loaded[0].chapterNum, folder: loaded[0].folder || undefined, trace: loaded[0].document.traces[0]?.trace_id });
         triggerToast(`Loaded ${loaded.length} chapters from uploaded files!`);
       }
     } catch (err: any) {
@@ -496,16 +390,7 @@ export const App: React.FC = () => {
     return <StartupLoadingScreen onReady={handleStartupReady} />;
   }
 
-  const handleSelectWorkspaceTab = (tab: WorkspaceTab) => {
-    if (tab === 'reader' && !readerChapterNum) {
-      const bm = getReadingBookmark(activeProject?.path || null);
-      if (bm) {
-        setReaderChapterNum(bm.chapter_num);
-        setReaderFolder(bm.folder || null);
-      }
-    }
-    setActiveWorkspace(tab);
-  };
+  const handleSelectWorkspaceTab = (tab: WorkspaceTab) => navigateWorkspace(tab, activeProject?.path);
 
   return (
     <div className="flex flex-col h-screen bg-[#2b2622] text-[#f7f5f0] overflow-hidden font-sans relative">
@@ -523,7 +408,7 @@ export const App: React.FC = () => {
         autoSync={autoSync}
         onToggleAutoSync={() => setAutoSync(!autoSync)}
         isSyncing={isSyncing}
-        onManualSync={() => syncWithBackend(true)}
+        onManualSync={() => { localTracesRef.current = false; void syncWithBackend(true); }}
       />
 
       {/* Sync Toast */}
@@ -552,16 +437,17 @@ export const App: React.FC = () => {
 
       {/* Workspace Body */}
       <div className="flex-1 overflow-hidden">
-        {activeWorkspace === 'studio' ? (
+        {isSwitching || (route.project && !sameProject(route.project, activeProject?.path)) ? (
+          <div className="p-6 text-xs text-[#aea69c]">Loading project...</div>
+        ) : activeWorkspace === 'studio' ? (
           <StudioView
             key={activeProject?.path || 'studio'}
             activeProjectPath={activeProject?.path || null}
             activeProjectTitle={activeProject?.title || null}
-            onNavigateToReader={(chapterNum, folder) => {
-              setReaderChapterNum(chapterNum);
-              setReaderFolder(folder || null);
-              setActiveWorkspace('reader');
-            }}
+            chapterNum={route.chapter}
+            chapterFolder={route.folder}
+            onChapterChange={(chapter, folder, replace) => patchRoute({ chapter, folder: folder || undefined }, replace)}
+            onNavigateToReader={(chapter, folder) => navigateRoute({ workspace: 'reader', project: activeProject?.path, chapter, folder: folder || undefined })}
             logs={logs}
             initialChapters={primedChapters}
           />
@@ -569,18 +455,23 @@ export const App: React.FC = () => {
           <ReaderView
             key={activeProject?.path || 'reader'}
             activeProjectPath={activeProject?.path || null}
-            initialChapterNum={readerChapterNum}
-            initialFolder={readerFolder}
-            onBackToStudio={() => setActiveWorkspace('studio')}
+            initialChapterNum={route.chapter}
+            initialFolder={route.folder}
+            onChapterChange={(chapter, folder, replace) => patchRoute({ chapter, folder: folder || undefined }, replace)}
+            onBackToStudio={() => navigateWorkspace('studio', activeProject?.path)}
           />
         ) : activeWorkspace === 'bible' ? (
           <BibleView
+            section={route.section}
+            onSectionChange={(section) => patchRoute({ section })}
             key={activeProject?.path || 'bible'}
             activeProjectPath={activeProject?.path || null}
             activeProjectTitle={activeProject?.title || null}
           />
         ) : activeWorkspace === 'settings' ? (
           <SettingsView
+            section={route.section}
+            onSectionChange={(section) => patchRoute({ section })}
             key={activeProject?.path || 'settings'}
             activeProjectPath={activeProject?.path || null}
             activeProjectTitle={activeProject?.title || null}
@@ -690,7 +581,6 @@ export const App: React.FC = () => {
                       traces={traces}
                       selectedTraceId={selectedTraceId}
                       onSelectTrace={(id) => {
-                        handleSelectChapter(selectedChapterId || '');
                         setSelectedTraceId(id);
                         setMobileTraceView('detail');
                       }}

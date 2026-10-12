@@ -23,6 +23,12 @@ uv run nousetsu web
 
 NouSetsu opens the default local address, `http://127.0.0.1:5173`. To use another port, pass `--port`, for example `uv run nousetsu web --port 5180`. For live frontend development, install the web dependencies with `npm ci --prefix web` and start `uv run nousetsu web --dev`. Run `uv run nousetsu web --help` to see the other supported options.
 
+The full startup service check runs once per browser-tab session. Refresh performs a brief connection check and loads fresh project/chapter data. If a required service is unavailable, use **Retry Verification** or **Skip & Continue**; skipping does not mark verification successful.
+
+Workspace paths (`/studio`, `/reader`, `/traces`, `/bible`, `/settings`) retain project and selection parameters through refresh and Back/Forward. Chapter selections include their volume folder, so chapters with the same number stay distinct. Display filters and panels are saved per project for the session. Unsaved forms and API-key inputs are not restored after refresh.
+
+Uploaded local trace files stay selected during workspace navigation. Select them again after a refresh; **Refresh from project** returns Traces to the backend project data.
+
 ## Install and launch the Windows desktop app
 
 Download the Windows installer from [NouSetsu Releases](https://github.com/Checkmartyr/NouSetsu/releases/latest), run it, and launch **NouSetsu** from the Start menu. The desktop app starts or connects to its local backend and opens the Web Studio in its Tauri window.
@@ -55,7 +61,7 @@ Use the project selector in the top bar to switch between registered projects. S
 You can start with existing chapters or import them during project creation:
 
 - **Local files:** In **Studio**, select **Upload**, add `.txt`, `.md`, or `.text` chapters, and choose a destination folder. Existing files are skipped unless overwrite is enabled.
-- **Web novel URL:** Choose the URL import option, enter the novel or table-of-contents URL, select **Inspect TOC**, and choose all chapters, a range, or individual chapters before importing. This requires the Novel-Scraper integration to be available.
+- **Web novel URL during creation:** Enable **Import chapters from a novel URL into raw_chapters**, enter the URL, and select **Inspect**. An empty **Novel Title** and **Project Name** use the romanized title, falling back to the original when romanization is unavailable. Manual edits are preserved; the preview shows the original title. Choose all chapters or a range, then select **Create & Import Chapters**. If importing fails after creation, **Retry Chapter Import** reuses that project. The Studio Upload dialog also supports URL imports into existing projects.
 - **EPUB or PDF:** Select the eBook option, inspect the detected chapters, choose which chapters to import, and optionally extract embedded illustrations into the project’s `assets/` folder.
 
 For details on supported sites and scraper setup, see the [Novel Scraper Guide](./novel_scraper.md).

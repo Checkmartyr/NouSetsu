@@ -523,6 +523,8 @@ NouSetsu includes a local Web Studio (`nousetsu web`) for batch queue control, f
 * **Settings & Model Routing**: Configure Gemini, OpenAI, OpenRouter, or a custom OpenAI-compatible provider; tune per-agent routes, rate limits (32K TPM / 60 RPM), and chunking thresholds.
 * **Live Publication Studio**: Preview and customize typography with real-time EPUB3/PDF compilation before downloading.
 * **Zero-Configuration Launch**: Launch directly via CLI (`nousetsu web`) or press `W` from inside the TUI application.
+* **Persistent Navigation**: Workspace paths restore the selected project, chapter, volume folder, and trace across refresh and Back/Forward. The full service check runs once per browser-tab session; later reloads reconnect and hydrate fresh data.
+* **Romanized Project Titles**: URL inspection autofills an empty Novel Title and Project Name with romanized text while preserving manual edits and displaying the original title in the preview.
 
 ### Native Desktop App (Tauri)
 

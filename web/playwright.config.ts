@@ -11,15 +11,15 @@ export default defineConfig({
     ['list']
   ],
   use: {
-    baseURL: 'http://localhost:5176',
+    baseURL: 'http://127.0.0.1:5176',
     channel: 'chrome',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
   webServer: {
-    command: 'npm run dev -- --port 5176 --strictPort',
-    url: 'http://localhost:5176',
-    reuseExistingServer: false,
+    command: 'node node_modules/vite/bin/vite.js --host 127.0.0.1 --port 5176 --strictPort',
+    url: 'http://127.0.0.1:5176',
+    reuseExistingServer: Boolean(process.env.PLAYWRIGHT_REUSE_SERVER),
     env: { VITE_LOCAL_UPDATER_TEST: 'true' },
   },
   projects: [

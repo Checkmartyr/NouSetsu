@@ -28,6 +28,7 @@ import {
 import { UploadModal } from './UploadModal';
 import { ExportBookModal } from './ExportBookModal';
 import { getReadingBookmark, ReadingBookmark } from '../utils/readerStorage';
+import { useSessionState } from '../services/navigation';
 
 interface StudioViewProps {
   activeProjectPath: string | null;
@@ -35,6 +36,9 @@ interface StudioViewProps {
   onNavigateToReader: (chapterNum: number, folder?: string | null) => void;
   logs: string[];
   initialChapters?: ChapterItem[];
+  chapterNum?: number;
+  chapterFolder?: string;
+  onChapterChange?: (chapter: number, folder: string | null, replace?: boolean) => void;
 }
 
 export const StudioView: React.FC<StudioViewProps> = ({
@@ -43,14 +47,24 @@ export const StudioView: React.FC<StudioViewProps> = ({
   onNavigateToReader,
   logs,
   initialChapters = [],
+  chapterNum,
+  chapterFolder,
+  onChapterChange,
 }) => {
   const [chapters, setChapters] = useState<ChapterItem[]>(initialChapters);
-  const [selectedChapter, setSelectedChapter] = useState<{ num: number; folder?: string | null } | null>(
-    initialChapters.length > 0
+  const [localChapter, setLocalChapter] = useState<{ num: number; folder?: string | null } | null>(
+    chapterNum ? { num: chapterNum, folder: chapterFolder || null } : initialChapters.length > 0
       ? { num: initialChapters[0].chapter_num, folder: initialChapters[0].folder }
       : null
   );
-  const [chapterContent, setChapterContent] = useState<ChapterContent | null>(null);
+  const controlledNavigation = Boolean(onChapterChange);
+  const selectedChapter = useMemo(() => {
+    const requested = controlledNavigation && chapterNum ? { num: chapterNum, folder: chapterFolder || null } : localChapter;
+    const target = chapters.find((c) => c.chapter_num === requested?.num && (c.folder || null) === (requested?.folder || null)) || chapters[0];
+    return target ? { num: target.chapter_num, folder: target.folder || null } : null;
+  }, [chapterNum, chapterFolder, chapters, localChapter, controlledNavigation]);
+  const [loadedContent, setChapterContent] = useState<ChapterContent | null>(null);
+  const chapterContent = loadedContent?.chapter_num === selectedChapter?.num && (loadedContent?.folder || null) === (selectedChapter?.folder || null) ? loadedContent : null;
   const [loadingContent, setLoadingContent] = useState(false);
   const [status, setStatus] = useState<TranslationStatus | null>(null);
   const [savedBookmark, setSavedBookmark] = useState<ReadingBookmark | null>(() =>
@@ -58,10 +72,10 @@ export const StudioView: React.FC<StudioViewProps> = ({
   );
 
   // Filters & Controls
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [selectedFolder, setSelectedFolder] = useState<string>('all');
-  const [isLogDrawerOpen, setIsLogDrawerOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useSessionState(activeProjectPath, 'studio', 'searchQuery', '');
+  const [statusFilter, setStatusFilter] = useSessionState<string>(activeProjectPath, 'studio', 'statusFilter', 'all');
+  const [selectedFolder, setSelectedFolder] = useSessionState<string>(activeProjectPath, 'studio', 'selectedFolder', 'all');
+  const [isLogDrawerOpen, setIsLogDrawerOpen] = useSessionState(activeProjectPath, 'studio', 'isLogDrawerOpen', false);
   const [isStarting, setIsStarting] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
@@ -72,58 +86,70 @@ export const StudioView: React.FC<StudioViewProps> = ({
   const [forceRetranslate, setForceRetranslate] = useState(false);
 
   const logBottomRef = useRef<HTMLDivElement>(null);
+  const requestGeneration = useRef(0);
+  const userChangedFilters = useRef(false);
+
+  const setSelectedChapter = (target: { num: number; folder?: string | null }, replace = false) => {
+    setChapterContent(null);
+    setLocalChapter(target);
+    onChapterChange?.(target.num, target.folder || null, replace);
+  };
+
+  useEffect(() => {
+    if (selectedChapter && onChapterChange && (chapterNum !== selectedChapter.num || (chapterFolder || null) !== selectedChapter.folder)) {
+      onChapterChange(selectedChapter.num, selectedChapter.folder || null, true);
+    }
+  }, [selectedChapter, chapterNum, chapterFolder, onChapterChange]);
 
   // Load chapters & translation status
   const refreshData = async () => {
     if (!activeProjectPath) return;
+    const generation = ++requestGeneration.current;
     setSavedBookmark(getReadingBookmark(activeProjectPath));
     const [chList, transStat] = await Promise.all([
       fetchChapters(activeProjectPath),
       fetchTranslationStatus(),
     ]);
+    if (generation !== requestGeneration.current) return;
     setChapters(chList);
     setStatus(transStat);
 
-    if (chList.length > 0) {
-      setSelectedChapter((prev) => {
-        if (!prev || !chList.some((c) => c.chapter_num === prev.num && (c.folder || null) === (prev.folder || null))) {
-          return { num: chList[0].chapter_num, folder: chList[0].folder };
-        }
-        return prev;
-      });
-    } else {
-      setSelectedChapter(null);
+    if (chList.length === 0) {
+      setLocalChapter(null);
       setChapterContent(null);
     }
   };
 
   useEffect(() => {
+    let active = true;
     refreshData();
     const interval = setInterval(async () => {
       const s = await fetchTranslationStatus();
-      setStatus(s);
+      if (active) setStatus(s);
     }, 2000);
-    return () => clearInterval(interval);
+    return () => { active = false; requestGeneration.current++; clearInterval(interval); };
   }, [activeProjectPath]);
 
   // Load selected chapter source & translation
   useEffect(() => {
     if (!selectedChapter || !activeProjectPath) {
       setChapterContent(null);
+      setLoadingContent(false);
       return;
     }
     let active = true;
+    setChapterContent(null);
     setLoadingContent(true);
     fetchChapterContent(selectedChapter.num, activeProjectPath, selectedChapter.folder || undefined).then((content) => {
       if (active) {
-        setChapterContent(content);
+        setChapterContent(content && content.chapter_num === selectedChapter.num && (content.folder || null) === (selectedChapter.folder || null) ? content : null);
         setLoadingContent(false);
       }
     });
     return () => {
       active = false;
     };
-  }, [selectedChapter, activeProjectPath]);
+  }, [selectedChapter?.num, selectedChapter?.folder, activeProjectPath]);
 
   // Scroll logs to bottom when updated
   useEffect(() => {
@@ -260,7 +286,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
   }, [filteredChapters, status]);
 
   // Collapsible dropdown state for folder sections (empty = all expanded by default)
-  const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
+  const [collapsedFolders, setCollapsedFolders] = useSessionState<Record<string, boolean>>(activeProjectPath, 'studio', 'collapsedFolders', {});
 
   const isFolderOpen = (key: string) => !collapsedFolders[key];
 
@@ -317,6 +343,11 @@ export const StudioView: React.FC<StudioViewProps> = ({
   }, [status?.is_running, status?.active_folder]);
 
   useEffect(() => {
+    // Restored filters never displace an explicit route selection. User filter edits
+    // may select the first remaining row when the current chapter is excluded.
+    const userEdited = userChangedFilters.current;
+    userChangedFilters.current = false;
+    if (chapterNum && chapters.some((c) => c.chapter_num === chapterNum && (c.folder || null) === (chapterFolder || null)) && !userEdited) return;
     if (filteredChapters.length > 0) {
       if (
         selectedChapter === null ||
@@ -324,10 +355,10 @@ export const StudioView: React.FC<StudioViewProps> = ({
           (c) => c.chapter_num === selectedChapter.num && (c.folder || null) === (selectedChapter.folder || null)
         )
       ) {
-        setSelectedChapter({ num: filteredChapters[0].chapter_num, folder: filteredChapters[0].folder });
+        setSelectedChapter({ num: filteredChapters[0].chapter_num, folder: filteredChapters[0].folder }, !userEdited);
       }
     }
-  }, [selectedFolder, filteredChapters]);
+  }, [selectedFolder, filteredChapters, chapterNum, chapterFolder, chapters]);
 
   const renderChapterRow = (ch: ChapterItem, inFolder: boolean) => {
     const isSelected =
@@ -601,7 +632,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
                 type="text"
                 placeholder="Search chapter..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => { userChangedFilters.current = true; setSearchQuery(e.target.value); }}
                 className="input-text w-full pl-8 pr-2.5 py-1 text-xs font-mono"
               />
             </div>
@@ -609,7 +640,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
             <div className="flex items-center gap-2">
               <select
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
+                onChange={(e) => { userChangedFilters.current = true; setStatusFilter(e.target.value); }}
                 className="flex-1 bg-[#383330] border border-[#3f3a36] rounded-[3px] px-2 py-1 text-xs text-[#f7f5f0] focus:outline-none focus:border-[#dad2c1]"
               >
                 <option value="all">All Statuses</option>
@@ -622,7 +653,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
               {folders.length > 0 && (
                 <select
                   value={selectedFolder}
-                  onChange={(e) => setSelectedFolder(e.target.value)}
+                  onChange={(e) => { userChangedFilters.current = true; setSelectedFolder(e.target.value); }}
                   className="flex-1 bg-[#383330] border border-[#3f3a36] rounded-[3px] px-2 py-1 text-xs text-[#f7f5f0] focus:outline-none focus:border-[#dad2c1]"
                 >
                   <option value="all">All Volumes</option>
@@ -934,6 +965,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
         onUploadSuccess={({ folder }) => {
           refreshData();
           if (folder && folder !== 'raw_chapters' && folder !== 'default') {
+            userChangedFilters.current = true;
             setSelectedFolder(folder);
           }
         }}
