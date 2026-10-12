@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -11,11 +11,15 @@ import {
   Bookmark,
   BookMarked,
   Check,
-  RotateCcw
+  RotateCcw,
+  List,
+  X
 } from 'lucide-react';
 import { ChapterItem, ChapterContent } from '../types/dashboard';
 import { fetchChapters, fetchChapterContent } from '../services/dashboardApi';
 import { useSessionState } from '../services/navigation';
+import { Pagination } from './Pagination';
+import { chapterSortOptions, chapterTitle, normalizeChapterSort, sortDisplayChapters, sortStoryChapters } from '../utils/chapterOrdering';
 import {
   getReadingBookmark,
   saveReadingBookmark,
@@ -47,6 +51,40 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
   );
   const [loadedContent, setContent] = useState<ChapterContent | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadingChapters, setLoadingChapters] = useState(false);
+  const [storedSort, setStoredSort] = useSessionState(activeProjectPath, 'reader', 'chapterSort', 'number-asc');
+  const chapterSort = normalizeChapterSort(storedSort);
+  const displayChapters = useMemo(() => sortDisplayChapters(chapters, chapterSort), [chapters, chapterSort]);
+  const storyChapters = useMemo(() => sortStoryChapters(chapters), [chapters]);
+  const [contentsOpen, setContentsOpen] = useState(false);
+  const [tocPage, setTocPage] = useState(1);
+  const [compact, setCompact] = useState(() => window.matchMedia('(max-width: 767px)').matches);
+  const contentsDialogRef = useRef<HTMLDialogElement>(null);
+  const contentsToggleRef = useRef<HTMLButtonElement>(null);
+  const totalPages = Math.max(1, Math.ceil(displayChapters.length / 50));
+  const validPage = Math.min(Math.max(1, tocPage), totalPages);
+  const visibleChapters = displayChapters.slice((validPage - 1) * 50, validPage * 50);
+
+  useEffect(() => {
+    if (storedSort !== chapterSort) setStoredSort(chapterSort);
+  }, [storedSort, chapterSort, setStoredSort]);
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 767px)');
+    const update = () => setCompact(media.matches);
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
+
+  useEffect(() => {
+    const dialog = contentsDialogRef.current;
+    if (!dialog || !contentsOpen || !compact) return;
+    dialog.showModal();
+    return () => {
+      dialog.close();
+      contentsToggleRef.current?.focus();
+    };
+  }, [contentsOpen, compact]);
 
   // Persistent Reader Customization & Bookmark State
   const initialPrefs = getReaderPreferences();
@@ -76,10 +114,13 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
     let active = true;
     setChapters([]);
     setContent(null);
+    setContentsOpen(false);
+    setTocPage(1);
+    setLoadingChapters(Boolean(activeProjectPath));
     setSavedBookmark(getReadingBookmark(activeProjectPath));
     if (!activeProjectPath) return;
     fetchChapters(activeProjectPath).then((list) => {
-      if (active) setChapters(list);
+      if (active) { setChapters(list); setLoadingChapters(false); }
     });
     return () => { active = false; };
   }, [activeProjectPath]);
@@ -91,11 +132,17 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
     || (!initialChapterNum && savedBookmark
       ? chapters.find((c) => c.chapter_num === savedBookmark.chapter_num && (c.folder || null) === (savedBookmark.folder || null))
       : undefined)
-    || chapters.find((c) => c.is_completed || c.translated_exists)
-    || chapters[0];
+    || storyChapters.find((c) => c.is_completed || c.translated_exists)
+    || storyChapters[0];
   const currentChapterNum = currentChapter?.chapter_num || 0;
   const currentFolder = currentChapter?.folder || null;
   const content = loadedContent?.chapter_num === currentChapterNum && (loadedContent?.folder || null) === currentFolder ? loadedContent : null;
+  const displayIndex = displayChapters.findIndex((c) => c.chapter_num === currentChapterNum && (c.folder || null) === currentFolder);
+
+  // Reveal the selected chapter on navigation, sorting, or opening; paging itself is independent.
+  useEffect(() => {
+    if (displayIndex >= 0) setTocPage(Math.floor(displayIndex / 50) + 1);
+  }, [currentChapterNum, currentFolder, chapterSort, contentsOpen, displayIndex]);
 
   // Defaults and invalid route selections replace history only after roster hydration.
   useEffect(() => {
@@ -106,6 +153,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
   }, [currentChapter, currentChapterNum, currentFolder, initialChapterNum, initialFolder, onChapterChange]);
 
   const selectChapter = (num: number, folder: string | null) => {
+    if (num === currentChapterNum && (folder || null) === currentFolder) return;
     setContent(null);
     setLocalChapter({ num, folder });
     onChapterChange?.(num, folder);
@@ -141,24 +189,24 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
     setSavedBookmark(newBm);
   }, [activeProjectPath, currentChapterNum, currentFolder, autoSave, loading, content, currentChapter]);
 
-  const currentIndex = chapters.findIndex(
+  const currentIndex = storyChapters.findIndex(
     (c) =>
       c.chapter_num === currentChapterNum &&
       (c.folder || null) === currentFolder
   );
   const hasPrev = currentIndex > 0;
-  const hasNext = currentIndex >= 0 && currentIndex < chapters.length - 1;
+  const hasNext = currentIndex >= 0 && currentIndex < storyChapters.length - 1;
 
   const handlePrev = () => {
     if (hasPrev) {
-      const prevCh = chapters[currentIndex - 1];
+      const prevCh = storyChapters[currentIndex - 1];
       selectChapter(prevCh.chapter_num, prevCh.folder || null);
     }
   };
 
   const handleNext = () => {
     if (hasNext) {
-      const nextCh = chapters[currentIndex + 1];
+      const nextCh = storyChapters[currentIndex + 1];
       selectChapter(nextCh.chapter_num, nextCh.folder || null);
     }
   };
@@ -266,6 +314,56 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
   };
 
   const curTheme = themeClasses[theme];
+  const contentsPanel = (
+    <nav aria-label="Table of contents" className={`flex flex-col h-full min-h-0 ${curTheme.bg} ${curTheme.text}`}>
+      <div className={`p-3 border-b space-y-3 shrink-0 ${curTheme.border}`}>
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold">Contents</h2>
+          <button type="button" autoFocus={compact} aria-label="Close contents" onClick={() => setContentsOpen(false)} className="p-1 rounded cursor-pointer hover:bg-neutral-500/10">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <label className="block text-xs">
+          Sort chapters
+          <select aria-label="Sort Reader chapters" value={chapterSort} onChange={(e) => setStoredSort(e.target.value)} className={`mt-1 w-full p-2 rounded border ${curTheme.bg} ${curTheme.border}`}>
+            {chapterSortOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+        </label>
+      </div>
+      <div className="flex-1 overflow-y-auto min-h-0">
+        {loadingChapters ? <p className="p-4 text-sm">Loading chapters…</p> : visibleChapters.length === 0 ? (
+          <p className="p-4 text-sm">{activeProjectPath ? 'No chapters found in this project.' : 'Select a project to read.'}</p>
+        ) : visibleChapters.map((chapter) => {
+          const current = chapter.chapter_num === currentChapterNum && (chapter.folder || null) === currentFolder;
+          const bookmarked = savedBookmark?.chapter_num === chapter.chapter_num && (savedBookmark.folder || null) === (chapter.folder || null);
+          return (
+            <button
+              key={JSON.stringify([chapter.folder || null, chapter.chapter_num])}
+              type="button"
+              data-chapter-num={chapter.chapter_num}
+              data-chapter-folder={chapter.folder || ''}
+              aria-current={current ? 'page' : undefined}
+              onClick={() => {
+                if (!current) selectChapter(chapter.chapter_num, chapter.folder || null);
+                if (compact) setContentsOpen(false);
+              }}
+              className={`w-full text-left px-3 py-3 border-b cursor-pointer hover:bg-neutral-500/10 ${curTheme.border} ${current ? 'bg-neutral-500/15 font-semibold' : ''}`}
+            >
+              <span className={`block text-[11px] mb-1 ${curTheme.subtext}`}>{chapter.folder || 'Root / Default'} · Chapter {chapter.chapter_num}</span>
+              <span className="block text-sm break-words">{chapterTitle(chapter)}</span>
+              <span className={`block text-[11px] mt-1 ${curTheme.subtext}`}>
+                {chapter.is_completed || chapter.translated_exists ? 'Translated' : 'Not translated'}
+                {current ? ' · Reading' : ''}{bookmarked ? ' · Saved' : ''}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      <div className="p-2 shrink-0">
+        <Pagination currentPage={validPage} totalPages={totalPages} totalItems={displayChapters.length} pageSize={50} onPageChange={setTocPage} itemName="chapters" className="!flex-col" />
+      </div>
+    </nav>
+  );
 
   return (
     <div className={`flex flex-col h-full overflow-hidden transition-colors ${curTheme.bg} ${curTheme.text}`}>
@@ -280,19 +378,24 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
             <span>Studio</span>
           </button>
 
+          <button ref={contentsToggleRef} type="button" aria-expanded={contentsOpen} aria-controls="reader-contents" onClick={() => setContentsOpen(!contentsOpen)} className={`text-xs px-2.5 py-1 rounded border flex items-center gap-1.5 cursor-pointer ${curTheme.border}`}>
+            <List className="w-3.5 h-3.5" />
+            Contents
+          </button>
+
           <div className="flex items-center gap-2">
             <BookOpen className="w-4 h-4 text-[#aea69c]" />
             <select
               value={`${currentFolder || ''}::${currentChapterNum}`}
               onChange={(e) => {
                 const val = e.target.value;
-                const [f, numStr] = val.split('::');
-                selectChapter(Number(numStr), f || null);
+                const target = chapters.find((c) => `${c.folder || ''}::${c.chapter_num}` === val);
+                if (target) selectChapter(target.chapter_num, target.folder || null);
               }}
               aria-label="Select chapter to read"
               className={`text-xs font-medium rounded-[3px] px-2.5 py-1 border cursor-pointer focus:outline-none ${curTheme.bg} ${curTheme.border} ${curTheme.text}`}
             >
-              {chapters.map((c) => {
+              {displayChapters.map((c) => {
                 const isBookmarked =
                   savedBookmark &&
                   savedBookmark.chapter_num === c.chapter_num &&
@@ -449,11 +552,17 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
 
       {/* Reader Body */}
       <div className="flex-1 flex overflow-hidden relative">
+        {contentsOpen && !compact && (
+          <aside id="reader-contents" className={`w-80 shrink-0 border-r ${curTheme.border}`}>{contentsPanel}</aside>
+        )}
+        <div className="flex-1 min-w-0 min-h-0 flex flex-col md:flex-row overflow-hidden">
         {/* Main Focus Reading Column */}
-        <div ref={readingBodyRef} onScroll={handleScroll} className="flex-1 overflow-y-auto px-6 py-10 flex justify-center">
+        <div ref={readingBodyRef} onScroll={handleScroll} className="flex-1 min-w-0 min-h-0 overflow-y-auto px-6 py-10 flex justify-center">
           <div className="max-w-3xl w-full">
-            {loading ? (
+            {loadingChapters || loading ? (
               <div className="text-center py-20 opacity-50">Loading translation...</div>
+            ) : !currentChapter ? (
+              <p className="text-center py-20 opacity-70">{activeProjectPath ? 'No chapters found in this project.' : 'Select a project to read.'}</p>
             ) : (content?.has_translated || Boolean(content?.translated_text?.trim())) ? (
               <article className="prose max-w-none">
                 <div className={`font-serif whitespace-pre-wrap ${fontClasses[fontSize]}`}>
@@ -478,7 +587,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
 
         {/* Optional Collapsible Original Source Peek Drawer */}
         {showOriginalPeek && (
-          <div className={`w-96 border-l p-6 overflow-y-auto shrink-0 ${curTheme.border} bg-black/20`}>
+          <div className={`w-full max-h-[35%] md:max-h-none md:w-72 lg:w-96 border-t md:border-t-0 md:border-l p-6 overflow-y-auto shrink-0 ${curTheme.border} bg-black/10`}>
             <div className={`text-xs font-semibold uppercase tracking-wider mb-4 ${curTheme.subtext}`}>
               Original Source Text (Ch.{currentChapterNum})
             </div>
@@ -487,7 +596,29 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
             </div>
           </div>
         )}
+        </div>
       </div>
+
+      {compact && (
+        <dialog ref={contentsDialogRef} id="reader-contents" aria-label="Table of contents" onCancel={() => setContentsOpen(false)}
+          onKeyDown={(event) => {
+            if (event.key !== 'Tab') return;
+            const controls = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), select:not(:disabled)'))
+              .filter((control) => control.getClientRects().length > 0);
+            const first = controls[0];
+            const last = controls[controls.length - 1];
+            if (event.shiftKey && document.activeElement === first) {
+              event.preventDefault();
+              last?.focus();
+            } else if (!event.shiftKey && document.activeElement === last) {
+              event.preventDefault();
+              first?.focus();
+            }
+          }}
+          className={`m-auto w-[calc(100%-2rem)] max-w-sm h-[80dvh] max-h-[calc(100dvh-2rem)] p-0 rounded border shadow-2xl backdrop:bg-black/50 ${curTheme.bg} ${curTheme.border} ${curTheme.text}`}>
+          {contentsPanel}
+        </dialog>
+      )}
 
       {/* Reader Footer Navigation */}
       <div className={`px-6 py-3 border-t flex items-center justify-between text-xs ${curTheme.header} ${curTheme.subtext}`}>

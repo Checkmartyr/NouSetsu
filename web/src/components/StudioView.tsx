@@ -29,6 +29,7 @@ import { UploadModal } from './UploadModal';
 import { ExportBookModal } from './ExportBookModal';
 import { getReadingBookmark, ReadingBookmark } from '../utils/readerStorage';
 import { useSessionState } from '../services/navigation';
+import { chapterSortOptions, normalizeChapterSort, sortDisplayChapters } from '../utils/chapterOrdering';
 
 interface StudioViewProps {
   activeProjectPath: string | null;
@@ -75,6 +76,8 @@ export const StudioView: React.FC<StudioViewProps> = ({
   const [searchQuery, setSearchQuery] = useSessionState(activeProjectPath, 'studio', 'searchQuery', '');
   const [statusFilter, setStatusFilter] = useSessionState<string>(activeProjectPath, 'studio', 'statusFilter', 'all');
   const [selectedFolder, setSelectedFolder] = useSessionState<string>(activeProjectPath, 'studio', 'selectedFolder', 'all');
+  const [savedChapterSort, setChapterSort] = useSessionState<string>(activeProjectPath, 'studio', 'chapterSort', 'number-asc');
+  const chapterSort = normalizeChapterSort(savedChapterSort);
   const [isLogDrawerOpen, setIsLogDrawerOpen] = useSessionState(activeProjectPath, 'studio', 'isLogDrawerOpen', false);
   const [isStarting, setIsStarting] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
@@ -89,7 +92,12 @@ export const StudioView: React.FC<StudioViewProps> = ({
   const requestGeneration = useRef(0);
   const userChangedFilters = useRef(false);
 
+  useEffect(() => {
+    if (savedChapterSort !== chapterSort) setChapterSort(chapterSort);
+  }, [savedChapterSort, chapterSort, setChapterSort]);
+
   const setSelectedChapter = (target: { num: number; folder?: string | null }, replace = false) => {
+    if (target.num === selectedChapter?.num && (target.folder || null) === (selectedChapter.folder || null)) return;
     setChapterContent(null);
     setLocalChapter(target);
     onChapterChange?.(target.num, target.folder || null, replace);
@@ -202,7 +210,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
   const folders = Array.from(new Set(chapters.map((c) => c.folder).filter(Boolean))) as string[];
   const hasMultipleFolders = folders.length > 1 || (folders.length === 1 && chapters.some((c) => !c.folder));
 
-  const filteredChapters = chapters.filter((c) => {
+  const filteredChapters = useMemo(() => chapters.filter((c) => {
     const term = searchQuery.toLowerCase().trim();
     const mdName =
       c.output_file_name ||
@@ -229,7 +237,12 @@ export const StudioView: React.FC<StudioViewProps> = ({
       selectedFolder === 'all' ? true : c.folder === selectedFolder;
 
     return matchesSearch && matchesStatus && matchesFolder;
-  });
+  }), [chapters, searchQuery, statusFilter, selectedFolder]);
+
+  const displayChapters = useMemo(
+    () => sortDisplayChapters(filteredChapters, chapterSort),
+    [filteredChapters, chapterSort]
+  );
 
   interface FolderGroup {
     key: string;
@@ -244,7 +257,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
   const folderGroups = useMemo<FolderGroup[]>(() => {
     const map = new Map<string, { folder: string | null; label: string; chapters: ChapterItem[] }>();
 
-    for (const ch of filteredChapters) {
+    for (const ch of displayChapters) {
       const fKey = ch.folder || '__root__';
       if (!map.has(fKey)) {
         map.set(fKey, {
@@ -283,7 +296,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
         hasRunning,
       };
     });
-  }, [filteredChapters, status]);
+  }, [displayChapters, status]);
 
   // Collapsible dropdown state for folder sections (empty = all expanded by default)
   const [collapsedFolders, setCollapsedFolders] = useSessionState<Record<string, boolean>>(activeProjectPath, 'studio', 'collapsedFolders', {});
@@ -375,7 +388,10 @@ export const StudioView: React.FC<StudioViewProps> = ({
 
     return (
       <div
-        key={`${ch.folder || 'root'}_${ch.chapter_num}`}
+        key={JSON.stringify([ch.folder || null, ch.chapter_num])}
+        data-chapter-num={ch.chapter_num}
+        data-chapter-folder={ch.folder || ''}
+        aria-current={isSelected ? 'page' : undefined}
         onClick={() => setSelectedChapter({ num: ch.chapter_num, folder: ch.folder })}
         className={`p-3 cursor-pointer transition-colors flex items-start justify-between gap-2 select-none group/item ${
           inFolder ? 'pl-5 pr-3 bg-[#2b2622]/40' : 'px-3'
@@ -665,6 +681,20 @@ export const StudioView: React.FC<StudioViewProps> = ({
                 </select>
               )}
             </div>
+
+            <label className="flex items-center gap-2 text-xs text-[#aea69c]">
+              <span>Sort</span>
+              <select
+                aria-label="Sort Studio chapters"
+                value={chapterSort}
+                onChange={(e) => setChapterSort(normalizeChapterSort(e.target.value))}
+                className="min-w-0 flex-1 bg-[#383330] border border-[#3f3a36] rounded-[3px] px-2 py-1 text-xs text-[#f7f5f0] focus:outline-none focus:border-[#dad2c1]"
+              >
+                {chapterSortOptions.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </label>
           </div>
 
           {/* Folder Hierarchy Toolbar (When multiple subfolders exist and viewing All) */}
@@ -698,7 +728,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
           )}
 
           {/* Chapter Task List */}
-          <div className="flex-1 overflow-y-auto divide-y divide-[#3f3a36]/50">
+          <div role="region" aria-label="Studio chapters" className="flex-1 overflow-y-auto divide-y divide-[#3f3a36]/50">
             {filteredChapters.length === 0 ? (
               <div className="p-8 text-center text-xs text-[#aea69c] flex flex-col items-center justify-center gap-3">
                 <FileText className="w-8 h-8 text-[#aea69c]" />
@@ -800,7 +830,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
               </div>
             ) : (
               <div className="divide-y divide-[#3f3a36]/50">
-                {filteredChapters.map((ch) => renderChapterRow(ch, false))}
+                {displayChapters.map((ch) => renderChapterRow(ch, false))}
               </div>
             )}
           </div>

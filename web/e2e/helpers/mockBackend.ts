@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test';
+import type { ChapterItem, TranslationStatus } from '../../src/types/dashboard';
 
 export const projectPaths = ['C:/novels/A novel & 世界', 'C:/novels/Second', 'C:/novels/Third'];
 export const projects = projectPaths.map((path, index) => ({
@@ -7,12 +8,25 @@ export const projects = projectPaths.map((path, index) => ({
   trace_count: 3, latest_trace_mtime: 1,
 }));
 const chapterPairs = [{ num: 1, folder: null }, { num: 1, folder: 'Volume 01' }, { num: 2, folder: 'Volume 01' }];
-export const chapters = chapterPairs.map(({ num, folder }) => ({
+export const chapters: ChapterItem[] = chapterPairs.map(({ num, folder }) => ({
   chapter_num: num, folder, title: `${folder || 'Root'} chapter ${num}`,
   file_name: `${num}.txt`, output_file_name: `${num}.md`, status: 'COMPLETED',
   current_stage: 'COMPLETED', raw_exists: true, raw_lines: 2, raw_words: 5,
   translated_exists: true, translated_words: 5, is_completed: true, has_checkpoint: false,
 }));
+
+export function chapterItem(num: number, folder: string | null = null, title = `Chapter ${num}`): ChapterItem {
+  return { ...chapters[0], chapter_num: num, folder, title, file_name: `${num}.txt`, output_file_name: `${num}.md` };
+}
+
+export const sortingChapters = [
+  chapterItem(2, null, 'Beta 10'),
+  chapterItem(1, 'Volume 10', 'Gamma'),
+  chapterItem(10, 'Volume 2', 'Alpha 10'),
+  chapterItem(1, null, 'Alpha 2'),
+  chapterItem(2, 'Volume 2', 'Alpha 2'),
+  { ...chapterItem(1, 'Volume 2', ''), file_name: 'Alpha 1.txt' },
+];
 const usage = { input_tokens: 10, output_tokens: 5, thought_tokens: 0, cached_tokens: 0, total_tokens: 15 };
 export const traceChapters = chapterPairs.map(({ num, folder }, index) => ({
   id: `chapter-${index}`, chapterNum: num, folder, fileName: `${num}.json`,
@@ -34,9 +48,20 @@ export function path(view: string, params: Record<string, string> = {}) {
 }
 
 // No request can reach a running backend or mutate a real project.
-export async function mockBackend(page: Page, options: { delayContent?: boolean; delaySwitch?: boolean; failSwitch?: boolean; lazyTraces?: boolean } = {}) {
+export async function mockBackend(page: Page, options: {
+  delayContent?: boolean; delaySwitch?: boolean; failSwitch?: boolean; lazyTraces?: boolean;
+  chapters?: ChapterItem[]; uploadChapters?: ChapterItem[];
+} = {}) {
+  const rosters = new Map<string, ChapterItem[]>();
+  let status: TranslationStatus = { is_running: false, active_chapter: null, active_folder: null, active_stage: null, completed_count: 3, total_count: 3, paused_reason: null, last_log: null };
+  const roster = (project: string) => rosters.get(project) ?? options.chapters ?? chapters;
   const state = { active: 0, environment: 0, desktop: 0, switches: [] as string[], concurrentSwitches: 0, maxConcurrentSwitches: 0, unexpected: [] as string[], delayedContentCompleted: false,
-    holdNextRegistry: false, registryHeld: false, registryReleased: false, releaseRegistry: null as (() => void) | null };
+    holdNextRegistry: false, registryHeld: false, registryReleased: false, releaseRegistry: null as (() => void) | null,
+    translationPayloads: [] as Record<string, unknown>[], uploadPayloads: [] as Record<string, unknown>[],
+    contentRequests: [] as { project: string; folder: string | null; chapter: number }[],
+    setChapters: (items: ChapterItem[], project = projectPaths[0]) => { rosters.set(project, [...items]); },
+    setTranslationStatus: (update: Partial<TranslationStatus>) => { status = { ...status, ...update }; },
+  };
   await page.route('**/api/**', async (route) => {
     const fulfill = (response: Parameters<typeof route.fulfill>[0]) => route.fulfill({
       ...response,
@@ -75,17 +100,20 @@ export async function mockBackend(page: Page, options: { delayContent?: boolean;
       return fulfill({ json: registry });
     }
     if (endpoint === '/api/sync-state') return fulfill({ json: { active_project_path: projectPaths[state.active], active_project_title: projects[state.active].title, traces_count: 3, latest_trace_mtime: 1 } });
-    if (endpoint === '/api/chapters') return fulfill({ json: chapters });
+    if (endpoint === '/api/chapters') return fulfill({ json: roster(url.searchParams.get('project_path') || projectPaths[state.active]) });
     const contentMatch = endpoint.match(/^\/api\/chapters\/(\d+)\/content$/);
     if (contentMatch) {
       const chapter = Number(contentMatch[1]);
       const folder = url.searchParams.get('folder') || null;
       const target = url.searchParams.get('project_path') || projectPaths[state.active];
+      state.contentRequests.push({ project: target, folder, chapter });
+      const item = roster(target).find((item) => item.chapter_num === chapter && (item.folder || null) === folder);
       if (options.delayContent && chapter === 1 && folder === 'Volume 01') {
         await new Promise((resolve) => setTimeout(resolve, 700));
         state.delayedContentCompleted = true;
       }
-      return fulfill({ json: { chapter_num: chapter, folder, source_file: `${chapter}.txt`, output_file: `${chapter}.md`, source_text: 'Original chapter', translated_text: `Reading ${target} ${folder || 'Root'} chapter ${chapter}`, has_source: true, has_translated: true } });
+      const translated = options.chapters !== undefined || rosters.has(target) ? Boolean(item?.translated_exists) : true;
+      return fulfill({ json: { chapter_num: chapter, folder, source_file: `${chapter}.txt`, output_file: `${chapter}.md`, source_text: 'Original chapter', translated_text: translated ? `Reading ${target} ${folder || 'Root'} chapter ${chapter}` : '', has_source: item?.raw_exists ?? true, has_translated: translated } });
     }
     if (endpoint === '/api/traces') {
       const num = url.searchParams.get('chapter');
@@ -95,11 +123,28 @@ export async function mockBackend(page: Page, options: { delayContent?: boolean;
         options.lazyTraces && index > 0 ? { ...ch, document: { ...ch.document, traces: [] } } : ch);
       return fulfill({ json: { project_path: projectPaths[state.active], project_title: projects[state.active].title, genre: 'fantasy', chapters: list } });
     }
-    if (endpoint === '/api/translate/status') return fulfill({ json: { is_running: false, active_chapter: null, active_folder: null, active_stage: null, completed_count: 3, total_count: 3, paused_reason: null, last_log: null } });
+    if (endpoint === '/api/translate/status') return fulfill({ json: status });
+    if (endpoint === '/api/translate/start' && request.method() === 'POST') {
+      state.translationPayloads.push(request.postDataJSON());
+      return fulfill({ json: { success: true, message: 'Mock translation started' } });
+    }
+    if (endpoint === '/api/chapters/upload' && request.method() === 'POST') {
+      const payload = request.postDataJSON();
+      state.uploadPayloads.push(payload);
+      if (options.uploadChapters) state.setChapters(options.uploadChapters, payload.project_path || projectPaths[state.active]);
+      const uploaded = payload.files.map((file: { name: string }) => file.name);
+      return fulfill({ json: { success: true, folder: payload.folder, uploaded, skipped: [], total_uploaded: uploaded.length, total_skipped: 0, message: 'Mock chapters uploaded' } });
+    }
+    if (endpoint === '/api/scraper/check') return fulfill({ json: { available: false, scraper_dir: null, python_exe: null } });
     if (endpoint === '/api/bible') return fulfill({ json: { title: 'Novel 1', genre: 'fantasy', source_language: 'Japanese', target_language: 'English', characters: [], glossary: [], archived_arcs: [] } });
     if (endpoint === '/api/bible/raw') return fulfill({ json: { raw_yaml: 'title: Novel 1' } });
     if (endpoint === '/api/settings') return fulfill({ json: { title: 'Novel 1', source_language: 'Japanese', target_language: 'English', genre: 'fantasy' } });
-    if (endpoint === '/api/folders') return fulfill({ json: { folders: ['Volume 01'], output_folders: [], default_output_dir: 'translated_chapters' } });
+    if (endpoint === '/api/folders') {
+      const target = url.searchParams.get('project_path') || projectPaths[state.active];
+      const folders = options.chapters !== undefined || rosters.has(target)
+        ? [...new Set(roster(target).map((item) => item.folder).filter((folder): folder is string => Boolean(folder)))] : ['Volume 01'];
+      return fulfill({ json: { folders, default_folder: folders[0] || 'raw_chapters', output_folders: [], default_output_dir: 'translated_chapters' } });
+    }
     if (endpoint === '/api/model-catalog') return fulfill({ json: { provider: url.searchParams.get('provider'), models: [], configured: false } });
     if (endpoint === '/api/logs/frontend') return fulfill({ json: { success: true } });
     if (endpoint === '/api/token-analytics') {
