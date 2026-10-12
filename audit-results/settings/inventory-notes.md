@@ -1,0 +1,52 @@
+# Settings inventory: expectations and source observations
+
+This inventory is generated without importing the application or loading any environment/project files. `scripts/audit/settings_inventory.py` parses the source schemas and allowlists, expands the six generation roles, records source references, and writes `setting-inventory.csv`. The CSV is the per-setting, per-mode matrix template. Its initial `pending` values mean **unmeasured**, never pass. The coordinator attaches measured evidence and final statuses separately.
+
+## Coverage and interpretation
+
+The source inventory contains 144 rows: all 45 `ProjectConfig` fields, all 24 role/control combinations, all 51 `ENV_CONFIG_KEYS`, all five `ENV_SECRET_KEYS`, five additional runtime-supported but unallowlisted procedural environment keys, eight settings actions, and all six project-creation request fields. Aliases share a canonical row (`output_dir`/`translated_dir`, `target_chunk_lines`/`chunk_size_lines`), so aliases are not double-counted as separate settings.
+
+The API endpoints, source types/defaults, bounds, UI exposure, storage, inheritance/reset semantics, runtime references, and application timing are recorded per row. `schema_default` means the literal model default; `effective_default` means the selected value when no override exists. Persisted environment inputs are strings and generally blank; their empty input is distinct from the runtime's built-in default. Runtime references are source evidence, not proof that an E2E path consumed the value. A consumer entry saying none was found is an audit target requiring a runtime check.
+
+`source_api` uses the real application handlers through in-process ASGI TestClient transport; `frozen_api` uses loopback HTTP to the actual frozen process. `web_dev` and `web_built` refer to actual browser frontend/backend combinations over HTTP. `native_dev` and `native_release` require a real Tauri WebView, not injected browser globals. A successful persistence round trip alone does not establish runtime semantics or native-mode parity.
+
+## Expected behavior to verify
+
+- Saving a project setting must persist that project's intended value, expose it on reload, and feed its actual consumer at the documented application boundary. Project A must not alter project B's settings or resolved defaults.
+- Model routes inherit on blank/null; per-role numeric/Boolean controls preserve explicit zero/false and inherit on null. Shared and role-specific defaults have different precedence from review/quota values in the present source; the audit must compare each resolver independently.
+- A blank secret input preserves the key. Replacement is explicit; clearing is explicit and removes file/process values. Responses, screenshots, logs, and reports must exclude secret material.
+- UI display, save fallbacks, API normalization, model validation, persisted YAML, and runtime controls must agree. Invalid values must fail without corrupting a project that was valid before the request.
+- Runtime application timing is mostly constructor-bound: `BatchRunner` loads config and resolves environment once at initialization. Metadata is different: each chapter loads a Bible. A new setting cannot be assumed to change a currently constructed runner or an already loaded chapter state.
+
+## Source-grounded findings to reproduce
+
+These are static observations. Use runtime/browser evidence before assigning full mode coverage or claiming E2E confirmation.
+
+| Target | Source evidence | Concrete implication and validation |
+|---|---|---|
+| Blank chunk fallback mismatch | `web/src/components/SettingsView.tsx:627-641`; displayed/default values at `:1551` and `:1579`; schema `src/nousetsu/models/config.py:158-159` | Save handler chooses 85/70 while display/onBlur chooses 800/400. Ordinary mouse Save may blur first; reproduce keyboard/programmatic save separately and distinguish those paths. |
+| Review/quota project precedence | `src/nousetsu/batch/runner.py:103-112` | Environment wins over explicit saved project review/quota values; GET shows raw project values. Verify constructor overrides and observe actual workflow/limiter values. |
+| Reconciliation inheritance masked | `src/nousetsu/models/config.py:173` and `:313-320` | Concrete project default True causes resolver to return before reading `NOVEL_POST_POLISH_RECONCILIATION`. Null settings PUT is ignored at `src/nousetsu/cli/web_server.py:2328-2329`; verify new-project env=False and reset behavior. |
+| Project dotenv process state | `src/nousetsu/utils/env.py:121-163`; settings GET `src/nousetsu/cli/web_server.py:2053-2054` | Central/CWD loads precede project dotenv with override=False, so existing keys win contrary to stated project-first intent. First project-only key can survive into another project. `NOUSETSU_ENV_FILE` early return prevents project dotenv loading entirely. Test both path branches. |
+| Scalar validation bypass and coercion | `src/nousetsu/cli/web_server.py:2283-2329`; bounds `src/nousetsu/models/config.py:153-154,166`; validated nested controls `web_server.py:2271-2274` | Direct scalar assignments bypass creation-time Pydantic bounds; bool("false") becomes True. Nested generation controls use model validation, while most top-level fields do not. Reload invalid persisted values to discover recovery behavior. |
+| Global save leaves project data stale | `web/src/components/SettingsView.tsx:689-703` | Save clears provider catalogs and reloads machine values only. Already loaded effective model/generation and env preset project data may remain stale. Compare visible state to fresh GET after save. |
+| Inherited extractor Boolean displays enabled | `cli/web_server.py:2217` returns raw optional config; `SettingsView.tsx:1696` checks `!== false`; resolver `models/config.py:304-311` | With project null and environment False, runtime disables extractor filtering while the project toggle shows enabled. Compare displayed and resolved values without creating an explicit project override. |
+| Scene character toggle lacks consumer | Search all `src/nousetsu`: key occurs only in config schema `models/config.py:170` and settings GET/PUT `cli/web_server.py:2216,2322-2323` | It persists but cannot affect pipeline filtering through that key. Compare disabled/enabled filtering calls on identical controlled chapters. |
+| Cross-folder toggle reads wrong store | `graph/workflow.py:424-430` reads `state.novel_bible.cross_folder_summaries`; config field `models/config.py:161`; settings update `cli/web_server.py:2287-2288`; Bible metadata sync `:2339-2350` | Saving config False does not synchronize the Bible's separately default-True field. Verify reader receives True despite config=False and compare volume-boundary context. |
+| Web creation ignores global language defaults | `cli/web_server.py:230-231,1108-1109`; `web/src/components/NewProjectModal.tsx:175-176`; CLI defaults `cli/app.py:1191-1192` | Web API creates Japanese/Thai independent of SOURCE_LANG/TARGET_LANG. ProjectConfig defaults English/Thai and legacy snapshot auto/English add inconsistent defaults. Test omission/blank/custom language values. |
+| Procedural controls unsupported through Settings | `models/config.py:174-178`; GET returns model dump `cli/web_server.py:2220`; PUT explicit assignments `:2237-2329`; allowlist `utils/env.py:12-70` | Five config fields are available in nested config but ignored by PUT. Their five environment aliases are also absent from the environment allowlist. Mark UI editing not applicable while recording unsupported API behavior. |
+| Clear-all leaves legacy interactions | `SettingsView.tsx:597-609`; generation precedence `models/config.py:108-114`; legacy API update `cli/web_server.py:2279-2280` | Clear resets models/generation map but keeps `use_interactions_api`; legacy False can continue masking env True despite "inheriting 100%" label. Reproduce with a preexisting legacy project override. |
+| Env preset is not canonical effective resolution | `cli/web_server.py:2071-2076` vs `models/config.py:277-287` | Env preset falls drafter/polisher back to primary Flash-Lite while canonical role defaults are Flash 3.5-Lite. Applying env defaults changes blank inherited roles into explicit different values. Capture before/after with empty machine overrides. |
+| Global environment semantic validation absent | `utils/env.py:237-249`; constructor integer/float parsing `batch/runner.py:103-110` | Strings, Booleans, and numbers accepted uniformly; malformed quotas can save successfully and fail later constructing a runner. Verify bounds, empty, zero, nonnumeric, infinity, and string Boolean controls with no external calls. |
+| Secret status describes file, not effective provider state | `utils/env.py:217`; provider resolution reads process environment | With inherited process keys, UI can show not configured while provider resolution has credentials. Controlled fake inherited keys are needed; never inspect real host credentials. |
+| Bible synchronization errors do not fail settings save | `cli/web_server.py:2354-2355` | Config can commit successfully while Bible update fails, leaving active metadata inconsistent. Inject an isolated write failure and compare API response with both files. |
+
+## Recommended priorities once reproduced
+
+1. Correct settings that silently fail to affect runtime: review/quota precedence, cross-folder memory, character filtering, reconciliation inheritance, and project dotenv isolation.
+2. Validate one merged project payload before writing; use explicit Boolean parsing, reject unknown writable settings, enforce meaningful bounds, and protect multi-file metadata consistency.
+3. Use a canonical resolved-settings representation for form effective values, presets, and runtime. Distinguish inherited values from explicitly persisted defaults and specify reset semantics for legacy fields.
+4. Refresh effective project settings after global changes; make stale/concurrent save behavior explicit; surface when a change applies to the next job rather than the active job.
+5. Harmonize creation defaults across web/desktop/CLI and provide supported UI/API access for intended procedural controls. Maintain real native and frozen-backend regression coverage.
+
+No product behavior is changed by these artifacts. Final measured findings, statuses, limitations, and recommendations belong in the coordinator's `settings-e2e-audit.md`.

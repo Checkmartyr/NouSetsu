@@ -1,0 +1,29 @@
+{
+  "env_file_path": "C:\\Users\\Asus\\AppData\\Local\\Packages\\OpenAI.Codex_2p2nqsd0c76g0\\LocalCache\\Roaming\\com.nousetsu.settingsaudit\\.env",
+  "config_path": "D:\\Code\\novel_translation_Agent\\src-tauri\\target\\settings-audit\\native-release\\projects\\Native A\\.novel\\config.yaml",
+  "env_sha256_before_restart": "ce50388807bd3166c5098c435792af874664a6926964d9d1a63dd0c1c669f776",
+  "config_sha256_before_restart": "bdfcd290966800c8b428ed44d297ca8016dea0312e191a2e03dec4c87c7cb9d0",
+  "env_sha256_after_restart": "ce50388807bd3166c5098c435792af874664a6926964d9d1a63dd0c1c669f776",
+  "config_sha256_after_restart": "bdfcd290966800c8b428ed44d297ca8016dea0312e191a2e03dec4c87c7cb9d0",
+  "observations": [
+    {
+      "case": "Packaged app restart preserves settings bytes and selected storage",
+      "status": "pass",
+      "setting_ids": []
+    },
+    {
+      "case": "Missing audit .env seeded byte-for-byte from bundled template",
+      "setting_ids": [],
+      "status": "pass"
+    },
+    {
+      "case": "Install directories blocked by owned regular files fall back to app data",
+      "setting_ids": [
+        "env.NOVEL_PROJECTS_DIR"
+      ],
+      "status": "pass",
+      "actual": "C:\\Users\\Asus\\AppData\\Local\\Packages\\OpenAI.Codex_2p2nqsd0c76g0\\LocalCache\\Roaming\\com.nousetsu.settingsaudit\\project",
+      "limitation": "Filesystem creation failure tested; OS ACL/permission denial not simulated"
+    }
+  ]
+}

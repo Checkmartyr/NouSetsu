@@ -1,0 +1,991 @@
+{
+  "scope": "source-backend-TestClient-and-offline-runtime",
+  "product_changes": false,
+  "tests": {
+    "total": 145,
+    "new_diagnostics": 93,
+    "existing_runtime_and_settings": 52,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "elapsed_seconds": 73.01
+  },
+  "evidence": [
+    "tests/test_settings_audit.py",
+    "audit-results/settings/backend-source-junit.xml",
+    "audit-results/settings/backend-findings.md",
+    "audit-results/settings/backend-source-supplement-junit.xml",
+    "audit-results/settings/backend-source-lifecycle-junit.xml",
+    "audit-results/settings/backend-source-readonly-junit.xml"
+  ],
+  "transport": "MockNovelLLM; five source get_llm factory spies with custom routes; ChatGoogle constructor spies for primary/fallback; Gemini Interactions adapter request capture via injected client; no real provider calls",
+  "covered_environment_fields": "all ENV_CONFIG_KEYS and ENV_SECRET_KEYS; roundtrip, clear, malformed payload and partial save",
+  "covered_project_fields": [
+    "title",
+    "genre",
+    "source_language",
+    "target_language",
+    "project_id",
+    "raw_dir",
+    "output_dir",
+    "translated_dir",
+    "model_name",
+    "fallback_model",
+    "extractor_model",
+    "drafter_model",
+    "critic_model",
+    "polisher_model",
+    "chronicler_model",
+    "scraper_model",
+    "generation_settings",
+    "use_interactions_api",
+    "auto_update_bible",
+    "max_tpm",
+    "max_rpm",
+    "cross_folder_summaries",
+    "safety_recursive_subdivision",
+    "safety_subdivision_min_lines",
+    "safety_subdivision_max_depth",
+    "max_review_loops",
+    "quality_threshold",
+    "enable_chunking",
+    "chunk_threshold_lines",
+    "target_chunk_lines",
+    "chunk_size_lines",
+    "chunk_overlap_lines",
+    "enable_rag",
+    "rag_top_k",
+    "rag_embedding_model",
+    "enable_rag_reranker",
+    "rag_reranker_model",
+    "filter_scene_characters",
+    "filter_extractor_entities",
+    "enable_patch_polishing",
+    "enable_post_polish_reconciliation"
+  ],
+  "ignored_schema_fields": [
+    "enable_procedural_graph_learning",
+    "procedural_learning_cadence",
+    "procedural_learning_interval",
+    "procedural_learning_min_failures",
+    "procedural_refiner_model",
+    "created_at"
+  ],
+  "confirmed_findings": [
+    {
+      "id": "B01",
+      "priority": "P1",
+      "fields": [
+        "max_review_loops",
+        "quality_threshold",
+        "rag_top_k"
+      ],
+      "result": "fail",
+      "defect": "Invalid constrained project values accepted; next load silently defaults entire config"
+    },
+    {
+      "id": "B02",
+      "priority": "P1",
+      "fields": [
+        "NOVEL_MAX_REVIEW_LOOPS"
+      ],
+      "result": "fail",
+      "defect": "Malformed global numeric accepted then runner fails"
+    },
+    {
+      "id": "B03",
+      "priority": "P1",
+      "fields": [
+        "max_review_loops",
+        "quality_threshold",
+        "max_tpm",
+        "max_rpm"
+      ],
+      "result": "fail",
+      "defect": "Environment takes precedence over displayed project values"
+    },
+    {
+      "id": "B04",
+      "priority": "P2",
+      "fields": [
+        "enable_post_polish_reconciliation",
+        "NOVEL_POST_POLISH_RECONCILIATION"
+      ],
+      "result": "fail",
+      "defect": "Concrete project default masks environment false"
+    },
+    {
+      "id": "B05",
+      "priority": "P1",
+      "fields": [
+        "all environment-derived model/generation values"
+      ],
+      "result": "fail",
+      "defect": "Process-global project dotenv leakage and central-first precedence"
+    },
+    {
+      "id": "B06",
+      "priority": "P2",
+      "fields": [
+        "NOUSETSU_ENV_FILE",
+        "NOVEL_MODEL"
+      ],
+      "result": "fail",
+      "defect": "Configured env path skips project dotenv; external edits are stale in process"
+    },
+    {
+      "id": "B07",
+      "priority": "P2",
+      "fields": [
+        "all project Boolean fields"
+      ],
+      "result": "fail",
+      "defect": "String false coerced to true"
+    },
+    {
+      "id": "B08",
+      "priority": "P2",
+      "fields": [
+        "use_interactions_api"
+      ],
+      "result": "fail",
+      "defect": "Null cannot restore legacy Interactions inheritance"
+    },
+    {
+      "id": "B09",
+      "priority": "P1",
+      "fields": [
+        "filter_scene_characters"
+      ],
+      "result": "fail",
+      "defect": "Saved toggle has no runtime consumer; drafting still filters"
+    },
+    {
+      "id": "B10",
+      "priority": "P1",
+      "fields": [
+        "cross_folder_summaries"
+      ],
+      "result": "fail",
+      "defect": "Config false not synced to Bible; runtime still backfills"
+    },
+    {
+      "id": "B11",
+      "priority": "P2",
+      "fields": [
+        "chunk_overlap_lines"
+      ],
+      "result": "fail",
+      "defect": "Configured zero ignored by draft context; constructor zero falls back"
+    },
+    {
+      "id": "B12",
+      "priority": "P2",
+      "fields": [
+        "title",
+        "genre",
+        "source_language",
+        "target_language"
+      ],
+      "result": "fail",
+      "defect": "Bible persistence failure ignored after config save"
+    },
+    {
+      "id": "B13",
+      "priority": "P2",
+      "fields": [
+        "all global settings"
+      ],
+      "result": "fail",
+      "defect": "Multi-key save can leave partial disk write and stale process"
+    },
+    {
+      "id": "B14",
+      "priority": "P2",
+      "fields": [
+        "all project settings"
+      ],
+      "result": "fail",
+      "defect": "Stale full-form save overwrites newer changes"
+    },
+    {
+      "id": "B15",
+      "priority": "P2",
+      "fields": [
+        "procedural learning fields"
+      ],
+      "result": "fail",
+      "defect": "Unsupported fields silently ignored with success response"
+    },
+    {
+      "id": "B16",
+      "priority": "P2",
+      "fields": [
+        "SOURCE_LANG",
+        "TARGET_LANG"
+      ],
+      "result": "fail",
+      "defect": "Saved language defaults ignored by web project creation"
+    },
+    {
+      "id": "B17",
+      "priority": "P2",
+      "fields": [
+        "thinking_budget",
+        "use_interactions_api"
+      ],
+      "result": "fail",
+      "defect": "Gemini Interactions outgoing payload omits saved thinking budget; ChatGoogle preserves zero budget"
+    }
+  ],
+  "tests_executed": [
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_valid_project_field_persists_and_isolates_other_project[title-Changed title]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_valid_project_field_persists_and_isolates_other_project[genre-romance]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_valid_project_field_persists_and_isolates_other_project[source_language-Chinese]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_valid_project_field_persists_and_isolates_other_project[target_language-Thai]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_valid_project_field_persists_and_isolates_other_project[project_id-audit-id]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_valid_project_field_persists_and_isolates_other_project[raw_dir-\\u539f\\u7a3f with spaces]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_valid_project_field_persists_and_isolates_other_project[output_dir-translated with spaces]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_valid_project_field_persists_and_isolates_other_project[model_name-test-shared]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_valid_project_field_persists_and_isolates_other_project[fallback_model-test-fallback]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_valid_project_field_persists_and_isolates_other_project[extractor_model-test-extractor]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_valid_project_field_persists_and_isolates_other_project[drafter_model-test-drafter]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_valid_project_field_persists_and_isolates_other_project[critic_model-test-critic]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_valid_project_field_persists_and_isolates_other_project[polisher_model-test-polisher]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_valid_project_field_persists_and_isolates_other_project[chronicler_model-test-chronicler]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_valid_project_field_persists_and_isolates_other_project[scraper_model-test-scraper]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_valid_project_field_persists_and_isolates_other_project[use_interactions_api-False]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_valid_project_field_persists_and_isolates_other_project[auto_update_bible-False]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_valid_project_field_persists_and_isolates_other_project[max_tpm-12345]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_valid_project_field_persists_and_isolates_other_project[max_rpm-45]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_valid_project_field_persists_and_isolates_other_project[cross_folder_summaries-False]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_valid_project_field_persists_and_isolates_other_project[safety_recursive_subdivision-False]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_valid_project_field_persists_and_isolates_other_project[safety_subdivision_min_lines-5]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_valid_project_field_persists_and_isolates_other_project[safety_subdivision_max_depth-2]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_valid_project_field_persists_and_isolates_other_project[max_review_loops-2]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_valid_project_field_persists_and_isolates_other_project[quality_threshold-9.0]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_valid_project_field_persists_and_isolates_other_project[enable_chunking-False]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_valid_project_field_persists_and_isolates_other_project[chunk_threshold_lines-20]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_valid_project_field_persists_and_isolates_other_project[target_chunk_lines-10]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_valid_project_field_persists_and_isolates_other_project[chunk_overlap_lines-0]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_valid_project_field_persists_and_isolates_other_project[enable_rag-False]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_valid_project_field_persists_and_isolates_other_project[rag_top_k-4]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_valid_project_field_persists_and_isolates_other_project[rag_embedding_model-test-embedding]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_valid_project_field_persists_and_isolates_other_project[enable_rag_reranker-False]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_valid_project_field_persists_and_isolates_other_project[rag_reranker_model-test-reranker]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_valid_project_field_persists_and_isolates_other_project[filter_scene_characters-False]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_valid_project_field_persists_and_isolates_other_project[filter_extractor_entities-False]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_valid_project_field_persists_and_isolates_other_project[enable_patch_polishing-False]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_valid_project_field_persists_and_isolates_other_project[enable_post_polish_reconciliation-False]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_observed_invalid_constrained_values_poison_entire_config[max_review_loops-0]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_observed_invalid_constrained_values_poison_entire_config[quality_threshold-11]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_observed_invalid_constrained_values_poison_entire_config[rag_top_k-0]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_observed_project_string_false_becomes_true[use_interactions_api]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_observed_project_string_false_becomes_true[auto_update_bible]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_observed_project_string_false_becomes_true[cross_folder_summaries]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_observed_project_string_false_becomes_true[safety_recursive_subdivision]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_observed_project_string_false_becomes_true[enable_chunking]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_observed_project_string_false_becomes_true[enable_rag]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_observed_project_string_false_becomes_true[enable_rag_reranker]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_observed_project_string_false_becomes_true[filter_scene_characters]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_observed_project_string_false_becomes_true[filter_extractor_entities]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_observed_project_string_false_becomes_true[enable_patch_polishing]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_observed_project_string_false_becomes_true[enable_post_polish_reconciliation]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_malformed_project_number_rejected_without_disk_change[max_review_loops]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_malformed_project_number_rejected_without_disk_change[quality_threshold]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_malformed_project_number_rejected_without_disk_change[rag_top_k]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_malformed_project_number_rejected_without_disk_change[max_tpm]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_generation_settings_all_roles_validation_zero_false_and_clear",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_model_clear_and_extractor_nullable_inheritance[None]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_model_clear_and_extractor_nullable_inheritance[]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_model_clear_and_extractor_nullable_inheritance[   ]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_observed_legacy_interactions_null_cannot_restore_inheritance",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_observed_unsupported_schema_fields_ignored",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_alias_and_nested_payload_precedence",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_observed_config_bible_sync_failure_still_returns_success",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_failed_config_save_returns_error_without_changing_bible",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_observed_full_form_stale_save_overwrites_other_editor",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_observed_cross_folder_config_does_not_update_runtime_bible",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_observed_review_quota_env_precedes_project_but_constructor_wins",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_observed_reconciliation_default_masks_environment",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_boolean_overrides_and_observed_numeric_zero_constructor_fallback",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_observed_runner_snapshot_changes_only_for_new_runner",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_source_provider_factory_spies_record_real_resolution_without_live_calls",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_observed_disabled_scene_filter_still_filters_actual_draft",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_saved_chunk_boundary_rag_and_safety_controls_reach_runtime",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_saved_review_threshold_requires_both_scores[9-9-chronicle]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_saved_review_threshold_requires_both_scores[9-8-polish]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_saved_review_threshold_requires_both_scores[8-9-polish]",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_observed_chunk_overlap_zero_still_supplies_three_draft_context_lines",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_observed_unvalidated_global_numeric_reaches_runner_failure",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_environment_all_keys_roundtrip_clear_and_secret_preservation",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_environment_rejects_bad_payload_before_any_write",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_observed_environment_write_failure_partially_updates_disk",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_observed_dotenv_first_loaded_wins_and_leaks_between_projects",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_explicit_environment_path_skips_project_dotenv",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_observed_external_dotenv_edits_show_new_saved_value_but_old_effective_value",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_review_loop",
+      "name": "test_default_review_loop_early_exit",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_review_loop",
+      "name": "test_multi_pass_review_loop_until_threshold_met",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_review_loop",
+      "name": "test_max_review_loops_cap",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_review_loop",
+      "name": "test_best_candidate_regression_guard",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_review_loop",
+      "name": "test_stop_event_during_review_loop",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_review_loop",
+      "name": "test_batch_runner_review_loop_config",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_stop",
+      "name": "test_batch_runner_stop_between_chapters",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_stop",
+      "name": "test_batch_runner_stop_mid_chapter_and_resume",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_chunker",
+      "name": "test_should_chunk_threshold",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_chunker",
+      "name": "test_split_lines_single_chunk_when_below_threshold",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_chunker",
+      "name": "test_split_lines_splits_and_preserves_content",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_chunker",
+      "name": "test_split_prefers_scene_breaks",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_chunker",
+      "name": "test_extract_tail_lines",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_chunker",
+      "name": "test_quote_safety_does_not_split_inside_open_quotes",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_drafter_chunking",
+      "name": "test_drafter_draft_chunked_accumulates_tokens_and_joins_output",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_extractor_filtering",
+      "name": "test_extractor_filtering_enabled",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_extractor_filtering",
+      "name": "test_extractor_filtering_disabled",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_extractor_filtering",
+      "name": "test_extractor_filtering_no_truncation",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_extractor_filtering",
+      "name": "test_extractor_filtering_empty_fallback",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_extractor_filtering",
+      "name": "test_config_cascade_extractor_filter",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_extractor_filtering",
+      "name": "test_workflow_and_runner_filter_wiring",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_extractor_filtering",
+      "name": "test_extractor_deduplicates_known_sub_names",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_entity_reconciliation",
+      "name": "test_chronicler_result_reconciled_entities_flat_and_nested",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_entity_reconciliation",
+      "name": "test_chronicler_agent_injects_provisional_entities",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_entity_reconciliation",
+      "name": "test_chronicler_agent_injects_active_characters",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_entity_reconciliation",
+      "name": "test_chronicler_agent_assemble_metadata_preserves_reconciled",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_entity_reconciliation",
+      "name": "test_workflow_reconciliation_integration",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_entity_reconciliation",
+      "name": "test_batch_runner_commits_reconciled_entities",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_entity_reconciliation",
+      "name": "test_config_post_polish_reconciliation_cascade",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_entity_reconciliation",
+      "name": "test_update_bible_memory_merges_pronouns_and_relational",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_entity_reconciliation",
+      "name": "test_update_bible_memory_preserves_cjk_original_name_against_latin_overwrite",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_entity_reconciliation",
+      "name": "test_update_bible_memory_upgrades_latin_to_cjk_original_name",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_entity_reconciliation",
+      "name": "test_update_bible_memory_preserves_and_upgrades_glossary_source_script",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_entity_reconciliation",
+      "name": "test_update_bible_memory_does_not_merge_family_members_or_opposite_genders",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_rag_integration",
+      "name": "test_workflow_rag_indexing_and_retrieval",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_rag_integration",
+      "name": "test_batch_runner_rag_engine_wiring",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_rag_integration",
+      "name": "test_cli_lore_search_execution",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_generation_settings",
+      "name": "test_project_generation_overrides_are_independent_and_inherit_environment",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_generation_settings",
+      "name": "test_generation_defaults_keep_existing_agent_defaults",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_generation_settings",
+      "name": "test_batch_runner_passes_independent_generation_settings_to_agents",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_generation_settings",
+      "name": "test_project_model_routes_resolve_per_role_and_scraper",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_environment_settings_updates",
+      "name": "test_desktop_projects_default_uses_install_project_path",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_environment_settings_updates",
+      "name": "test_desktop_projects_default_overrides_template_placeholder_in_env",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_environment_settings_updates",
+      "name": "test_dotenv_projects_path_overrides_desktop_default",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_environment_settings_updates",
+      "name": "test_environment_endpoint_saves_allowlisted_values_without_returning_secrets",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_environment_settings_updates",
+      "name": "test_model_catalog_endpoint_is_local_and_never_returns_keys",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_environment_settings_updates",
+      "name": "test_custom_model_catalog_uses_saved_base_url_and_never_returns_key",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_environment_settings_updates",
+      "name": "test_custom_model_catalog_rejects_invalid_base_url",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_environment_settings_updates",
+      "name": "test_environment_endpoint_rejects_nonlocal_browser_origins",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_environment_settings_updates",
+      "name": "test_environment_endpoint_rejects_unapproved_keys",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_environment_settings_updates",
+      "name": "test_github_release_endpoint_compares_tags_and_returns_downloads",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_environment_settings_updates",
+      "name": "test_release_version_comparison_handles_prereleases",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_observed_web_creation_ignores_saved_default_languages",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_google_transport_spy_disabled_interactions_and_zero_budget",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_observed_interactions_payload_omits_configured_budget",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_fallback_transfers_controls_and_uses_secondary_on_primary_error",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_settings_during_real_source_job_affect_subsequent_job_only",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_clean_process_restart_reads_external_defaults_change",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_windows_readonly_environment_file_refuses_save_without_state_drift",
+      "status": "pass"
+    },
+    {
+      "module": "tests.test_settings_audit",
+      "name": "test_observed_inherited_extractor_false_get_exposes_raw_null",
+      "status": "pass"
+    }
+  ],
+  "limitations": [
+    "No native or frozen-sidecar evidence in this component",
+    "Factory-boundary spies prove source argument selection, not remote provider support",
+    "Mock routing can mask RAG embedding/reranker selection; parent audits sidecar provider transport"
+  ],
+  "additional_observations": [
+    {
+      "case": "actual_windows_readonly_env",
+      "status": "pass",
+      "http_status": 500,
+      "disk_unchanged": true,
+      "process_unchanged": true,
+      "isolation": "temporary file read-only bit only; restored in finally"
+    },
+    {
+      "case": "inherited_extractor_false",
+      "raw_project_value": null,
+      "raw_nested_config_value": null,
+      "env_value": "false",
+      "resolved_runtime_value": false,
+      "ui_status": "covered separately by browser audit"
+    }
+  ]
+}

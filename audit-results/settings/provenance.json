@@ -1,0 +1,53 @@
+{
+  "source_commit": "81d4691ac5bc046b14b99d8eea45a51fff333fdb",
+  "workspace": "D:\\Code\\novel_translation_Agent\\src-tauri\\target\\settings-audit\\workspace",
+  "audit_identifier": "com.nousetsu.settingsaudit",
+  "existing_artifacts": {
+    "src-tauri/target/release/nousetsu-desktop.exe": {
+      "sha256": "3a3d8b75a39d0a44f731cd5ddddf630fd3a7e180758af34d69b38466c78931df",
+      "size": 15444992,
+      "mtime": 1791197716.721218,
+      "source_identity": "unverified existing artifact"
+    },
+    "src-tauri/binaries/nousetsu-backend/nousetsu-backend.exe": {
+      "sha256": "efc96e559a3f4a1447683a88d3cb2aa12accc28d46160192701c08bae34ee7c1",
+      "size": 28485068,
+      "mtime": 1791197472.740047,
+      "source_identity": "unverified existing artifact"
+    },
+    "web/dist/index.html": {
+      "sha256": "ce18499d1529fb64f3891a0277e535938c6b1f51ce5b38e585588850cb7d4abe",
+      "size": 1865,
+      "mtime": 1791790014.7234027,
+      "source_identity": "unverified existing artifact"
+    }
+  },
+  "current_source_commit": "81d4691ac5bc046b14b99d8eea45a51fff333fdb",
+  "audit_builds": {
+    "web/dist/index.html": {
+      "sha256": "d6d316c19de788f284912ea5e18bcf406a3f3169d581777ac51469b76e55f409",
+      "size": 1865,
+      "mtime": 1791793291.721419,
+      "source_identity": "audit snapshot at source_commit"
+    },
+    "src-tauri/binaries/nousetsu-backend/nousetsu-backend.exe": {
+      "sha256": "b0ad36d4b2d57e9a8915a6bda4457161e80e21d2cb4fda9a9fcfbec8cf6f6ef6",
+      "size": 28485068,
+      "mtime": 1791793983.4286678,
+      "source_identity": "audit snapshot at source_commit"
+    },
+    "src-tauri/target/debug/nousetsu-desktop.exe": {
+      "sha256": "f373c75325bff5947d2997de8d8012aa208adbe4fc3ebff9d91efe5f4be3521c",
+      "size": 24996352,
+      "mtime": 1791793856.9485838,
+      "source_identity": "audit snapshot at source_commit"
+    },
+    "src-tauri/target/release/nousetsu-desktop.exe": {
+      "sha256": "2894d2b8e4799488206cbe6db9c19bc1977db01b20b37207816476e1aa339296",
+      "size": 15071232,
+      "mtime": 1791794437.27459,
+      "source_identity": "audit snapshot at source_commit"
+    }
+  },
+  "snapshot_source_differences": []
+}
