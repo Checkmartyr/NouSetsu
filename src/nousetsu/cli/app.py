@@ -29,9 +29,8 @@ from nousetsu.ebook import (
 )
 from nousetsu.tui.app import NovelAgentApp
 
-from nousetsu.utils.env import load_env
+from nousetsu.utils.env import resolve_env
 
-load_env()
 
 if sys.platform == "win32":
     try:
@@ -47,8 +46,8 @@ def cmd_init(args: argparse.Namespace) -> None:
     project_dir = getattr(args, "project_dir", None)
     target_path = resolve_project_dir(project_dir, for_creation=True, title=args.title)
     repo = NovelRepository(target_path)
-    source_lang = args.source_lang or os.environ.get("SOURCE_LANG", "auto")
-    target_lang = args.target_lang or os.environ.get("TARGET_LANG", "English")
+    source_lang = args.source_lang or resolve_env().get("SOURCE_LANG", "auto")
+    target_lang = args.target_lang or resolve_env().get("TARGET_LANG", "English")
     bible = repo.initialize_project(
         title=args.title,
         source_lang=source_lang,
@@ -75,11 +74,6 @@ def cmd_batch(args: argparse.Namespace) -> None:
     project_dir = getattr(args, "project_dir", None)
     repo = NovelRepository(resolve_project_dir(project_dir))
     cfg = repo.load_config()
-    if getattr(args, "interactions", None) is not None:
-        os.environ["NOVEL_USE_INTERACTIONS"] = "1" if args.interactions else "0"
-    elif cfg.use_interactions_api is not None:
-        os.environ["NOVEL_USE_INTERACTIONS"] = "1" if cfg.use_interactions_api else "0"
-
     if args.source_lang or args.target_lang:
         src_lang = args.source_lang
         if src_lang and src_lang.lower() in ["auto", "autodetect", "detect"]:
@@ -96,6 +90,7 @@ def cmd_batch(args: argparse.Namespace) -> None:
         polisher_model=getattr(args, "polisher_model", None),
         chronicler_model=getattr(args, "chronicler_model", None),
         auto_update_bible=getattr(args, "auto_update_bible", None),
+        use_interactions_api=getattr(args, "interactions", None),
         max_tpm=getattr(args, "max_tpm", None),
         max_rpm=getattr(args, "max_rpm", None),
         max_review_loops=getattr(args, "max_loops", None),
@@ -379,7 +374,7 @@ def cmd_learn_graph(args: argparse.Namespace) -> None:
     agent_target = (getattr(args, "agent", None) or "all").lower()
     max_traces = getattr(args, "max_traces", 20) or 20
     dry_run = getattr(args, "dry_run", False)
-    model_name = getattr(args, "model", None) or os.environ.get("NOVEL_FALLBACK_MODEL") or "gemini-3.5-flash-lite"
+    model_name = getattr(args, "model", None) or resolve_env().get("NOVEL_FALLBACK_MODEL") or "gemini-3.5-flash-lite"
 
     mode_label = "[yellow]Dry Run Preview[/]" if dry_run else "[bold green]Offline Graph Self-Evolution[/]"
     console.print(f"\n{mode_label} for project at [bold]{repo.root_dir}[/] (Model: [cyan]{model_name}[/])...\n")
@@ -449,7 +444,7 @@ def cmd_learn_graph(args: argparse.Namespace) -> None:
         return
 
     rejection_path = repo.novel_dir / "rejection_memory.json"
-    refiner = ProceduralGraphRefiner(model_name=model_name, rejection_memory_path=rejection_path)
+    refiner = ProceduralGraphRefiner(model_name=model_name, rejection_memory_path=rejection_path, environ=resolve_env(repo.root_dir))
 
     for agent_key, agent_title, stage_traces, current_graph in agents_to_evolve:
         console.print(f"\n[bold cyan]Evolving Procedural Graph for {agent_title} ({current_graph.graph_id})...[/]")
@@ -988,7 +983,7 @@ def cmd_web(args: argparse.Namespace) -> None:
     from nousetsu.cli.web_server import NousetsuWebHandler, run_web_server
 
     port = getattr(args, "port", 5173) or 5173
-    host = getattr(args, "host", None) or os.environ.get("HOST", "127.0.0.1")
+    host = getattr(args, "host", None) or resolve_env().get("HOST", "127.0.0.1")
     open_browser = getattr(args, "open_browser", True)
     if open_browser is None:
         open_browser = True
@@ -1188,8 +1183,8 @@ def main() -> None:
     parser.add_argument("--version", "-v", action="version", version=f"nousetsu {__version__}")
     subparsers = parser.add_subparsers(dest="command", help="Available subcommands")
 
-    default_src = os.environ.get("SOURCE_LANG", "English")
-    default_tgt = os.environ.get("TARGET_LANG", "Thai")
+    default_src = resolve_env().get("SOURCE_LANG", "English")
+    default_tgt = resolve_env().get("TARGET_LANG", "Thai")
 
     # init
     p_init = subparsers.add_parser("init", help="Initialize novel project and Novel Bible")
@@ -1322,7 +1317,7 @@ def main() -> None:
     p_web.add_argument("--project-dir", "-P", default=None, help="Folder or name of novel project (resolves in NOVEL_PROJECTS_DIR or current directory)")
     p_web.add_argument("--folder", "-F", default=None, help="Specific volume folder to focus on")
     p_web.add_argument("--port", "-p", type=int, default=5173, help="Port to run visualizer server on (default: 5173)")
-    p_web.add_argument("--host", "-H", default=os.environ.get("HOST", "127.0.0.1"), help="Host IP to bind to (default: 127.0.0.1 or HOST env var)")
+    p_web.add_argument("--host", "-H", default=resolve_env().get("HOST", "127.0.0.1"), help="Host IP to bind to (default: 127.0.0.1 or HOST env var)")
     p_web.add_argument("--open-browser", action=argparse.BooleanOptionalAction, default=True, help="Automatically open visualizer in browser (default: True)")
     p_web.add_argument("--dev", action="store_true", help="Run with live Vite dev server instead of production dist")
     p_web.add_argument("--build", action="store_true", help="Rebuild frontend assets before launching")

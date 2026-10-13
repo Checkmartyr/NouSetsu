@@ -70,24 +70,31 @@ class NovelTranslationWorkflow:
         filter_extractor_entities: bool = True,
         enable_post_polish_reconciliation: bool = True,
         generation_settings: Optional[Dict[str, Dict[str, Any]]] = None,
+        environ=None,
+        filter_scene_characters: bool = True,
+        cross_folder_summaries: bool = True,
     ):
+        from nousetsu.utils.env import resolve_env
+        self.environ = resolve_env() if environ is None else environ
+        self.filter_scene_characters = filter_scene_characters
+        self.cross_folder_summaries = cross_folder_summaries
         self.traces_dir = traces_dir
         self.prompt_tracker = prompt_tracker
         self.enable_patch_polishing = enable_patch_polishing
         self.filter_extractor_entities = filter_extractor_entities
         self.enable_post_polish_reconciliation = enable_post_polish_reconciliation
         self.generation_settings = generation_settings or {}
-        effective_model = model_name or os.environ.get("NOVEL_MODEL") or os.environ.get("DEFAULT_MODEL") or "gemini-3.1-flash-lite"
+        effective_model = model_name or self.environ.get("NOVEL_MODEL") or self.environ.get("DEFAULT_MODEL") or "gemini-3.1-flash-lite"
         self.model_name = effective_model
         is_mock = effective_model.startswith("mock") or effective_model.startswith("test")
         default_agent = effective_model if is_mock else None
 
-        self.fallback_model = fallback_model or default_agent or os.environ.get("NOVEL_FALLBACK_MODEL") or "gemini-3.5-flash-lite"
-        self.extractor_model = extractor_model or default_agent or os.environ.get("NOVEL_EXTRACTOR_MODEL") or "gemini-3.1-flash-lite"
-        self.drafter_model = drafter_model or default_agent or os.environ.get("NOVEL_DRAFTER_MODEL") or "gemini-3.5-flash-lite"
-        self.critic_model = critic_model or default_agent or os.environ.get("NOVEL_CRITIC_MODEL") or "gemma-4-26b-a4b-it"
-        self.polisher_model = polisher_model or default_agent or os.environ.get("NOVEL_POLISHER_MODEL") or "gemini-3.5-flash-lite"
-        self.chronicler_model = chronicler_model or default_agent or os.environ.get("NOVEL_CHRONICLER_MODEL") or "gemma-4-26b-a4b-it"
+        self.fallback_model = fallback_model or default_agent or self.environ.get("NOVEL_FALLBACK_MODEL") or "gemini-3.5-flash-lite"
+        self.extractor_model = extractor_model or default_agent or self.environ.get("NOVEL_EXTRACTOR_MODEL") or "gemini-3.1-flash-lite"
+        self.drafter_model = drafter_model or default_agent or self.environ.get("NOVEL_DRAFTER_MODEL") or "gemini-3.5-flash-lite"
+        self.critic_model = critic_model or default_agent or self.environ.get("NOVEL_CRITIC_MODEL") or "gemma-4-26b-a4b-it"
+        self.polisher_model = polisher_model or default_agent or self.environ.get("NOVEL_POLISHER_MODEL") or "gemini-3.5-flash-lite"
+        self.chronicler_model = chronicler_model or default_agent or self.environ.get("NOVEL_CHRONICLER_MODEL") or "gemma-4-26b-a4b-it"
 
         self.rate_limiter = rate_limiter or SlidingWindowRateLimiter()
         self.max_review_loops = max_review_loops
@@ -108,6 +115,9 @@ class NovelTranslationWorkflow:
         self.current_stage: PipelineStage = PipelineStage.NONE
         self.extractor = EntityExtractorAgent(
             model_name=self.extractor_model,
+            environ=self.environ,
+            filter_scene_characters=self.filter_scene_characters,
+            chunk_overlap_lines=chunk_overlap_lines,
             fallback_model=self.fallback_model,
             procedural_graph=extractor_pg,
             chunker=self.chunker,
@@ -119,6 +129,9 @@ class NovelTranslationWorkflow:
         )
         self.drafter = ContextAwareDrafterAgent(
             model_name=self.drafter_model,
+            environ=self.environ,
+            filter_scene_characters=self.filter_scene_characters,
+            chunk_overlap_lines=chunk_overlap_lines,
             fallback_model=self.fallback_model,
             procedural_graph=drafter_pg,
             enable_recursive_subdivision=self.safety_recursive_subdivision,
@@ -128,6 +141,9 @@ class NovelTranslationWorkflow:
         )
         self.critic = CritiqueAgent(
             model_name=self.critic_model,
+            environ=self.environ,
+            filter_scene_characters=self.filter_scene_characters,
+            chunk_overlap_lines=chunk_overlap_lines,
             fallback_model=self.fallback_model,
             procedural_graph=critic_pg,
             chunker=self.chunker,
@@ -138,6 +154,9 @@ class NovelTranslationWorkflow:
         )
         self.polisher = PolishingAgent(
             model_name=self.polisher_model,
+            environ=self.environ,
+            filter_scene_characters=self.filter_scene_characters,
+            chunk_overlap_lines=chunk_overlap_lines,
             fallback_model=self.fallback_model,
             procedural_graph=polisher_pg,
             enable_recursive_subdivision=self.safety_recursive_subdivision,
@@ -148,6 +167,9 @@ class NovelTranslationWorkflow:
         self.drafter.polisher = self.polisher
         self.chronicler = ChroniclerAgent(
             model_name=self.chronicler_model,
+            environ=self.environ,
+            filter_scene_characters=self.filter_scene_characters,
+            chunk_overlap_lines=chunk_overlap_lines,
             fallback_model=self.fallback_model,
             procedural_graph=chronicler_pg,
             **self.generation_settings.get("chronicler", {}),
@@ -160,14 +182,14 @@ class NovelTranslationWorkflow:
         if self.enable_rag and embedding_client is None and self.rag_engine is not None:
             from nousetsu.rag.embeddings import EmbeddingClient
             emb_model = "mock-embedding" if is_mock else rag_embedding_model
-            self.embedding_client = EmbeddingClient(model_name=emb_model)
+            self.embedding_client = EmbeddingClient(model_name=emb_model, environ=self.environ)
         else:
             self.embedding_client = embedding_client
 
         if self.enable_rag and self.enable_rag_reranker and reranker is None and self.rag_engine is not None:
             from nousetsu.rag.reranker import get_reranker
             rerank_model = "mock-reranker" if is_mock else rag_reranker_model
-            self.reranker = get_reranker(model_name=rerank_model, is_mock=is_mock)
+            self.reranker = get_reranker(model_name=rerank_model, is_mock=is_mock, environ=self.environ)
         else:
             self.reranker = reranker
 
@@ -421,7 +443,7 @@ class NovelTranslationWorkflow:
             est_draft = int(estimate_tokens(state.source_text) * 1.5) + 2000
 
         current_folder = Path(state.source_file).parent.name if state.source_file else None
-        cross_folder = getattr(state.novel_bible, "cross_folder_summaries", True)
+        cross_folder = self.cross_folder_summaries
         if hasattr(state.novel_bible, "get_rolling_context"):
             active_summaries = state.novel_bible.get_rolling_context(
                 folder=current_folder,
@@ -1083,7 +1105,7 @@ class NovelTranslationWorkflow:
 
     def _build_drafter_rag_query(self, state: TranslationState) -> str:
         """Construct targeted bilingual query for Drafter episodic lore and TM consistency."""
-        scene_chars = filter_characters_for_scene(state.active_characters, source_text=state.source_text)
+        scene_chars = filter_characters_for_scene(state.active_characters, source_text=state.source_text) if self.filter_scene_characters else state.active_characters
         char_tokens = []
         for c in scene_chars[:4]:
             char_tokens.append(c.name)
@@ -1142,7 +1164,7 @@ class NovelTranslationWorkflow:
             state.active_characters,
             source_text=state.source_text,
             target_text=final_text
-        )
+        ) if self.filter_scene_characters else state.active_characters
         char_names = " ".join([c.name for c in scene_chars[:4]])
 
         # Extract chapter resolution/climax from the final lines of the chapter

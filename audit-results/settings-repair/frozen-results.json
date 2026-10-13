@@ -1,0 +1,1987 @@
+[
+  {
+    "case": "isolated_environment",
+    "status": "pass",
+    "path": "D:\\Code\\novel_translation_Agent\\src-tauri\\target\\settings-repair\\frozen-5191-3if0we9r\\.env",
+    "binary_sha256": "cf22250c6c34f42ab993f79c75894d0c7e62bc794d08b459af6532ac0b5ad554"
+  },
+  {
+    "case": "project_creation_explicit",
+    "setting_id": "creation.title",
+    "status": "pass",
+    "actual": "Creation 日本語",
+    "expected": "Creation 日本語"
+  },
+  {
+    "case": "project_creation_explicit",
+    "setting_id": "creation.folder_name",
+    "status": "pass",
+    "actual": "creation space",
+    "expected": "creation space"
+  },
+  {
+    "case": "project_creation_explicit",
+    "setting_id": "creation.source_language",
+    "status": "pass",
+    "actual": "Korean",
+    "expected": "Korean"
+  },
+  {
+    "case": "project_creation_explicit",
+    "setting_id": "creation.target_language",
+    "status": "pass",
+    "actual": "English",
+    "expected": "English"
+  },
+  {
+    "case": "project_creation_explicit",
+    "setting_id": "creation.genre",
+    "status": "pass",
+    "actual": "romance",
+    "expected": "romance"
+  },
+  {
+    "case": "project_creation_explicit",
+    "setting_id": "creation.model",
+    "status": "pass",
+    "actual": "mock-audit-created",
+    "expected": "mock-audit-created"
+  },
+  {
+    "case": "project_creation_inherited",
+    "setting_id": "creation.source_language",
+    "status": "pass",
+    "actual": "Chinese",
+    "expected": "Chinese"
+  },
+  {
+    "case": "project_creation_inherited",
+    "setting_id": "creation.target_language",
+    "status": "pass",
+    "actual": "French",
+    "expected": "French"
+  },
+  {
+    "case": "isolated_logs_diagnostics",
+    "setting_id": "action.logs_refresh",
+    "status": "pass"
+  },
+  {
+    "case": "readonly_created_at",
+    "setting_id": "project.created_at",
+    "status": "pass"
+  },
+  {
+    "case": "updates_controlled_external_transport_failure",
+    "setting_id": "action.check_updates",
+    "status": "pass",
+    "response_status": 502,
+    "transport": "Loopback proxy refuses CONNECT; no external update request or installation"
+  },
+  {
+    "case": "valid_roundtrip",
+    "setting_id": "project.title",
+    "status": "pass",
+    "expected": "Audit changed 日本",
+    "actual": "Audit changed 日本"
+  },
+  {
+    "case": "valid_roundtrip",
+    "setting_id": "project.project_id",
+    "status": "pass",
+    "expected": "audit-project",
+    "actual": "audit-project"
+  },
+  {
+    "case": "valid_roundtrip",
+    "setting_id": "project.source_language",
+    "status": "pass",
+    "expected": "Japanese",
+    "actual": "Japanese"
+  },
+  {
+    "case": "valid_roundtrip",
+    "setting_id": "project.target_language",
+    "status": "pass",
+    "expected": "English",
+    "actual": "English"
+  },
+  {
+    "case": "valid_roundtrip",
+    "setting_id": "project.genre",
+    "status": "pass",
+    "expected": "romance",
+    "actual": "romance"
+  },
+  {
+    "case": "valid_roundtrip",
+    "setting_id": "project.raw_dir",
+    "status": "pass",
+    "expected": "raw space",
+    "actual": "raw space"
+  },
+  {
+    "case": "valid_roundtrip",
+    "setting_id": "project.output_dir",
+    "status": "pass",
+    "expected": "translated space",
+    "actual": "translated space"
+  },
+  {
+    "case": "valid_roundtrip",
+    "setting_id": "project.model_name",
+    "status": "pass",
+    "expected": "custom:audit-drafter",
+    "actual": "custom:audit-drafter"
+  },
+  {
+    "case": "valid_roundtrip",
+    "setting_id": "project.fallback_model",
+    "status": "pass",
+    "expected": "custom:audit-polisher",
+    "actual": "custom:audit-polisher"
+  },
+  {
+    "case": "valid_roundtrip",
+    "setting_id": "project.max_tpm",
+    "status": "pass",
+    "expected": 1000000,
+    "actual": 1000000
+  },
+  {
+    "case": "valid_roundtrip",
+    "setting_id": "project.max_rpm",
+    "status": "pass",
+    "expected": 10000,
+    "actual": 10000
+  },
+  {
+    "case": "valid_roundtrip",
+    "setting_id": "project.max_review_loops",
+    "status": "pass",
+    "expected": 2,
+    "actual": 2
+  },
+  {
+    "case": "valid_roundtrip",
+    "setting_id": "project.quality_threshold",
+    "status": "pass",
+    "expected": 9.0,
+    "actual": 9.0
+  },
+  {
+    "case": "valid_roundtrip",
+    "setting_id": "project.chunk_threshold_lines",
+    "status": "pass",
+    "expected": 24,
+    "actual": 24
+  },
+  {
+    "case": "valid_roundtrip",
+    "setting_id": "project.target_chunk_lines",
+    "status": "pass",
+    "expected": 12,
+    "actual": 12
+  },
+  {
+    "case": "valid_roundtrip",
+    "setting_id": "project.chunk_overlap_lines",
+    "status": "pass",
+    "expected": 0,
+    "actual": 0
+  },
+  {
+    "case": "valid_roundtrip",
+    "setting_id": "project.rag_top_k",
+    "status": "pass",
+    "expected": 3,
+    "actual": 3
+  },
+  {
+    "case": "valid_roundtrip",
+    "setting_id": "project.rag_embedding_model",
+    "status": "pass",
+    "expected": "mock-embedding",
+    "actual": "mock-embedding"
+  },
+  {
+    "case": "valid_roundtrip",
+    "setting_id": "project.rag_reranker_model",
+    "status": "pass",
+    "expected": "custom:audit-critic",
+    "actual": "custom:audit-critic"
+  },
+  {
+    "case": "valid_roundtrip",
+    "setting_id": "project.safety_subdivision_min_lines",
+    "status": "pass",
+    "expected": 4,
+    "actual": 4
+  },
+  {
+    "case": "valid_roundtrip",
+    "setting_id": "project.safety_subdivision_max_depth",
+    "status": "pass",
+    "expected": 2,
+    "actual": 2
+  },
+  {
+    "case": "valid_roundtrip",
+    "setting_id": "project.auto_update_bible",
+    "status": "pass",
+    "expected": false,
+    "actual": false
+  },
+  {
+    "case": "valid_roundtrip",
+    "setting_id": "project.enable_chunking",
+    "status": "pass",
+    "expected": false,
+    "actual": false
+  },
+  {
+    "case": "valid_roundtrip",
+    "setting_id": "project.cross_folder_summaries",
+    "status": "pass",
+    "expected": false,
+    "actual": false
+  },
+  {
+    "case": "valid_roundtrip",
+    "setting_id": "project.safety_recursive_subdivision",
+    "status": "pass",
+    "expected": false,
+    "actual": false
+  },
+  {
+    "case": "valid_roundtrip",
+    "setting_id": "project.enable_rag",
+    "status": "pass",
+    "expected": false,
+    "actual": false
+  },
+  {
+    "case": "valid_roundtrip",
+    "setting_id": "project.enable_rag_reranker",
+    "status": "pass",
+    "expected": false,
+    "actual": false
+  },
+  {
+    "case": "valid_roundtrip",
+    "setting_id": "project.filter_scene_characters",
+    "status": "pass",
+    "expected": false,
+    "actual": false
+  },
+  {
+    "case": "valid_roundtrip",
+    "setting_id": "project.enable_patch_polishing",
+    "status": "pass",
+    "expected": false,
+    "actual": false
+  },
+  {
+    "case": "valid_roundtrip",
+    "setting_id": "project.extractor_model",
+    "status": "pass",
+    "expected": "custom:audit-extractor",
+    "actual": "custom:audit-extractor"
+  },
+  {
+    "case": "valid_roundtrip",
+    "setting_id": "project.drafter_model",
+    "status": "pass",
+    "expected": "custom:audit-drafter",
+    "actual": "custom:audit-drafter"
+  },
+  {
+    "case": "valid_roundtrip",
+    "setting_id": "project.critic_model",
+    "status": "pass",
+    "expected": "custom:audit-critic",
+    "actual": "custom:audit-critic"
+  },
+  {
+    "case": "valid_roundtrip",
+    "setting_id": "project.polisher_model",
+    "status": "pass",
+    "expected": "custom:audit-polisher",
+    "actual": "custom:audit-polisher"
+  },
+  {
+    "case": "valid_roundtrip",
+    "setting_id": "project.chronicler_model",
+    "status": "pass",
+    "expected": "custom:audit-chronicler",
+    "actual": "custom:audit-chronicler"
+  },
+  {
+    "case": "valid_roundtrip",
+    "setting_id": "project.scraper_model",
+    "status": "pass",
+    "expected": "custom:audit-scraper",
+    "actual": "custom:audit-scraper"
+  },
+  {
+    "case": "valid_roundtrip",
+    "setting_id": "project.filter_extractor_entities",
+    "status": "pass",
+    "expected": false,
+    "actual": false
+  },
+  {
+    "case": "valid_roundtrip",
+    "setting_id": "project.use_interactions_api",
+    "status": "pass",
+    "expected": false,
+    "actual": false
+  },
+  {
+    "case": "valid_roundtrip",
+    "setting_id": "project.enable_post_polish_reconciliation",
+    "status": "pass",
+    "expected": false,
+    "actual": false
+  },
+  {
+    "case": "valid_roundtrip",
+    "setting_id": "project.enable_procedural_graph_learning",
+    "status": "pass",
+    "expected": false,
+    "actual": false
+  },
+  {
+    "case": "valid_roundtrip",
+    "setting_id": "project.procedural_learning_cadence",
+    "status": "pass",
+    "expected": "both",
+    "actual": "both"
+  },
+  {
+    "case": "valid_roundtrip",
+    "setting_id": "project.procedural_learning_interval",
+    "status": "pass",
+    "expected": 4,
+    "actual": 4
+  },
+  {
+    "case": "valid_roundtrip",
+    "setting_id": "project.procedural_learning_min_failures",
+    "status": "pass",
+    "expected": 2,
+    "actual": 2
+  },
+  {
+    "case": "valid_roundtrip",
+    "setting_id": "project.procedural_refiner_model",
+    "status": "pass",
+    "expected": "custom:audit-critic",
+    "actual": "custom:audit-critic"
+  },
+  {
+    "case": "valid_roundtrip",
+    "setting_id": "project.generation_settings",
+    "status": "pass",
+    "expected": {
+      "extractor": {
+        "temperature": 0.1,
+        "thinking_level": "low",
+        "thinking_budget": 0,
+        "use_interactions_api": false
+      },
+      "drafter": {
+        "temperature": 0.2,
+        "thinking_level": "low",
+        "thinking_budget": 0,
+        "use_interactions_api": false
+      },
+      "critic": {
+        "temperature": 0.3,
+        "thinking_level": "low",
+        "thinking_budget": 0,
+        "use_interactions_api": false
+      },
+      "polisher": {
+        "temperature": 0.4,
+        "thinking_level": "low",
+        "thinking_budget": 0,
+        "use_interactions_api": false
+      },
+      "chronicler": {
+        "temperature": 0.5,
+        "thinking_level": "low",
+        "thinking_budget": 0,
+        "use_interactions_api": false
+      },
+      "scraper": {
+        "temperature": 0.6,
+        "thinking_level": "low",
+        "thinking_budget": 0,
+        "use_interactions_api": false
+      }
+    },
+    "actual": {
+      "extractor": {
+        "temperature": 0.1,
+        "thinking_level": "low",
+        "thinking_budget": 0,
+        "use_interactions_api": false
+      },
+      "drafter": {
+        "temperature": 0.2,
+        "thinking_level": "low",
+        "thinking_budget": 0,
+        "use_interactions_api": false
+      },
+      "critic": {
+        "temperature": 0.3,
+        "thinking_level": "low",
+        "thinking_budget": 0,
+        "use_interactions_api": false
+      },
+      "polisher": {
+        "temperature": 0.4,
+        "thinking_level": "low",
+        "thinking_budget": 0,
+        "use_interactions_api": false
+      },
+      "chronicler": {
+        "temperature": 0.5,
+        "thinking_level": "low",
+        "thinking_budget": 0,
+        "use_interactions_api": false
+      },
+      "scraper": {
+        "temperature": 0.6,
+        "thinking_level": "low",
+        "thinking_budget": 0,
+        "use_interactions_api": false
+      }
+    }
+  },
+  {
+    "case": "project_isolation",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.DEFAULT_MODEL",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_MODEL",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_FALLBACK_MODEL",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_SCRAPER_MODEL",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_SCRAPER_TEMPERATURE",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_SCRAPER_THINKING_LEVEL",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_SCRAPER_THINKING_BUDGET",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_SCRAPER_USE_INTERACTIONS",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_EXTRACTOR_MODEL",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_EXTRACTOR_TEMPERATURE",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_EXTRACTOR_USE_INTERACTIONS",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_DRAFTER_MODEL",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_DRAFTER_TEMPERATURE",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_DRAFTER_USE_INTERACTIONS",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_CRITIC_MODEL",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_CRITIC_TEMPERATURE",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_CRITIC_USE_INTERACTIONS",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_POLISHER_MODEL",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_POLISHER_TEMPERATURE",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_POLISHER_USE_INTERACTIONS",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_CHRONICLER_MODEL",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_CHRONICLER_TEMPERATURE",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_CHRONICLER_USE_INTERACTIONS",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.SOURCE_LANG",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.TARGET_LANG",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_MAX_TPM",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_MAX_RPM",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_MAX_REVIEW_LOOPS",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_QUALITY_THRESHOLD",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_PROJECTS_DIR",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_THINKING_LEVEL",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_EXTRACTOR_THINKING_LEVEL",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_DRAFTER_THINKING_LEVEL",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_CRITIC_THINKING_LEVEL",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_POLISHER_THINKING_LEVEL",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_CHRONICLER_THINKING_LEVEL",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_THINKING_BUDGET",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_EXTRACTOR_THINKING_BUDGET",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_DRAFTER_THINKING_BUDGET",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_CRITIC_THINKING_BUDGET",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_POLISHER_THINKING_BUDGET",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_CHRONICLER_THINKING_BUDGET",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_TEMPERATURE",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_USE_INTERACTIONS",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_FILTER_EXTRACTOR_ENTITIES",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_POST_POLISH_RECONCILIATION",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_RAG_EMBEDDING_MODEL",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_RAG_RERANKER_MODEL",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_SCRAPER_PATH",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_SCRAPER_PYTHON",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.CUSTOM_API_BASE_URL",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_ENABLE_PROCEDURAL_GRAPH_LEARNING",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_PROCEDURAL_LEARNING_CADENCE",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_PROCEDURAL_LEARNING_INTERVAL",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_PROCEDURAL_LEARNING_MIN_FAILURES",
+    "status": "pass"
+  },
+  {
+    "case": "global_valid_roundtrip",
+    "setting_id": "env.NOVEL_PROCEDURAL_REFINER_MODEL",
+    "status": "pass"
+  },
+  {
+    "case": "secret_roundtrip_redaction",
+    "setting_id": "env.GEMINI_API_KEY",
+    "status": "pass"
+  },
+  {
+    "case": "secret_roundtrip_redaction",
+    "setting_id": "env.GOOGLE_API_KEY",
+    "status": "pass"
+  },
+  {
+    "case": "secret_roundtrip_redaction",
+    "setting_id": "env.OPENAI_API_KEY",
+    "status": "pass"
+  },
+  {
+    "case": "secret_roundtrip_redaction",
+    "setting_id": "env.OPENROUTER_API_KEY",
+    "status": "pass"
+  },
+  {
+    "case": "secret_roundtrip_redaction",
+    "setting_id": "env.CUSTOM_API_KEY",
+    "status": "pass"
+  },
+  {
+    "case": "local_provider_catalog",
+    "status": "pass",
+    "response": [
+      200,
+      {
+        "provider": "custom",
+        "configured": true,
+        "models": [
+          "audit-chronicler",
+          "audit-critic",
+          "audit-drafter",
+          "audit-extractor",
+          "audit-polisher",
+          "audit-scraper"
+        ]
+      }
+    ]
+  },
+  {
+    "case": "translation_start",
+    "response": [
+      200,
+      {
+        "success": true,
+        "message": "Translation task started successfully."
+      }
+    ]
+  },
+  {
+    "case": "runtime_provider_payloads",
+    "status": "pass",
+    "job": {
+      "is_running": false,
+      "active_chapter": null,
+      "active_folder": null,
+      "active_stage": null
+    },
+    "captures": [
+      {
+        "model": "audit-extractor",
+        "temperature": 0.1,
+        "response_format": {
+          "type": "json_schema",
+          "json_schema": {
+            "schema": {
+              "$defs": {
+                "CharacterNameDetail": {
+                  "description": "Linguistic components of a character's personal name.",
+                  "properties": {
+                    "name": {
+                      "default": "",
+                      "description": "Given / first name (e.g. 'Mary' or 'メアリィ' or '炎')",
+                      "title": "Name",
+                      "type": "string"
+                    },
+                    "m_name": {
+                      "default": "",
+                      "description": "Middle name or noble connector (e.g. 'Lukia' or 'ルクア' or 'von')",
+                      "title": "M Name",
+                      "type": "string"
+                    },
+                    "s_name": {
+                      "default": "",
+                      "description": "Surname / family / clan name (e.g. 'Legalia' or 'レガリヤ' or '萧')",
+                      "title": "S Name",
+                      "type": "string"
+                    }
+                  },
+                  "title": "CharacterNameDetail",
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "name",
+                    "m_name",
+                    "s_name"
+                  ]
+                },
+                "CharacterNames": {
+                  "description": "Structured name components mapped across source and target languages.",
+                  "properties": {
+                    "source": {
+                      "description": "Name components in source language native script",
+                      "properties": {
+                        "name": {
+                          "default": "",
+                          "description": "Given / first name (e.g. 'Mary' or 'メアリィ' or '炎')",
+                          "title": "Name",
+                          "type": "string"
+                        },
+                        "m_name": {
+                          "default": "",
+                          "description": "Middle name or noble connector (e.g. 'Lukia' or 'ルクア' or 'von')",
+                          "title": "M Name",
+                          "type": "string"
+                        },
+                        "s_name": {
+                          "default": "",
+                          "description": "Surname / family / clan name (e.g. 'Legalia' or 'レガリヤ' or '萧')",
+                          "title": "S Name",
+                          "type": "string"
+                        }
+                      },
+                      "title": "CharacterNameDetail",
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "name",
+                        "m_name",
+                        "s_name"
+                      ]
+                    },
+                    "target": {
+                      "description": "Name components in target translation language",
+                      "properties": {
+                        "name": {
+                          "default": "",
+                          "description": "Given / first name (e.g. 'Mary' or 'メアリィ' or '炎')",
+                          "title": "Name",
+                          "type": "string"
+                        },
+                        "m_name": {
+                          "default": "",
+                          "description": "Middle name or noble connector (e.g. 'Lukia' or 'ルクア' or 'von')",
+                          "title": "M Name",
+                          "type": "string"
+                        },
+                        "s_name": {
+                          "default": "",
+                          "description": "Surname / family / clan name (e.g. 'Legalia' or 'レガリヤ' or '萧')",
+                          "title": "S Name",
+                          "type": "string"
+                        }
+                      },
+                      "title": "CharacterNameDetail",
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "name",
+                        "m_name",
+                        "s_name"
+                      ]
+                    }
+                  },
+                  "title": "CharacterNames",
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "source",
+                    "target"
+                  ]
+                },
+                "CharacterProfile": {
+                  "properties": {
+                    "name": {
+                      "default": "",
+                      "description": "Standard translated character name",
+                      "title": "Name",
+                      "type": "string"
+                    },
+                    "original_name": {
+                      "default": "",
+                      "description": "Original raw name in source text",
+                      "title": "Original Name",
+                      "type": "string"
+                    },
+                    "names": {
+                      "anyOf": [
+                        {
+                          "$ref": "#/$defs/CharacterNames"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "Structured name components (name, m_name, s_name) in source and target languages"
+                    },
+                    "aliases": {
+                      "description": "Known nicknames, aliases, titles",
+                      "items": {
+                        "type": "string"
+                      },
+                      "title": "Aliases",
+                      "type": "array"
+                    },
+                    "gender": {
+                      "default": "unspecified",
+                      "description": "Gender identity for pronoun consistency",
+                      "title": "Gender",
+                      "type": "string"
+                    },
+                    "role": {
+                      "default": "supporting",
+                      "description": "Role e.g. protagonist, antagonist, supporting, mentor",
+                      "title": "Role",
+                      "type": "string"
+                    },
+                    "voice": {
+                      "default": "neutral",
+                      "description": "Tone register, speech quirks, formality level",
+                      "title": "Voice",
+                      "type": "string"
+                    },
+                    "relationships": {
+                      "additionalProperties": {
+                        "type": "string"
+                      },
+                      "description": "Relationship map e.g. {'Elena': 'sister'}",
+                      "title": "Relationships",
+                      "type": "object"
+                    },
+                    "pronouns": {
+                      "anyOf": [
+                        {
+                          "$ref": "#/$defs/CharacterPronouns"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "Source and target language pronouns for zero-anaphora and dialogue consistency"
+                    }
+                  },
+                  "title": "CharacterProfile",
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "name",
+                    "original_name",
+                    "names",
+                    "aliases",
+                    "gender",
+                    "role",
+                    "voice",
+                    "relationships",
+                    "pronouns"
+                  ]
+                },
+                "CharacterPronouns": {
+                  "properties": {
+                    "source": {
+                      "default": "",
+                      "description": "Source language pronoun(s) (e.g. 'she/her', 'watashi', 'I')",
+                      "title": "Source",
+                      "type": "string"
+                    },
+                    "target": {
+                      "default": "",
+                      "description": "Target language pronoun(s) (e.g. 'เธอ', 'ฉัน', 'เขา', 'ผม')",
+                      "title": "Target",
+                      "type": "string"
+                    },
+                    "relational": {
+                      "additionalProperties": {
+                        "type": "string"
+                      },
+                      "description": "Relational pronouns/address with specific characters e.g. {'Amelia Barlen': 'หนู/พี่'}",
+                      "title": "Relational",
+                      "type": "object"
+                    }
+                  },
+                  "title": "CharacterPronouns",
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "source",
+                    "target",
+                    "relational"
+                  ]
+                },
+                "GlossaryItem": {
+                  "properties": {
+                    "source": {
+                      "description": "Original term in source language",
+                      "title": "Source",
+                      "type": "string"
+                    },
+                    "target": {
+                      "description": "Canonical translated term",
+                      "title": "Target",
+                      "type": "string"
+                    },
+                    "category": {
+                      "default": "term",
+                      "description": "Category: character, faction, location, skill, item, rank, term",
+                      "title": "Category",
+                      "type": "string"
+                    },
+                    "notes": {
+                      "default": "",
+                      "description": "Contextual guidance or etymology",
+                      "title": "Notes",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "source",
+                    "target",
+                    "category",
+                    "notes"
+                  ],
+                  "title": "GlossaryItem",
+                  "type": "object",
+                  "additionalProperties": false
+                }
+              },
+              "description": "Structured extraction output from EntityExtractorAgent.",
+              "properties": {
+                "new_characters": {
+                  "description": "Newly identified characters appearing in the chapter text with pronouns, role, and voice",
+                  "items": {
+                    "$ref": "#/$defs/CharacterProfile"
+                  },
+                  "title": "New Characters",
+                  "type": "array"
+                },
+                "new_terms": {
+                  "description": "Newly identified terms, cultivation realms, locations, items, or factions",
+                  "items": {
+                    "$ref": "#/$defs/GlossaryItem"
+                  },
+                  "title": "New Terms",
+                  "type": "array"
+                },
+                "active_terms_in_chapter": {
+                  "description": "Source terms from the known glossary actively present in this chapter",
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "Active Terms In Chapter",
+                  "type": "array"
+                }
+              },
+              "title": "ExtractorResult",
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "new_characters",
+                "new_terms",
+                "active_terms_in_chapter"
+              ]
+            },
+            "name": "ExtractorResult",
+            "strict": true
+          }
+        },
+        "stream": false
+      },
+      {
+        "model": "audit-drafter",
+        "temperature": 0.2,
+        "stream": false
+      },
+      {
+        "model": "audit-critic",
+        "temperature": 0.3,
+        "response_format": {
+          "type": "json_schema",
+          "json_schema": {
+            "schema": {
+              "description": "Structured audit output from CritiqueAgent.",
+              "properties": {
+                "fidelity_score": {
+                  "default": 8.0,
+                  "description": "Strict translation fidelity score from 0.0 to 10.0 assessing omissions, accuracy, and register",
+                  "title": "Fidelity Score",
+                  "type": "number"
+                },
+                "style_score": {
+                  "default": 7.8,
+                  "description": "Target language prose style score from 0.0 to 10.0 assessing cadence, natural flow, and dialogue voice",
+                  "title": "Style Score",
+                  "type": "number"
+                },
+                "glossary_compliance_pct": {
+                  "default": 100.0,
+                  "description": "Percentage of glossary adherence (0.0 to 100.0)",
+                  "title": "Glossary Compliance Pct",
+                  "type": "number"
+                },
+                "warnings": {
+                  "description": "Specific errors, ambiguities, dropped clauses, or glossary mismatches",
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "Warnings",
+                  "type": "array"
+                },
+                "critique_notes": {
+                  "default": "",
+                  "description": "Granular, line-by-line actionable feedback and diff recommendations for the PolishingAgent",
+                  "title": "Critique Notes",
+                  "type": "string"
+                }
+              },
+              "title": "CritiqueResult",
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "fidelity_score",
+                "style_score",
+                "glossary_compliance_pct",
+                "warnings",
+                "critique_notes"
+              ]
+            },
+            "name": "CritiqueResult",
+            "strict": true
+          }
+        },
+        "stream": false
+      },
+      {
+        "model": "audit-polisher",
+        "temperature": 0.4,
+        "stream": false
+      },
+      {
+        "model": "audit-chronicler",
+        "temperature": 0.5,
+        "response_format": {
+          "type": "json_schema",
+          "json_schema": {
+            "schema": {
+              "$defs": {
+                "CharacterNameDetail": {
+                  "description": "Linguistic components of a character's personal name.",
+                  "properties": {
+                    "name": {
+                      "default": "",
+                      "description": "Given / first name (e.g. 'Mary' or 'メアリィ' or '炎')",
+                      "title": "Name",
+                      "type": "string"
+                    },
+                    "m_name": {
+                      "default": "",
+                      "description": "Middle name or noble connector (e.g. 'Lukia' or 'ルクア' or 'von')",
+                      "title": "M Name",
+                      "type": "string"
+                    },
+                    "s_name": {
+                      "default": "",
+                      "description": "Surname / family / clan name (e.g. 'Legalia' or 'レガリヤ' or '萧')",
+                      "title": "S Name",
+                      "type": "string"
+                    }
+                  },
+                  "title": "CharacterNameDetail",
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "name",
+                    "m_name",
+                    "s_name"
+                  ]
+                },
+                "CharacterNames": {
+                  "description": "Structured name components mapped across source and target languages.",
+                  "properties": {
+                    "source": {
+                      "description": "Name components in source language native script",
+                      "properties": {
+                        "name": {
+                          "default": "",
+                          "description": "Given / first name (e.g. 'Mary' or 'メアリィ' or '炎')",
+                          "title": "Name",
+                          "type": "string"
+                        },
+                        "m_name": {
+                          "default": "",
+                          "description": "Middle name or noble connector (e.g. 'Lukia' or 'ルクア' or 'von')",
+                          "title": "M Name",
+                          "type": "string"
+                        },
+                        "s_name": {
+                          "default": "",
+                          "description": "Surname / family / clan name (e.g. 'Legalia' or 'レガリヤ' or '萧')",
+                          "title": "S Name",
+                          "type": "string"
+                        }
+                      },
+                      "title": "CharacterNameDetail",
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "name",
+                        "m_name",
+                        "s_name"
+                      ]
+                    },
+                    "target": {
+                      "description": "Name components in target translation language",
+                      "properties": {
+                        "name": {
+                          "default": "",
+                          "description": "Given / first name (e.g. 'Mary' or 'メアリィ' or '炎')",
+                          "title": "Name",
+                          "type": "string"
+                        },
+                        "m_name": {
+                          "default": "",
+                          "description": "Middle name or noble connector (e.g. 'Lukia' or 'ルクア' or 'von')",
+                          "title": "M Name",
+                          "type": "string"
+                        },
+                        "s_name": {
+                          "default": "",
+                          "description": "Surname / family / clan name (e.g. 'Legalia' or 'レガリヤ' or '萧')",
+                          "title": "S Name",
+                          "type": "string"
+                        }
+                      },
+                      "title": "CharacterNameDetail",
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "name",
+                        "m_name",
+                        "s_name"
+                      ]
+                    }
+                  },
+                  "title": "CharacterNames",
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "source",
+                    "target"
+                  ]
+                },
+                "CharacterProfile": {
+                  "properties": {
+                    "name": {
+                      "default": "",
+                      "description": "Standard translated character name",
+                      "title": "Name",
+                      "type": "string"
+                    },
+                    "original_name": {
+                      "default": "",
+                      "description": "Original raw name in source text",
+                      "title": "Original Name",
+                      "type": "string"
+                    },
+                    "names": {
+                      "anyOf": [
+                        {
+                          "$ref": "#/$defs/CharacterNames"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "Structured name components (name, m_name, s_name) in source and target languages"
+                    },
+                    "aliases": {
+                      "description": "Known nicknames, aliases, titles",
+                      "items": {
+                        "type": "string"
+                      },
+                      "title": "Aliases",
+                      "type": "array"
+                    },
+                    "gender": {
+                      "default": "unspecified",
+                      "description": "Gender identity for pronoun consistency",
+                      "title": "Gender",
+                      "type": "string"
+                    },
+                    "role": {
+                      "default": "supporting",
+                      "description": "Role e.g. protagonist, antagonist, supporting, mentor",
+                      "title": "Role",
+                      "type": "string"
+                    },
+                    "voice": {
+                      "default": "neutral",
+                      "description": "Tone register, speech quirks, formality level",
+                      "title": "Voice",
+                      "type": "string"
+                    },
+                    "relationships": {
+                      "additionalProperties": {
+                        "type": "string"
+                      },
+                      "description": "Relationship map e.g. {'Elena': 'sister'}",
+                      "title": "Relationships",
+                      "type": "object"
+                    },
+                    "pronouns": {
+                      "anyOf": [
+                        {
+                          "$ref": "#/$defs/CharacterPronouns"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "Source and target language pronouns for zero-anaphora and dialogue consistency"
+                    }
+                  },
+                  "title": "CharacterProfile",
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "name",
+                    "original_name",
+                    "names",
+                    "aliases",
+                    "gender",
+                    "role",
+                    "voice",
+                    "relationships",
+                    "pronouns"
+                  ]
+                },
+                "CharacterPronouns": {
+                  "properties": {
+                    "source": {
+                      "default": "",
+                      "description": "Source language pronoun(s) (e.g. 'she/her', 'watashi', 'I')",
+                      "title": "Source",
+                      "type": "string"
+                    },
+                    "target": {
+                      "default": "",
+                      "description": "Target language pronoun(s) (e.g. 'เธอ', 'ฉัน', 'เขา', 'ผม')",
+                      "title": "Target",
+                      "type": "string"
+                    },
+                    "relational": {
+                      "additionalProperties": {
+                        "type": "string"
+                      },
+                      "description": "Relational pronouns/address with specific characters e.g. {'Amelia Barlen': 'หนู/พี่'}",
+                      "title": "Relational",
+                      "type": "object"
+                    }
+                  },
+                  "title": "CharacterPronouns",
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "source",
+                    "target",
+                    "relational"
+                  ]
+                },
+                "ChroniclerArcUpdate": {
+                  "description": "Meso-level story arc progression from ChroniclerAgent.",
+                  "properties": {
+                    "title": {
+                      "default": "",
+                      "description": "Current active story arc title",
+                      "title": "Title",
+                      "type": "string"
+                    },
+                    "core_conflict": {
+                      "default": "",
+                      "description": "Central conflict or objective of this arc",
+                      "title": "Core Conflict",
+                      "type": "string"
+                    },
+                    "synopsis": {
+                      "default": "",
+                      "description": "Cumulative narrative progression of the active arc so far",
+                      "title": "Synopsis",
+                      "type": "string"
+                    },
+                    "milestones": {
+                      "description": "Key milestones achieved during this arc",
+                      "items": {
+                        "type": "string"
+                      },
+                      "title": "Milestones",
+                      "type": "array"
+                    },
+                    "is_completed": {
+                      "default": false,
+                      "description": "Whether this chapter concludes the current arc",
+                      "title": "Is Completed",
+                      "type": "boolean"
+                    }
+                  },
+                  "title": "ChroniclerArcUpdate",
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "title",
+                    "core_conflict",
+                    "synopsis",
+                    "milestones",
+                    "is_completed"
+                  ]
+                },
+                "GlossaryItem": {
+                  "properties": {
+                    "source": {
+                      "description": "Original term in source language",
+                      "title": "Source",
+                      "type": "string"
+                    },
+                    "target": {
+                      "description": "Canonical translated term",
+                      "title": "Target",
+                      "type": "string"
+                    },
+                    "category": {
+                      "default": "term",
+                      "description": "Category: character, faction, location, skill, item, rank, term",
+                      "title": "Category",
+                      "type": "string"
+                    },
+                    "notes": {
+                      "default": "",
+                      "description": "Contextual guidance or etymology",
+                      "title": "Notes",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "source",
+                    "target",
+                    "category",
+                    "notes"
+                  ],
+                  "title": "GlossaryItem",
+                  "type": "object",
+                  "additionalProperties": false
+                }
+              },
+              "description": "Structured chapter summary and narrative memory from ChroniclerAgent.",
+              "properties": {
+                "chapter_num": {
+                  "default": 1,
+                  "description": "Sequential chapter index",
+                  "title": "Chapter Num",
+                  "type": "integer"
+                },
+                "title": {
+                  "default": "",
+                  "description": "Chapter title",
+                  "title": "Title",
+                  "type": "string"
+                },
+                "synopsis": {
+                  "default": "",
+                  "description": "Concise 2-3 paragraph overview of plot events",
+                  "title": "Synopsis",
+                  "type": "string"
+                },
+                "key_events": {
+                  "description": "Crucial plot points, reveals, and turning points",
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "Key Events",
+                  "type": "array"
+                },
+                "character_state_changes": {
+                  "description": "Injuries, deaths, relationship developments, level-ups, or item acquisitions",
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "Character State Changes",
+                  "type": "array"
+                },
+                "arc_update": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/ChroniclerArcUpdate"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Optional active story arc progress or conclusion update"
+                },
+                "story_update": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Optional synthesized whole-story summary update if milestone reached",
+                  "title": "Story Update"
+                },
+                "reconciled_characters": {
+                  "description": "Refined character profiles reconciled against final translated prose with confirmed target names, aliases, and pronouns",
+                  "items": {
+                    "$ref": "#/$defs/CharacterProfile"
+                  },
+                  "title": "Reconciled Characters",
+                  "type": "array"
+                },
+                "reconciled_terms": {
+                  "description": "Refined glossary terms reconciled against final translated prose with confirmed target terms actually used in publication prose",
+                  "items": {
+                    "$ref": "#/$defs/GlossaryItem"
+                  },
+                  "title": "Reconciled Terms",
+                  "type": "array"
+                },
+                "chapter_summary": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": true,
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Support for nested chapter_summary envelope if model formats hierarchically",
+                  "title": "Chapter Summary"
+                }
+              },
+              "title": "ChroniclerResult",
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "chapter_num",
+                "title",
+                "synopsis",
+                "key_events",
+                "character_state_changes",
+                "arc_update",
+                "story_update",
+                "reconciled_characters",
+                "reconciled_terms",
+                "chapter_summary"
+              ]
+            },
+            "name": "ChroniclerResult",
+            "strict": true
+          }
+        },
+        "stream": false
+      }
+    ],
+    "outputs": [
+      "0001.md"
+    ],
+    "metadata": {
+      "project_id": "default_project",
+      "version": 1,
+      "updated_at": "2026-10-13T13:51:38.850938+00:00",
+      "chapters": {
+        "translated_chapters/0001": {
+          "chapter_id": "chapter_0001",
+          "chapter_num": 1,
+          "source_file": "D:\\Code\\novel_translation_Agent\\src-tauri\\target\\settings-repair\\frozen-5191-3if0we9r\\projects\\audit-a\\raw_chapters\\0001.txt",
+          "source_sha256": "03557d60a707de80b0cb9e560839fe0d8587c711f5adc3f2b9537d37afdf5b60",
+          "output_file": "D:\\Code\\novel_translation_Agent\\src-tauri\\target\\settings-repair\\frozen-5191-3if0we9r\\projects\\audit-a\\translated_chapters\\0001.md",
+          "timestamp": "2026-10-13T13:51:38.833182+00:00",
+          "model": "custom:audit-drafter",
+          "checkpoint": {
+            "status": "completed",
+            "last_completed_stage": "chronicling",
+            "failed_stage": null,
+            "retry_count": 0,
+            "last_error": null,
+            "last_error_type": null,
+            "last_error_traceback": null,
+            "error_logs": [],
+            "stage_artifacts": {
+              "extracted_terms": [],
+              "extracted_characters": [],
+              "reconciled_terms": [],
+              "reconciled_characters": [],
+              "draft_text": "# Chapter 1: Audit\n\nA traveler stepped forward and began a journey.",
+              "critique_notes": "Audit fixture is faithful.",
+              "polished_text": "# Chapter 1: Audit\n\nA traveler stepped forward and began a journey.",
+              "safety_fallbacks_used": 0,
+              "subdivisions_count": 0,
+              "subdivided_blocks": [
+                {
+                  "block_index": 0,
+                  "source_text": "第一章\n旅人は歩き始めた。",
+                  "draft_text": "# Chapter 1: Audit\n\nA traveler stepped forward and began a journey.",
+                  "polished_text": "# Chapter 1: Audit\n\nA traveler stepped forward and began a journey.",
+                  "is_sensitive": false,
+                  "fallback_used": false
+                }
+              ]
+            }
+          },
+          "stats": {
+            "source_char_count": 13,
+            "target_word_count": 12,
+            "prompt_tokens": 200,
+            "completion_tokens": 100,
+            "thought_tokens": 0,
+            "cached_tokens": 0,
+            "total_tokens": 300,
+            "duration_seconds": 0.14,
+            "step_usage": [
+              {
+                "stage": "extraction",
+                "step_name": "Extraction",
+                "iteration": 1,
+                "model": "custom:audit-extractor",
+                "chunk_count": 1,
+                "duration_seconds": 0.09,
+                "usage": {
+                  "input_tokens": 40,
+                  "output_tokens": 20,
+                  "thought_tokens": 0,
+                  "cached_tokens": 0,
+                  "total_tokens": 60
+                },
+                "timestamp": "2026-10-13T13:51:38.781009+00:00"
+              },
+              {
+                "stage": "drafting",
+                "step_name": "Drafting",
+                "iteration": 1,
+                "model": "custom:audit-drafter",
+                "chunk_count": 1,
+                "duration_seconds": 0.01,
+                "usage": {
+                  "input_tokens": 40,
+                  "output_tokens": 20,
+                  "thought_tokens": 0,
+                  "cached_tokens": 0,
+                  "total_tokens": 60
+                },
+                "timestamp": "2026-10-13T13:51:38.787568+00:00"
+              },
+              {
+                "stage": "critique",
+                "step_name": "Critique (Pass 1)",
+                "iteration": 1,
+                "model": "custom:audit-critic",
+                "chunk_count": 1,
+                "duration_seconds": 0.02,
+                "usage": {
+                  "input_tokens": 40,
+                  "output_tokens": 20,
+                  "thought_tokens": 0,
+                  "cached_tokens": 0,
+                  "total_tokens": 60
+                },
+                "timestamp": "2026-10-13T13:51:38.803844+00:00"
+              },
+              {
+                "stage": "polishing",
+                "step_name": "Polishing (Pass 1)",
+                "iteration": 1,
+                "model": "custom:audit-polisher",
+                "chunk_count": 1,
+                "duration_seconds": 0.01,
+                "usage": {
+                  "input_tokens": 40,
+                  "output_tokens": 20,
+                  "thought_tokens": 0,
+                  "cached_tokens": 0,
+                  "total_tokens": 60
+                },
+                "timestamp": "2026-10-13T13:51:38.809739+00:00"
+              },
+              {
+                "stage": "chronicling",
+                "step_name": "Chronicling",
+                "iteration": 1,
+                "model": "custom:audit-chronicler",
+                "chunk_count": 1,
+                "duration_seconds": 0.02,
+                "usage": {
+                  "input_tokens": 40,
+                  "output_tokens": 20,
+                  "thought_tokens": 0,
+                  "cached_tokens": 0,
+                  "total_tokens": 60
+                },
+                "timestamp": "2026-10-13T13:51:38.831382+00:00"
+              }
+            ],
+            "safety_fallbacks_used": 0,
+            "subdivisions_count": 0
+          },
+          "quality_audit": {
+            "fidelity_score": 9.5,
+            "style_score": 9.2,
+            "glossary_compliance_pct": 100.0,
+            "warnings": [],
+            "passed": true
+          },
+          "entities_present": [],
+          "glossary_terms_applied": [],
+          "paragraph_alignments": [],
+          "review_status": "draft",
+          "trace_file": "D:\\Code\\novel_translation_Agent\\src-tauri\\target\\settings-repair\\frozen-5191-3if0we9r\\projects\\audit-a\\.novel\\traces\\raw_chapters\\chapter_0001.json",
+          "prompt_trace_count": 5
+        },
+        "0001": {
+          "chapter_id": "chapter_0001",
+          "chapter_num": 1,
+          "source_file": "D:\\Code\\novel_translation_Agent\\src-tauri\\target\\settings-repair\\frozen-5191-3if0we9r\\projects\\audit-a\\raw_chapters\\0001.txt",
+          "source_sha256": "03557d60a707de80b0cb9e560839fe0d8587c711f5adc3f2b9537d37afdf5b60",
+          "output_file": "D:\\Code\\novel_translation_Agent\\src-tauri\\target\\settings-repair\\frozen-5191-3if0we9r\\projects\\audit-a\\translated_chapters\\0001.md",
+          "timestamp": "2026-10-13T13:51:38.833182+00:00",
+          "model": "custom:audit-drafter",
+          "checkpoint": {
+            "status": "completed",
+            "last_completed_stage": "chronicling",
+            "failed_stage": null,
+            "retry_count": 0,
+            "last_error": null,
+            "last_error_type": null,
+            "last_error_traceback": null,
+            "error_logs": [],
+            "stage_artifacts": {
+              "extracted_terms": [],
+              "extracted_characters": [],
+              "reconciled_terms": [],
+              "reconciled_characters": [],
+              "draft_text": "# Chapter 1: Audit\n\nA traveler stepped forward and began a journey.",
+              "critique_notes": "Audit fixture is faithful.",
+              "polished_text": "# Chapter 1: Audit\n\nA traveler stepped forward and began a journey.",
+              "safety_fallbacks_used": 0,
+              "subdivisions_count": 0,
+              "subdivided_blocks": [
+                {
+                  "block_index": 0,
+                  "source_text": "第一章\n旅人は歩き始めた。",
+                  "draft_text": "# Chapter 1: Audit\n\nA traveler stepped forward and began a journey.",
+                  "polished_text": "# Chapter 1: Audit\n\nA traveler stepped forward and began a journey.",
+                  "is_sensitive": false,
+                  "fallback_used": false
+                }
+              ]
+            }
+          },
+          "stats": {
+            "source_char_count": 13,
+            "target_word_count": 12,
+            "prompt_tokens": 200,
+            "completion_tokens": 100,
+            "thought_tokens": 0,
+            "cached_tokens": 0,
+            "total_tokens": 300,
+            "duration_seconds": 0.14,
+            "step_usage": [
+              {
+                "stage": "extraction",
+                "step_name": "Extraction",
+                "iteration": 1,
+                "model": "custom:audit-extractor",
+                "chunk_count": 1,
+                "duration_seconds": 0.09,
+                "usage": {
+                  "input_tokens": 40,
+                  "output_tokens": 20,
+                  "thought_tokens": 0,
+                  "cached_tokens": 0,
+                  "total_tokens": 60
+                },
+                "timestamp": "2026-10-13T13:51:38.781009+00:00"
+              },
+              {
+                "stage": "drafting",
+                "step_name": "Drafting",
+                "iteration": 1,
+                "model": "custom:audit-drafter",
+                "chunk_count": 1,
+                "duration_seconds": 0.01,
+                "usage": {
+                  "input_tokens": 40,
+                  "output_tokens": 20,
+                  "thought_tokens": 0,
+                  "cached_tokens": 0,
+                  "total_tokens": 60
+                },
+                "timestamp": "2026-10-13T13:51:38.787568+00:00"
+              },
+              {
+                "stage": "critique",
+                "step_name": "Critique (Pass 1)",
+                "iteration": 1,
+                "model": "custom:audit-critic",
+                "chunk_count": 1,
+                "duration_seconds": 0.02,
+                "usage": {
+                  "input_tokens": 40,
+                  "output_tokens": 20,
+                  "thought_tokens": 0,
+                  "cached_tokens": 0,
+                  "total_tokens": 60
+                },
+                "timestamp": "2026-10-13T13:51:38.803844+00:00"
+              },
+              {
+                "stage": "polishing",
+                "step_name": "Polishing (Pass 1)",
+                "iteration": 1,
+                "model": "custom:audit-polisher",
+                "chunk_count": 1,
+                "duration_seconds": 0.01,
+                "usage": {
+                  "input_tokens": 40,
+                  "output_tokens": 20,
+                  "thought_tokens": 0,
+                  "cached_tokens": 0,
+                  "total_tokens": 60
+                },
+                "timestamp": "2026-10-13T13:51:38.809739+00:00"
+              },
+              {
+                "stage": "chronicling",
+                "step_name": "Chronicling",
+                "iteration": 1,
+                "model": "custom:audit-chronicler",
+                "chunk_count": 1,
+                "duration_seconds": 0.02,
+                "usage": {
+                  "input_tokens": 40,
+                  "output_tokens": 20,
+                  "thought_tokens": 0,
+                  "cached_tokens": 0,
+                  "total_tokens": 60
+                },
+                "timestamp": "2026-10-13T13:51:38.831382+00:00"
+              }
+            ],
+            "safety_fallbacks_used": 0,
+            "subdivisions_count": 0
+          },
+          "quality_audit": {
+            "fidelity_score": 9.5,
+            "style_score": 9.2,
+            "glossary_compliance_pct": 100.0,
+            "warnings": [],
+            "passed": true
+          },
+          "entities_present": [],
+          "glossary_terms_applied": [],
+          "paragraph_alignments": [],
+          "review_status": "draft",
+          "trace_file": "D:\\Code\\novel_translation_Agent\\src-tauri\\target\\settings-repair\\frozen-5191-3if0we9r\\projects\\audit-a\\.novel\\traces\\raw_chapters\\chapter_0001.json",
+          "prompt_trace_count": 5
+        }
+      }
+    }
+  },
+  {
+    "case": "restart_config",
+    "status": "pass",
+    "settings": [
+      "project_id",
+      "title",
+      "source_language",
+      "target_language",
+      "raw_dir",
+      "output_dir",
+      "model_name",
+      "fallback_model",
+      "extractor_model",
+      "drafter_model",
+      "critic_model",
+      "polisher_model",
+      "chronicler_model",
+      "scraper_model",
+      "generation_settings",
+      "use_interactions_api",
+      "auto_update_bible",
+      "max_tpm",
+      "max_rpm",
+      "max_review_loops",
+      "quality_threshold",
+      "genre",
+      "enable_chunking",
+      "chunk_threshold_lines",
+      "target_chunk_lines",
+      "chunk_overlap_lines",
+      "cross_folder_summaries",
+      "safety_recursive_subdivision",
+      "safety_subdivision_min_lines",
+      "safety_subdivision_max_depth",
+      "enable_rag",
+      "rag_top_k",
+      "rag_embedding_model",
+      "enable_rag_reranker",
+      "rag_reranker_model",
+      "filter_scene_characters",
+      "filter_extractor_entities",
+      "enable_patch_polishing",
+      "enable_post_polish_reconciliation",
+      "enable_procedural_graph_learning",
+      "procedural_learning_cadence",
+      "procedural_learning_interval",
+      "procedural_learning_min_failures",
+      "procedural_refiner_model",
+      "created_at"
+    ]
+  },
+  {
+    "case": "procedural_setting_persistence",
+    "setting_id": "project.procedural_learning_interval",
+    "status": "pass"
+  },
+  {
+    "case": "invalid_review_loop",
+    "status": "pass",
+    "save_status": 422,
+    "after_title": "Audit changed 日本",
+    "after_loops": 1
+  },
+  {
+    "case": "required_revision",
+    "status": "pass"
+  }
+]

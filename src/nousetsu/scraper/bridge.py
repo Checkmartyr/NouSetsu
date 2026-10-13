@@ -2,6 +2,7 @@
 Scraper Bridge: executes Novel-Scraper commands via subprocess and handles streaming progress.
 """
 
+from nousetsu.utils.env import resolve_env
 import asyncio
 import json
 import logging
@@ -65,7 +66,7 @@ class NovelScraperBridge:
 
     def _working_directory(self) -> Path:
         if self._bundled_worker:
-            app_data_dir = os.environ.get("NOUSETSU_APP_DATA_DIR")
+            app_data_dir = resolve_env().get("NOUSETSU_APP_DATA_DIR")
             if app_data_dir:
                 return Path(app_data_dir).resolve()
         if self.scraper_dir is None:

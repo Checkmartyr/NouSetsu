@@ -1,0 +1,19 @@
+{
+  "case": "Compatible backend sharing preserves source storage and visibly reports its context",
+  "status": "pass",
+  "classification": "Intentional compatible sharing retained",
+  "advertised_fixture_version": "0.5.3",
+  "actual_settings_path": "D:\\Code\\novel_translation_Agent\\src-tauri\\target\\settings-repair\\cross-mode-reuse\\source.env",
+  "backend_context": {
+    "version": "0.5.3",
+    "mode": "source",
+    "owner_pid": 2532,
+    "env_file_path": "D:\\Code\\novel_translation_Agent\\src-tauri\\target\\settings-repair\\cross-mode-reuse\\source.env",
+    "registry_dir": "D:\\Code\\novel_translation_Agent\\src-tauri\\target\\settings-repair\\native-release\\registry",
+    "projects_dir": "D:\\Code\\novel_translation_Agent\\src-tauri\\target\\settings-repair\\native-release\\registry\\projects"
+  },
+  "actual_native_display": "Backend: source | owner: 2532 | .env: D:\\Code\\novel_translation_Agent\\src-tauri\\target\\settings-repair\\cross-mode-reuse\\source.env | Registry: D:\\Code\\novel_translation_Agent\\src-tauri\\target\\settings-repair\\native-release\\registry",
+  "owned_source_pid": 2532,
+  "source_launcher_pid": 86020,
+  "desktop_pid": 82172
+}

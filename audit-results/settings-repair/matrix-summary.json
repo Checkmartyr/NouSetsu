@@ -1,0 +1,34 @@
+{
+  "settings": 144,
+  "modes": {
+    "source_api": {
+      "pass": 139,
+      "not applicable": 5
+    },
+    "frozen_api": {
+      "pass": 139,
+      "not applicable": 5
+    },
+    "web_dev": {
+      "pass": 142,
+      "not applicable": 2
+    },
+    "web_built": {
+      "pass": 142,
+      "not applicable": 2
+    },
+    "native_dev": {
+      "pass": 141,
+      "not applicable": 3
+    },
+    "native_release": {
+      "pass": 141,
+      "not applicable": 3
+    }
+  },
+  "signoff": "PASS: all applicable setting scenarios observed",
+  "status_definition": "Worst directly recorded scenario per setting and mode. Pass establishes the cited scenario, not every boundary or provider behavior. Missing evidence stays blocked. Source JUnit runtime checks are qualified separately and never promoted to native/frozen runtime observations.",
+  "python_regressions": {
+    "pass": 721
+  }
+}

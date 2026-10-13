@@ -73,12 +73,13 @@ class LLMCrossEncoderReranker(BaseCrossEncoderReranker):
     def __init__(
         self,
         model_name: str = "gemini-3.5-flash-lite",
-        fallback_model: Optional[str] = None
+        fallback_model: Optional[str] = None,
+        environ=None,
     ):
         from nousetsu.agents.llm import get_llm
         self.model_name = model_name
         self.fallback_model = fallback_model
-        self.llm = get_llm(model_name=model_name, fallback_model=fallback_model, temperature=0.1)
+        self.llm = get_llm(model_name=model_name, fallback_model=fallback_model, temperature=0.1, environ=environ)
 
     def rerank(
         self,
@@ -170,16 +171,19 @@ Respond STRICTLY with a valid JSON array:
 def get_reranker(
     model_name: Optional[str] = None,
     fallback_model: Optional[str] = None,
-    is_mock: bool = False
+    is_mock: bool = False,
+    environ=None,
 ) -> BaseCrossEncoderReranker:
     """Factory creating an appropriate Cross-Encoder reranker instance."""
-    eff_model = model_name or os.environ.get("NOVEL_RAG_RERANKER_MODEL", "gemini-3.5-flash-lite")
+    from nousetsu.utils.env import resolve_env
+    env = resolve_env() if environ is None else environ
+    eff_model = model_name or env.get("NOVEL_RAG_RERANKER_MODEL", "gemini-3.5-flash-lite")
     mock_mode = (
         is_mock
         or eff_model.lower().startswith(("mock", "test"))
-        or bool(os.environ.get("PYTEST_CURRENT_TEST"))
-        or os.environ.get("NOVEL_USE_MOCK_RERANKER", "").lower() in ("1", "true")
+        or bool(env.get("PYTEST_CURRENT_TEST"))
+        or env.get("NOVEL_USE_MOCK_RERANKER", "").lower() in ("1", "true")
     )
     if mock_mode:
         return MockCrossEncoderReranker()
-    return LLMCrossEncoderReranker(model_name=eff_model, fallback_model=fallback_model)
+    return LLMCrossEncoderReranker(model_name=eff_model, fallback_model=fallback_model, environ=env)

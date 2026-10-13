@@ -23,8 +23,9 @@ import yaml
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, Response, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.exceptions import RequestValidationError
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from nousetsu.ebook import (
     EbookReader,
@@ -60,7 +61,7 @@ from nousetsu.storage.repository import (
     resolve_project_dir,
     get_new_project_dir,
 )
-from nousetsu.utils.env import load_env, get_env_snapshot, get_env_settings, save_env_settings
+from nousetsu.utils.env import (resolve_env, resolve_env_with_sources, get_env_snapshot, get_env_settings, save_env_settings, settings_revision, EnvironmentValidationError, SettingsRevisionConflict, redact_settings, credential_values, resolve_env_file)
 from nousetsu.utils.language import detect_language
 from nousetsu.utils.logging import (
     setup_backend_file_logging,
@@ -70,8 +71,6 @@ from nousetsu.utils.logging import (
 )
 from nousetsu.utils.model_catalog import fetch_model_catalog
 
-# Ensure environment variables from central .env are loaded into web server process
-load_env()
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +107,42 @@ def _is_newer_release(latest: str, current: str) -> bool:
     if latest_parts[:3] != current_parts[:3]:
         return latest_parts[:3] > current_parts[:3]
     return current_parts[3] and not latest_parts[3]
+
+
+def _project_setting_sources(cfg, env, origins):
+    names = {"model_name": "NOVEL_MODEL", "enable_post_polish_reconciliation": "NOVEL_POST_POLISH_RECONCILIATION", "enable_procedural_graph_learning": "NOVEL_ENABLE_PROCEDURAL_GRAPH_LEARNING"}
+    result = {}
+    for name, value in cfg.model_dump().items():
+        if value is not None:
+            result[name] = "project"
+        else:
+            key = names.get(name, "NOVEL_" + name.upper())
+            result[name] = origins.get(key, "builtin") if env.get(key) else "builtin"
+    if cfg.model_name is None and not env.get("NOVEL_MODEL") and env.get("DEFAULT_MODEL"):
+        result["model_name"] = origins.get("DEFAULT_MODEL", "builtin")
+    for role in ("extractor", "drafter", "critic", "polisher", "chronicler", "scraper"):
+        name = role + "_model"
+        key = "NOVEL_" + role.upper() + "_MODEL"
+        if getattr(cfg, name):
+            result[name] = "project"
+        elif role == "scraper" and env.get(key):
+            result[name] = origins.get(key, "builtin")
+        elif cfg.model_name:
+            result[name] = "project_shared"
+        elif env.get(key):
+            result[name] = origins.get(key, "builtin")
+        else:
+            result[name] = result["model_name"]
+    return result
+
+
+def _required_revision(request: Request) -> str:
+    supplied = request.headers.get("if-match")
+    if not supplied:
+        raise HTTPException(status_code=428, detail="A settings revision is required; reload before saving.")
+    if not re.fullmatch(r'"[0-9a-f]{64}"', supplied):
+        raise HTTPException(status_code=412, detail="Invalid settings revision; reload before saving.")
+    return supplied[1:-1]
 
 
 def _require_local_settings_origin(request: Request) -> None:
@@ -227,8 +262,8 @@ class SwitchProjectRequest(BaseModel):
 class CreateProjectRequest(BaseModel):
     title: str = Field(..., description="Novel title")
     folder_name: Optional[str] = Field(None, description="Optional folder name inside NOVEL_PROJECTS_DIR")
-    source_language: Optional[str] = Field("Japanese", description="Source language")
-    target_language: Optional[str] = Field("Thai", description="Target language")
+    source_language: Optional[str] = Field(None, description="Source language")
+    target_language: Optional[str] = Field(None, description="Target language")
     genre: Optional[str] = Field("general", description="Novel genre")
     model: Optional[str] = Field(None, description="Primary model override")
 
@@ -337,6 +372,14 @@ def _get_project_meta(project_path: Path) -> Dict[str, Any]:
         cached_ts, cached_meta = _PROJECT_META_CACHE[p_str]
         if now - cached_ts < 3.0:
             return dict(cached_meta)
+
+    try:
+        if (project_path / ".novel/config.yaml").exists():
+            NovelRepository(project_path).load_config()
+        elif (project_path / ".novel/config.json").exists():
+            ProjectConfig.model_validate(json.loads((project_path / ".novel/config.json").read_text(encoding="utf-8")))
+    except Exception:
+        return {"path": p_str, "title": project_path.name, "genre": "general", "source_language": "", "target_language": "", "has_traces": False, "trace_count": 0, "latest_trace_mtime": 0, "settings_error": "Project configuration is invalid or unavailable"}
 
     title = project_path.name
     genre = "general"
@@ -698,7 +741,6 @@ def _run_batch_worker(
     chapter_filter: Optional[Union[int, str]] = None,
 ) -> None:
     try:
-        load_env(repo.root_dir)
         runner = BatchRunner(
             repository=repo,
             model_name=model,
@@ -1007,7 +1049,6 @@ async def _run_scraper_task(
 
 def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
     """Create and configure the FastAPI application."""
-    load_env()
     dist_path = dist_dir or (Path(__file__).resolve().parent.parent.parent.parent / "web" / "dist")
 
     app = FastAPI(
@@ -1016,6 +1057,34 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
         version=__version__,
     )
 
+    from nousetsu.storage.repository import ConfigLoadError, SettingsRecoveryError
+    from nousetsu.storage.settings_store import SettingsLockTimeout
+
+    @app.exception_handler(ConfigLoadError)
+    @app.exception_handler(SettingsRecoveryError)
+    async def settings_storage_error(request: Request, error: Exception):
+        return JSONResponse(status_code=500, content={"detail": str(error)})
+
+    @app.exception_handler(SettingsLockTimeout)
+    async def settings_busy(request: Request, error: Exception):
+        return JSONResponse(status_code=503, content={"detail": "Settings are busy; try again."})
+
+    @app.exception_handler(EnvironmentValidationError)
+    async def settings_environment_error(request: Request, error: EnvironmentValidationError):
+        return JSONResponse(status_code=422, content={"detail": [{"loc": [error.key], "msg": str(error)}]})
+
+    @app.exception_handler(ValidationError)
+    async def settings_validation_error(request: Request, error: ValidationError):
+        return JSONResponse(status_code=422, content={"detail": [{"loc": list(item["loc"]), "msg": item["msg"]} for item in error.errors(include_input=False, include_context=False, include_url=False)]})
+
+    @app.exception_handler(RequestValidationError)
+    async def request_validation_error(request: Request, error: RequestValidationError):
+        return JSONResponse(status_code=422, content={"detail": [{"loc": list(item["loc"]), "msg": item["msg"]} for item in error.errors()]})
+
+    @app.exception_handler(ValueError)
+    async def invalid_effective_settings(request: Request, error: ValueError):
+        return JSONResponse(status_code=422, content={"detail": [{"loc": ["settings"], "msg": "Invalid effective setting or input; inspect the saved defaults."}]})
+
     # CORS configuration
     app.add_middleware(
         CORSMiddleware,
@@ -1023,11 +1092,19 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=["ETag"],
     )
 
     @app.get("/api/desktop-info")
-    async def get_desktop_info() -> Dict[str, str]:
-        return {"version": os.environ.get("NOUSETSU_DESKTOP_VERSION", __version__)}
+    async def get_desktop_info() -> Dict[str, Any]:
+        info = {"version": os.environ.get("NOUSETSU_DESKTOP_VERSION", __version__),
+                "mode": "frozen" if getattr(__import__("sys"), "frozen", False) else "source",
+                "owner_pid": os.getpid(), "env_file_path": str(resolve_env_file())}
+        try:
+            info.update(registry_dir=str(ProjectRegistry().storage_dir), projects_dir=str(get_projects_root_dir()))
+        except (ValueError, OSError):
+            info["storage_error"] = "Storage configuration is invalid or unavailable; inspect global settings."
+        return info
 
     def _resolve_repo(project_path: Optional[str] = None) -> NovelRepository:
         target_path = resolve_project_dir(project_path)
@@ -1043,8 +1120,9 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
     async def get_active_project() -> Dict[str, Any]:
         registry = ProjectRegistry()
         active_p = registry.get_last_active_project() or resolve_project_dir(None)
-        active_meta = _get_project_meta(active_p)
-        active_meta["is_active"] = True
+        active_meta = _get_project_meta(active_p) if active_p and (active_p / ".novel").is_dir() else None
+        if active_meta:
+            active_meta["is_active"] = True
 
         paths = registry.list_project_paths()
         discovered_paths = []
@@ -1066,7 +1144,7 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
         for meta in other_projects:
             meta["is_active"] = (str(active_p.resolve()) == meta["path"])
 
-        projects = [active_meta] + other_projects
+        projects = ([active_meta] if active_meta else []) + other_projects
 
         return {
             "active_project": active_meta,
@@ -1105,8 +1183,8 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
         repo = NovelRepository(target_dir)
         repo.initialize_project(
             title=title,
-            source_lang=body.source_language or "Japanese",
-            target_lang=body.target_language or "Thai",
+            source_lang=body.source_language or resolve_env().get("SOURCE_LANG") or "auto",
+            target_lang=body.target_language or resolve_env().get("TARGET_LANG") or "English",
             model_name=body.model,
             genre=body.genre or "general",
         )
@@ -1128,7 +1206,7 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
         registry = ProjectRegistry()
         active_p = registry.get_last_active_project() or resolve_project_dir(None)
         paths = registry.list_project_paths()
-        valid_paths = [Path(p) for p in paths if Path(p).exists()]
+        valid_paths = [Path(p) for p in paths if (Path(p) / ".novel").is_dir()]
 
         if len(valid_paths) > 1:
             with ThreadPoolExecutor(max_workers=min(8, len(valid_paths))) as executor:
@@ -1142,7 +1220,7 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
         return {
             "projects_dir": str(get_projects_root_dir()),
             "active_project_path": str(active_p.resolve()) if active_p else None,
-            "active_project": _get_project_meta(active_p) if active_p and active_p.exists() else None,
+            "active_project": _get_project_meta(active_p) if active_p and (active_p / ".novel").is_dir() else None,
             "projects": projects,
         }
 
@@ -1326,7 +1404,6 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
             raise HTTPException(status_code=409, detail="A translation job is already in progress.")
 
         repo = _resolve_repo(body.project_path)
-        load_env(repo.root_dir)
         try:
             active_job.start(
                 _run_batch_worker,
@@ -1545,10 +1622,11 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
                 detail="Novel-Scraper is not configured or unavailable. Please initialize git submodule in modules/novel_scraper.",
             )
         if body.project_path:
-            cfg = _resolve_repo(body.project_path).load_config()
-            subprocess_env = scraper_subprocess_environment(cfg)
+            repo = _resolve_repo(body.project_path)
+            cfg = repo.load_config()
+            subprocess_env = scraper_subprocess_environment(cfg, environ=resolve_env(repo.root_dir))
         else:
-            subprocess_env = dict(os.environ)
+            subprocess_env = dict(resolve_env())
         res = await bridge.inspect_url(url, env=subprocess_env)
         return res.model_dump()
 
@@ -1568,7 +1646,7 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
 
         repo = _resolve_repo(body.project_path)
         cfg = repo.load_config()
-        subprocess_env = scraper_subprocess_environment(cfg)
+        subprocess_env = scraper_subprocess_environment(cfg, environ=resolve_env(repo.root_dir))
         raw_dir_name = cfg.raw_dir or "raw_chapters"
 
         folder = body.folder
@@ -1915,7 +1993,7 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
                     act["synopsis"] = act["summary"]
 
             bible = NovelBible.model_validate(bible_data)
-            repo.save_bible(bible)
+            repo.save_edited_bible(bible)
             return {"success": True, "bible": bible.model_dump()}
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Validation failed: {e}")
@@ -1938,7 +2016,7 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
             if not isinstance(parsed, dict):
                 raise ValueError("YAML must represent a dictionary document.")
             bible = NovelBible.model_validate(parsed)
-            repo.save_bible(bible)
+            repo.save_edited_bible(bible)
             return {"success": True, "bible": bible.model_dump()}
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Invalid YAML content: {e}")
@@ -1950,15 +2028,15 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
     @app.get("/api/model-catalog")
     async def get_model_catalog(request: Request, provider: str = Query(...)) -> Dict[str, Any]:
         _require_local_settings_origin(request)
-        load_env()
+        env = resolve_env()
         provider = provider.casefold()
         api_key = {
-            "gemini": os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"),
-            "openai": os.environ.get("OPENAI_API_KEY"),
-            "openrouter": os.environ.get("OPENROUTER_API_KEY"),
-            "custom": os.environ.get("CUSTOM_API_KEY"),
+            "gemini": env.get("GEMINI_API_KEY") or env.get("GOOGLE_API_KEY"),
+            "openai": env.get("OPENAI_API_KEY"),
+            "openrouter": env.get("OPENROUTER_API_KEY"),
+            "custom": env.get("CUSTOM_API_KEY"),
         }.get(provider)
-        base_url = os.environ.get("CUSTOM_API_BASE_URL", "").strip()
+        base_url = env.get("CUSTOM_API_BASE_URL", "").strip()
         if provider not in {"gemini", "openai", "openrouter", "custom"}:
             raise HTTPException(status_code=400, detail="Unsupported model catalog provider.")
         if not api_key or (provider == "custom" and not base_url):
@@ -1977,31 +2055,34 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
         return {"provider": provider, "configured": True, "models": models}
 
     @app.get("/api/environment")
-    async def get_machine_environment(request: Request) -> Dict[str, Any]:
+    async def get_machine_environment(request: Request, response: Response) -> Dict[str, Any]:
         _require_local_settings_origin(request)
-        load_env()
-        return get_env_settings()
+        result = get_env_settings()
+        response.headers["ETag"] = f'"{result["revision"]}"'
+        return result
 
     @app.put("/api/environment")
-    async def update_machine_environment(request: Request, body: Dict[str, Any]) -> Dict[str, Any]:
+    async def update_machine_environment(request: Request, response: Response, body: Dict[str, Any]) -> Dict[str, Any]:
         _require_local_settings_origin(request)
+        expected = _required_revision(request)
+        from nousetsu.storage.settings_store import SettingsLockTimeout
         values = body.get("values", {})
         api_keys = body.get("api_keys", {})
         clear_api_keys = body.get("clear_api_keys", [])
-        if (
-            not isinstance(values, dict)
-            or not isinstance(api_keys, dict)
-            or not isinstance(clear_api_keys, list)
-            or any(not isinstance(key, str) for key in clear_api_keys)
-        ):
-            raise HTTPException(status_code=400, detail="Invalid environment settings payload.")
+        if (set(body) - {"values", "api_keys", "clear_api_keys"} or not isinstance(values, dict) or not isinstance(api_keys, dict)
+            or not isinstance(clear_api_keys, list) or any(not isinstance(key, str) for key in clear_api_keys)):
+            raise HTTPException(status_code=422, detail="Invalid environment settings payload.")
         try:
-            saved = save_env_settings(values, api_keys, clear_api_keys)
-        except ValueError as error:
-            raise HTTPException(status_code=400, detail=str(error)) from error
-        except OSError as error:
-            logger.exception("Could not save local environment settings")
-            raise HTTPException(status_code=500, detail="Could not write the local .env file.") from error
+            saved = save_env_settings(values, api_keys, clear_api_keys, expected_revision=expected)
+        except SettingsRevisionConflict:
+            raise HTTPException(status_code=412, detail="Settings changed; reload before saving.") from None
+        except EnvironmentValidationError as error:
+            raise HTTPException(status_code=422, detail=[{"loc": [error.key], "msg": str(error)}]) from None
+        except SettingsLockTimeout:
+            raise HTTPException(status_code=503, detail="Settings are busy; try again.") from None
+        except OSError:
+            raise HTTPException(status_code=500, detail="Could not write the local .env file.") from None
+        response.headers["ETag"] = f'"{saved["revision"]}"'
         return {"success": True, **saved}
 
     @app.get("/api/updates/latest")
@@ -2048,315 +2129,126 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
     # ------------------------------------------------------------------------
 
     @app.get("/api/settings")
-    async def get_settings(project_path: Optional[str] = Query(None)) -> Dict[str, Any]:
+    async def get_settings(response: Response, project_path: Optional[str] = Query(None)) -> Dict[str, Any]:
         repo = _resolve_repo(project_path)
-        load_env(repo.root_dir)
-        cfg = repo.load_config()
-        env_snap = get_env_snapshot()
-        effective_extractor = cfg.get_agent_model("extractor")
-        effective_drafter = cfg.get_agent_model("drafter")
-        effective_critic = cfg.get_agent_model("critic")
-        effective_polisher = cfg.get_agent_model("polisher")
-        effective_chronicler = cfg.get_agent_model("chronicler")
-        effective_scraper = cfg.get_agent_model("scraper")
-        effective_primary = cfg.get_model_name()
-        effective_fallback = cfg.get_fallback_model()
-        effective_generation_settings = {
-            role: cfg.get_agent_generation_settings(role)
-            for role in ("extractor", "drafter", "critic", "polisher", "chronicler", "scraper")
-        }
-
-        env_default_model = os.environ.get("NOVEL_MODEL") or os.environ.get("DEFAULT_MODEL") or "gemini-3.1-flash-lite"
-        env_fallback_model = os.environ.get("NOVEL_FALLBACK_MODEL") or "gemini-3.5-flash-lite"
-        env_extractor = os.environ.get("NOVEL_EXTRACTOR_MODEL") or env_default_model
-        env_drafter = os.environ.get("NOVEL_DRAFTER_MODEL") or env_default_model
-        env_critic = os.environ.get("NOVEL_CRITIC_MODEL") or "gemma-4-26b-a4b-it"
-        env_polisher = os.environ.get("NOVEL_POLISHER_MODEL") or env_default_model
-        env_chronicler = os.environ.get("NOVEL_CHRONICLER_MODEL") or "gemma-4-26b-a4b-it"
-        env_scraper = os.environ.get("NOVEL_SCRAPER_MODEL") or env_default_model
-
-        env_presets = {
-            "model_name": env_default_model,
-            "fallback_model": env_fallback_model,
-            "extractor_model": env_extractor,
-            "drafter_model": env_drafter,
-            "critic_model": env_critic,
-            "polisher_model": env_polisher,
-            "chronicler_model": env_chronicler,
-            "scraper_model": env_scraper,
-        }
-
-        available_presets = [
-            {
-                "id": "env_current",
-                "name": "Current .env Defaults",
-                "description": "Models loaded directly from your machine's .env file",
-                "models": env_presets,
-            },
-            {
-                "id": "balanced_standard",
-                "name": "Standard Production (Recommended)",
-                "description": "Flash-Lite for Drafter/Polisher, Gemma 4 for Critic/Chronicler",
-                "models": {
-                    "model_name": "gemini-3.1-flash-lite",
-                    "fallback_model": "gemini-3.5-flash-lite",
-                    "extractor_model": "gemini-3.1-flash-lite",
-                    "drafter_model": "gemini-3.5-flash-lite",
-                    "critic_model": "gemma-4-26b-a4b-it",
-                    "polisher_model": "gemini-3.5-flash-lite",
-                    "chronicler_model": "gemma-4-26b-a4b-it",
-                },
-            },
-            {
-                "id": "flash_lite_speed",
-                "name": "Frugal & Fast (100% Flash-Lite)",
-                "description": "Lowest token cost and highest throughput across all 5 agents",
-                "models": {
-                    "model_name": "gemini-3.1-flash-lite",
-                    "fallback_model": "gemini-3.5-flash-lite",
-                    "extractor_model": "gemini-3.1-flash-lite",
-                    "drafter_model": "gemini-3.1-flash-lite",
-                    "critic_model": "gemini-3.1-flash-lite",
-                    "polisher_model": "gemini-3.1-flash-lite",
-                    "chronicler_model": "gemini-3.1-flash-lite",
-                },
-            },
-            {
-                "id": "pro_high_fidelity",
-                "name": "Premium Quality (Gemini 3 Pro)",
-                "description": "Gemini 3.1 Pro for drafting & polishing, Gemma 4 for auditing",
-                "models": {
-                    "model_name": "gemini-3.1-flash-lite",
-                    "fallback_model": "gemini-3.5-flash-lite",
-                    "extractor_model": "gemini-3.1-flash-lite",
-                    "drafter_model": "gemini-3.1-pro",
-                    "critic_model": "gemma-4-26b-a4b-it",
-                    "polisher_model": "gemini-3.1-pro",
-                    "chronicler_model": "gemma-4-26b-a4b-it",
-                },
-            },
-            {
-                "id": "gemma_reasoning",
-                "name": "Gemma Deep Reasoning Focus",
-                "description": "Gemma 4 31B for line-by-line critique and nuance detection",
-                "models": {
-                    "model_name": "gemini-3.1-flash-lite",
-                    "fallback_model": "gemini-3.5-flash-lite",
-                    "extractor_model": "gemini-3.1-flash-lite",
-                    "drafter_model": "gemini-3.5-flash-lite",
-                    "critic_model": "gemma-4-31b-it",
-                    "polisher_model": "gemini-3.5-flash-lite",
-                    "chronicler_model": "gemma-4-26b-a4b-it",
-                },
-            },
-        ]
-
-        model_catalog = [
-            "gemini-3.1-flash-lite",
-            "gemini-3.5-flash-lite",
-            "gemini-3.1-pro",
-            "gemma-4-26b-a4b-it",
-            "gemma-4-31b-it",
-        ]
-
-        return {
-            "title": cfg.title,
-            "genre": cfg.genre,
-            "source_language": cfg.source_language,
-            "target_language": cfg.target_language,
-            "raw_dir": cfg.raw_dir,
-            "translated_dir": cfg.output_dir,
-            "output_dir": cfg.output_dir,
-            "model_name": cfg.model_name or "",
-            "fallback_model": cfg.fallback_model or "",
-            "extractor_model": cfg.extractor_model or "",
-            "drafter_model": cfg.drafter_model or "",
-            "critic_model": cfg.critic_model or "",
-            "polisher_model": cfg.polisher_model or "",
-            "chronicler_model": cfg.chronicler_model or "",
-            "scraper_model": cfg.scraper_model or "",
-            "generation_settings": {
-                role: settings.model_dump(exclude_unset=True)
-                for role, settings in cfg.generation_settings.items()
-            },
-            "effective_generation_settings": effective_generation_settings,
-            "effective_model_name": effective_primary,
-            "effective_fallback_model": effective_fallback,
-            "effective_extractor_model": effective_extractor,
-            "effective_drafter_model": effective_drafter,
-            "effective_critic_model": effective_critic,
-            "effective_polisher_model": effective_polisher,
-            "effective_chronicler_model": effective_chronicler,
-            "effective_scraper_model": effective_scraper,
-            "env_presets": env_presets,
-            "available_presets": available_presets,
-            "model_catalog": model_catalog,
-            "max_review_loops": cfg.max_review_loops,
-            "quality_threshold": cfg.quality_threshold,
-            "chunk_threshold_lines": cfg.chunk_threshold_lines,
-            "chunk_size_lines": cfg.target_chunk_lines,
-            "target_chunk_lines": cfg.target_chunk_lines,
-            "chunk_overlap_lines": cfg.chunk_overlap_lines,
-            "enable_chunking": cfg.enable_chunking,
-            "project_id": cfg.project_id,
-            "created_at": cfg.created_at,
-            "use_interactions_api": cfg.use_interactions_api,
-            "auto_update_bible": cfg.auto_update_bible,
-            "max_tpm": cfg.max_tpm,
-            "max_rpm": cfg.max_rpm,
-            "cross_folder_summaries": cfg.cross_folder_summaries,
-            "safety_recursive_subdivision": cfg.safety_recursive_subdivision,
-            "safety_subdivision_min_lines": cfg.safety_subdivision_min_lines,
-            "safety_subdivision_max_depth": cfg.safety_subdivision_max_depth,
-            "enable_rag": cfg.enable_rag,
-            "rag_top_k": cfg.rag_top_k,
-            "rag_embedding_model": cfg.rag_embedding_model or "",
-            "enable_rag_reranker": cfg.enable_rag_reranker,
-            "rag_reranker_model": cfg.rag_reranker_model or "",
-            "filter_scene_characters": cfg.filter_scene_characters,
-            "filter_extractor_entities": cfg.filter_extractor_entities,
-            "enable_patch_polishing": cfg.enable_patch_polishing,
-            "enable_post_polish_reconciliation": cfg.enable_post_polish_reconciliation,
-            "config": cfg.model_dump(),
-            "env": env_snap,
-        }
-
-    @app.put("/api/settings")
-    async def update_settings(body: Dict[str, Any], project_path: Optional[str] = Query(None)) -> Dict[str, Any]:
-        repo = _resolve_repo(project_path)
-        try:
+        with repo.project_lock():
             cfg = repo.load_config()
-            # Start with nested config if present, then let top-level body fields override it
-            src: Dict[str, Any] = {}
-            if isinstance(body.get("config"), dict):
-                src.update(body["config"])
-            for k, v in body.items():
-                if k not in ("config", "env"):
-                    src[k] = v
+            env, env_origins = resolve_env_with_sources(repo.root_dir)
+            env_snap = get_env_snapshot(env)
+            effective_extractor = cfg.get_agent_model("extractor", env)
+            effective_drafter = cfg.get_agent_model("drafter", env)
+            effective_critic = cfg.get_agent_model("critic", env)
+            effective_polisher = cfg.get_agent_model("polisher", env)
+            effective_chronicler = cfg.get_agent_model("chronicler", env)
+            effective_scraper = cfg.get_agent_model("scraper", env)
+            effective_primary = cfg.get_model_name(env)
+            effective_fallback = cfg.get_fallback_model(env)
+            effective_generation_settings = {
+                role: cfg.get_agent_generation_settings(role, env)
+                for role in ("extractor", "drafter", "critic", "polisher", "chronicler", "scraper")
+            }
 
-            if "title" in src and src["title"] is not None:
-                cfg.title = str(src["title"]).strip()
-            if "genre" in src and src["genre"] is not None:
-                cfg.genre = str(src["genre"]).strip()
-            if "source_language" in src and src["source_language"] is not None:
-                cfg.source_language = str(src["source_language"]).strip()
-            if "target_language" in src and src["target_language"] is not None:
-                cfg.target_language = str(src["target_language"]).strip()
-            if "project_id" in src and src["project_id"] is not None:
-                cfg.project_id = str(src["project_id"]).strip()
-            if "raw_dir" in src and src["raw_dir"] is not None:
-                cfg.raw_dir = str(src["raw_dir"]).strip()
-            if "translated_dir" in src and src["translated_dir"] is not None:
-                cfg.output_dir = str(src["translated_dir"]).strip()
-            elif "output_dir" in src and src["output_dir"] is not None:
-                cfg.output_dir = str(src["output_dir"]).strip()
-            if "model_name" in src:
-                val = str(src["model_name"]).strip() if src["model_name"] is not None else ""
-                cfg.model_name = val if val else None
-            if "fallback_model" in src:
-                val = str(src["fallback_model"]).strip() if src["fallback_model"] is not None else ""
-                cfg.fallback_model = val if val else None
+            env_default_model = env.get("NOVEL_MODEL") or env.get("DEFAULT_MODEL") or "gemini-3.1-flash-lite"
+            env_fallback_model = env.get("NOVEL_FALLBACK_MODEL") or "gemini-3.5-flash-lite"
+            env_extractor = env.get("NOVEL_EXTRACTOR_MODEL") or env_default_model
+            env_drafter = env.get("NOVEL_DRAFTER_MODEL") or env_default_model
+            env_critic = env.get("NOVEL_CRITIC_MODEL") or "gemma-4-26b-a4b-it"
+            env_polisher = env.get("NOVEL_POLISHER_MODEL") or env_default_model
+            env_chronicler = env.get("NOVEL_CHRONICLER_MODEL") or "gemma-4-26b-a4b-it"
+            env_scraper = env.get("NOVEL_SCRAPER_MODEL") or env_default_model
 
-            for m_field in ("extractor_model", "drafter_model", "critic_model", "polisher_model", "chronicler_model", "scraper_model"):
-                if m_field in src:
-                    val = str(src[m_field]).strip() if src[m_field] is not None else ""
-                    setattr(cfg, m_field, val if val else None)
+            env_presets = {
+                "model_name": env_default_model,
+                "fallback_model": env_fallback_model,
+                "extractor_model": env_extractor,
+                "drafter_model": env_drafter,
+                "critic_model": env_critic,
+                "polisher_model": env_polisher,
+                "chronicler_model": env_chronicler,
+                "scraper_model": env_scraper,
+            }
 
-            if "generation_settings" in src:
-                from nousetsu.models.config import AgentGenerationSettings, GENERATION_ROLES
+            available_presets = [
+                {
+                    "id": "env_current",
+                    "name": "Current .env Defaults",
+                    "description": "Models loaded directly from your machine's .env file",
+                    "models": env_presets,
+                },
+                {
+                    "id": "balanced_standard",
+                    "name": "Standard Production (Recommended)",
+                    "description": "Flash-Lite for Drafter/Polisher, Gemma 4 for Critic/Chronicler",
+                    "models": {
+                        "model_name": "gemini-3.1-flash-lite",
+                        "fallback_model": "gemini-3.5-flash-lite",
+                        "extractor_model": "gemini-3.1-flash-lite",
+                        "drafter_model": "gemini-3.5-flash-lite",
+                        "critic_model": "gemma-4-26b-a4b-it",
+                        "polisher_model": "gemini-3.5-flash-lite",
+                        "chronicler_model": "gemma-4-26b-a4b-it",
+                    },
+                },
+                {
+                    "id": "flash_lite_speed",
+                    "name": "Frugal & Fast (100% Flash-Lite)",
+                    "description": "Lowest token cost and highest throughput across all 5 agents",
+                    "models": {
+                        "model_name": "gemini-3.1-flash-lite",
+                        "fallback_model": "gemini-3.5-flash-lite",
+                        "extractor_model": "gemini-3.1-flash-lite",
+                        "drafter_model": "gemini-3.1-flash-lite",
+                        "critic_model": "gemini-3.1-flash-lite",
+                        "polisher_model": "gemini-3.1-flash-lite",
+                        "chronicler_model": "gemini-3.1-flash-lite",
+                    },
+                },
+                {
+                    "id": "pro_high_fidelity",
+                    "name": "Premium Quality (Gemini 3 Pro)",
+                    "description": "Gemini 3.1 Pro for drafting & polishing, Gemma 4 for auditing",
+                    "models": {
+                        "model_name": "gemini-3.1-flash-lite",
+                        "fallback_model": "gemini-3.5-flash-lite",
+                        "extractor_model": "gemini-3.1-flash-lite",
+                        "drafter_model": "gemini-3.1-pro",
+                        "critic_model": "gemma-4-26b-a4b-it",
+                        "polisher_model": "gemini-3.1-pro",
+                        "chronicler_model": "gemma-4-26b-a4b-it",
+                    },
+                },
+                {
+                    "id": "gemma_reasoning",
+                    "name": "Gemma Deep Reasoning Focus",
+                    "description": "Gemma 4 31B for line-by-line critique and nuance detection",
+                    "models": {
+                        "model_name": "gemini-3.1-flash-lite",
+                        "fallback_model": "gemini-3.5-flash-lite",
+                        "extractor_model": "gemini-3.1-flash-lite",
+                        "drafter_model": "gemini-3.5-flash-lite",
+                        "critic_model": "gemma-4-31b-it",
+                        "polisher_model": "gemini-3.5-flash-lite",
+                        "chronicler_model": "gemma-4-26b-a4b-it",
+                    },
+                },
+            ]
 
-                raw_settings = src["generation_settings"]
-                if not isinstance(raw_settings, dict) or set(raw_settings) - set(GENERATION_ROLES):
-                    raise ValueError("Invalid generation settings roles.")
-                cfg.generation_settings = {
-                    role: AgentGenerationSettings.model_validate(values)
-                    for role, values in raw_settings.items()
-                    if isinstance(values, dict)
-                }
-                if any(not isinstance(values, dict) for values in raw_settings.values()):
-                    raise ValueError("Invalid generation settings value.")
+            model_catalog = [
+                "gemini-3.1-flash-lite",
+                "gemini-3.5-flash-lite",
+                "gemini-3.1-pro",
+                "gemma-4-26b-a4b-it",
+                "gemma-4-31b-it",
+            ]
 
-            if "use_interactions_api" in src and src["use_interactions_api"] is not None:
-                cfg.use_interactions_api = bool(src["use_interactions_api"])
-            if "auto_update_bible" in src and src["auto_update_bible"] is not None:
-                cfg.auto_update_bible = bool(src["auto_update_bible"])
-            if "max_tpm" in src and src["max_tpm"] is not None:
-                cfg.max_tpm = int(src["max_tpm"])
-            if "max_rpm" in src and src["max_rpm"] is not None:
-                cfg.max_rpm = int(src["max_rpm"])
-            if "cross_folder_summaries" in src and src["cross_folder_summaries"] is not None:
-                cfg.cross_folder_summaries = bool(src["cross_folder_summaries"])
-            if "safety_recursive_subdivision" in src and src["safety_recursive_subdivision"] is not None:
-                cfg.safety_recursive_subdivision = bool(src["safety_recursive_subdivision"])
-            if "safety_subdivision_min_lines" in src and src["safety_subdivision_min_lines"] is not None:
-                cfg.safety_subdivision_min_lines = int(src["safety_subdivision_min_lines"])
-            if "safety_subdivision_max_depth" in src and src["safety_subdivision_max_depth"] is not None:
-                cfg.safety_subdivision_max_depth = int(src["safety_subdivision_max_depth"])
-
-            if "max_review_loops" in src and src["max_review_loops"] is not None:
-                cfg.max_review_loops = int(src["max_review_loops"])
-            if "quality_threshold" in src and src["quality_threshold"] is not None:
-                cfg.quality_threshold = float(src["quality_threshold"])
-            if "enable_chunking" in src and src["enable_chunking"] is not None:
-                cfg.enable_chunking = bool(src["enable_chunking"])
-            if "chunk_threshold_lines" in src and src["chunk_threshold_lines"] is not None:
-                cfg.chunk_threshold_lines = int(src["chunk_threshold_lines"])
-            if "chunk_size_lines" in src and src["chunk_size_lines"] is not None:
-                cfg.target_chunk_lines = int(src["chunk_size_lines"])
-            elif "target_chunk_lines" in src and src["target_chunk_lines"] is not None:
-                cfg.target_chunk_lines = int(src["target_chunk_lines"])
-            if "chunk_overlap_lines" in src and src["chunk_overlap_lines"] is not None:
-                cfg.chunk_overlap_lines = int(src["chunk_overlap_lines"])
-            if "enable_rag" in src and src["enable_rag"] is not None:
-                cfg.enable_rag = bool(src["enable_rag"])
-            if "rag_top_k" in src and src["rag_top_k"] is not None:
-                cfg.rag_top_k = int(src["rag_top_k"])
-            if "rag_embedding_model" in src:
-                val = str(src["rag_embedding_model"]).strip() if src["rag_embedding_model"] is not None else ""
-                cfg.rag_embedding_model = val if val else None
-            if "enable_rag_reranker" in src and src["enable_rag_reranker"] is not None:
-                cfg.enable_rag_reranker = bool(src["enable_rag_reranker"])
-            if "rag_reranker_model" in src:
-                val = str(src["rag_reranker_model"]).strip() if src["rag_reranker_model"] is not None else ""
-                cfg.rag_reranker_model = val if val else None
-            if "filter_scene_characters" in src and src["filter_scene_characters"] is not None:
-                cfg.filter_scene_characters = bool(src["filter_scene_characters"])
-            if "filter_extractor_entities" in src:
-                cfg.filter_extractor_entities = bool(src["filter_extractor_entities"]) if src["filter_extractor_entities"] is not None else None
-            if "enable_patch_polishing" in src and src["enable_patch_polishing"] is not None:
-                cfg.enable_patch_polishing = bool(src["enable_patch_polishing"])
-            if "enable_post_polish_reconciliation" in src and src["enable_post_polish_reconciliation"] is not None:
-                cfg.enable_post_polish_reconciliation = bool(src["enable_post_polish_reconciliation"])
-
-            repo.save_config(cfg)
-            _invalidate_chapter_caches(str(repo.root_dir))
-
-            # Sync updated project metadata to Novel Bible if present
-            try:
-                bible_path = repo.bible_file_path()
-                if bible_path.exists():
-                    bible = repo.load_bible()
-                    modified = False
-                    if cfg.title and bible.title != cfg.title:
-                        bible.title = cfg.title
-                        modified = True
-                    if cfg.genre and bible.genre != cfg.genre:
-                        bible.genre = cfg.genre
-                        modified = True
-                    if cfg.source_language and bible.source_language != cfg.source_language:
-                        bible.source_language = cfg.source_language
-                        modified = True
-                    if cfg.target_language and bible.target_language != cfg.target_language:
-                        bible.target_language = cfg.target_language
-                        modified = True
-                    if modified:
-                        repo.save_bible(bible)
-            except Exception as e:
-                logger.warning("Could not sync Bible with updated settings: %s", e)
-
-            return {
-                "success": True,
-                "config": cfg.model_dump(),
+            for preset in available_presets:
+                preset["models"].setdefault("scraper_model", "gemini-3.1-flash-lite")
+            revision = settings_revision(repo.config_file_path(), env)
+            response.headers["ETag"] = f'"{revision}"'
+            return redact_settings({
+                "revision": revision,
+                "effective_config": cfg.get_effective_config(env),
+                "sources": _project_setting_sources(cfg, env, env_origins),
                 "title": cfg.title,
                 "genre": cfg.genre,
                 "source_language": cfg.source_language,
@@ -2366,15 +2258,107 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
                 "output_dir": cfg.output_dir,
                 "model_name": cfg.model_name or "",
                 "fallback_model": cfg.fallback_model or "",
+                "extractor_model": cfg.extractor_model or "",
+                "drafter_model": cfg.drafter_model or "",
+                "critic_model": cfg.critic_model or "",
+                "polisher_model": cfg.polisher_model or "",
+                "chronicler_model": cfg.chronicler_model or "",
+                "scraper_model": cfg.scraper_model or "",
+                "generation_settings": {
+                    role: settings.model_dump(exclude_unset=True)
+                    for role, settings in cfg.generation_settings.items()
+                },
+                "effective_generation_settings": effective_generation_settings,
+                "effective_model_name": effective_primary,
+                "effective_fallback_model": effective_fallback,
+                "effective_extractor_model": effective_extractor,
+                "effective_drafter_model": effective_drafter,
+                "effective_critic_model": effective_critic,
+                "effective_polisher_model": effective_polisher,
+                "effective_chronicler_model": effective_chronicler,
+                "effective_scraper_model": effective_scraper,
+                "env_presets": env_presets,
+                "available_presets": available_presets,
+                "model_catalog": model_catalog,
                 "max_review_loops": cfg.max_review_loops,
                 "quality_threshold": cfg.quality_threshold,
                 "chunk_threshold_lines": cfg.chunk_threshold_lines,
                 "chunk_size_lines": cfg.target_chunk_lines,
                 "target_chunk_lines": cfg.target_chunk_lines,
                 "chunk_overlap_lines": cfg.chunk_overlap_lines,
-            }
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Invalid settings payload: {e}")
+                "enable_chunking": cfg.enable_chunking,
+                "project_id": cfg.project_id,
+                "created_at": cfg.created_at,
+                "use_interactions_api": cfg.use_interactions_api,
+                "auto_update_bible": cfg.auto_update_bible,
+                "max_tpm": cfg.max_tpm,
+                "max_rpm": cfg.max_rpm,
+                "cross_folder_summaries": cfg.cross_folder_summaries,
+                "safety_recursive_subdivision": cfg.safety_recursive_subdivision,
+                "safety_subdivision_min_lines": cfg.safety_subdivision_min_lines,
+                "safety_subdivision_max_depth": cfg.safety_subdivision_max_depth,
+                "enable_rag": cfg.enable_rag,
+                "rag_top_k": cfg.rag_top_k,
+                "rag_embedding_model": cfg.rag_embedding_model or "",
+                "enable_rag_reranker": cfg.enable_rag_reranker,
+                "rag_reranker_model": cfg.rag_reranker_model or "",
+                "filter_scene_characters": cfg.filter_scene_characters,
+                "filter_extractor_entities": cfg.filter_extractor_entities,
+                "enable_patch_polishing": cfg.enable_patch_polishing,
+                "enable_post_polish_reconciliation": cfg.enable_post_polish_reconciliation,
+                **{name: getattr(cfg, name) for name in ("enable_procedural_graph_learning", "procedural_learning_cadence", "procedural_learning_interval", "procedural_learning_min_failures", "procedural_refiner_model")},
+                "config": cfg.model_dump(),
+                "env": env_snap,
+            }, env, credential_values(repo.root_dir))
+
+    @app.put("/api/settings")
+    async def update_settings(request: Request, response: Response, body: Dict[str, Any], project_path: Optional[str] = Query(None)) -> Dict[str, Any]:
+        _require_local_settings_origin(request)
+        repo = _resolve_repo(project_path)
+        expected = _required_revision(request)
+        from nousetsu.storage.settings_store import SettingsLockTimeout
+        try:
+            with repo.project_lock():
+                cfg = repo.load_config()
+                current_revision = settings_revision(repo.config_file_path(), resolve_env(repo.root_dir))
+                if expected != current_revision:
+                    raise HTTPException(status_code=412, detail="Settings changed; reload before saving.")
+                src = {}
+                if "config" in body:
+                    if not isinstance(body["config"], dict):
+                        raise HTTPException(status_code=422, detail=[{"loc": ["config"], "msg": "Expected an object"}])
+                    src.update(body["config"])
+                src.update({key: value for key, value in body.items() if key != "config"})
+                aliases = {"translated_dir": "output_dir", "chunk_size_lines": "target_chunk_lines"}
+                allowed = set(ProjectConfig.model_fields) - {"created_at"}
+                unknown = set(src) - allowed - set(aliases)
+                if unknown:
+                    raise HTTPException(status_code=422, detail=[{"loc": [key], "msg": "Unsupported or read-only setting"} for key in sorted(unknown)])
+                for alias, field in aliases.items():
+                    if alias in src:
+                        src[field] = src.pop(alias)
+                for key, value in list(src.items()):
+                    field = ProjectConfig.model_fields[key]
+                    if isinstance(value, str):
+                        src[key] = value.strip()
+                        if not src[key] and field.default is None:
+                            src[key] = None
+                candidate = ProjectConfig.model_validate({**cfg.model_dump(), **src}, strict=True)
+                candidate.get_effective_config(resolve_env(repo.root_dir))
+                repo.save_settings(candidate)
+                _invalidate_chapter_caches(str(repo.root_dir))
+                result = await get_settings(response, project_path)
+                return {"success": True, **result}
+        except HTTPException:
+            raise
+        except ValidationError as error:
+            raise HTTPException(status_code=422, detail=[{"loc": list(item["loc"]), "msg": item["msg"]} for item in error.errors(include_input=False, include_context=False, include_url=False)]) from None
+        except ValueError:
+            raise HTTPException(status_code=422, detail=[{"loc": ["settings"], "msg": "Invalid inherited setting; repair the corresponding default first"}]) from None
+        except SettingsLockTimeout:
+            raise HTTPException(status_code=503, detail="Settings are busy; try again.") from None
+        except OSError:
+            raise HTTPException(status_code=500, detail="Could not write project settings.") from None
 
     # ------------------------------------------------------------------------
     # 5.6 Logging & Diagnostics
@@ -2663,7 +2647,6 @@ def run_web_server(
     dist_dir: Optional[Path] = None
 ) -> None:
     """Run the Nousetsu web server hosting the dashboard and trace sync API."""
-    load_env()
     setup_backend_file_logging()
     server_app = create_app(dist_dir=dist_dir)
     url = f"http://{host}:{port}"

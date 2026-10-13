@@ -52,19 +52,22 @@ class EmbeddingClient:
     def __init__(
         self,
         model_name: str = "text-multilingual-embedding-002",
-        api_key: Optional[str] = None
+        api_key: Optional[str] = None,
+        environ=None,
     ):
+        from nousetsu.utils.env import resolve_env
+        env = resolve_env() if environ is None else environ
         self.raw_model_name = model_name
         self.is_mock = (
             model_name.lower().startswith(("mock", "test"))
-            or bool(os.environ.get("PYTEST_CURRENT_TEST"))
-            or os.environ.get("NOVEL_USE_MOCK_EMBEDDINGS", "").lower() in ("1", "true")
+            or bool(env.get("PYTEST_CURRENT_TEST"))
+            or env.get("NOVEL_USE_MOCK_EMBEDDINGS", "").lower() in ("1", "true")
         )
 
         resolved_key = (
             api_key
-            or os.environ.get("GEMINI_API_KEY")
-            or os.environ.get("GOOGLE_API_KEY")
+            or env.get("GEMINI_API_KEY")
+            or env.get("GOOGLE_API_KEY")
         )
 
         self._client = None

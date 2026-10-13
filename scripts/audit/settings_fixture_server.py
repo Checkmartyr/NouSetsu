@@ -28,7 +28,7 @@ def main() -> None:
     parser.add_argument("--port", type=int, required=True)
     parser.add_argument("--mode", choices=("dev", "built"), required=True)
     args = parser.parse_args()
-    evidence = Path("audit-results/settings").resolve()
+    evidence = Path("audit-results/settings-repair").resolve()
     root = Path(tempfile.mkdtemp(prefix=f"nousetsu-settings-{args.mode}-"))
     projects = root / "projects"
     env_file = root / "audit.env"
@@ -45,7 +45,6 @@ def main() -> None:
     os.environ.update({
         "NOUSETSU_ENV_FILE": str(env_file),
         "NOVEL_REGISTRY_DIR": str(root / "registry"),
-        "NOVEL_PROJECTS_DIR": str(projects),
         "NOUSETSU_LOGS_DIR": str(root / "logs"),
     })
     env_file.write_text(
@@ -69,7 +68,7 @@ def main() -> None:
     import uvicorn
     import yaml
     from nousetsu.storage.repository import NovelRepository, ProjectRegistry
-    from nousetsu.utils.env import ENV_CONFIG_KEYS, ENV_SECRET_KEYS, load_env, save_env_settings
+    from nousetsu.utils.env import ENV_CONFIG_KEYS, ENV_SECRET_KEYS, resolve_env, save_env_settings
     from nousetsu.cli import web_server
 
     for name in ("Audit A", "Audit B"):
@@ -104,8 +103,8 @@ def main() -> None:
             "config": {key: yaml.safe_load((projects / f"Audit {key}" / ".novel/config.yaml").read_text(encoding="utf-8")) for key in ("A", "B")},
             "bible": {key: yaml.safe_load((projects / f"Audit {key}" / ".novel/bible/bible.yaml").read_text(encoding="utf-8")) for key in ("A", "B")},
             "resolved": {key: {
-                "filter_extractor_entities": NovelRepository(projects / f"Audit {key}").load_config().get_filter_extractor_entities(),
-                "generation": {role: NovelRepository(projects / f"Audit {key}").load_config().get_agent_generation_settings(role) for role in ("extractor", "drafter", "critic", "polisher", "chronicler", "scraper")},
+                "filter_extractor_entities": NovelRepository(projects / f"Audit {key}").load_config().get_filter_extractor_entities(resolve_env(projects / f"Audit {key}")),
+                "generation": {role: NovelRepository(projects / f"Audit {key}").load_config().get_agent_generation_settings(role, resolve_env(projects / f"Audit {key}")) for role in ("extractor", "drafter", "critic", "polisher", "chronicler", "scraper")},
             } for key in ("A", "B")},
         }
 
@@ -120,7 +119,6 @@ def main() -> None:
             path.write_bytes(content)
         for key in (*ENV_CONFIG_KEYS, *ENV_SECRET_KEYS):
             os.environ.pop(key, None)
-        load_env()
         web_server._PROJECT_META_CACHE.clear()
         web_server._invalidate_chapter_caches()
         return snapshot()

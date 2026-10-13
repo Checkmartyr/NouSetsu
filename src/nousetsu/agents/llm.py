@@ -6,7 +6,7 @@ from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from pydantic import Field
 from nousetsu.models.metadata import TokenUsage
-from nousetsu.utils.env import load_env
+from nousetsu.utils.env import resolve_env
 
 
 def extract_usage_from_message(msg: Any) -> TokenUsage:
@@ -449,10 +449,10 @@ class FallbackChatModel(BaseChatModel):
         return RunnableLambda(_invoke_structured_with_fallback)
 
 
-def _resolve_temperature(temp: Optional[float] = None) -> float:
+def _resolve_temperature(temp: Optional[float] = None, environ=None) -> float:
     if temp is not None:
         return float(temp)
-    env_temp = os.environ.get("NOVEL_TEMPERATURE")
+    env_temp = (resolve_env() if environ is None else environ).get("NOVEL_TEMPERATURE")
     if env_temp:
         try:
             return float(env_temp)
@@ -506,21 +506,22 @@ def _create_single_llm(
     use_interactions: Optional[bool] = None,
     thinking_level: Optional[str] = None,
     thinking_budget: Optional[int] = None,
+    environ=None,
 ) -> BaseChatModel:
     """Instantiate an LLM by model ID and the matching configured provider key."""
-    resolved_temp = _resolve_temperature(temperature)
+    env = resolve_env() if environ is None else environ
+    resolved_temp = _resolve_temperature(temperature, env)
     requested_model = model_name.strip()
     normalized_model = requested_model.lower()
     if normalized_model.startswith(("mock", "test")):
         return MockNovelLLM(model_name=requested_model, temperature=resolved_temp)
 
-    load_env()
 
-    google_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-    openai_key = os.environ.get("OPENAI_API_KEY")
-    openrouter_key = os.environ.get("OPENROUTER_API_KEY")
-    custom_key = os.environ.get("CUSTOM_API_KEY")
-    custom_base_url = os.environ.get("CUSTOM_API_BASE_URL", "").strip().rstrip("/")
+    google_key = env.get("GEMINI_API_KEY") or env.get("GOOGLE_API_KEY")
+    openai_key = env.get("OPENAI_API_KEY")
+    openrouter_key = env.get("OPENROUTER_API_KEY")
+    custom_key = env.get("CUSTOM_API_KEY")
+    custom_base_url = env.get("CUSTOM_API_BASE_URL", "").strip().rstrip("/")
     openrouter_base_url = "https://openrouter.ai/api/v1"
 
     # Explicit provider prefixes take precedence over all other provider keys.
@@ -548,7 +549,7 @@ def _create_single_llm(
 
     if _is_gemini_model(requested_model):
         if google_key:
-            env_interactions = os.environ.get("NOVEL_USE_INTERACTIONS", "1").lower() not in ["0", "false", "no"]
+            env_interactions = env.get("NOVEL_USE_INTERACTIONS", "1").lower() not in ["0", "false", "no"]
             should_use_interactions = env_interactions if use_interactions is None else use_interactions
 
             if should_use_interactions:
@@ -616,14 +617,16 @@ def get_llm(
     on_fallback: Optional[Callable[[str, Exception], None]] = None,
     thinking_level: Optional[str] = None,
     thinking_budget: Optional[int] = None,
+    environ=None,
 ) -> BaseChatModel:
     """Factory to instantiate appropriate LLM, optionally wrapped with automatic fallback support."""
-    resolved_temp = _resolve_temperature(temperature)
-    resolved_thinking_level = thinking_level or os.environ.get("NOVEL_THINKING_LEVEL")
+    env = resolve_env() if environ is None else environ
+    resolved_temp = _resolve_temperature(temperature, env)
+    resolved_thinking_level = thinking_level or env.get("NOVEL_THINKING_LEVEL")
     resolved_thinking_budget = thinking_budget
-    if resolved_thinking_budget is None and os.environ.get("NOVEL_THINKING_BUDGET"):
+    if resolved_thinking_budget is None and env.get("NOVEL_THINKING_BUDGET"):
         try:
-            resolved_thinking_budget = int(os.environ["NOVEL_THINKING_BUDGET"])
+            resolved_thinking_budget = int(env["NOVEL_THINKING_BUDGET"])
         except ValueError:
             pass
     primary_llm = _create_single_llm(
@@ -632,6 +635,7 @@ def get_llm(
         use_interactions=use_interactions,
         thinking_level=resolved_thinking_level,
         thinking_budget=resolved_thinking_budget,
+        environ=env,
     )
 
     clean_fallback = (fallback_model or "").strip()
@@ -642,6 +646,7 @@ def get_llm(
             use_interactions=use_interactions,
             thinking_level=resolved_thinking_level,
             thinking_budget=resolved_thinking_budget,
+            environ=env,
         )
         return FallbackChatModel(
             primary=primary_llm,

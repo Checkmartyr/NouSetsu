@@ -44,13 +44,21 @@ class EntityExtractorAgent:
         thinking_budget: Optional[int] = None,
         temperature: Optional[float] = None,
         use_interactions_api: Optional[bool] = None,
+        environ=None,
+        filter_scene_characters: bool = True,
+        chunk_overlap_lines: int = 3,
     ):
+        from nousetsu.utils.env import resolve_env
+        self.environ = resolve_env() if environ is None else environ
+        self.filter_scene_characters = filter_scene_characters
+        self.chunk_overlap_lines = chunk_overlap_lines
         self.model_name = model_name
         self.fallback_model = fallback_model
-        generation = resolve_agent_generation_settings("extractor")
+        generation = resolve_agent_generation_settings("extractor", environ=self.environ)
 
         self.llm = get_llm(
             model_name=model_name,
+            environ=self.environ,
             fallback_model=fallback_model,
             temperature=temperature if temperature is not None else generation["temperature"],
             use_interactions=(use_interactions_api if use_interactions_api is not None else generation["use_interactions_api"]),

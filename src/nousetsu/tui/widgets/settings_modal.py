@@ -1,3 +1,4 @@
+from nousetsu.utils.env import resolve_env
 import os
 from pathlib import Path
 from textual.app import ComposeResult
@@ -77,14 +78,14 @@ class SettingsModal(ModalScreen):
             yield Label("⚙️ Project & Translation Settings", classes="pane-title")
 
             with VerticalScroll():
-                env_default_model = os.environ.get("NOVEL_MODEL") or os.environ.get("DEFAULT_MODEL") or "gemini-3.1-flash-lite"
-                env_fallback_model = os.environ.get("NOVEL_FALLBACK_MODEL") or "gemini-3.5-flash-lite"
-                env_extractor = os.environ.get("NOVEL_EXTRACTOR_MODEL") or env_default_model
-                env_drafter = os.environ.get("NOVEL_DRAFTER_MODEL") or env_default_model
-                env_critic = os.environ.get("NOVEL_CRITIC_MODEL") or "gemma-4-26b-a4b-it"
-                env_polisher = os.environ.get("NOVEL_POLISHER_MODEL") or env_default_model
-                env_chronicler = os.environ.get("NOVEL_CHRONICLER_MODEL") or "gemma-4-26b-a4b-it"
-                env_interactions = os.environ.get("NOVEL_USE_INTERACTIONS", "1").strip().lower() not in ("0", "false", "no")
+                env_default_model = resolve_env().get("NOVEL_MODEL") or resolve_env().get("DEFAULT_MODEL") or "gemini-3.1-flash-lite"
+                env_fallback_model = resolve_env().get("NOVEL_FALLBACK_MODEL") or "gemini-3.5-flash-lite"
+                env_extractor = resolve_env().get("NOVEL_EXTRACTOR_MODEL") or env_default_model
+                env_drafter = resolve_env().get("NOVEL_DRAFTER_MODEL") or env_default_model
+                env_critic = resolve_env().get("NOVEL_CRITIC_MODEL") or "gemma-4-26b-a4b-it"
+                env_polisher = resolve_env().get("NOVEL_POLISHER_MODEL") or env_default_model
+                env_chronicler = resolve_env().get("NOVEL_CHRONICLER_MODEL") or "gemma-4-26b-a4b-it"
+                env_interactions = resolve_env().get("NOVEL_USE_INTERACTIONS", "1").strip().lower() not in ("0", "false", "no")
                 interactions_enabled = (
                     self.cfg.use_interactions_api
                     if self.cfg.use_interactions_api is not None
@@ -143,18 +144,18 @@ class SettingsModal(ModalScreen):
                 with Container(classes="settings-section"):
                     yield Label("⚡ API Rate Limits & Provider Guard", classes="section-title")
                     yield Label("Max Tokens Per Minute (TPM, default 32000):", classes="field-label")
-                    yield Input(value=str(self.cfg.max_tpm), id="set_max_tpm")
+                    yield Input(value="" if self.cfg.max_tpm is None else str(self.cfg.max_tpm), id="set_max_tpm")
                     yield Label("Max Requests Per Minute (RPM, default 60):", classes="field-label")
-                    yield Input(value=str(self.cfg.max_rpm), id="set_max_rpm")
+                    yield Input(value="" if self.cfg.max_rpm is None else str(self.cfg.max_rpm), id="set_max_rpm")
                     yield Label("Legacy project-wide Gemini Interactions override:", classes="field-label")
                     yield Input(value="true" if interactions_enabled else "false", id="set_use_interactions")
 
                 with Container(classes="settings-section"):
                     yield Label("🔄 Review Loop & Automation", classes="section-title")
                     yield Label("Max Review Loops (1–5, default 3):", classes="field-label")
-                    yield Input(value=str(self.cfg.max_review_loops), id="set_max_loops")
+                    yield Input(value="" if self.cfg.max_review_loops is None else str(self.cfg.max_review_loops), id="set_max_loops")
                     yield Label("Quality Threshold (5.0–10.0, default 8.5):", classes="field-label")
-                    yield Input(value=str(self.cfg.quality_threshold), id="set_quality_threshold")
+                    yield Input(value="" if self.cfg.quality_threshold is None else str(self.cfg.quality_threshold), id="set_quality_threshold")
                     yield Label("Auto-Update Novel Bible (true / false):", classes="field-label")
                     yield Input(value="true" if self.cfg.auto_update_bible else "false", id="set_auto_bible")
                     yield Label("Filter Extractor Entities (true / false):", classes="field-label")
@@ -235,7 +236,6 @@ class SettingsModal(ModalScreen):
         if honorifics_val:
             self.bible.style_guide.honorific_mode = honorifics_val
 
-        self.repo.save_bible(self.bible)
 
         # Update and persist complete ProjectConfig
         cfg = self.repo.load_config()
@@ -259,15 +259,23 @@ class SettingsModal(ModalScreen):
         if out_dir:
             cfg.output_dir = out_dir
 
+        if not tpm_val:
+            cfg.max_tpm = None
         if tpm_val.isdigit():
             cfg.max_tpm = int(tpm_val)
+        if not rpm_val:
+            cfg.max_rpm = None
         if rpm_val.isdigit():
             cfg.max_rpm = int(rpm_val)
         cfg.use_interactions_api = interactions_val
 
+        if not loops_val:
+            cfg.max_review_loops = None
         if loops_val.isdigit():
             cfg.max_review_loops = max(1, min(5, int(loops_val)))
 
+        if not thresh_val:
+            cfg.quality_threshold = None
         try:
             new_thresh = float(thresh_val)
             if 5.0 <= new_thresh <= 10.0:
@@ -286,7 +294,9 @@ class SettingsModal(ModalScreen):
         if chunk_overlap_val.isdigit():
             cfg.chunk_overlap_lines = int(chunk_overlap_val)
 
-        self.repo.save_config(cfg)
+        current_bible = self.repo.load_bible()
+        current_bible.style_guide = self.bible.style_guide
+        self.repo.save_settings(type(cfg).model_validate(cfg.model_dump()), bible=current_bible)
 
 
         # Update active app instance state

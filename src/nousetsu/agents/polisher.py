@@ -54,13 +54,21 @@ class PolishingAgent:
         subdivision_min_lines: int = 8,
         subdivision_max_depth: int = 4,
         use_interactions_api: Optional[bool] = None,
+        environ=None,
+        filter_scene_characters: bool = True,
+        chunk_overlap_lines: int = 3,
     ):
+        from nousetsu.utils.env import resolve_env
+        self.environ = resolve_env() if environ is None else environ
+        self.filter_scene_characters = filter_scene_characters
+        self.chunk_overlap_lines = chunk_overlap_lines
         self.model_name = model_name
         self.fallback_model = fallback_model
-        generation = resolve_agent_generation_settings("polisher")
+        generation = resolve_agent_generation_settings("polisher", environ=self.environ)
 
         self.llm = get_llm(
             model_name=model_name,
+            environ=self.environ,
             fallback_model=fallback_model,
             temperature=temperature if temperature is not None else generation["temperature"],
             use_interactions=(use_interactions_api if use_interactions_api is not None else generation["use_interactions_api"]),
@@ -174,7 +182,7 @@ class PolishingAgent:
             target_text=draft_text,
             fallback_on_empty=True,
             max_characters=15
-        )
+        ) if self.filter_scene_characters else active_characters
         chars_str = format_character_roster(
             characters=eval_characters,
             context_characters=eval_characters,
@@ -424,7 +432,7 @@ class PolishingAgent:
                     **sub_kwargs
                 )
                 left_tail_lines = [l.strip() for l in left_pol.splitlines() if l.strip()]
-                left_tail = "\n".join(left_tail_lines[-3:]) if left_tail_lines else preceding_context
+                left_tail = "\n".join(left_tail_lines[-self.chunk_overlap_lines:] if self.chunk_overlap_lines else []) if left_tail_lines else preceding_context
                 right_pol = self._polish_with_recursive_subdivision(
                     draft_text=right_d,
                     critique_notes=critique_notes,
@@ -497,7 +505,7 @@ class PolishingAgent:
                     polished_parts.append(b.draft_text)
                     tail_lines = [l.strip() for l in b.draft_text.splitlines() if l.strip()]
                     if tail_lines:
-                        prev_tail = "\n".join(tail_lines[-3:])
+                        prev_tail = "\n".join(tail_lines[-self.chunk_overlap_lines:] if self.chunk_overlap_lines else [])
                     self.last_subdivided_blocks.append(b)
                 else:
                     block_pol = self._polish_with_recursive_subdivision(
@@ -517,7 +525,7 @@ class PolishingAgent:
                     polished_parts.append(block_pol)
                     tail_lines = [l.strip() for l in block_pol.splitlines() if l.strip()]
                     if tail_lines:
-                        prev_tail = "\n".join(tail_lines[-3:])
+                        prev_tail = "\n".join(tail_lines[-self.chunk_overlap_lines:] if self.chunk_overlap_lines else [])
             raw_polished = "\n\n".join([p.strip() for p in polished_parts if p and p.strip()])
             return self._ensure_chapter_title_preserved(draft_text=draft_text, polished_text=raw_polished)
 
@@ -635,7 +643,7 @@ class PolishingAgent:
 
             # Extract last 3 non-empty lines for sliding context
             lines = [l.strip() for l in chunk_polished.splitlines() if l.strip()]
-            prev_polished_tail = "\n".join(lines[-3:]) if lines else ""
+            prev_polished_tail = "\n".join(lines[-self.chunk_overlap_lines:] if self.chunk_overlap_lines else []) if lines else ""
 
         self.last_usage = total_usage
         return "\n\n".join(polished_parts)

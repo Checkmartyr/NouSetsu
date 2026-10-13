@@ -167,25 +167,12 @@ export async function updateRawBible(rawYaml: string, projectPath?: string): Pro
 }
 
 export async function fetchSettings(projectPath?: string): Promise<ProjectSettings | null> {
-  try {
-    const params = new URLSearchParams();
-    if (projectPath) params.set('project_path', projectPath);
-    const qs = params.toString() ? `?${params.toString()}` : '';
-    const res = await fetch(`${API_BASE}/api/settings${qs}`);
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (data && data.config && typeof data.config === 'object') {
-      const { config, ...rest } = data;
-      return {
-        ...config,
-        ...rest,
-        env: data.env,
-      } as ProjectSettings;
-    }
-    return data as ProjectSettings;
-  } catch (e) {
-    return null;
-  }
+  const params = new URLSearchParams();
+  if (projectPath) params.set('project_path', projectPath);
+  const qs = params.toString() ? `?${params.toString()}` : '';
+  const res = await fetch(`${API_BASE}/api/settings${qs}`);
+  const data = await settingsResponse<ProjectSettings>(res);
+  return data?.config ? {...data.config, ...data} : data;
 }
 
 export async function fetchModelCatalog(provider: ModelProvider): Promise<ModelCatalogResult> {
@@ -208,22 +195,32 @@ export async function fetchMachineEnvironment(): Promise<MachineEnvironment | nu
   }
 }
 
+export class SettingsSaveError extends Error {
+  constructor(public status: number, message: string) { super(message); }
+}
+
+async function settingsResponse<T>(res: Response): Promise<T> {
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const detail = Array.isArray(body.detail)
+      ? body.detail.map((item: {loc?: string[]; msg?: string}) => `${item.loc?.join('.') || 'Settings'}: ${item.msg || 'Invalid value'}`).join('; ')
+      : typeof body.detail === 'string' ? body.detail : `Settings save failed (HTTP ${res.status}).`;
+    throw new SettingsSaveError(res.status, res.status === 412 ? 'Settings changed elsewhere. Your edits are preserved; reload before saving again.' : detail);
+  }
+  return body as T;
+}
+
 export async function saveMachineEnvironment(data: {
   values: Record<string, string>;
   api_keys: Record<string, string>;
   clear_api_keys: string[];
-}): Promise<boolean> {
-  try {
-    const res = await fetch(`${API_BASE}/api/environment`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    return res.ok;
-  } catch (e) {
-    console.error('Failed to save machine environment settings:', e);
-    return false;
-  }
+}, revision?: string): Promise<MachineEnvironment> {
+  const res = await fetch(`${API_BASE}/api/environment`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...(revision ? { 'If-Match': `"${revision}"` } : {}) },
+    body: JSON.stringify(data),
+  });
+  return settingsResponse<MachineEnvironment>(res);
 }
 
 export async function checkLatestRelease(): Promise<UpdateCheckResult> {
@@ -249,23 +246,18 @@ export async function checkLatestRelease(): Promise<UpdateCheckResult> {
 }
 
 export async function updateSettings(
-  data: Partial<ProjectSettings>,
-  projectPath?: string
-): Promise<boolean> {
-  try {
-    const params = new URLSearchParams();
-    if (projectPath) params.set('project_path', projectPath);
-    const qs = params.toString() ? `?${params.toString()}` : '';
-    const res = await fetch(`${API_BASE}/api/settings${qs}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    return res.ok;
-  } catch (e) {
-    console.error('Failed to update settings:', e);
-    return false;
-  }
+  data: Partial<ProjectSettings>, projectPath?: string, revision?: string
+): Promise<ProjectSettings> {
+  const params = new URLSearchParams();
+  if (projectPath) params.set('project_path', projectPath);
+  const qs = params.toString() ? `?${params.toString()}` : '';
+  const res = await fetch(`${API_BASE}/api/settings${qs}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...(revision ? { 'If-Match': `"${revision}"` } : {}) },
+    body: JSON.stringify(data),
+  });
+  const body = await settingsResponse<ProjectSettings>(res);
+  return { ...body.config, ...body };
 }
 
 /**
@@ -517,3 +509,10 @@ export async function openLogsDirectory(): Promise<boolean> {
 
 
 
+
+export async function fetchBackendContext(): Promise<{mode: string; owner_pid: number; registry_dir: string; projects_dir: string} | null> {
+  try {
+    const response = await fetch(`${API_BASE}/api/desktop-info`);
+    return response.ok ? await response.json() : null;
+  } catch { return null; }
+}

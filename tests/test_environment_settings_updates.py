@@ -79,6 +79,7 @@ def test_environment_endpoint_saves_allowlisted_values_without_returning_secrets
 
     response = client.put(
         "/api/environment",
+        headers={"If-Match": client.get("/api/environment").headers["etag"]},
         json={
             "values": {
                 "NOVEL_MODEL": "gemini-test-model",
@@ -106,7 +107,7 @@ def test_environment_endpoint_saves_allowlisted_values_without_returning_secrets
     assert saved["NOVEL_SCRAPER_USE_INTERACTIONS"] == "false"
     assert saved["CUSTOM_API_BASE_URL"] == "https://custom.example/v1"
     assert saved["CUSTOM_API_KEY"] == "replacement-custom-secret"
-    assert os.environ["NOVEL_SCRAPER_MODEL"] == "openrouter:anthropic/claude-3.7-sonnet"
+    assert "NOVEL_SCRAPER_MODEL" not in os.environ
     assert response.json()["values"]["NOVEL_SCRAPER_MODEL"] == "openrouter:anthropic/claude-3.7-sonnet"
     assert saved["OPENAI_API_KEY"] == "replacement-secret"
     assert saved["UNRELATED_SETTING"] == "preserve-me"
@@ -207,11 +208,12 @@ def test_environment_endpoint_rejects_unapproved_keys(tmp_path: Path, monkeypatc
 
     response = client.put(
         "/api/environment",
+        headers={"If-Match": client.get("/api/environment").headers["etag"]},
         json={"values": {"PYTHONPATH": "unsafe"}, "api_keys": {}, "clear_api_keys": []},
     )
 
-    assert response.status_code == 400
-    assert "Unsupported" in response.json()["detail"]
+    assert response.status_code == 422
+    assert "Unsupported" in response.json()["detail"][0]["msg"]
     assert not (tmp_path / ".env").exists()
 
 

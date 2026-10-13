@@ -13,7 +13,7 @@ from nousetsu.models.exceptions import BatchStoppedException
 from nousetsu.models.metadata import ChapterMetadata, CheckpointData, PipelineStage, StageArtifacts, StageStatus, TokenUsage
 from nousetsu.models.state import TranslationState
 from nousetsu.storage.repository import NovelRepository
-from nousetsu.utils.env import load_env
+from nousetsu.utils.env import resolve_env
 from nousetsu.utils.language import detect_language
 from nousetsu.utils.rate_limiter import SlidingWindowRateLimiter
 import logging
@@ -53,6 +53,7 @@ class BatchRunner:
         procedural_learning_interval: Optional[int] = None,
         procedural_learning_min_failures: Optional[int] = None,
         procedural_refiner_model: Optional[str] = None,
+        use_interactions_api: Optional[bool] = None,
         console: Optional[Console] = None
     ):
         if isinstance(repository, NovelRepository):
@@ -60,11 +61,20 @@ class BatchRunner:
         else:
             from nousetsu.storage.repository import resolve_project_dir
             self.repo = NovelRepository(resolve_project_dir(repository))
-        load_env(self.repo.root_dir)
+        self.environ = resolve_env(self.repo.root_dir)
         cfg = self.repo.load_config()
+        self.initial_source_language = cfg.source_language
+        overrides = {name: value for name, value in {
+            "max_tpm": max_tpm, "max_rpm": max_rpm,
+            "max_review_loops": max_review_loops, "quality_threshold": quality_threshold,
+            "chunk_threshold_lines": chunk_threshold_lines,
+            "target_chunk_lines": target_chunk_lines, "chunk_overlap_lines": chunk_overlap_lines,
+        }.items() if value is not None}
+        type(cfg).model_validate({**cfg.model_dump(), **overrides})
+
 
         # Resolve primary model
-        resolved_model = model_name or cfg.get_model_name()
+        resolved_model = model_name or cfg.get_model_name(self.environ)
         self.model_name = resolved_model
 
         # If primary model is a mock/test model, propagate to all agents unless caller explicitly specified otherwise
@@ -72,16 +82,20 @@ class BatchRunner:
         default_agent_model = resolved_model if is_mock else None
 
         # Resolve fallback and per-agent models
-        resolved_fallback = fallback_model or default_agent_model or cfg.get_fallback_model()
-        resolved_extractor = extractor_model or default_agent_model or cfg.get_agent_model("extractor")
-        resolved_drafter = drafter_model or default_agent_model or cfg.get_agent_model("drafter")
-        resolved_critic = critic_model or default_agent_model or cfg.get_agent_model("critic")
-        resolved_polisher = polisher_model or default_agent_model or cfg.get_agent_model("polisher")
-        resolved_chronicler = chronicler_model or default_agent_model or cfg.get_agent_model("chronicler")
+        resolved_fallback = fallback_model or default_agent_model or cfg.get_fallback_model(self.environ)
+        resolved_extractor = extractor_model or default_agent_model or cfg.get_agent_model("extractor", self.environ)
+        resolved_drafter = drafter_model or default_agent_model or cfg.get_agent_model("drafter", self.environ)
+        resolved_critic = critic_model or default_agent_model or cfg.get_agent_model("critic", self.environ)
+        resolved_polisher = polisher_model or default_agent_model or cfg.get_agent_model("polisher", self.environ)
+        resolved_chronicler = chronicler_model or default_agent_model or cfg.get_agent_model("chronicler", self.environ)
         resolved_generation = {
-            role: cfg.get_agent_generation_settings(role)
+            role: cfg.get_agent_generation_settings(role, self.environ)
             for role in ("extractor", "drafter", "critic", "polisher", "chronicler")
         }
+
+        if use_interactions_api is not None:
+            for values in resolved_generation.values():
+                values["use_interactions_api"] = use_interactions_api
 
         self.fallback_model = resolved_fallback
         self.extractor_model = resolved_extractor
@@ -95,30 +109,21 @@ class BatchRunner:
 
         self.genre = genre or getattr(cfg, "genre", "general")
 
-        # Rate limiting configuration (default 32K TPM / 60 RPM; for mock models bypass throttle)
-        if is_mock and not max_tpm and "NOVEL_MAX_TPM" not in os.environ:
-            resolved_tpm = 10_000_000
-            resolved_rpm = 10_000
-        else:
-            env_tpm = int(os.environ["NOVEL_MAX_TPM"]) if "NOVEL_MAX_TPM" in os.environ else None
-            env_rpm = int(os.environ["NOVEL_MAX_RPM"]) if "NOVEL_MAX_RPM" in os.environ else None
-            resolved_tpm = max_tpm or env_tpm or getattr(cfg, "max_tpm", 32000)
-            resolved_rpm = max_rpm or env_rpm or getattr(cfg, "max_rpm", 60)
-
-        # Review loop configuration
-        env_loops = int(os.environ["NOVEL_MAX_REVIEW_LOOPS"]) if "NOVEL_MAX_REVIEW_LOOPS" in os.environ else None
-        env_thresh = float(os.environ["NOVEL_QUALITY_THRESHOLD"]) if "NOVEL_QUALITY_THRESHOLD" in os.environ else None
-        resolved_loops = max_review_loops or env_loops or getattr(cfg, "max_review_loops", 3)
-        resolved_thresh = quality_threshold or env_thresh or getattr(cfg, "quality_threshold", 8.5)
+        resolved_tpm = max_tpm if max_tpm is not None else cfg.resolve_value("max_tpm", self.environ)
+        resolved_rpm = max_rpm if max_rpm is not None else cfg.resolve_value("max_rpm", self.environ)
+        if is_mock and max_tpm is None and cfg.max_tpm is None and "NOVEL_MAX_TPM" not in self.environ:
+            resolved_tpm, resolved_rpm = 10_000_000, 10_000
+        resolved_loops = max_review_loops if max_review_loops is not None else cfg.resolve_value("max_review_loops", self.environ)
+        resolved_thresh = quality_threshold if quality_threshold is not None else cfg.resolve_value("quality_threshold", self.environ)
 
         self.max_review_loops = resolved_loops
         self.quality_threshold = resolved_thresh
 
         # Chunking configuration
         resolved_chunking = enable_chunking if enable_chunking is not None else getattr(cfg, "enable_chunking", True)
-        resolved_chunk_thresh = chunk_threshold_lines or getattr(cfg, "chunk_threshold_lines", 800)
-        resolved_target_lines = target_chunk_lines or getattr(cfg, "target_chunk_lines", 400)
-        resolved_overlap_lines = chunk_overlap_lines or getattr(cfg, "chunk_overlap_lines", 3)
+        resolved_chunk_thresh = chunk_threshold_lines if chunk_threshold_lines is not None else cfg.chunk_threshold_lines
+        resolved_target_lines = target_chunk_lines if target_chunk_lines is not None else cfg.target_chunk_lines
+        resolved_overlap_lines = chunk_overlap_lines if chunk_overlap_lines is not None else cfg.chunk_overlap_lines
 
         resolved_rag = enable_rag if enable_rag is not None else getattr(cfg, "enable_rag", True)
         resolved_reranker = enable_rag_reranker if enable_rag_reranker is not None else getattr(cfg, "enable_rag_reranker", True)
@@ -126,7 +131,7 @@ class BatchRunner:
             filter_extractor_entities
             if filter_extractor_entities is not None
             else (
-                cfg.get_filter_extractor_entities()
+                cfg.get_filter_extractor_entities(self.environ)
                 if hasattr(cfg, "get_filter_extractor_entities")
                 else getattr(cfg, "filter_extractor_entities", True)
             )
@@ -135,7 +140,7 @@ class BatchRunner:
             enable_post_polish_reconciliation
             if enable_post_polish_reconciliation is not None
             else (
-                cfg.get_post_polish_reconciliation()
+                cfg.get_post_polish_reconciliation(self.environ)
                 if hasattr(cfg, "get_post_polish_reconciliation")
                 else getattr(cfg, "enable_post_polish_reconciliation", True)
             )
@@ -163,9 +168,9 @@ class BatchRunner:
             rag_engine=self.repo.get_rag_engine() if resolved_rag else None,
             enable_rag=resolved_rag,
             rag_top_k=getattr(cfg, "rag_top_k", 2),
-            rag_embedding_model=cfg.get_rag_embedding_model() if hasattr(cfg, "get_rag_embedding_model") else getattr(cfg, "rag_embedding_model", "text-multilingual-embedding-002"),
+            rag_embedding_model=cfg.get_rag_embedding_model(self.environ) if hasattr(cfg, "get_rag_embedding_model") else getattr(cfg, "rag_embedding_model", "text-multilingual-embedding-002"),
             enable_rag_reranker=resolved_reranker,
-            rag_reranker_model=default_agent_model if is_mock else (cfg.get_rag_reranker_model() if hasattr(cfg, "get_rag_reranker_model") else getattr(cfg, "rag_reranker_model", "gemini-3.5-flash-lite")),
+            rag_reranker_model=default_agent_model if is_mock else (cfg.get_rag_reranker_model(self.environ) if hasattr(cfg, "get_rag_reranker_model") else getattr(cfg, "rag_reranker_model", "gemini-3.5-flash-lite")),
             traces_dir=self.repo.traces_dir,
             extractor_pg=self.repo.load_procedural_graph("extractor"),
             drafter_pg=self.repo.load_procedural_graph("drafter"),
@@ -176,6 +181,9 @@ class BatchRunner:
             filter_extractor_entities=resolved_filter_extractor,
             enable_post_polish_reconciliation=resolved_reconcile,
             generation_settings=resolved_generation,
+            environ=self.environ,
+            filter_scene_characters=cfg.filter_scene_characters,
+            cross_folder_summaries=cfg.cross_folder_summaries,
         )
         self.rag_engine = self.workflow.rag_engine
         self.auto_update_bible = auto_update_bible if auto_update_bible is not None else cfg.auto_update_bible
@@ -187,7 +195,7 @@ class BatchRunner:
             enable_procedural_graph_learning
             if enable_procedural_graph_learning is not None
             else (
-                cfg.get_enable_procedural_graph_learning()
+                cfg.get_enable_procedural_graph_learning(self.environ)
                 if hasattr(cfg, "get_enable_procedural_graph_learning")
                 else getattr(cfg, "enable_procedural_graph_learning", True)
             )
@@ -196,7 +204,7 @@ class BatchRunner:
             procedural_learning_cadence
             if procedural_learning_cadence is not None
             else (
-                cfg.get_procedural_learning_cadence()
+                cfg.get_procedural_learning_cadence(self.environ)
                 if hasattr(cfg, "get_procedural_learning_cadence")
                 else getattr(cfg, "procedural_learning_cadence", "both")
             )
@@ -205,7 +213,7 @@ class BatchRunner:
             procedural_learning_interval
             if procedural_learning_interval is not None
             else (
-                cfg.get_procedural_learning_interval()
+                cfg.get_procedural_learning_interval(self.environ)
                 if hasattr(cfg, "get_procedural_learning_interval")
                 else getattr(cfg, "procedural_learning_interval", 15)
             )
@@ -214,7 +222,7 @@ class BatchRunner:
             procedural_learning_min_failures
             if procedural_learning_min_failures is not None
             else (
-                cfg.get_procedural_learning_min_failures()
+                cfg.get_procedural_learning_min_failures(self.environ)
                 if hasattr(cfg, "get_procedural_learning_min_failures")
                 else getattr(cfg, "procedural_learning_min_failures", 2)
             )
@@ -225,7 +233,7 @@ class BatchRunner:
             else (
                 procedural_refiner_model
                 or (
-                    cfg.get_procedural_refiner_model()
+                    cfg.get_procedural_refiner_model(self.environ)
                     if hasattr(cfg, "get_procedural_refiner_model")
                     else getattr(cfg, "procedural_refiner_model", "gemini-3.5-flash-lite")
                 )
@@ -241,6 +249,7 @@ class BatchRunner:
             rejection_path = self.repo.procedural_graphs_dir / "rejection_memory.json"
             self._refiner = ProceduralGraphRefiner(
                 model_name=self.procedural_refiner_model,
+                environ=self.environ,
                 rejection_memory_path=rejection_path
             )
         return self._refiner
@@ -379,7 +388,7 @@ class BatchRunner:
         bible = self.repo.load_bible()
         if (not bible.source_language) or bible.source_language.strip().lower() in ["auto", "autodetect", "detect", "unknown"]:
             detected = detect_language(source_text, default="Japanese")
-            bible = self.repo.set_languages(source_lang=detected)
+            bible = self.repo.set_languages(source_lang=detected, expected_source_language=self.initial_source_language)
 
         # Prepare initial state with possible checkpoint resumption
         initial_state = TranslationState(

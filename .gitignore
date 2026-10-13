@@ -40,6 +40,8 @@ src-tauri/binaries/nousetsu-backend*
 web/playwright-report/
 web/test-results/
 web/audit-results/
+audit-results/settings-repair/web-dist/
+audit-results/settings-repair/test-tmp/
 
 update-feed/
 branding/

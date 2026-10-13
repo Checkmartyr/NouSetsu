@@ -1,0 +1,852 @@
+[
+  {
+    "mode": "web-dev",
+    "scenario": "project UI/save/disk/reload",
+    "fields": [
+      "enable_procedural_graph_learning",
+      "procedural_learning_cadence",
+      "title",
+      "genre",
+      "source_language",
+      "target_language",
+      "project_id",
+      "chunk_threshold_lines",
+      "target_chunk_lines",
+      "chunk_overlap_lines",
+      "rag_top_k",
+      "rag_embedding_model",
+      "rag_reranker_model",
+      "safety_subdivision_min_lines",
+      "safety_subdivision_max_depth",
+      "max_tpm",
+      "max_rpm",
+      "raw_dir",
+      "output_dir",
+      "procedural_learning_interval",
+      "procedural_learning_min_failures",
+      "procedural_refiner_model",
+      "max_review_loops",
+      "quality_threshold",
+      "model_name",
+      "fallback_model",
+      "extractor_model",
+      "drafter_model",
+      "critic_model",
+      "polisher_model",
+      "chronicler_model",
+      "scraper_model",
+      "enable_patch_polishing",
+      "enable_chunking",
+      "auto_update_bible",
+      "cross_folder_summaries",
+      "filter_scene_characters",
+      "filter_extractor_entities",
+      "enable_post_polish_reconciliation",
+      "enable_rag",
+      "enable_rag_reranker",
+      "safety_recursive_subdivision",
+      "generation_settings.extractor.temperature",
+      "generation_settings.extractor.thinking_level",
+      "generation_settings.extractor.thinking_budget",
+      "generation_settings.extractor.use_interactions_api",
+      "generation_settings.drafter.temperature",
+      "generation_settings.drafter.thinking_level",
+      "generation_settings.drafter.thinking_budget",
+      "generation_settings.drafter.use_interactions_api",
+      "generation_settings.critic.temperature",
+      "generation_settings.critic.thinking_level",
+      "generation_settings.critic.thinking_budget",
+      "generation_settings.critic.use_interactions_api",
+      "generation_settings.polisher.temperature",
+      "generation_settings.polisher.thinking_level",
+      "generation_settings.polisher.thinking_budget",
+      "generation_settings.polisher.use_interactions_api",
+      "generation_settings.chronicler.temperature",
+      "generation_settings.chronicler.thinking_level",
+      "generation_settings.chronicler.thinking_budget",
+      "generation_settings.chronicler.use_interactions_api",
+      "generation_settings.scraper.temperature",
+      "generation_settings.scraper.thinking_level",
+      "generation_settings.scraper.thinking_budget",
+      "generation_settings.scraper.use_interactions_api"
+    ],
+    "status": "pass",
+    "details": {
+      "isolated_B_unchanged": true,
+      "bible_metadata_synced": true,
+      "runtime_execution": "Covered separately by backend audit; browser validates persistence and resolved API values."
+    }
+  },
+  {
+    "mode": "web-dev",
+    "scenario": "global UI/save/disk/reload and secret lifecycle",
+    "fields": [
+      "SOURCE_LANG",
+      "TARGET_LANG",
+      "NOVEL_MAX_REVIEW_LOOPS",
+      "NOVEL_QUALITY_THRESHOLD",
+      "NOVEL_FILTER_EXTRACTOR_ENTITIES",
+      "NOVEL_POST_POLISH_RECONCILIATION",
+      "NOVEL_RAG_EMBEDDING_MODEL",
+      "NOVEL_RAG_RERANKER_MODEL",
+      "NOVEL_MAX_TPM",
+      "NOVEL_MAX_RPM",
+      "NOVEL_ENABLE_PROCEDURAL_GRAPH_LEARNING",
+      "NOVEL_PROCEDURAL_LEARNING_CADENCE",
+      "NOVEL_PROCEDURAL_LEARNING_INTERVAL",
+      "NOVEL_PROCEDURAL_LEARNING_MIN_FAILURES",
+      "NOVEL_PROCEDURAL_REFINER_MODEL",
+      "NOVEL_PROJECTS_DIR",
+      "NOVEL_SCRAPER_PATH",
+      "NOVEL_SCRAPER_PYTHON",
+      "DEFAULT_MODEL",
+      "NOVEL_MODEL",
+      "NOVEL_FALLBACK_MODEL",
+      "NOVEL_TEMPERATURE",
+      "NOVEL_THINKING_LEVEL",
+      "NOVEL_THINKING_BUDGET",
+      "NOVEL_USE_INTERACTIONS",
+      "NOVEL_EXTRACTOR_MODEL",
+      "NOVEL_EXTRACTOR_TEMPERATURE",
+      "NOVEL_EXTRACTOR_THINKING_LEVEL",
+      "NOVEL_EXTRACTOR_THINKING_BUDGET",
+      "NOVEL_EXTRACTOR_USE_INTERACTIONS",
+      "NOVEL_DRAFTER_MODEL",
+      "NOVEL_DRAFTER_TEMPERATURE",
+      "NOVEL_DRAFTER_THINKING_LEVEL",
+      "NOVEL_DRAFTER_THINKING_BUDGET",
+      "NOVEL_DRAFTER_USE_INTERACTIONS",
+      "NOVEL_CRITIC_MODEL",
+      "NOVEL_CRITIC_TEMPERATURE",
+      "NOVEL_CRITIC_THINKING_LEVEL",
+      "NOVEL_CRITIC_THINKING_BUDGET",
+      "NOVEL_CRITIC_USE_INTERACTIONS",
+      "NOVEL_POLISHER_MODEL",
+      "NOVEL_POLISHER_TEMPERATURE",
+      "NOVEL_POLISHER_THINKING_LEVEL",
+      "NOVEL_POLISHER_THINKING_BUDGET",
+      "NOVEL_POLISHER_USE_INTERACTIONS",
+      "NOVEL_CHRONICLER_MODEL",
+      "NOVEL_CHRONICLER_TEMPERATURE",
+      "NOVEL_CHRONICLER_THINKING_LEVEL",
+      "NOVEL_CHRONICLER_THINKING_BUDGET",
+      "NOVEL_CHRONICLER_USE_INTERACTIONS",
+      "NOVEL_SCRAPER_MODEL",
+      "NOVEL_SCRAPER_TEMPERATURE",
+      "NOVEL_SCRAPER_THINKING_LEVEL",
+      "NOVEL_SCRAPER_THINKING_BUDGET",
+      "NOVEL_SCRAPER_USE_INTERACTIONS",
+      "CUSTOM_API_BASE_URL",
+      "GEMINI_API_KEY",
+      "GOOGLE_API_KEY",
+      "OPENAI_API_KEY",
+      "OPENROUTER_API_KEY",
+      "CUSTOM_API_KEY"
+    ],
+    "status": "pass",
+    "details": {
+      "allowlisted_keys_edited": 56,
+      "secrets_returned": false
+    }
+  },
+  {
+    "mode": "web-dev",
+    "scenario": "model preset coverage",
+    "fields": [
+      "model_name",
+      "fallback_model",
+      "extractor_model",
+      "drafter_model",
+      "critic_model",
+      "polisher_model",
+      "chronicler_model",
+      "scraper_model"
+    ],
+    "status": "pass",
+    "details": {
+      "preset": "env_current",
+      "mismatches": [],
+      "recommendation": "Apply scraper_model as well as pipeline model fields when using a preset."
+    }
+  },
+  {
+    "mode": "web-dev",
+    "scenario": "effective project model refresh after global save",
+    "fields": [
+      "NOVEL_MODEL",
+      "effective_model_name"
+    ],
+    "status": "pass",
+    "details": {
+      "before": "mock-audit-shared",
+      "displayed": "mock-updated-global",
+      "fresh": "mock-updated-global",
+      "recommendation": "Refresh project resolved settings after a successful global save."
+    }
+  },
+  {
+    "mode": "web-dev",
+    "scenario": "presets/reset/load-env/custom catalog/navigation/A-B isolation",
+    "fields": [
+      "model_name",
+      "fallback_model",
+      "extractor_model",
+      "drafter_model",
+      "critic_model",
+      "polisher_model",
+      "chronicler_model",
+      "scraper_model",
+      "generation_settings",
+      "CUSTOM_API_BASE_URL",
+      "CUSTOM_API_KEY",
+      "title"
+    ],
+    "status": "pass",
+    "details": {
+      "provider_catalog": "Real localhost /models transport",
+      "unsaved_form_excluded_from_session": true
+    }
+  },
+  {
+    "mode": "web-dev",
+    "scenario": "blank threshold keyboard save",
+    "fields": [
+      "chunk_threshold_lines"
+    ],
+    "status": "pass",
+    "details": {
+      "observed": 800,
+      "expected": 800,
+      "trigger": "Clear threshold; Ctrl+S without blurring"
+    }
+  },
+  {
+    "mode": "web-dev",
+    "scenario": "blank size keyboard save",
+    "fields": [
+      "target_chunk_lines"
+    ],
+    "status": "pass",
+    "details": {
+      "observed": 400,
+      "expected": 400
+    }
+  },
+  {
+    "mode": "web-dev",
+    "scenario": "invalid generation temperature rejected without persistence",
+    "fields": [
+      "generation_settings.extractor.temperature"
+    ],
+    "status": "pass",
+    "details": {
+      "status": 422
+    }
+  },
+  {
+    "mode": "web-dev",
+    "scenario": "settings accessible names",
+    "fields": [],
+    "status": "pass",
+    "details": {
+      "unnamed_switches": 0,
+      "unassociated_labels": 0,
+      "unnamed_control_descriptors": [],
+      "recommendation": "Associate every visible label with its control and name switches."
+    }
+  },
+  {
+    "mode": "web-dev",
+    "scenario": "mobile settings page overflow",
+    "fields": [],
+    "status": "pass",
+    "details": {
+      "width": 390,
+      "horizontal_overflow": false
+    }
+  },
+  {
+    "mode": "web-dev",
+    "scenario": "diagnostics isolation and update error handling",
+    "fields": [
+      "logs",
+      "updates"
+    ],
+    "status": "pass",
+    "details": {
+      "logs_directory": "isolated fixture logs",
+      "update_network": "Blocked by fixture; real backend returns 502 and UI displays error",
+      "update_installation": "excluded"
+    }
+  },
+  {
+    "mode": "web-dev",
+    "scenario": "stale full-form save overwrite",
+    "fields": [
+      "title",
+      "genre"
+    ],
+    "status": "pass",
+    "details": {
+      "first_save_title": "Saved from form A",
+      "final_title": "Saved from form A",
+      "final_genre": "general",
+      "recommendation": "Send changed fields or reject stale writes with a revision token."
+    }
+  },
+  {
+    "mode": "web-dev",
+    "scenario": "global semantic input validation",
+    "fields": [
+      "NOVEL_TEMPERATURE",
+      "NOVEL_MAX_REVIEW_LOOPS",
+      "NOVEL_MAX_TPM"
+    ],
+    "status": "pass",
+    "details": {
+      "saved": {
+        "NOVEL_TEMPERATURE": null,
+        "NOVEL_MAX_REVIEW_LOOPS": "3",
+        "NOVEL_MAX_TPM": "32000"
+      },
+      "recommendation": "Validate typed environment controls before persistence with the same ranges as project settings."
+    }
+  },
+  {
+    "mode": "web-dev",
+    "scenario": "no-project startup permits global settings",
+    "fields": [
+      "NOVEL_PROJECTS_DIR"
+    ],
+    "status": "pass",
+    "details": {
+      "stalled": false,
+      "reason": null,
+      "recommendation": "Permit global settings on an empty registry without chapter readiness checks."
+    }
+  },
+  {
+    "mode": "web-dev",
+    "scenario": "no-project global save and project empty state",
+    "fields": [
+      "SOURCE_LANG",
+      "TARGET_LANG",
+      "title"
+    ],
+    "status": "pass",
+    "details": {
+      "global_accessible": true,
+      "invalid_project_form": "empty state shown"
+    }
+  },
+  {
+    "mode": "web-dev",
+    "scenario": "inherited entity filtering toggle display",
+    "fields": [
+      "filter_extractor_entities",
+      "NOVEL_FILTER_EXTRACTOR_ENTITIES"
+    ],
+    "status": "pass",
+    "details": {
+      "raw_project": null,
+      "effective": false,
+      "displayed_checked": "false",
+      "recommendation": "Display the effective resolved Boolean and offer a separate inheritance state."
+    }
+  },
+  {
+    "mode": "web-dev",
+    "scenario": "clear all preserves legacy Interactions override",
+    "fields": [
+      "use_interactions_api",
+      "generation_settings"
+    ],
+    "status": "pass",
+    "details": {
+      "legacy_override_after_clear": null,
+      "shared_env": "true",
+      "effective_roles": {
+        "extractor": true,
+        "drafter": true,
+        "critic": true,
+        "polisher": true,
+        "chronicler": true,
+        "scraper": true
+      },
+      "recommendation": "Clear the legacy project-wide override together with role generation overrides."
+    }
+  },
+  {
+    "mode": "web-dev",
+    "scenario": "creation defaults UI/API/disk/reload",
+    "fields": [
+      "creation.title",
+      "creation.folder_name",
+      "creation.source_language",
+      "creation.target_language",
+      "creation.genre",
+      "creation.model"
+    ],
+    "status": "pass",
+    "details": {
+      "expected": {
+        "title": "Created defaults",
+        "source_language": "Chinese",
+        "target_language": "French",
+        "genre": "romance",
+        "model_name": "mock-created"
+      },
+      "folder_name": "created-web-dev-defaults-1791899286092",
+      "isolated": true
+    }
+  },
+  {
+    "mode": "web-dev",
+    "scenario": "creation override UI/API/disk/reload",
+    "fields": [
+      "creation.title",
+      "creation.folder_name",
+      "creation.source_language",
+      "creation.target_language",
+      "creation.genre",
+      "creation.model"
+    ],
+    "status": "pass",
+    "details": {
+      "expected": {
+        "title": "Created override",
+        "source_language": "Korean",
+        "target_language": "English",
+        "genre": "romance",
+        "model_name": "mock-created"
+      },
+      "folder_name": "created-web-dev-override-1791899287167",
+      "isolated": true
+    }
+  },
+  {
+    "mode": "web-built",
+    "scenario": "project UI/save/disk/reload",
+    "fields": [
+      "enable_procedural_graph_learning",
+      "procedural_learning_cadence",
+      "title",
+      "genre",
+      "source_language",
+      "target_language",
+      "project_id",
+      "chunk_threshold_lines",
+      "target_chunk_lines",
+      "chunk_overlap_lines",
+      "rag_top_k",
+      "rag_embedding_model",
+      "rag_reranker_model",
+      "safety_subdivision_min_lines",
+      "safety_subdivision_max_depth",
+      "max_tpm",
+      "max_rpm",
+      "raw_dir",
+      "output_dir",
+      "procedural_learning_interval",
+      "procedural_learning_min_failures",
+      "procedural_refiner_model",
+      "max_review_loops",
+      "quality_threshold",
+      "model_name",
+      "fallback_model",
+      "extractor_model",
+      "drafter_model",
+      "critic_model",
+      "polisher_model",
+      "chronicler_model",
+      "scraper_model",
+      "enable_patch_polishing",
+      "enable_chunking",
+      "auto_update_bible",
+      "cross_folder_summaries",
+      "filter_scene_characters",
+      "filter_extractor_entities",
+      "enable_post_polish_reconciliation",
+      "enable_rag",
+      "enable_rag_reranker",
+      "safety_recursive_subdivision",
+      "generation_settings.extractor.temperature",
+      "generation_settings.extractor.thinking_level",
+      "generation_settings.extractor.thinking_budget",
+      "generation_settings.extractor.use_interactions_api",
+      "generation_settings.drafter.temperature",
+      "generation_settings.drafter.thinking_level",
+      "generation_settings.drafter.thinking_budget",
+      "generation_settings.drafter.use_interactions_api",
+      "generation_settings.critic.temperature",
+      "generation_settings.critic.thinking_level",
+      "generation_settings.critic.thinking_budget",
+      "generation_settings.critic.use_interactions_api",
+      "generation_settings.polisher.temperature",
+      "generation_settings.polisher.thinking_level",
+      "generation_settings.polisher.thinking_budget",
+      "generation_settings.polisher.use_interactions_api",
+      "generation_settings.chronicler.temperature",
+      "generation_settings.chronicler.thinking_level",
+      "generation_settings.chronicler.thinking_budget",
+      "generation_settings.chronicler.use_interactions_api",
+      "generation_settings.scraper.temperature",
+      "generation_settings.scraper.thinking_level",
+      "generation_settings.scraper.thinking_budget",
+      "generation_settings.scraper.use_interactions_api"
+    ],
+    "status": "pass",
+    "details": {
+      "isolated_B_unchanged": true,
+      "bible_metadata_synced": true,
+      "runtime_execution": "Covered separately by backend audit; browser validates persistence and resolved API values."
+    }
+  },
+  {
+    "mode": "web-built",
+    "scenario": "global UI/save/disk/reload and secret lifecycle",
+    "fields": [
+      "SOURCE_LANG",
+      "TARGET_LANG",
+      "NOVEL_MAX_REVIEW_LOOPS",
+      "NOVEL_QUALITY_THRESHOLD",
+      "NOVEL_FILTER_EXTRACTOR_ENTITIES",
+      "NOVEL_POST_POLISH_RECONCILIATION",
+      "NOVEL_RAG_EMBEDDING_MODEL",
+      "NOVEL_RAG_RERANKER_MODEL",
+      "NOVEL_MAX_TPM",
+      "NOVEL_MAX_RPM",
+      "NOVEL_ENABLE_PROCEDURAL_GRAPH_LEARNING",
+      "NOVEL_PROCEDURAL_LEARNING_CADENCE",
+      "NOVEL_PROCEDURAL_LEARNING_INTERVAL",
+      "NOVEL_PROCEDURAL_LEARNING_MIN_FAILURES",
+      "NOVEL_PROCEDURAL_REFINER_MODEL",
+      "NOVEL_PROJECTS_DIR",
+      "NOVEL_SCRAPER_PATH",
+      "NOVEL_SCRAPER_PYTHON",
+      "DEFAULT_MODEL",
+      "NOVEL_MODEL",
+      "NOVEL_FALLBACK_MODEL",
+      "NOVEL_TEMPERATURE",
+      "NOVEL_THINKING_LEVEL",
+      "NOVEL_THINKING_BUDGET",
+      "NOVEL_USE_INTERACTIONS",
+      "NOVEL_EXTRACTOR_MODEL",
+      "NOVEL_EXTRACTOR_TEMPERATURE",
+      "NOVEL_EXTRACTOR_THINKING_LEVEL",
+      "NOVEL_EXTRACTOR_THINKING_BUDGET",
+      "NOVEL_EXTRACTOR_USE_INTERACTIONS",
+      "NOVEL_DRAFTER_MODEL",
+      "NOVEL_DRAFTER_TEMPERATURE",
+      "NOVEL_DRAFTER_THINKING_LEVEL",
+      "NOVEL_DRAFTER_THINKING_BUDGET",
+      "NOVEL_DRAFTER_USE_INTERACTIONS",
+      "NOVEL_CRITIC_MODEL",
+      "NOVEL_CRITIC_TEMPERATURE",
+      "NOVEL_CRITIC_THINKING_LEVEL",
+      "NOVEL_CRITIC_THINKING_BUDGET",
+      "NOVEL_CRITIC_USE_INTERACTIONS",
+      "NOVEL_POLISHER_MODEL",
+      "NOVEL_POLISHER_TEMPERATURE",
+      "NOVEL_POLISHER_THINKING_LEVEL",
+      "NOVEL_POLISHER_THINKING_BUDGET",
+      "NOVEL_POLISHER_USE_INTERACTIONS",
+      "NOVEL_CHRONICLER_MODEL",
+      "NOVEL_CHRONICLER_TEMPERATURE",
+      "NOVEL_CHRONICLER_THINKING_LEVEL",
+      "NOVEL_CHRONICLER_THINKING_BUDGET",
+      "NOVEL_CHRONICLER_USE_INTERACTIONS",
+      "NOVEL_SCRAPER_MODEL",
+      "NOVEL_SCRAPER_TEMPERATURE",
+      "NOVEL_SCRAPER_THINKING_LEVEL",
+      "NOVEL_SCRAPER_THINKING_BUDGET",
+      "NOVEL_SCRAPER_USE_INTERACTIONS",
+      "CUSTOM_API_BASE_URL",
+      "GEMINI_API_KEY",
+      "GOOGLE_API_KEY",
+      "OPENAI_API_KEY",
+      "OPENROUTER_API_KEY",
+      "CUSTOM_API_KEY"
+    ],
+    "status": "pass",
+    "details": {
+      "allowlisted_keys_edited": 56,
+      "secrets_returned": false
+    }
+  },
+  {
+    "mode": "web-built",
+    "scenario": "model preset coverage",
+    "fields": [
+      "model_name",
+      "fallback_model",
+      "extractor_model",
+      "drafter_model",
+      "critic_model",
+      "polisher_model",
+      "chronicler_model",
+      "scraper_model"
+    ],
+    "status": "pass",
+    "details": {
+      "preset": "env_current",
+      "mismatches": [],
+      "recommendation": "Apply scraper_model as well as pipeline model fields when using a preset."
+    }
+  },
+  {
+    "mode": "web-built",
+    "scenario": "effective project model refresh after global save",
+    "fields": [
+      "NOVEL_MODEL",
+      "effective_model_name"
+    ],
+    "status": "pass",
+    "details": {
+      "before": "mock-audit-shared",
+      "displayed": "mock-updated-global",
+      "fresh": "mock-updated-global",
+      "recommendation": "Refresh project resolved settings after a successful global save."
+    }
+  },
+  {
+    "mode": "web-built",
+    "scenario": "presets/reset/load-env/custom catalog/navigation/A-B isolation",
+    "fields": [
+      "model_name",
+      "fallback_model",
+      "extractor_model",
+      "drafter_model",
+      "critic_model",
+      "polisher_model",
+      "chronicler_model",
+      "scraper_model",
+      "generation_settings",
+      "CUSTOM_API_BASE_URL",
+      "CUSTOM_API_KEY",
+      "title"
+    ],
+    "status": "pass",
+    "details": {
+      "provider_catalog": "Real localhost /models transport",
+      "unsaved_form_excluded_from_session": true
+    }
+  },
+  {
+    "mode": "web-built",
+    "scenario": "blank threshold keyboard save",
+    "fields": [
+      "chunk_threshold_lines"
+    ],
+    "status": "pass",
+    "details": {
+      "observed": 800,
+      "expected": 800,
+      "trigger": "Clear threshold; Ctrl+S without blurring"
+    }
+  },
+  {
+    "mode": "web-built",
+    "scenario": "blank size keyboard save",
+    "fields": [
+      "target_chunk_lines"
+    ],
+    "status": "pass",
+    "details": {
+      "observed": 400,
+      "expected": 400
+    }
+  },
+  {
+    "mode": "web-built",
+    "scenario": "invalid generation temperature rejected without persistence",
+    "fields": [
+      "generation_settings.extractor.temperature"
+    ],
+    "status": "pass",
+    "details": {
+      "status": 422
+    }
+  },
+  {
+    "mode": "web-built",
+    "scenario": "settings accessible names",
+    "fields": [],
+    "status": "pass",
+    "details": {
+      "unnamed_switches": 0,
+      "unassociated_labels": 0,
+      "unnamed_control_descriptors": [],
+      "recommendation": "Associate every visible label with its control and name switches."
+    }
+  },
+  {
+    "mode": "web-built",
+    "scenario": "mobile settings page overflow",
+    "fields": [],
+    "status": "pass",
+    "details": {
+      "width": 390,
+      "horizontal_overflow": false
+    }
+  },
+  {
+    "mode": "web-built",
+    "scenario": "diagnostics isolation and update error handling",
+    "fields": [
+      "logs",
+      "updates"
+    ],
+    "status": "pass",
+    "details": {
+      "logs_directory": "isolated fixture logs",
+      "update_network": "Blocked by fixture; real backend returns 502 and UI displays error",
+      "update_installation": "excluded"
+    }
+  },
+  {
+    "mode": "web-built",
+    "scenario": "stale full-form save overwrite",
+    "fields": [
+      "title",
+      "genre"
+    ],
+    "status": "pass",
+    "details": {
+      "first_save_title": "Saved from form A",
+      "final_title": "Saved from form A",
+      "final_genre": "general",
+      "recommendation": "Send changed fields or reject stale writes with a revision token."
+    }
+  },
+  {
+    "mode": "web-built",
+    "scenario": "global semantic input validation",
+    "fields": [
+      "NOVEL_TEMPERATURE",
+      "NOVEL_MAX_REVIEW_LOOPS",
+      "NOVEL_MAX_TPM"
+    ],
+    "status": "pass",
+    "details": {
+      "saved": {
+        "NOVEL_TEMPERATURE": null,
+        "NOVEL_MAX_REVIEW_LOOPS": "3",
+        "NOVEL_MAX_TPM": "32000"
+      },
+      "recommendation": "Validate typed environment controls before persistence with the same ranges as project settings."
+    }
+  },
+  {
+    "mode": "web-built",
+    "scenario": "no-project startup permits global settings",
+    "fields": [
+      "NOVEL_PROJECTS_DIR"
+    ],
+    "status": "pass",
+    "details": {
+      "stalled": false,
+      "reason": null,
+      "recommendation": "Permit global settings on an empty registry without chapter readiness checks."
+    }
+  },
+  {
+    "mode": "web-built",
+    "scenario": "no-project global save and project empty state",
+    "fields": [
+      "SOURCE_LANG",
+      "TARGET_LANG",
+      "title"
+    ],
+    "status": "pass",
+    "details": {
+      "global_accessible": true,
+      "invalid_project_form": "empty state shown"
+    }
+  },
+  {
+    "mode": "web-built",
+    "scenario": "inherited entity filtering toggle display",
+    "fields": [
+      "filter_extractor_entities",
+      "NOVEL_FILTER_EXTRACTOR_ENTITIES"
+    ],
+    "status": "pass",
+    "details": {
+      "raw_project": null,
+      "effective": false,
+      "displayed_checked": "false",
+      "recommendation": "Display the effective resolved Boolean and offer a separate inheritance state."
+    }
+  },
+  {
+    "mode": "web-built",
+    "scenario": "clear all preserves legacy Interactions override",
+    "fields": [
+      "use_interactions_api",
+      "generation_settings"
+    ],
+    "status": "pass",
+    "details": {
+      "legacy_override_after_clear": null,
+      "shared_env": "true",
+      "effective_roles": {
+        "extractor": true,
+        "drafter": true,
+        "critic": true,
+        "polisher": true,
+        "chronicler": true,
+        "scraper": true
+      },
+      "recommendation": "Clear the legacy project-wide override together with role generation overrides."
+    }
+  },
+  {
+    "mode": "web-built",
+    "scenario": "creation defaults UI/API/disk/reload",
+    "fields": [
+      "creation.title",
+      "creation.folder_name",
+      "creation.source_language",
+      "creation.target_language",
+      "creation.genre",
+      "creation.model"
+    ],
+    "status": "pass",
+    "details": {
+      "expected": {
+        "title": "Created defaults",
+        "source_language": "Chinese",
+        "target_language": "French",
+        "genre": "romance",
+        "model_name": "mock-created"
+      },
+      "folder_name": "created-web-built-defaults-1791899348645",
+      "isolated": true
+    }
+  },
+  {
+    "mode": "web-built",
+    "scenario": "creation override UI/API/disk/reload",
+    "fields": [
+      "creation.title",
+      "creation.folder_name",
+      "creation.source_language",
+      "creation.target_language",
+      "creation.genre",
+      "creation.model"
+    ],
+    "status": "pass",
+    "details": {
+      "expected": {
+        "title": "Created override",
+        "source_language": "Korean",
+        "target_language": "English",
+        "genre": "romance",
+        "model_name": "mock-created"
+      },
+      "folder_name": "created-web-built-override-1791899349487",
+      "isolated": true
+    }
+  }
+]

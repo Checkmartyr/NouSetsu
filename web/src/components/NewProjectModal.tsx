@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { AlertCircle, CheckCircle2, Download, FolderPlus, LoaderCircle, Search, Sparkles, X } from 'lucide-react';
 import { createProject } from '../services/apiClient';
 import {
+  fetchMachineEnvironment,
   checkScraperAvailability,
   fetchScraperStatus,
   inspectScraperUrl,
@@ -28,8 +29,8 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
 }) => {
   const [title, setTitle] = useState('');
   const [folderName, setFolderName] = useState('');
-  const [sourceLanguage, setSourceLanguage] = useState('Japanese');
-  const [targetLanguage, setTargetLanguage] = useState('Thai');
+  const [sourceLanguage, setSourceLanguage] = useState('');
+  const [targetLanguage, setTargetLanguage] = useState('');
   const [genre, setGenre] = useState('general');
   const [model, setModel] = useState('gemini-3.5-flash-lite');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -51,8 +52,8 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
 
     setTitle('');
     setFolderName('');
-    setSourceLanguage('Japanese');
-    setTargetLanguage('Thai');
+    setSourceLanguage('');
+    setTargetLanguage('');
     setGenre('general');
     setModel('gemini-3.5-flash-lite');
     setErrorMsg(null);
@@ -68,6 +69,12 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
     setCreatedProject(null);
 
     let cancelled = false;
+    fetchMachineEnvironment().then((environment) => {
+      if (cancelled || !environment) return;
+      const values = environment.effective_values || environment.values;
+      setSourceLanguage((current) => current || values.SOURCE_LANG || '');
+      setTargetLanguage((current) => current || values.TARGET_LANG || '');
+    });
     checkScraperAvailability().then((result) => {
       if (!cancelled) setScraperAvailable(result.available);
     });
@@ -172,8 +179,8 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
         const res = await createProject({
           title: title.trim(),
           folder_name: folderName.trim() || undefined,
-          source_language: sourceLanguage.trim() || 'Japanese',
-          target_language: targetLanguage.trim() || 'Thai',
+          source_language: sourceLanguage.trim() || undefined,
+          target_language: targetLanguage.trim() || undefined,
           genre: genre.trim() || 'general',
           model: model.trim() || undefined,
         });
@@ -295,10 +302,11 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
           {/* Language Pair */}
           <div className="grid grid-cols-2 gap-3 pt-0.5">
             <div>
-              <label className="block text-[#b0a89f] font-mono text-[11px] mb-1">
+              <label htmlFor="new-project-sourceLanguage" className="block text-[#b0a89f] font-mono text-[11px] mb-1">
                 Source Language
               </label>
               <input
+                id="new-project-sourceLanguage"
                 type="text"
                 value={sourceLanguage}
                 onChange={(e) => setSourceLanguage(e.target.value)}
@@ -308,10 +316,11 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
             </div>
 
             <div>
-              <label className="block text-[#b0a89f] font-mono text-[11px] mb-1">
+              <label htmlFor="new-project-targetLanguage" className="block text-[#b0a89f] font-mono text-[11px] mb-1">
                 Target Language
               </label>
               <input
+                id="new-project-targetLanguage"
                 type="text"
                 value={targetLanguage}
                 onChange={(e) => setTargetLanguage(e.target.value)}
@@ -324,10 +333,11 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
           {/* Genre & Model */}
           <div className="grid grid-cols-2 gap-3 pt-0.5">
             <div>
-              <label className="block text-[#b0a89f] font-mono text-[11px] mb-1">
+              <label htmlFor="new-project-genre" className="block text-[#b0a89f] font-mono text-[11px] mb-1">
                 Novel Genre
               </label>
               <select
+                id="new-project-genre"
                 value={genre}
                 onChange={(e) => setGenre(e.target.value)}
                 className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-[#f7f5f0] focus:outline-none focus:border-[#b0a89f] text-xs cursor-pointer font-mono"
@@ -341,10 +351,11 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
             </div>
 
             <div>
-              <label className="block text-[#b0a89f] font-mono text-[11px] mb-1">
+              <label htmlFor="new-project-model" className="block text-[#b0a89f] font-mono text-[11px] mb-1">
                 Primary Model
               </label>
               <input
+                id="new-project-model"
                 type="text"
                 value={model}
                 onChange={(e) => setModel(e.target.value)}

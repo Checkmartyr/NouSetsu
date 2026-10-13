@@ -218,7 +218,7 @@ def test_settings_endpoints(client: TestClient, web_test_repo: NovelRepository):
         "chunk_size_lines": 80,
         "chunk_overlap_lines": 5,
     }
-    res_put = client.put(f"/api/settings?project_path={proj_param}", json=payload)
+    res_put = client.put(f"/api/settings?project_path={proj_param}", headers={"If-Match": client.get(f"/api/settings?project_path={proj_param}").headers["etag"]}, json=payload)
     assert res_put.status_code == 200
     assert res_put.json()["success"] is True
 
@@ -301,7 +301,7 @@ def test_settings_endpoints(client: TestClient, web_test_repo: NovelRepository):
         "scraper_model": "",
         "generation_settings": {},
     }
-    res_clear = client.put(f"/api/settings?project_path={proj_param}", json=clear_payload)
+    res_clear = client.put(f"/api/settings?project_path={proj_param}", headers={"If-Match": client.get(f"/api/settings?project_path={proj_param}").headers["etag"]}, json=clear_payload)
     assert res_clear.status_code == 200
     cfg_cleared = web_test_repo.load_config()
     assert cfg_cleared.extractor_model is None
@@ -311,7 +311,7 @@ def test_settings_endpoints(client: TestClient, web_test_repo: NovelRepository):
     assert cfg_cleared.chronicler_model is None
 
     # 7. Verify payload with nested config (backward compatibility)
-    res_put2 = client.put(f"/api/settings?project_path={proj_param}", json={"config": {"max_review_loops": 2}})
+    res_put2 = client.put(f"/api/settings?project_path={proj_param}", headers={"If-Match": client.get(f"/api/settings?project_path={proj_param}").headers["etag"]}, json={"config": {"max_review_loops": 2}})
     assert res_put2.status_code == 200
     assert web_test_repo.load_config().max_review_loops == 2
 

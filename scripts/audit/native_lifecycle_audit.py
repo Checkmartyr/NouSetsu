@@ -36,7 +36,7 @@ def verify_restart():
     evidence = json.loads(path.read_text(encoding="utf-8"))
     env_file = Path(evidence["env_file_path"])
     config = Path(evidence["config_path"])
-    assert "com.nousetsu.settingsaudit" in str(env_file)
+    assert "com.nousetsu.settingsrepair" in str(env_file)
     deadline = time.monotonic() + 100
     while time.monotonic() < deadline:
         try:
@@ -60,7 +60,7 @@ def seed(action):
     env_file = Path(data["env_file_path"])
     backup = WORK / "native-release-preserved.env"
     template = WORK / "workspace/src-tauri/target/release/defaults/.env.example"
-    assert env_file.parent.name == "com.nousetsu.settingsaudit" and env_file.name == ".env"
+    assert env_file.parent.name == "com.nousetsu.settingsrepair" and env_file.name == ".env"
     assert backup.resolve().is_relative_to(WORK.resolve())
     if action == "prepare-seed":
         assert not backup.exists(), "Do not overwrite a preserved audit settings file"
@@ -87,6 +87,15 @@ def seed(action):
 
 
 def prepare_fallback():
+    # Test derived defaults, while preserving the saved custom path for restoration.
+    import dotenv
+    data = json.loads((EVIDENCE / "native-release-lifecycle.json").read_text(encoding="utf-8"))
+    env_file = Path(data["env_file_path"])
+    assert env_file.parent.name == "com.nousetsu.settingsrepair" and env_file.name == ".env"
+    preserved = WORK / "fallback-preserved.env"
+    assert not preserved.exists(), "Do not overwrite preserved fallback fixture settings"
+    shutil.copy2(env_file, preserved)
+    dotenv.unset_key(env_file, "NOVEL_PROJECTS_DIR", encoding="utf-8")
     install = WORK / "blocked-install"
     install.mkdir(exist_ok=True)
     release = WORK / "workspace/src-tauri/target/release"
@@ -122,7 +131,7 @@ def verify_fallback():
 
 
 def verify_reuse():
-    """Observe product startup reusing our deliberately incompatible storage context."""
+    """Verify intentional compatible-backend reuse with an isolated storage context."""
     import socket
     import sys
     with socket.socket() as probe:
@@ -148,7 +157,9 @@ def verify_reuse():
             except OSError:
                 time.sleep(.3)
         exe = WORK / "workspace/src-tauri/target/release/nousetsu-desktop.exe"
-        desktop = subprocess.Popen([str(exe)], cwd=exe.parent, env=clean_environment(), stdout=log, stderr=log, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        desktop_env = clean_environment()
+        desktop_env.update({"WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS": "--remote-debugging-port=5195", "WEBVIEW2_USER_DATA_FOLDER": str(fixture / "webview-profile")})
+        desktop = subprocess.Popen([str(exe)], cwd=exe.parent, env=desktop_env, stdout=log, stderr=log, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         desktop_log = exe.parent / "logs/desktop.log"
         deadline = time.monotonic() + 30
         while time.monotonic() < deadline:
@@ -159,8 +170,35 @@ def verify_reuse():
             raise AssertionError("Packaged app did not confirm owned backend reuse")
         status, actual = request("http://127.0.0.1:15474", "/api/environment")
         assert status == 200 and Path(actual["env_file_path"]).resolve() == source_env.resolve()
-        write_json(EVIDENCE / "native-backend-reuse.json", {"case": "Packaged app reuses source backend by version despite different settings file", "status": "pass", "classification": "Observed sharing behavior; installation-affinity policy is not established", "advertised_fixture_version": desktop_version, "actual_settings_path": str(source_env), "packaged_default_settings_context": "App-data .env and bundled sidecar when a new backend is spawned", "owned_source_pid": backend.pid, "desktop_pid": desktop.pid, "recommendation": "Show backend mode, owner and storage context; validate installation identity if per-install defaults are intended"})
-        print("Reproduced compatible-version backend storage-context mismatch")
+        status, context = request("http://127.0.0.1:15474", "/api/desktop-info")
+        assert status == 200 and context["mode"] == "source"
+        source_owner = int(context["owner_pid"])
+        if source_owner != backend.pid:
+            # Windows virtualenv redirectors can launch the real interpreter as a child.
+            parent = subprocess.check_output(["powershell", "-NoProfile", "-Command", f"(Get-CimInstance Win32_Process -Filter 'ProcessId={source_owner}').ParentProcessId"], text=True)
+            assert int(parent.strip()) == backend.pid, "Backend owner is not our launched interpreter or its child"
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as playwright:
+            deadline = time.monotonic() + 60
+            while True:
+                try:
+                    browser = playwright.chromium.connect_over_cdp("http://127.0.0.1:5195")
+                    break
+                except Exception:
+                    if time.monotonic() >= deadline:
+                        raise
+                    time.sleep(.3)
+            page = next(page for ctx in browser.contexts for page in ctx.pages if ":15474" in page.url)
+            assert page.evaluate("'__TAURI_INTERNALS__' in window")
+            page.goto("http://127.0.0.1:15474/settings?section=global")
+            display = page.locator("p").filter(has_text="Backend: source").first
+            display.wait_for()
+            text = display.inner_text()
+            assert f"owner: {source_owner}" in text and str(source_env) in text
+            page.screenshot(path=str(EVIDENCE / "native-backend-reuse.png"), full_page=True)
+            browser.close()
+        write_json(EVIDENCE / "native-backend-reuse.json", {"case": "Compatible backend sharing preserves source storage and visibly reports its context", "status": "pass", "classification": "Intentional compatible sharing retained", "advertised_fixture_version": desktop_version, "actual_settings_path": str(source_env), "backend_context": context, "actual_native_display": text, "owned_source_pid": source_owner, "source_launcher_pid": backend.pid, "desktop_pid": desktop.pid})
+        print("Compatible source backend reuse and actual native context display passed")
     finally:
         for process in (desktop, backend):
             if process and process.poll() is None:
@@ -171,7 +209,7 @@ def verify_reuse():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("stop-dev", "stop-release", "verify-restart", "prepare-seed", "verify-seed", "restore-seed", "prepare-fallback", "verify-fallback", "verify-reuse"))
+    parser.add_argument("action", choices=("stop-dev", "stop-release", "verify-restart", "prepare-seed", "verify-seed", "restore-seed", "prepare-fallback", "verify-fallback", "restore-fallback", "verify-reuse"))
     args = parser.parse_args()
     if args.action == "verify-restart":
         verify_restart()
@@ -181,6 +219,13 @@ if __name__ == "__main__":
         prepare_fallback()
     elif args.action == "verify-fallback":
         verify_fallback()
+    elif args.action == "restore-fallback":
+        data = json.loads((EVIDENCE / "native-release-lifecycle.json").read_text(encoding="utf-8"))
+        env_file = Path(data["env_file_path"])
+        assert env_file.parent.name == "com.nousetsu.settingsrepair" and env_file.name == ".env"
+        shutil.copy2(WORK / "fallback-preserved.env", env_file)
+        (WORK / "fallback-preserved.env").unlink()
+        print("Preserved custom projects path restored")
     elif args.action == "verify-reuse":
         verify_reuse()
     else:

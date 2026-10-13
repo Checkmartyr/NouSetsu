@@ -6,8 +6,8 @@ export default defineConfig({
   workers: 1,
   fullyParallel: false,
   timeout: 120_000,
-  outputDir: '../audit-results/settings/browser-artifacts',
-  reporter: [['list'], ['json', { outputFile: '../audit-results/settings/browser-playwright.json' }]],
+  outputDir: '../audit-results/settings-repair/browser-artifacts',
+  reporter: [['list'], ['json', { outputFile: '../audit-results/settings-repair/browser-playwright.json' }]],
   use: { channel: 'chrome', viewport: { width: 1440, height: 900 }, actionTimeout: 15_000, screenshot: 'only-on-failure', trace: 'retain-on-failure' },
   webServer: [
     { command: 'uv run --no-sync python scripts/audit/settings_fixture_server.py --port 5186 --mode dev', cwd: '..', url: 'http://127.0.0.1:5186/api/audit/fixture', timeout: 120_000, reuseExistingServer: false },

@@ -2,7 +2,7 @@
 
 This script observes product behavior; it does not repair it. Synthetic credentials
 are used only with loopback transports. Build files and projects stay in ignored
-src-tauri/target/settings-audit; evidence excludes request headers and prompts.
+src-tauri/target/settings-repair; evidence excludes request headers and prompts.
 """
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ import sys
 import threading
 import time
 import tempfile
+import socket
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
@@ -30,8 +31,8 @@ if sys.platform == "win32":
         pass
 
 ROOT = Path(__file__).resolve().parents[2]
-WORK = ROOT / "src-tauri" / "target" / "settings-audit"
-EVIDENCE = ROOT / "audit-results" / "settings"
+WORK = ROOT / "src-tauri" / "target" / "settings-repair"
+EVIDENCE = ROOT / "audit-results" / "settings-repair"
 ROLES = ("extractor", "drafter", "critic", "polisher", "chronicler", "scraper")
 
 
@@ -48,9 +49,17 @@ def clean_environment() -> dict[str, str]:
     }
 
 
-def request(base: str, path: str, body: object = None, method: str | None = None) -> tuple[int, object]:
+def request(base: str, path: str, body: object = None, method: str | None = None,
+            headers: dict[str, str] | None = None) -> tuple[int, object]:
+    """Use current revisions for ordinary audit saves; explicit headers test conflicts."""
     data = None if body is None else json.dumps(body).encode()
-    req = Request(base + path, data=data, method=method, headers={"Content-Type": "application/json"})
+    request_headers = {"Content-Type": "application/json", **(headers or {})}
+    if method == "PUT" and path.split("?")[0] in {"/api/settings", "/api/environment"} and headers is None:
+        status, current = request(base, path)
+        if status != 200 or not isinstance(current, dict) or not current.get("revision"):
+            raise RuntimeError("Settings snapshot unavailable before save")
+        request_headers["If-Match"] = '"' + current["revision"] + '"'
+    req = Request(base + path, data=data, method=method, headers=request_headers)
     try:
         with urlopen(req, timeout=25) as response:
             return response.status, json.load(response)
@@ -86,13 +95,22 @@ def prepare() -> None:
         if path.is_file():
             artifacts[rel] = {"sha256": hashlib.sha256(path.read_bytes()).hexdigest(), "size": path.stat().st_size, "mtime": path.stat().st_mtime, "source_identity": "unverified existing artifact"}
     config = {
-        "identifier": "com.nousetsu.settingsaudit",
+        "identifier": "com.nousetsu.settingsrepair",
         "productName": "NouSetsu Settings Audit",
         "build": {"beforeBuildCommand": "", "beforeDevCommand": "", "frontendDist": str(workspace / "web/dist"), "devUrl": "http://127.0.0.1:5187"},
         "app": {"windows": [{"title": "NouSetsu Settings Audit", "width": 1440, "height": 900, "minWidth": 1024, "minHeight": 700}]},
+        "plugins": {"updater": {"endpoints": ["http://127.0.0.1:5194/audit-updates"], "dangerousInsecureTransportProtocol": True}},
     }
     write_json(WORK / "tauri-audit.json", config)
-    write_json(EVIDENCE / "provenance.json", {"source_commit": commit, "workspace": str(workspace), "audit_identifier": config["identifier"], "existing_artifacts": artifacts})
+    source_hashes = {}
+    for folder in ("src", "web/src", "web/public", "src-tauri/src", "modules/novel_scraper/src"):
+        for source_path in sorted((workspace / folder).rglob("*")):
+            if source_path.is_file() and "__pycache__" not in source_path.parts:
+                source_hashes[source_path.relative_to(workspace).as_posix()] = hashlib.sha256(source_path.read_bytes()).hexdigest()
+    for relative in ("pyproject.toml", "uv.lock", ".env.example", "web/package.json", "web/package-lock.json", "src-tauri/Cargo.toml", "src-tauri/Cargo.lock", "src-tauri/tauri.conf.json", "src-tauri/build_sidecar.py"):
+        if (workspace / relative).is_file():
+            source_hashes[relative] = hashlib.sha256((workspace / relative).read_bytes()).hexdigest()
+    write_json(EVIDENCE / "provenance.json", {"source_commit": commit, "workspace": str(workspace), "audit_identifier": config["identifier"], "source_snapshot_hashes": source_hashes, "existing_artifacts": artifacts})
     print(str(workspace))
 
 
@@ -100,6 +118,7 @@ class ProviderStub(BaseHTTPRequestHandler):
     captures: list[dict] = []
     capture_lock = threading.Lock()
     evidence_file = EVIDENCE / "provider-captures.json"
+    audit_gets: list[str] = []
 
     def log_message(self, *args: object) -> None:
         pass
@@ -112,7 +131,17 @@ class ProviderStub(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def do_CONNECT(self) -> None:
+        self.send_error(502, "Audit refuses external tunnels")
+
     def do_GET(self) -> None:
+        if self.server.server_port == 5194:
+            self.audit_gets.append(self.path)
+            write_json(EVIDENCE / "native-transport-requests.json", self.audit_gets)
+        if self.path == "/audit-updates":
+            self.send_response(204)
+            self.end_headers()
+            return
         self.send_json({"object": "list", "data": [{"id": "audit-" + role, "object": "model"} for role in ROLES]})
 
     def do_POST(self) -> None:
@@ -142,19 +171,27 @@ def start_stub(port: int = 5193) -> ThreadingHTTPServer:
     return server
 
 
-def frozen_audit(binary: Path, port: int = 5191) -> None:
+def frozen_audit(binary: Path, port: int = 5191, source: bool = False) -> None:
+    for owned_port in (port, 5193):
+        with socket.socket() as probe:
+            if probe.connect_ex(("127.0.0.1", owned_port)) == 0:
+                raise RuntimeError(f"Port {owned_port} already has a listener; refusing audit writes")
     WORK.mkdir(parents=True, exist_ok=True)
-    fixture = Path(tempfile.mkdtemp(prefix=f"frozen-{port}-", dir=WORK))
+    mode = "source" if source else "frozen"
+    result_path = EVIDENCE / f"{mode}-results.json"
+    fixture = Path(tempfile.mkdtemp(prefix=f"{mode}-{port}-", dir=WORK))
     env_file = fixture / ".env"
     env_file.write_text("NOVEL_MODEL='custom:audit-drafter'\nNOVEL_FALLBACK_MODEL='custom:audit-drafter'\nCUSTOM_API_KEY='synthetic-audit-key'\nCUSTOM_API_BASE_URL='http://127.0.0.1:5193/v1'\nNOVEL_MAX_TPM='1000000'\nNOVEL_MAX_RPM='10000'\n", encoding="utf-8")
     env = clean_environment()
     env.update({"NOUSETSU_ENV_FILE": str(env_file), "NOUSETSU_APP_DATA_DIR": str(fixture), "NOUSETSU_LOGS_DIR": str(fixture / "logs"), "NOVEL_REGISTRY_DIR": str(fixture / "registry"), "NOVEL_PROJECTS_DIR": str(fixture / "projects")})
+    env.update({"HTTPS_PROXY": "http://127.0.0.1:5193", "HTTP_PROXY": "http://127.0.0.1:5193", "NO_PROXY": "127.0.0.1,localhost,::1"})
     base = f"http://127.0.0.1:{port}"
     records: list[dict] = []
-    write_json(EVIDENCE / "frozen-results.json", [{"case": "audit_run", "status": "blocked", "reason": "New run started; no observations completed yet"}])
+    write_json(result_path, [{"case": "audit_run", "status": "blocked", "reason": "New run started; no observations completed yet"}])
     stub = start_stub()
     log = (fixture / "backend.log").open("w", encoding="utf-8")
-    process = subprocess.Popen([str(binary), "--port", str(port)], cwd=fixture, env=env, stdout=log, stderr=log, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    command = [sys.executable, "-m", "nousetsu.desktop_backend", "--port", str(port)] if source else [str(binary), "--port", str(port)]
+    process = subprocess.Popen(command, cwd=fixture, env=env, stdout=log, stderr=log, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     try:
         deadline = time.monotonic() + 100
         while time.monotonic() < deadline:
@@ -175,15 +212,42 @@ def frozen_audit(binary: Path, port: int = 5191) -> None:
             status, created = request(base, "/api/projects/create", {"title": title, "folder_name": folder, "source_language": "Japanese", "target_language": "English"})
             assert status == 200, created
             projects.append(created["active_project"]["path"])
+        creation_values = {"title": "Creation 日本語", "folder_name": "creation space", "source_language": "Korean", "target_language": "English", "genre": "romance", "model": "mock-audit-created"}
+        status, created = request(base, "/api/projects/create", creation_values)
+        assert status == 200, created
+        created_path = created["active_project"]["path"]
+        created_cfg = request(base, "/api/settings?" + urlencode({"project_path": created_path}))[1]["config"]
+        for key, expected in creation_values.items():
+            actual = Path(created_path).name if key == "folder_name" else created_cfg["model_name" if key == "model" else key]
+            assert actual == expected
+            records.append({"case": "project_creation_explicit", "setting_id": "creation." + key, "status": "pass", "actual": actual, "expected": expected})
+        assert request(base, "/api/environment", {"values": {"SOURCE_LANG": "Chinese", "TARGET_LANG": "French"}}, "PUT")[0] == 200
+        status, created = request(base, "/api/projects/create", {"title": "Inherited Creation", "folder_name": "inherited-creation"})
+        assert status == 200
+        inherited_cfg = request(base, "/api/settings?" + urlencode({"project_path": created["active_project"]["path"]}))[1]["config"]
+        for key, expected in (("source_language", "Chinese"), ("target_language", "French")):
+            assert inherited_cfg[key] == expected
+            records.append({"case": "project_creation_inherited", "setting_id": "creation." + key, "status": "pass", "actual": inherited_cfg[key], "expected": expected})
+        assert request(base, "/api/environment", {"values": {"SOURCE_LANG": "", "TARGET_LANG": ""}}, "PUT")[0] == 200
+        logs_status, logs = request(base, "/api/logs/info")
+        records.append({"case": "isolated_logs_diagnostics", "setting_id": "action.logs_refresh", "status": "pass" if logs_status == 200 else "fail"})
         query = "?" + urlencode({"project_path": projects[0]})
         initial = request(base, "/api/settings" + query)[1]
         config = initial["config"]
+        readonly = request(base, "/api/settings" + query, {"created_at": "changed"}, "PUT")
+        records.append({"case": "readonly_created_at", "setting_id": "project.created_at", "status": "pass" if readonly[0] == 422 and request(base, "/api/settings" + query)[1]["created_at"] == initial["created_at"] else "fail"})
+        updates_status, updates = request(base, "/api/updates/latest")
+        records.append({"case": "updates_controlled_external_transport_failure", "setting_id": "action.check_updates", "status": "pass" if updates_status == 502 and isinstance(updates.get("detail"), str) else "fail", "response_status": updates_status, "transport": "Loopback proxy refuses CONNECT; no external update request or installation"})
         edits = {"title": "Audit changed 日本", "project_id": "audit-project", "source_language": "Japanese", "target_language": "English", "genre": "romance", "raw_dir": "raw space", "output_dir": "translated space", "model_name": "custom:audit-drafter", "fallback_model": "custom:audit-polisher", "max_tpm": 1000000, "max_rpm": 10000, "max_review_loops": 2, "quality_threshold": 9.0, "chunk_threshold_lines": 24, "target_chunk_lines": 12, "chunk_overlap_lines": 0, "rag_top_k": 3, "rag_embedding_model": "mock-embedding", "rag_reranker_model": "custom:audit-critic", "safety_subdivision_min_lines": 4, "safety_subdivision_max_depth": 2}
         for key, value in config.items():
             if isinstance(value, bool):
                 edits[key] = not value
         edits.update({f"{role}_model": "custom:audit-" + role for role in ROLES})
         edits["filter_extractor_entities"] = False
+        edits.update({"use_interactions_api": False, "enable_post_polish_reconciliation": False,
+                      "enable_procedural_graph_learning": False, "procedural_learning_cadence": "both",
+                      "procedural_learning_interval": 4, "procedural_learning_min_failures": 2,
+                      "procedural_refiner_model": "custom:audit-critic"})
         edits["generation_settings"] = {role: {"temperature": (i + 1) / 10, "thinking_level": "low", "thinking_budget": 0, "use_interactions_api": False} for i, role in enumerate(ROLES)}
         status, saved = request(base, "/api/settings" + query, edits, "PUT")
         assert status == 200, saved
@@ -208,6 +272,12 @@ def frozen_audit(binary: Path, port: int = 5191) -> None:
                 value = "0"
             elif "USE_INTERACTIONS" in key or key in {"NOVEL_FILTER_EXTRACTOR_ENTITIES", "NOVEL_POST_POLISH_RECONCILIATION"}:
                 value = "false"
+            elif key == "NOVEL_ENABLE_PROCEDURAL_GRAPH_LEARNING":
+                value = "false"
+            elif key == "NOVEL_PROCEDURAL_LEARNING_CADENCE":
+                value = "both"
+            elif key in {"NOVEL_PROCEDURAL_LEARNING_INTERVAL", "NOVEL_PROCEDURAL_LEARNING_MIN_FAILURES"}:
+                value = "2"
             elif key == "SOURCE_LANG":
                 value = "Chinese"
             elif key == "TARGET_LANG":
@@ -240,7 +310,8 @@ def frozen_audit(binary: Path, port: int = 5191) -> None:
         records.append({"case": "local_provider_catalog", "status": "pass" if catalog[0] == 200 and catalog[1].get("configured") else "fail", "response": catalog})
         # A valid setting save is distinct from proving the pipeline consumes it.
         runtime_settings = {"raw_dir": "raw_chapters", "output_dir": "translated_chapters", "enable_rag": False, "enable_chunking": False, "auto_update_bible": True, "max_review_loops": 1}
-        request(base, "/api/settings" + query, runtime_settings, "PUT")
+        runtime_save = request(base, "/api/settings" + query, runtime_settings, "PUT")
+        assert runtime_save[0] == 200, runtime_save
         upload = request(base, "/api/chapters/upload", {"project_path": projects[0], "files": [{"name": "0001.txt", "content": "第一章\n旅人は歩き始めた。"}]})
         assert upload[0] == 200, upload
         ProviderStub.captures = []
@@ -265,7 +336,7 @@ def frozen_audit(binary: Path, port: int = 5191) -> None:
         before_restart = request(base, "/api/settings" + query)[1]["config"]
         process.terminate()
         process.wait(timeout=10)
-        process = subprocess.Popen([str(binary), "--port", str(port)], cwd=fixture, env=env, stdout=log, stderr=log, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        process = subprocess.Popen(command, cwd=fixture, env=env, stdout=log, stderr=log, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         deadline = time.monotonic() + 100
         while time.monotonic() < deadline:
             try:
@@ -279,12 +350,15 @@ def frozen_audit(binary: Path, port: int = 5191) -> None:
         records.append({"case": "restart_config", "status": "pass" if after_restart[1]["config"] == before_restart else "fail", "settings": list(before_restart)})
         ignored = request(base, "/api/settings" + query, {"procedural_learning_interval": 7}, "PUT")
         ignored_cfg = request(base, "/api/settings" + query)[1]["config"]
-        records.append({"case": "ignored_procedural_setting", "setting_id": "project.procedural_learning_interval", "status": "fail" if ignored[0] == 200 and ignored_cfg.get("procedural_learning_interval") != 7 else "pass"})
+        records.append({"case": "procedural_setting_persistence", "setting_id": "project.procedural_learning_interval", "status": "pass" if ignored[0] == 200 and ignored_cfg.get("procedural_learning_interval") == 7 else "fail"})
         # Invalid input: observe both save outcome and the subsequent model reload.
         response = request(base, "/api/settings" + query, {"max_review_loops": 99}, "PUT")
         reread = request(base, "/api/settings" + query)[1]
-        records.append({"case": "invalid_review_loop", "status": "fail" if response[0] == 200 else "pass", "save_status": response[0], "after_title": reread.get("title"), "after_loops": reread.get("max_review_loops")})
-        write_json(EVIDENCE / "frozen-results.json", records)
+        records.append({"case": "invalid_review_loop", "status": "pass" if response[0] == 422 and reread["config"] == ignored_cfg else "fail", "save_status": response[0], "after_title": reread.get("title"), "after_loops": reread.get("max_review_loops")})
+        missing = request(base, "/api/settings" + query, {"title": "Missing revision"}, "PUT", headers={})
+        stale = request(base, "/api/settings" + query, {"title": "Stale revision"}, "PUT", headers={"If-Match": '"obsolete"'})
+        records.append({"case": "required_revision", "status": "pass" if missing[0] == 428 and stale[0] == 412 and request(base, "/api/settings" + query)[1]["config"] == ignored_cfg else "fail"})
+        write_json(result_path, records)
         print(json.dumps({"cases": len(records), "failed_observations": sum(r.get("status") == "fail" for r in records), "provider_calls": len(captures), "fixture": str(fixture)}))
     finally:
         if process.poll() is None:
@@ -297,7 +371,7 @@ def frozen_audit(binary: Path, port: int = 5191) -> None:
         stub.shutdown()
         log.close()
         if records:
-            write_json(EVIDENCE / "frozen-results.json", records)
+            write_json(result_path, records)
 
 
 def launch_native(mode: str, executable: Path | None = None) -> None:
@@ -308,6 +382,7 @@ def launch_native(mode: str, executable: Path | None = None) -> None:
             raise RuntimeError("Port 15474 already has a listener; refusing to reuse it")
     workspace = WORK / "workspace"
     env = clean_environment()
+    env.update({"HTTPS_PROXY": "http://127.0.0.1:5194", "HTTP_PROXY": "http://127.0.0.1:5194", "NO_PROXY": "127.0.0.1,localhost,::1"})
     env.update({"NOUSETSU_PROJECT_DIR": str(workspace), "NOUSETSU_PYTHON": str(ROOT / ".venv/Scripts/python.exe"), "NOVEL_REGISTRY_DIR": str(WORK / f"native-{mode}/registry"), "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS": "--remote-debugging-port=5195", "WEBVIEW2_USER_DATA_FOLDER": str(WORK / f"native-{mode}/webview-profile")})
     if mode == "dev":
         if not (workspace / ".env").exists():
@@ -339,15 +414,15 @@ def launch_native(mode: str, executable: Path | None = None) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("prepare", "frozen", "stub", "native-dev", "native-release"))
+    parser.add_argument("action", choices=("prepare", "source", "frozen", "stub", "native-dev", "native-release"))
     parser.add_argument("--binary", type=Path, default=WORK / "workspace/src-tauri/binaries/nousetsu-backend/nousetsu-backend.exe")
     parser.add_argument("--port", type=int, default=5191)
     parser.add_argument("--native-exe", type=Path)
     args = parser.parse_args()
     if args.action == "prepare":
         prepare()
-    elif args.action == "frozen":
-        frozen_audit(args.binary.resolve(), args.port)
+    elif args.action in {"source", "frozen"}:
+        frozen_audit(Path(sys.executable) if args.action == "source" else args.binary.resolve(), args.port, source=args.action == "source")
     elif args.action.startswith("native-"):
         launch_native(args.action.removeprefix("native-"), args.native_exe)
     else:

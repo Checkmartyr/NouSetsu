@@ -223,6 +223,11 @@ export interface ModelCatalogResult {
 }
 
 export interface MachineEnvironment {
+  revision?: string;
+  effective_values?: Record<string, string>;
+  sources?: Record<string, string>;
+  backend_mode?: string;
+  registry_dir?: string;
   env_file_path: string;
   values: Record<string, string>;
   api_key_status: Record<string, boolean>;
@@ -246,6 +251,14 @@ export interface UpdateCheckResult {
 }
 
 export interface ProjectSettings {
+  revision?: string;
+  effective_config?: Partial<ProjectSettings>;
+  sources?: Record<string, string>;
+  enable_procedural_graph_learning?: boolean | null;
+  procedural_learning_cadence?: string | null;
+  procedural_learning_interval?: number | null;
+  procedural_learning_min_failures?: number | null;
+  procedural_refiner_model?: string | null;
   // General & Project Metadata
   project_id?: string;
   title?: string;
@@ -286,8 +299,8 @@ export interface ProjectSettings {
   model_catalog?: string[];
 
   // Reflection Review & Polishing
-  max_review_loops?: number;
-  quality_threshold?: number;
+  max_review_loops?: number | null;
+  quality_threshold?: number | null;
   enable_patch_polishing?: boolean;
 
   // Semantic Chunking
@@ -302,7 +315,7 @@ export interface ProjectSettings {
   cross_folder_summaries?: boolean;
   filter_scene_characters?: boolean;
   filter_extractor_entities?: boolean | null;
-  enable_post_polish_reconciliation?: boolean;
+  enable_post_polish_reconciliation?: boolean | null;
 
   // Episodic Lore & Hybrid RAG (Tier 4)
   enable_rag?: boolean;
@@ -317,8 +330,8 @@ export interface ProjectSettings {
   safety_subdivision_max_depth?: number | '';
 
   // Rate Limiting & Quotas
-  max_tpm?: number | '';
-  max_rpm?: number | '';
+  max_tpm?: number | '' | null;
+  max_rpm?: number | '' | null;
 
   [key: string]: any;
 }

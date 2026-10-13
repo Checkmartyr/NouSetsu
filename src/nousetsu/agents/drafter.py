@@ -42,13 +42,21 @@ class ContextAwareDrafterAgent:
         thinking_level: Optional[str] = None,
         thinking_budget: Optional[int] = None,
         use_interactions_api: Optional[bool] = None,
+        environ=None,
+        filter_scene_characters: bool = True,
+        chunk_overlap_lines: int = 3,
     ):
+        from nousetsu.utils.env import resolve_env
+        self.environ = resolve_env() if environ is None else environ
+        self.filter_scene_characters = filter_scene_characters
+        self.chunk_overlap_lines = chunk_overlap_lines
         self.model_name = model_name
         self.fallback_model = fallback_model
-        generation = resolve_agent_generation_settings("drafter")
+        generation = resolve_agent_generation_settings("drafter", environ=self.environ)
 
         self.llm = get_llm(
             model_name=model_name,
+            environ=self.environ,
             fallback_model=fallback_model,
             temperature=temperature if temperature is not None else generation["temperature"],
             use_interactions=(use_interactions_api if use_interactions_api is not None else generation["use_interactions_api"]),
@@ -298,7 +306,7 @@ class ContextAwareDrafterAgent:
 
             # Extract last 3 non-empty lines of draft for next chunk's sliding context
             lines = [l.strip() for l in chunk_draft.splitlines() if l.strip()]
-            prev_draft_tail = "\n".join(lines[-3:]) if lines else ""
+            prev_draft_tail = "\n".join(lines[-self.chunk_overlap_lines:] if self.chunk_overlap_lines else []) if lines else ""
 
         self.last_usage = total_usage
         return "\n\n".join(drafted_parts)
@@ -323,7 +331,7 @@ class ContextAwareDrafterAgent:
             source_text=chunk_text,
             target_text=preceding_context,
             max_characters=15
-        )
+        ) if self.filter_scene_characters else active_characters
         chars_str = format_character_roster(
             characters=eval_characters,
             context_characters=eval_characters,
@@ -527,7 +535,7 @@ class ContextAwareDrafterAgent:
                     **kwargs
                 )
                 left_tail_lines = [l.strip() for l in left_draft.splitlines() if l.strip()]
-                left_tail = "\n".join(left_tail_lines[-3:]) if left_tail_lines else preceding_context
+                left_tail = "\n".join(left_tail_lines[-self.chunk_overlap_lines:] if self.chunk_overlap_lines else []) if left_tail_lines else preceding_context
                 right_draft = self._draft_with_recursive_subdivision(
                     chunk_text=right_text,
                     preceding_context=left_tail,

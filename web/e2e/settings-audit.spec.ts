@@ -6,7 +6,7 @@ import crypto from 'node:crypto';
 // These tests exercise the real API. No page.route(), fetch replacement, or
 // simulated Tauri globals are used. Findings are recorded separately from
 // harness assertions so a reproduced product defect is not a passing contract.
-const evidence = path.resolve('../audit-results/settings');
+const evidence = path.resolve('../audit-results/settings-repair');
 const roles = [
   ['extractor', 'Entity Extractor'], ['drafter', 'Context-Aware Drafter'],
   ['critic', 'Critique Agent'], ['polisher', 'Polishing Agent'],
@@ -22,7 +22,7 @@ function record(scenario: string, fields: string[], status: Result['status'], de
   rows.push({ mode: test.info().project.name, scenario, fields, status, details });
 }
 function field(scope: Page | Locator, label: string | RegExp): Locator {
-  return scope.locator('label').filter({ hasText: label }).first().locator('xpath=..').locator('input, select').first();
+  return scope.getByLabel(label).first();
 }
 async function snapshot(request: APIRequestContext) {
   return (await request.get(`${backend(test.info().project.name)}/api/audit/fixture`)).json();
@@ -41,19 +41,15 @@ async function open(page: Page, section: string, project = fixture.projects.A) {
 }
 async function saveProject(page: Page) {
   const response = page.waitForResponse(r => r.url().includes('/api/settings') && r.request().method() === 'PUT');
-  const refreshed = page.waitForResponse(r => r.url().includes('/api/settings') && r.request().method() === 'GET');
   await page.getByRole('button', { name: 'Save Settings', exact: true }).click();
   const result = await response;
   expect(result.status()).toBe(200);
-  await refreshed;
-  await expect(page.locator('form')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Save Settings', exact: true })).toBeEnabled();
 }
 async function saveGlobal(page: Page) {
   const response = page.waitForResponse(r => r.url().endsWith('/api/environment') && r.request().method() === 'PUT');
-  const refreshed = page.waitForResponse(r => r.url().endsWith('/api/environment') && r.request().method() === 'GET');
   await page.getByRole('button', { name: 'Save Global Settings', exact: true }).click();
   expect((await response).status()).toBe(200);
-  await refreshed;
   await expect(page.getByText('Local environment settings saved.', { exact: true })).toBeVisible();
 }
 async function generation(card: Locator, temperature: string, budget: string) {
@@ -106,9 +102,12 @@ test('all editable project controls save through real API, disk, and reload', as
     safety_subdivision_min_lines: ['10', /^Subdivision Min Lines/], safety_subdivision_max_depth: ['5', /^Subdivision Max/],
     max_tpm: ['50000', /^Max Tokens Per Minute/], max_rpm: ['80', /^Max Requests Per Minute/],
     raw_dir: ['raw chapters 日本語', /^Raw Chapters Directory$/], output_dir: ['translated chapters 日本語', /^Translated Chapters Directory$/],
+    procedural_learning_interval: ['20', /^procedural_learning_interval$/], procedural_learning_min_failures: ['3', /^procedural_learning_min_failures$/], procedural_refiner_model: ['mock-refiner', /^Refiner model$/],
     max_review_loops: ['4', /^Max Review Loops/], quality_threshold: ['9', /^Quality Score Threshold/],
   };
   for (const [, [value, label]] of Object.entries(values)) await field(form, label).fill(value);
+  await form.getByLabel('Enable procedural learning').selectOption('true');
+  await form.getByLabel('Learning cadence').selectOption('interval');
   const models: Record<string, string> = { model_name: 'mock-project-primary', fallback_model: 'mock-project-fallback' };
   await form.getByLabel('Primary model route model ID', { exact: true }).fill(models.model_name);
   await form.getByLabel('Shared fallback route model ID', { exact: true }).fill(models.fallback_model);
@@ -136,6 +135,8 @@ test('all editable project controls save through real API, disk, and reload', as
   for (const [key, value] of Object.entries(models)) expect(disk.config.A[key], key).toBe(value);
   for (const key of Object.keys(toggles)) expect(disk.config.A[key], key).toBe(false);
   for (const [index, [role]] of roles.entries()) expect(disk.config.A.generation_settings[role]).toEqual({ temperature: Number((0.3 + index * 0.1).toFixed(1)), thinking_budget: 100 + index, thinking_level: 'low', use_interactions_api: false });
+  expect(disk.config.A.enable_procedural_graph_learning).toBe(true);
+  expect(disk.config.A.procedural_learning_cadence).toBe('interval');
   expect(disk.bible.A.title).toBe(disk.config.A.title);
   expect(disk.config.B.title).toBe('Audit B');
   await page.reload();
@@ -153,7 +154,7 @@ test('all editable project controls save through real API, disk, and reload', as
   }
   const read = await settings(request);
   for (const key of Object.keys(models)) expect(read[key], key).toBe(models[key]);
-  const tested = [...Object.keys(values), ...Object.keys(models), ...Object.keys(toggles), ...roles.flatMap(([role]) => ['temperature', 'thinking_level', 'thinking_budget', 'use_interactions_api'].map(key => `generation_settings.${role}.${key}`))];
+  const tested = ['enable_procedural_graph_learning', 'procedural_learning_cadence', ...Object.keys(values), ...Object.keys(models), ...Object.keys(toggles), ...roles.flatMap(([role]) => ['temperature', 'thinking_level', 'thinking_budget', 'use_interactions_api'].map(key => `generation_settings.${role}.${key}`))];
   record('project UI/save/disk/reload', tested, 'pass', { isolated_B_unchanged: true, bible_metadata_synced: true, runtime_execution: 'Covered separately by backend audit; browser validates persistence and resolved API values.' });
   await page.screenshot({ path: path.join(evidence, `${test.info().project.name}-project.png`), fullPage: true });
 });
@@ -163,10 +164,11 @@ test('all global controls and five secrets persist, preserve, replace, and clear
   const expected: Record<string, string> = {};
   const simple = [
     ['Language Defaults', 'SOURCE_LANG', 'Japanese'], ['Language Defaults', 'TARGET_LANG', 'English'],
-    ['Quality Defaults', 'NOVEL_MAX_REVIEW_LOOPS', '4'], ['Quality Defaults', 'NOVEL_QUALITY_THRESHOLD', '9'],
+    ['Quality Defaults', 'NOVEL_MAX_REVIEW_LOOPS', '4'], ['Quality Defaults', 'NOVEL_QUALITY_THRESHOLD', '9.0'],
     ['Memory & Entity Defaults', 'NOVEL_FILTER_EXTRACTOR_ENTITIES', 'false'], ['Memory & Entity Defaults', 'NOVEL_POST_POLISH_RECONCILIATION', 'false'],
     ['RAG Model Defaults', 'NOVEL_RAG_EMBEDDING_MODEL', 'mock-global-embedding'], ['RAG Model Defaults', 'NOVEL_RAG_RERANKER_MODEL', 'mock-global-reranker'],
     ['Rate Limit Defaults', 'NOVEL_MAX_TPM', '45000'], ['Rate Limit Defaults', 'NOVEL_MAX_RPM', '70'],
+    ['Procedural Learning Defaults', 'NOVEL_ENABLE_PROCEDURAL_GRAPH_LEARNING', 'true'], ['Procedural Learning Defaults', 'NOVEL_PROCEDURAL_LEARNING_CADENCE', 'interval'], ['Procedural Learning Defaults', 'NOVEL_PROCEDURAL_LEARNING_INTERVAL', '20'], ['Procedural Learning Defaults', 'NOVEL_PROCEDURAL_LEARNING_MIN_FAILURES', '3'], ['Procedural Learning Defaults', 'NOVEL_PROCEDURAL_REFINER_MODEL', 'mock-refiner'],
     ['Workspace Defaults', 'NOVEL_PROJECTS_DIR', fixture.projects.A.replace(/Audit A$/, '')],
     ['Workspace Defaults', 'NOVEL_SCRAPER_PATH', `${fixture.root}/scraper 日本語`], ['Workspace Defaults', 'NOVEL_SCRAPER_PYTHON', `${fixture.root}/python.exe`],
   ];
@@ -233,6 +235,7 @@ test('presets, reset, provider catalog, stale effective values, navigation and p
   await saveProject(page);
   const presetDisk = await snapshot(request);
   const presetMismatches = Object.entries(preset.models).filter(([key, value]) => presetDisk.config.A[key] !== value).map(([key, expected]) => ({ key, expected, observed: presetDisk.config.A[key] }));
+  expect(presetMismatches).toEqual([]);
   record('model preset coverage', Object.keys(preset.models), presetMismatches.length ? 'fail' : 'pass', { preset: preset.id, mismatches: presetMismatches, recommendation: 'Apply scraper_model as well as pipeline model fields when using a preset.' });
   await page.getByTitle('Clear all project overrides to inherit 100% from .env', { exact: true }).click();
   await saveProject(page);
@@ -254,6 +257,7 @@ test('presets, reset, provider catalog, stale effective values, navigation and p
   const primary = page.getByLabel('Primary model route model ID', { exact: true });
   const displayed = await primary.getAttribute('placeholder');
   const fresh = await settings(request);
+  expect(displayed).toBe(fresh.effective_model_name);
   record('effective project model refresh after global save', ['NOVEL_MODEL', 'effective_model_name'], displayed === fresh.effective_model_name ? 'pass' : 'fail', { before: before.effective_model_name, displayed, fresh: fresh.effective_model_name, recommendation: 'Refresh project resolved settings after a successful global save.' });
   await primary.locator('xpath=..').getByRole('combobox').first().selectOption('custom');
   await primary.fill('audit-local-model');
@@ -281,14 +285,16 @@ test('numeric boundaries, blank fallback, accessibility, diagnostics and failed 
   // Keyboard save retains focus and reaches handleSave's fallback before blur.
   await page.getByPlaceholder('800').fill('');
   await page.keyboard.press('Control+s');
-  await expect(page.getByText('Settings saved to config.yaml successfully!', { exact: true })).toBeVisible();
+  await expect(page.getByText('Project settings saved.', { exact: true })).toBeVisible();
   const blank = await snapshot(request);
+  expect(blank.config.A.chunk_threshold_lines).toBe(800);
   record('blank threshold keyboard save', ['chunk_threshold_lines'], blank.config.A.chunk_threshold_lines === 800 ? 'pass' : 'fail', { observed: blank.config.A.chunk_threshold_lines, expected: 800, trigger: 'Clear threshold; Ctrl+S without blurring' });
   await open(page, 'chunking');
   await page.getByPlaceholder('400').fill('');
   await page.keyboard.press('Control+s');
-  await expect(page.getByText('Settings saved to config.yaml successfully!', { exact: true })).toBeVisible();
+  await expect(page.getByText('Project settings saved.', { exact: true })).toBeVisible();
   const size = await snapshot(request);
+  expect(size.config.A.target_chunk_lines).toBe(400);
   record('blank size keyboard save', ['target_chunk_lines'], size.config.A.target_chunk_lines === 400 ? 'pass' : 'fail', { observed: size.config.A.target_chunk_lines, expected: 400 });
   await open(page, 'models');
   const extractor = page.getByLabel('Entity Extractor model model ID', { exact: true });
@@ -298,13 +304,14 @@ test('numeric boundaries, blank fallback, accessibility, diagnostics and failed 
   page.once('dialog', dialog => dialog.accept());
   const response = page.waitForResponse(r => r.url().includes('/api/settings') && r.request().method() === 'PUT');
   await page.getByRole('button', { name: 'Save Settings', exact: true }).click();
-  expect((await response).status()).toBe(400);
+  expect((await response).status()).toBe(422);
   expect((await snapshot(request)).config.A.extractor_model).toBeNull();
-  record('invalid generation temperature rejected without persistence', ['generation_settings.extractor.temperature'], 'pass', { status: 400 });
+  record('invalid generation temperature rejected without persistence', ['generation_settings.extractor.temperature'], 'pass', { status: 422 });
   await open(page, 'all');
   const unnamed = await page.locator('form').getByRole('switch').evaluateAll(elements => elements.filter(e => !e.getAttribute('aria-label') && !e.getAttribute('aria-labelledby')).length);
   const unassociated = await page.locator('form label').evaluateAll(elements => elements.filter(e => !(e as HTMLLabelElement).control).length);
   const descriptors = await page.locator('form').getByRole('switch').evaluateAll(elements => elements.filter(e => !e.getAttribute('aria-label') && !e.getAttribute('aria-labelledby')).map(e => e.parentElement?.textContent?.trim().replace(/\s+/g, ' ').slice(0, 180)));
+  expect(unnamed).toBe(0); expect(unassociated).toBe(0);
   record('settings accessible names', [], unnamed || unassociated ? 'fail' : 'pass', { unnamed_switches: unnamed, unassociated_labels: unassociated, unnamed_control_descriptors: descriptors, recommendation: 'Associate every visible label with its control and name switches.' });
   await page.setViewportSize({ width: 390, height: 844 });
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1);
@@ -326,8 +333,13 @@ test('two real browser forms reveal stale full-form save overwrite', async ({ pa
   await page.getByPlaceholder('Ascendance of a Bookworm').fill('Saved from form A');
   await saveProject(page);
   await field(second.locator('form'), /^Genre$/).fill('romance');
-  await saveProject(second);
+  const stale = second.waitForResponse(r => r.url().includes('/api/settings') && r.request().method() === 'PUT');
+  await second.getByRole('button', {name: 'Save Settings', exact: true}).click();
+  expect((await stale).status()).toBe(412);
+  await expect(second.getByRole('alert')).toContainText('Your edits are preserved');
+  await expect(field(second.locator('form'), /^Genre$/)).toHaveValue('romance');
   const disk = await snapshot(request);
+  expect(disk.config.A.title).toBe('Saved from form A');
   record('stale full-form save overwrite', ['title', 'genre'], disk.config.A.title === 'Saved from form A' ? 'pass' : 'fail', { first_save_title: 'Saved from form A', final_title: disk.config.A.title, final_genre: disk.config.A.genre, recommendation: 'Send changed fields or reject stale writes with a revision token.' });
   await second.close();
 });
@@ -338,9 +350,12 @@ test('global malformed values and no-project settings remain observable', async 
   await shared.getByLabel('Temperature', { exact: true }).fill('3');
   await page.getByRole('textbox', { name: 'Quality Defaults NOVEL_MAX_REVIEW_LOOPS', exact: true }).fill('not-a-number');
   await page.getByRole('textbox', { name: 'Rate Limit Defaults NOVEL_MAX_TPM', exact: true }).fill('-1');
-  await saveGlobal(page);
+  const invalid = page.waitForResponse(r => r.url().endsWith('/api/environment') && r.request().method() === 'PUT');
+  await page.getByRole('button', {name: 'Save Global Settings', exact: true}).click();
+  expect((await invalid).status()).toBe(422);
   const disk = await snapshot(request);
-  record('global semantic input validation', ['NOVEL_TEMPERATURE', 'NOVEL_MAX_REVIEW_LOOPS', 'NOVEL_MAX_TPM'], 'fail', { saved: { NOVEL_TEMPERATURE: disk.env_values.NOVEL_TEMPERATURE, NOVEL_MAX_REVIEW_LOOPS: disk.env_values.NOVEL_MAX_REVIEW_LOOPS, NOVEL_MAX_TPM: disk.env_values.NOVEL_MAX_TPM }, recommendation: 'Validate typed environment controls before persistence with the same ranges as project settings.' });
+  expect(disk.env_values.NOVEL_MAX_TPM).not.toBe('-1');
+  record('global semantic input validation', ['NOVEL_TEMPERATURE', 'NOVEL_MAX_REVIEW_LOOPS', 'NOVEL_MAX_TPM'], 'pass', { saved: { NOVEL_TEMPERATURE: disk.env_values.NOVEL_TEMPERATURE, NOVEL_MAX_REVIEW_LOOPS: disk.env_values.NOVEL_MAX_REVIEW_LOOPS, NOVEL_MAX_TPM: disk.env_values.NOVEL_MAX_TPM }, recommendation: 'Validate typed environment controls before persistence with the same ranges as project settings.' });
   await request.post(`${backend(test.info().project.name)}/api/audit/reset`);
   await request.post(`${backend(test.info().project.name)}/api/audit/no-project`);
   await page.goto('/settings?section=global');
@@ -348,7 +363,7 @@ test('global malformed values and no-project settings remain observable', async 
   await page.getByRole('button', { name: 'Save Global Settings', exact: true }).or(skip).first().waitFor();
   const startupStalled = await skip.isVisible();
   record('no-project startup permits global settings', ['NOVEL_PROJECTS_DIR'], startupStalled ? 'fail' : 'pass', { stalled: startupStalled, reason: startupStalled ? 'Startup requests chapters for uninitialized fallback cwd and receives HTTP 400.' : null, recommendation: 'Permit global settings on an empty registry without chapter readiness checks.' });
-  if (startupStalled) await skip.click();
+  expect(startupStalled).toBe(false);
   await expect(page.getByRole('button', { name: 'Save Global Settings', exact: true })).toBeVisible();
   await page.getByRole('textbox', { name: 'Language Defaults TARGET_LANG', exact: true }).fill('Thai');
   await saveGlobal(page);
@@ -360,19 +375,58 @@ test('global malformed values and no-project settings remain observable', async 
 
 test('inherited entity toggle and legacy Interactions survive apparent clear-all', async ({ page, request }) => {
   const base = backend(test.info().project.name);
-  expect((await request.put(`${base}/api/environment`, { data: { values: { NOVEL_FILTER_EXTRACTOR_ENTITIES: 'false', NOVEL_USE_INTERACTIONS: 'true' } } })).status()).toBe(200);
+  expect((await request.put(`${base}/api/environment`, { headers: {'If-Match': `"${(await (await request.get(`${base}/api/environment`)).json()).revision}"`}, data: { values: { NOVEL_FILTER_EXTRACTOR_ENTITIES: 'false', NOVEL_USE_INTERACTIONS: 'true' } } })).status()).toBe(200);
   await open(page, 'memory');
   const toggle = page.getByText('Extractor Known Entity Filtering', { exact: true }).locator('xpath=ancestor::*[.//button[@role="switch"]][1]').getByRole('switch');
   const disk = await snapshot(request);
   const displayed = await toggle.getAttribute('aria-checked');
   expect(disk.config.A.filter_extractor_entities).toBeNull();
   expect(disk.resolved.A.filter_extractor_entities).toBe(false);
+  expect(displayed).toBe('false');
   record('inherited entity filtering toggle display', ['filter_extractor_entities', 'NOVEL_FILTER_EXTRACTOR_ENTITIES'], displayed === String(disk.resolved.A.filter_extractor_entities) ? 'pass' : 'fail', { raw_project: null, effective: disk.resolved.A.filter_extractor_entities, displayed_checked: displayed, recommendation: 'Display the effective resolved Boolean and offer a separate inheritance state.' });
-  expect((await request.put(`${base}/api/settings?${new URLSearchParams({ project_path: fixture.projects.A })}`, { data: { use_interactions_api: false } })).status()).toBe(200);
+  expect((await request.put(`${base}/api/settings?${new URLSearchParams({ project_path: fixture.projects.A })}`, { headers: {'If-Match': `"${(await settings(request)).revision}"`}, data: { use_interactions_api: false } })).status()).toBe(200);
   await open(page, 'models');
   await page.getByTitle('Clear all project overrides to inherit 100% from .env', { exact: true }).click();
   await saveProject(page);
   const cleared = await snapshot(request);
   const legacy = cleared.config.A.use_interactions_api;
+  expect(legacy).toBeNull();
   record('clear all preserves legacy Interactions override', ['use_interactions_api', 'generation_settings'], legacy === null ? 'pass' : 'fail', { legacy_override_after_clear: legacy, shared_env: 'true', effective_roles: Object.fromEntries(roles.map(([role]) => [role, cleared.resolved.A.generation[role].use_interactions_api])), recommendation: 'Clear the legacy project-wide override together with role generation overrides.' });
+});
+
+
+test('creation controls inherit global languages and persist explicit overrides', async ({page, request}) => {
+  const base=backend(test.info().project.name);
+  const current=await (await request.get(`${base}/api/environment`)).json();
+  expect((await request.put(`${base}/api/environment`, {headers:{'If-Match': `"${current.revision}"`}, data:{values:{SOURCE_LANG:'Chinese', TARGET_LANG:'French'}}})).status()).toBe(200);
+  await open(page,'general');
+  for (const explicit of [false,true]) {
+    await page.getByTitle('Initialize new novel project inside project/',{exact:true}).click();
+    const form=page.locator('form').filter({has:page.locator('#new-project-title')});
+    await expect(form.getByLabel('Source Language',{exact:true})).toHaveValue('Chinese');
+    await expect(form.getByLabel('Target Language',{exact:true})).toHaveValue('French');
+    const suffix=explicit?'override':'defaults';
+    const folder=`created-${test.info().project.name}-${suffix}-${Date.now()}`;
+    const title=`Created ${suffix}`;
+    await form.getByLabel(/Novel Title/).fill(title);
+    await form.getByLabel(/Project Name/).fill(folder);
+    if(explicit){await form.getByLabel('Source Language',{exact:true}).fill('Korean');await form.getByLabel('Target Language',{exact:true}).fill('English');}
+    await form.getByLabel('Novel Genre',{exact:true}).selectOption('romance');
+    await form.getByLabel('Primary Model',{exact:true}).fill('mock-created');
+    await page.screenshot({path:path.join(evidence,`${test.info().project.name}-creation-${suffix}.png`),fullPage:true});
+    const response=page.waitForResponse(r=>r.url().endsWith('/api/projects/create')&&r.request().method()==='POST');
+    await form.getByRole('button',{name:'Initialize Project',exact:true}).click();
+    const created=await response;expect(created.status()).toBe(200);
+    const body=await created.json();const project=body.active_project.path;
+    expect(path.relative(fixture.root,project).startsWith('..')).toBe(false);expect(path.basename(project)).toBe(folder);
+    const cfg=(await settings(request,project)).config;
+    const expected={title,source_language:explicit?'Korean':'Chinese',target_language:explicit?'English':'French',genre:'romance',model_name:'mock-created'};
+    const disk=fs.readFileSync(path.join(project,'.novel/config.yaml'),'utf8');
+    for(const [key,value] of Object.entries(expected)){expect(cfg[key]).toBe(value);expect(disk).toContain(value);}
+    await open(page,'general',project);await page.reload();
+    await expect(page.getByLabel('Novel Title',{exact:true})).toHaveValue(title);
+    await expect(page.getByLabel('Source Language',{exact:true})).toHaveValue(expected.source_language);
+    await expect(page.getByLabel('Target Language',{exact:true})).toHaveValue(expected.target_language);
+    record(`creation ${suffix} UI/API/disk/reload`,['creation.title','creation.folder_name','creation.source_language','creation.target_language','creation.genre','creation.model'],'pass',{expected,folder_name:folder,isolated:true});
+  }
 });
