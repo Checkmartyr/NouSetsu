@@ -1154,12 +1154,84 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               {settings && activeTab !== 'global' && <form onSubmit={handleSave} className="space-y-6">
                 <div className="text-xs text-slate-400">Settings affect subsequent jobs. Active jobs keep their captured settings.</div>
                 {['all', 'review', 'ratelimit', 'memory'].includes(activeTab) && <div className="flex flex-wrap gap-3 text-xs">{['max_review_loops', 'quality_threshold', 'max_tpm', 'max_rpm', 'filter_extractor_entities', 'enable_post_polish_reconciliation'].map((key) => <div key={key}>{key}: {settings[key] == null ? `Inherited (${String(settings.effective_config?.[key] ?? 'default')})` : `Project override (${String(settings[key])})`} <button type="button" className="underline" onClick={() => setSettings({...settings, [key]: null})}>Inherit global default</button></div>)}</div>}
-                {(showAll || activeTab === 'procedural') && <section className="p-5 space-y-3 bg-[#383330]"><h2>Procedural Learning</h2>
-                  <label className="block">Enable procedural learning<select value={settings.enable_procedural_graph_learning == null ? '' : String(settings.enable_procedural_graph_learning)} onChange={(e) => setSettings({...settings, enable_procedural_graph_learning: e.target.value === '' ? null : e.target.value === 'true'})}><option value="">Inherit ({String(settings.effective_config?.enable_procedural_graph_learning ?? false)})</option><option value="true">Enabled</option><option value="false">Disabled</option></select></label>
-                  <label className="block">Learning cadence<select value={settings.procedural_learning_cadence ?? ''} onChange={(e) => setSettings({...settings, procedural_learning_cadence: e.target.value || null})}><option value="">Inherit ({settings.effective_config?.procedural_learning_cadence ?? 'default'})</option>{['arc', 'interval', 'both'].map((value) => <option key={value}>{value}</option>)}</select></label>
-                  {(['procedural_learning_interval', 'procedural_learning_min_failures'] as const).map((key) => <label className="block" key={key}>{key}<input type="number" min={1} value={settings[key] ?? ''} placeholder={String(settings.effective_config?.[key] ?? 'Inherited')} onChange={(e) => setSettings({...settings, [key]: e.target.value === '' ? null : Number(e.target.value)})}/></label>)}
-                  <label className="block">Refiner model<input value={settings.procedural_refiner_model ?? ''} placeholder={settings.effective_config?.procedural_refiner_model ?? 'Inherited'} onChange={(e) => setSettings({...settings, procedural_refiner_model: e.target.value || null})}/></label>
-                </section>}
+                {(showAll || activeTab === 'procedural') && (
+                  <section className="bg-[#383330] border border-[#3f3a36] rounded-[4px] p-5 space-y-4">
+                    <div className="flex items-center gap-2 border-b border-[#4a433e] pb-3">
+                      <Bot className="w-4 h-4 shrink-0 text-indigo-400" />
+                      <div>
+                        <h2 className="text-sm font-bold text-slate-200">Procedural Learning</h2>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          Refine agent workflows from translation feedback at story arc boundaries or chapter intervals.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                      <div className="min-w-0">
+                        <label htmlFor="procedural-learning-enabled" className="block text-slate-400 mb-1 font-medium">Enable procedural learning</label>
+                        <select
+                          id="procedural-learning-enabled"
+                          value={settings.enable_procedural_graph_learning == null ? '' : String(settings.enable_procedural_graph_learning)}
+                          onChange={(e) => setSettings({ ...settings, enable_procedural_graph_learning: e.target.value === '' ? null : e.target.value === 'true' })}
+                          className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2.5 text-slate-200 focus:outline-none focus:border-indigo-500"
+                        >
+                          <option value="">Inherit ({settings.effective_config?.enable_procedural_graph_learning ? 'Enabled' : 'Disabled'})</option>
+                          <option value="true">Enabled</option>
+                          <option value="false">Disabled</option>
+                        </select>
+                      </div>
+
+                      <div className="min-w-0">
+                        <label htmlFor="procedural-learning-cadence" className="block text-slate-400 mb-1 font-medium">Learning cadence</label>
+                        <select
+                          id="procedural-learning-cadence"
+                          value={settings.procedural_learning_cadence ?? ''}
+                          onChange={(e) => setSettings({ ...settings, procedural_learning_cadence: e.target.value || null })}
+                          className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2.5 text-slate-200 focus:outline-none focus:border-indigo-500"
+                        >
+                          <option value="">Inherit ({settings.effective_config?.procedural_learning_cadence ?? 'default'})</option>
+                          <option value="arc">Story arc boundaries</option>
+                          <option value="interval">Chapter intervals</option>
+                          <option value="both">Arc boundaries & chapter intervals</option>
+                        </select>
+                      </div>
+
+                      {([
+                        { key: 'procedural_learning_interval', label: 'Learning Interval (Chapters)', description: 'Chapters between learning runs when the cadence includes chapter intervals.' },
+                        { key: 'procedural_learning_min_failures', label: 'Minimum Failure Traces', description: 'Failure traces required before the refiner updates an agent workflow.' },
+                      ] as const).map(({ key, label, description }) => (
+                        <div key={key} className="min-w-0">
+                          <label htmlFor={key} className="block text-slate-400 mb-1 font-medium">{label}</label>
+                          <input
+                            id={key}
+                            type="number"
+                            min={1}
+                            value={settings[key] ?? ''}
+                            placeholder={String(settings.effective_config?.[key] ?? 'Inherited')}
+                            onChange={(e) => setSettings({ ...settings, [key]: e.target.value === '' ? null : Number(e.target.value) })}
+                            className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2.5 text-slate-200 focus:outline-none focus:border-indigo-500"
+                            aria-describedby={`${key}-help`}
+                          />
+                          <p id={`${key}-help`} className="text-[10px] text-slate-500 mt-1">{description}</p>
+                        </div>
+                      ))}
+
+                      <div className="min-w-0 sm:col-span-2">
+                        <label htmlFor="procedural-refiner-model" className="block text-slate-400 mb-1 font-medium">Refiner model</label>
+                        <input
+                          id="procedural-refiner-model"
+                          value={settings.procedural_refiner_model ?? ''}
+                          placeholder={settings.effective_config?.procedural_refiner_model ?? 'Inherited'}
+                          onChange={(e) => setSettings({ ...settings, procedural_refiner_model: e.target.value || null })}
+                          className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2.5 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
+                          aria-describedby="procedural-refiner-model-help"
+                        />
+                        <p id="procedural-refiner-model-help" className="text-[10px] text-slate-500 mt-1">Model used to refine agent workflows. Leave blank to inherit the global default.</p>
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-slate-400">Select Inherit or clear a field to use its global default.</p>
+                  </section>
+                )}
               {/* Group 1: General Novel Information */}
               {(showAll || activeTab === 'general') && (
                 <div className="bg-[#383330] border border-[#3f3a36] rounded-[4px] p-5 space-y-4">

@@ -16,7 +16,7 @@ export interface WorkspaceRoute {
 
 const workspaces = ['studio', 'reader', 'traces', 'bible', 'settings'];
 const bibleSections = ['characters', 'visualizer', 'glossary', 'memory', 'raw'];
-const settingsSections = ['global', 'updates', 'logs', 'all', 'general', 'models', 'review', 'chunking', 'memory', 'rag', 'safety', 'ratelimit', 'paths'];
+const settingsSections = ['global', 'updates', 'logs', 'all', 'general', 'models', 'review', 'chunking', 'memory', 'rag', 'safety', 'ratelimit', 'procedural', 'paths'];
 const stages = ['extraction', 'drafting', 'critique', 'polishing', 'chronicling'];
 const details = ['prompts', 'output', 'diff', 'analytics', 'raw'];
 const memory = new Map<string, string>();

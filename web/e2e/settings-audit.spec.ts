@@ -102,7 +102,7 @@ test('all editable project controls save through real API, disk, and reload', as
     safety_subdivision_min_lines: ['10', /^Subdivision Min Lines/], safety_subdivision_max_depth: ['5', /^Subdivision Max/],
     max_tpm: ['50000', /^Max Tokens Per Minute/], max_rpm: ['80', /^Max Requests Per Minute/],
     raw_dir: ['raw chapters 日本語', /^Raw Chapters Directory$/], output_dir: ['translated chapters 日本語', /^Translated Chapters Directory$/],
-    procedural_learning_interval: ['20', /^procedural_learning_interval$/], procedural_learning_min_failures: ['3', /^procedural_learning_min_failures$/], procedural_refiner_model: ['mock-refiner', /^Refiner model$/],
+    procedural_learning_interval: ['20', /^Learning Interval \(Chapters\)$/], procedural_learning_min_failures: ['3', /^Minimum Failure Traces$/], procedural_refiner_model: ['mock-refiner', /^Refiner model$/],
     max_review_loops: ['4', /^Max Review Loops/], quality_threshold: ['9', /^Quality Score Threshold/],
   };
   for (const [, [value, label]] of Object.entries(values)) await field(form, label).fill(value);
