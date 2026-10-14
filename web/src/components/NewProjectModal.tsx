@@ -133,11 +133,11 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
       concurrency: 3,
     });
 
-    let status = await fetchScraperStatus(startRes.task_id);
+    let status = await fetchScraperStatus(startRes.task_id, project.path);
     setScraperStatus(status);
     while (status.status === 'pending' || status.status === 'running') {
       await new Promise<void>((resolve) => window.setTimeout(resolve, 1000));
-      status = await fetchScraperStatus(startRes.task_id);
+      status = await fetchScraperStatus(startRes.task_id, project.path);
       setScraperStatus(status);
     }
 

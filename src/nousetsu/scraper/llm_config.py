@@ -70,7 +70,7 @@ def resolve_scraper_llm_settings(
 
 
 def scraper_subprocess_environment(
-    config: ProjectConfig, environ: Optional[Mapping[str, str]] = None
+    config: ProjectConfig, environ: Optional[Mapping[str, str]] = None, project_root=None
 ) -> dict[str, str]:
     """Build an isolated child-process environment with resolved project scraper settings."""
     env = dict(resolve_env() if environ is None else environ)
@@ -88,4 +88,11 @@ def scraper_subprocess_environment(
             env.pop(env_key, None)
         else:
             env[env_key] = str(value)
+    for name, value in config.scraper_budgets.model_dump(exclude_none=True).items():
+        env[f"NOVEL_SCRAPER_{name.upper()}"] = str(value)
+    if config.scraper_session_state:
+        env["NOVEL_SCRAPER_STORAGE_STATE"] = config.scraper_session_state
+    if project_root and env.get("NOVEL_SCRAPER_STORAGE_STATE"):
+        from pathlib import Path
+        env["NOVEL_SCRAPER_STORAGE_STATE"] = str((Path(project_root) / env["NOVEL_SCRAPER_STORAGE_STATE"]).resolve())
     return env

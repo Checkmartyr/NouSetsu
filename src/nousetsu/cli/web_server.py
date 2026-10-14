@@ -45,6 +45,7 @@ from nousetsu.scraper import (
     resolve_scraper_llm_settings,
     scraper_subprocess_environment,
 )
+from nousetsu.scraper.jobs import write_json as write_scraper_json, read_job as read_scraper_job, job_path as scraper_job_path
 
 from nousetsu import __version__
 from nousetsu.analysis.project_token_analytics import compute_project_token_analytics
@@ -974,6 +975,7 @@ def _process_chapter_files(
 
 # In-memory registry of active scraper extraction jobs
 _ACTIVE_SCRAPER_JOBS: Dict[str, ScraperStatusResponse] = {}
+_SCRAPER_TASKS: Dict[str, asyncio.Task] = {}
 
 
 async def _run_scraper_task(
@@ -988,7 +990,13 @@ async def _run_scraper_task(
 ) -> None:
     """Run scraper extraction in background, reporting progress and invalidating chapter caches."""
     def on_progress(status: ScraperStatusResponse) -> None:
+        status.folder = target_folder_name
+        status.url = req.url
         _ACTIVE_SCRAPER_JOBS[task_id] = status
+        document = read_scraper_job(repo.root_dir, task_id)
+        if document:
+            document["status"] = status.model_dump()
+            write_scraper_json(scraper_job_path(repo.root_dir, task_id), document)
         event_bus.publish_sync("scraper_progress", {
             "task_id": task_id,
             "folder": target_folder_name,
@@ -1010,6 +1018,7 @@ async def _run_scraper_task(
             env=subprocess_env,
         )
         _ACTIVE_SCRAPER_JOBS[task_id] = final_status
+        on_progress(final_status)
 
         # Clear file stats and SHA caches
         _FILE_STATS_CACHE.clear()
@@ -1025,6 +1034,13 @@ async def _run_scraper_task(
             "files": final_status.completed_files,
             "timestamp": time.time(),
         })
+    except asyncio.CancelledError:
+        previous = _ACTIVE_SCRAPER_JOBS.get(task_id)
+        if previous:
+            previous.status = "paused"
+            previous.message = "Backend interrupted; resume to continue verified chapters"
+            on_progress(previous)
+        raise
     except Exception as e:
         logger.exception("Background scraper task %s failed: %s", task_id, e)
         err_status = ScraperStatusResponse(
@@ -1034,6 +1050,7 @@ async def _run_scraper_task(
             error=str(e),
         )
         _ACTIVE_SCRAPER_JOBS[task_id] = err_status
+        on_progress(err_status)
         event_bus.publish_sync("scraper_completed", {
             "task_id": task_id,
             "folder": target_folder_name,
@@ -1624,10 +1641,13 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
         if body.project_path:
             repo = _resolve_repo(body.project_path)
             cfg = repo.load_config()
-            subprocess_env = scraper_subprocess_environment(cfg, environ=resolve_env(repo.root_dir))
+            subprocess_env = scraper_subprocess_environment(cfg, environ=resolve_env(repo.root_dir), project_root=repo.root_dir)
         else:
             subprocess_env = dict(resolve_env())
         res = await bridge.inspect_url(url, env=subprocess_env)
+        if body.project_path and res.success:
+            res.inspection_id = uuid.uuid4().hex
+            write_scraper_json(repo.root_dir / ".novel" / "scraper" / "inspections" / f"{res.inspection_id}.json", res.model_dump())
         return res.model_dump()
 
     @app.post("/api/scraper/extract")
@@ -1646,7 +1666,7 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
 
         repo = _resolve_repo(body.project_path)
         cfg = repo.load_config()
-        subprocess_env = scraper_subprocess_environment(cfg, environ=resolve_env(repo.root_dir))
+        subprocess_env = scraper_subprocess_environment(cfg, environ=resolve_env(repo.root_dir), project_root=repo.root_dir)
         raw_dir_name = cfg.raw_dir or "raw_chapters"
 
         folder = body.folder
@@ -1666,7 +1686,13 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
 
         dest_dir.mkdir(parents=True, exist_ok=True)
         _ensure_volume_output_dir(repo, dest_dir, cfg)
-        task_id = str(uuid.uuid4())[:8]
+        task_id = uuid.uuid4().hex
+        body.project_path = str(repo.root_dir.resolve())
+        for document_path in (repo.root_dir / ".novel" / "scraper" / "jobs").glob("*.json"):
+            document = json.loads(document_path.read_text(encoding="utf-8"))
+            running = _SCRAPER_TASKS.get(document.get("task_id"))
+            if running and not running.done() and document.get("destination") == str(dest_dir):
+                raise HTTPException(status_code=409, detail="An extraction job already owns this destination")
 
         init_status = ScraperStatusResponse(
             task_id=task_id,
@@ -1676,8 +1702,12 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
             output_dir=str(dest_dir),
         )
         _ACTIVE_SCRAPER_JOBS[task_id] = init_status
+        write_scraper_json(scraper_job_path(repo.root_dir, task_id), {
+            "task_id": task_id, "request": body.model_dump(), "destination": str(dest_dir),
+            "folder": target_folder_name, "status": init_status.model_dump(),
+        })
 
-        asyncio.create_task(
+        _SCRAPER_TASKS[task_id] = asyncio.create_task(
             _run_scraper_task(
                 bridge=bridge,
                 req=body,
@@ -1698,12 +1728,77 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
         }
 
     @app.get("/api/scraper/status/{task_id}")
-    async def scraper_status(task_id: str) -> Dict[str, Any]:
+    async def scraper_status(task_id: str, project_path: Optional[str] = Query(None)) -> Dict[str, Any]:
         """Poll progress and status of a scraping task."""
-        job = _ACTIVE_SCRAPER_JOBS.get(task_id)
+        job = _ACTIVE_SCRAPER_JOBS.get(task_id) if project_path is None else None
+        if project_path:
+            repo = _resolve_repo(project_path)
+            try:
+                document = read_scraper_job(repo.root_dir, task_id)
+            except ValueError as error:
+                raise HTTPException(status_code=400, detail=str(error)) from error
+            if document:
+                job = ScraperStatusResponse.model_validate(document["status"])
+                job.folder = document.get("folder")
+                job.url = document["request"]["url"]
+                task = _SCRAPER_TASKS.get(task_id)
+                if job.status in {"running", "pending"} and (not task or task.done()):
+                    job.status = "paused"
+                    job.message = "Previous backend stopped; resume this job"
+                    document["status"] = job.model_dump()
+                    write_scraper_json(scraper_job_path(repo.root_dir, task_id), document)
         if not job:
             raise HTTPException(status_code=404, detail="Scraper task not found.")
         return job.model_dump()
+
+    @app.get("/api/scraper/jobs")
+    async def scraper_jobs(project_path: str = Query(...)):
+        repo = _resolve_repo(project_path)
+        results = []
+        paths = sorted((repo.root_dir / ".novel" / "scraper" / "jobs").glob("*.json"), key=lambda path: path.stat().st_mtime, reverse=True)
+        for path in paths:
+            results.append(await scraper_status(path.stem, project_path))
+        return {"jobs": results}
+
+    @app.post("/api/scraper/cancel/{task_id}")
+    async def scraper_cancel(task_id: str, project_path: str = Query(...)):
+        repo = _resolve_repo(project_path)
+        status = await scraper_status(task_id, project_path)
+        marker = scraper_job_path(repo.root_dir, task_id).with_suffix(".cancel")
+        marker.touch()
+        if status["status"] in {"paused", "partial", "failed"}:
+            document = read_scraper_job(repo.root_dir, task_id)
+            document["status"]["status"] = "cancelled"
+            write_scraper_json(scraper_job_path(repo.root_dir, task_id), document)
+        return {"success": True, "task_id": task_id}
+
+    @app.post("/api/scraper/resume/{task_id}")
+    async def scraper_resume(task_id: str, project_path: str = Query(...)):
+        repo = _resolve_repo(project_path)
+        status = await scraper_status(task_id, project_path)
+        if status["status"] in {"pending", "running", "completed"}:
+            raise HTTPException(status_code=409, detail="Job is active or already complete")
+        document = read_scraper_job(repo.root_dir, task_id)
+        req = ScraperExtractRequest.model_validate(document["request"])
+        req.project_path = str(repo.root_dir.resolve())
+        destination = Path(document["destination"]).resolve()
+        if not destination.is_relative_to(repo.root_dir.resolve()):
+            raise HTTPException(status_code=400, detail="Saved destination is outside this project")
+        for active_id, active_task in _SCRAPER_TASKS.items():
+            if not active_task.done() and active_id != task_id:
+                active_doc = read_scraper_job(repo.root_dir, active_id)
+                if active_doc and active_doc.get("destination") == str(destination):
+                    raise HTTPException(status_code=409, detail="Another job owns this destination")
+        scraper_job_path(repo.root_dir, task_id).with_suffix(".cancel").unlink(missing_ok=True)
+        running = ScraperStatusResponse.model_validate(document["status"])
+        running.status, running.message = "running", "Resuming verified chapter checkpoint"
+        document["status"] = running.model_dump()
+        write_scraper_json(scraper_job_path(repo.root_dir, task_id), document)
+        _ACTIVE_SCRAPER_JOBS[task_id] = running
+        env = scraper_subprocess_environment(repo.load_config(), environ=resolve_env(repo.root_dir), project_root=repo.root_dir)
+        _SCRAPER_TASKS[task_id] = asyncio.create_task(_run_scraper_task(NovelScraperBridge(), req,
+            destination, repo, document["folder"], task_id, event_bus, env))
+        return {"success": True, "task_id": task_id, "folder": document["folder"], "message": running.message}
 
     # ------------------------------------------------------------------------
     # 2.7 eBook (EPUB & PDF) Ingestion & Compilation Endpoints

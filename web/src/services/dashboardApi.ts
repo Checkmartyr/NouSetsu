@@ -379,6 +379,7 @@ export async function startScraperExtract(params: ScraperExtractParams): Promise
       concurrency: params.concurrency ?? 3,
       include_frontmatter: params.includeFrontmatter ?? false,
       overwrite: params.overwrite ?? false,
+      inspection_id: params.inspectionId,
     }),
   });
   const data = await res.json();
@@ -388,13 +389,26 @@ export async function startScraperExtract(params: ScraperExtractParams): Promise
   return data as ScraperExtractResult;
 }
 
-export async function fetchScraperStatus(taskId: string): Promise<ScraperStatusResult> {
-  const res = await fetch(`${API_BASE}/api/scraper/status/${taskId}`);
+export async function fetchScraperStatus(taskId: string, projectPath?: string): Promise<ScraperStatusResult> {
+  const query = projectPath ? `?project_path=${encodeURIComponent(projectPath)}` : '';
+  const res = await fetch(`${API_BASE}/api/scraper/status/${taskId}${query}`);
   const data = await res.json();
   if (!res.ok) {
     throw new Error(data.detail || 'Failed to fetch scraper task status');
   }
   return data as ScraperStatusResult;
+}
+
+export async function fetchScraperJobs(projectPath: string): Promise<ScraperStatusResult[]> {
+  const res = await fetch(`${API_BASE}/api/scraper/jobs?project_path=${encodeURIComponent(projectPath)}`);
+  if (!res.ok) throw new Error('Failed to restore extraction jobs');
+  return (await res.json()).jobs;
+}
+
+export async function controlScraperJob(taskId: string, projectPath: string, action: 'resume' | 'cancel'): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/scraper/${action}/${taskId}?project_path=${encodeURIComponent(projectPath)}`, { method: 'POST' });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || `Failed to ${action} extraction`);
 }
 
 export async function inspectEbook(file: File): Promise<EbookInspectResult> {

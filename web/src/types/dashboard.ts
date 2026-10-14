@@ -387,6 +387,10 @@ export interface ScraperInspectResult {
   total_chapters: number;
   chapters: ScraperChapterPreview[];
   error?: string | null;
+  inspection_id?: string | null;
+  is_complete?: boolean;
+  completeness_evidence?: string[];
+  issues?: string[];
 }
 
 export interface ScraperExtractParams {
@@ -399,6 +403,7 @@ export interface ScraperExtractParams {
   concurrency?: number;
   includeFrontmatter?: boolean;
   overwrite?: boolean;
+  inspectionId?: string;
 }
 
 export interface ScraperExtractResult {
@@ -410,7 +415,9 @@ export interface ScraperExtractResult {
 
 export interface ScraperStatusResult {
   task_id: string;
-  status: 'pending' | 'running' | 'completed' | 'failed';
+  url?: string;
+  folder?: string;
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'partial' | 'paused' | 'cancelled';
   progress_percent: number;
   current_chapter: number;
   total_chapters: number;
@@ -419,6 +426,14 @@ export interface ScraperStatusResult {
   completed_files: string[];
   output_dir?: string | null;
   error?: string | null;
+  stage?: string;
+  saved?: number;
+  skipped?: number;
+  failed?: number;
+  blocked?: number;
+  is_complete?: boolean;
+  completeness_evidence?: string[];
+  issues?: string[];
 }
 
 export interface EbookInspectChapterItem {

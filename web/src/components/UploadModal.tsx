@@ -24,6 +24,8 @@ import {
   inspectScraperUrl,
   startScraperExtract,
   fetchScraperStatus,
+  fetchScraperJobs,
+  controlScraperJob,
   inspectEbook,
   importEbook,
 } from '../services/dashboardApi';
@@ -83,6 +85,8 @@ export const UploadModal: React.FC<UploadModalProps> = ({
   const [includeFrontmatter, setIncludeFrontmatter] = useState<boolean>(false);
   const [isScraping, setIsScraping] = useState(false);
   const [scraperStatus, setScraperStatus] = useState<ScraperStatusResult | null>(null);
+  const [scraperTaskId, setScraperTaskId] = useState<string | null>(null);
+  const jobLoadGeneration = useRef(0);
 
   // eBook (EPUB/PDF) state
   const [ebookFile, setEbookFile] = useState<File | null>(null);
@@ -102,6 +106,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
 
   // Load project folders & check scraper availability on open
   useEffect(() => {
+    const generation = ++jobLoadGeneration.current;
     if (isOpen && activeProjectPath) {
       fetchProjectFolders(activeProjectPath).then((data) => {
         setFolders(data.folders);
@@ -121,6 +126,17 @@ export const UploadModal: React.FC<UploadModalProps> = ({
       setCustomFolderName('');
       setInspectResult(null);
       setScraperStatus(null);
+      setScraperTaskId(null);
+      fetchScraperJobs(activeProjectPath).then((jobs) => {
+        if (generation !== jobLoadGeneration.current) return;
+        const latest = jobs.find((job) => job.status !== 'completed');
+        if (latest) {
+          setScraperStatus(latest);
+          if (latest.folder) setSelectedFolder(latest.folder);
+          if (latest.url) setScraperUrl(latest.url);
+          if (latest.status === 'running' || latest.status === 'pending') setScraperTaskId(latest.task_id);
+        }
+      }).catch(() => { /* A fresh project has no previous scrape jobs. */ });
       setEbookFile(null);
       setEbookInspectResult(null);
       setIsInspectingEbook(false);
@@ -128,7 +144,39 @@ export const UploadModal: React.FC<UploadModalProps> = ({
       setErrorMsg(null);
       setSuccessMsg(null);
     }
+    return () => { jobLoadGeneration.current++; };
   }, [isOpen, activeProjectPath]);
+
+  useEffect(() => {
+    if (!isOpen || !activeProjectPath || !scraperTaskId) return;
+    let stopped = false;
+    let timer: ReturnType<typeof window.setTimeout>;
+    const poll = async () => {
+      try {
+        const status = await fetchScraperStatus(scraperTaskId, activeProjectPath);
+        if (stopped) return;
+        setScraperStatus(status);
+        const active = status.status === 'pending' || status.status === 'running';
+        setIsScraping(active);
+        if (active) {
+          timer = window.setTimeout(poll, 1000);
+        } else {
+          setScraperTaskId(null);
+          if (status.completed_files.length > 0) onUploadSuccess({ folder: status.folder || selectedFolder, uploadedCount: status.completed_files.length });
+          if (status.status === 'completed') setSuccessMsg(status.message);
+          else setErrorMsg(status.error || status.message || `Extraction ${status.status}`);
+        }
+      } catch (error: any) {
+        if (!stopped) {
+          setIsScraping(false);
+          setErrorMsg(error.message);
+          setScraperTaskId(null);
+        }
+      }
+    };
+    void poll();
+    return () => { stopped = true; window.clearTimeout(timer); };
+  }, [isOpen, activeProjectPath, scraperTaskId]);
 
   if (!isOpen) return null;
 
@@ -315,12 +363,8 @@ export const UploadModal: React.FC<UploadModalProps> = ({
     }
 
     const requestedUrl = scraperUrl.trim();
-    if (
-      !inspectResult ||
-      inspectResult.chapters.length === 0 ||
-      inspectResult.url.trim() !== requestedUrl
-    ) {
-      setErrorMsg('Please inspect the current novel URL before scraping.');
+    if (!requestedUrl) {
+      setErrorMsg('Enter a novel or chapter URL.');
       return;
     }
 
@@ -350,6 +394,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
     }
 
     setIsScraping(true);
+    jobLoadGeneration.current++;
     setErrorMsg(null);
     setSuccessMsg(null);
 
@@ -364,38 +409,10 @@ export const UploadModal: React.FC<UploadModalProps> = ({
         concurrency,
         includeFrontmatter,
         overwrite,
+        inspectionId: inspectResult?.url.trim() === requestedUrl ? inspectResult.inspection_id ?? undefined : undefined,
       });
 
-      const taskId = startRes.task_id;
-
-      // Poll status every 1 second until completed or failed
-      const pollInterval = window.setInterval(async () => {
-        try {
-          const status = await fetchScraperStatus(taskId);
-          setScraperStatus(status);
-
-          if (status.status === 'completed') {
-            window.clearInterval(pollInterval);
-            setIsScraping(false);
-            setSuccessMsg(status.message || `Successfully scraped ${status.completed_files.length} chapters!`);
-            onUploadSuccess({
-              folder: targetFolder,
-              uploadedCount: status.completed_files.length,
-            });
-            setTimeout(() => {
-              onClose();
-            }, 1500);
-          } else if (status.status === 'failed') {
-            window.clearInterval(pollInterval);
-            setIsScraping(false);
-            setErrorMsg(status.error || 'Scraping failed during extraction.');
-          }
-        } catch (e: any) {
-          window.clearInterval(pollInterval);
-          setIsScraping(false);
-          setErrorMsg(e.message || 'Failed to poll scraper status.');
-        }
-      }, 1000);
+      setScraperTaskId(startRes.task_id);
     } catch (err: any) {
       setIsScraping(false);
       setErrorMsg(err.message || 'Failed to initiate scraping task.');
@@ -1110,7 +1127,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
             )}
 
             {/* Scraping Progress Panel */}
-            {isScraping && scraperStatus && (
+            {scraperStatus && (
               <div className="p-3 bg-[#24201d] border border-[#d9a05b]/40 rounded-[4px] space-y-2 animate-in fade-in">
                 <div className="flex items-center justify-between font-mono text-xs">
                   <span className="font-semibold text-[#f7f5f0] flex items-center gap-1.5">
@@ -1118,7 +1135,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                     Downloading Chapters...
                   </span>
                   <span className="text-[#d9a05b] font-bold">
-                    {scraperStatus.progress_percent}%
+                    {scraperStatus.stage || scraperStatus.status}: {scraperStatus.progress_percent}%
                   </span>
                 </div>
 
@@ -1132,7 +1149,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
 
                 <div className="flex items-center justify-between text-[11px] font-mono text-[#857d75]">
                   <span className="truncate pr-2">
-                    {scraperStatus.current_title ? `Current: ${scraperStatus.current_title}` : scraperStatus.message}
+                    {isScraping && scraperStatus.current_title ? `Current: ${scraperStatus.current_title}` : scraperStatus.message}
                   </span>
                   {scraperStatus.total_chapters > 0 && (
                     <span className="shrink-0">
@@ -1140,12 +1157,31 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                     </span>
                   )}
                 </div>
+                {!!scraperStatus.issues?.length && (
+                  <ul className="text-[11px] text-[#d9a05b] list-disc pl-4">
+                    {scraperStatus.issues.map((issue, index) => <li key={index}>{issue}</li>)}
+                  </ul>
+                )}
               </div>
             )}
 
             {/* Footer Actions */}
             <div className="pt-3 border-t border-[#3f3a36] flex items-center justify-end gap-2">
-              <button
+              {scraperStatus && activeProjectPath && (
+                <button type="button" className="px-3 py-1.5 text-xs text-[#d5ba8b] border border-[#5f5140] rounded"
+                  onClick={async () => {
+                    try {
+                      const action = isScraping ? 'cancel' : 'resume';
+                      await controlScraperJob(scraperStatus.task_id, activeProjectPath, action);
+                      setErrorMsg(null);
+                      setScraperTaskId(scraperStatus.task_id);
+                    } catch (error: any) { setErrorMsg(error.message); }
+                  }}
+                  disabled={scraperStatus.status === 'completed'}>
+                  {isScraping ? 'Stop extraction' : 'Resume extraction'}
+                </button>
+              )}
+                <button
                 type="button"
                 onClick={onClose}
                 disabled={isScraping || isInspecting}
@@ -1157,7 +1193,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
               <button
                 type="button"
                 onClick={handleStartScrape}
-                disabled={isScraping || isInspecting || !inspectResult || scraperAvailable === false}
+                disabled={isScraping || isInspecting || !scraperUrl.trim() || scraperAvailable === false}
                 className="flex items-center gap-1.5 px-4 py-1.5 rounded-[3px] bg-[#d9a05b] hover:bg-[#e6b170] text-[#24201d] text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50"
               >
                 {isScraping ? (

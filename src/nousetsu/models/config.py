@@ -50,6 +50,18 @@ class AgentGenerationSettings(BaseModel):
     use_interactions_api: Optional[bool] = None
 
 
+class ScraperBudgets(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+    toc_cycles: Optional[int] = Field(None, ge=1)
+    review_iterations: Optional[int] = Field(None, ge=1)
+    repair_attempts: Optional[int] = Field(None, ge=1)
+    discovery_seconds: Optional[float] = Field(None, gt=0)
+    toc_pages: Optional[int] = Field(None, ge=1)
+    browser_pages: Optional[int] = Field(None, ge=1, le=10)
+    request_attempts: Optional[int] = Field(None, ge=1)
+    no_progress_attempts: Optional[int] = Field(None, ge=1)
+
+
 def _parse_env_float(value: Optional[str]) -> Optional[float]:
     try:
         return float(value) if value not in (None, "") else None
@@ -150,6 +162,8 @@ class ProjectConfig(BaseModel):
     polisher_model: Optional[str] = Field(default=None, description="LLM model override for Polisher Agent")
     chronicler_model: Optional[str] = Field(default=None, description="LLM model override for Chronicler Agent")
     scraper_model: Optional[str] = Field(default=None, description="LLM model override for Novel Scraper")
+    scraper_budgets: ScraperBudgets = Field(default_factory=ScraperBudgets)
+    scraper_session_state: Optional[str] = None
     generation_settings: Dict[str, AgentGenerationSettings] = Field(default_factory=dict)
     use_interactions_api: Optional[bool] = Field(default=None, description="Legacy project-wide Gemini Interactions override")
     auto_update_bible: bool = Field(default=True, description="Automatically merge newly discovered characters, terms, and summaries into Novel Bible")

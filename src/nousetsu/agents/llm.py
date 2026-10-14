@@ -112,7 +112,7 @@ class MockNovelLLM(BaseChatModel):
     temperature: float = 1.0
     responses: list[str] = Field(default_factory=list)
 
-    def _generate(self, messages: list[BaseMessage], stop: Optional[list[str]] = None, **kwargs: Any) -> ChatResult:
+    def _generate(self, messages: list[BaseMessage], stop: Optional[list[str]] = None, run_manager: Any = None, **kwargs: Any) -> ChatResult:
         if self.responses:
             content = self.responses.pop(0) if len(self.responses) > 1 else self.responses[0]
         else:
@@ -353,6 +353,7 @@ class FallbackChatModel(BaseChatModel):
         self,
         messages: list[BaseMessage],
         stop: Optional[list[str]] = None,
+        run_manager: Any = None,
         **kwargs: Any
     ) -> ChatResult:
         import logging
