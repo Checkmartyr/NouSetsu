@@ -1,0 +1,38 @@
+[
+  {
+    "mode": "web-dev",
+    "scenario": "single setting presentation and inline inheritance lifecycle",
+    "fields": [
+      "max_review_loops",
+      "quality_threshold",
+      "max_tpm",
+      "max_rpm",
+      "filter_extractor_entities",
+      "enable_post_polish_reconciliation"
+    ],
+    "status": "pass",
+    "details": {
+      "mobile_width": 390,
+      "saves": "real API/disk/reload",
+      "sliders": "keyboard"
+    }
+  },
+  {
+    "mode": "web-built",
+    "scenario": "single setting presentation and inline inheritance lifecycle",
+    "fields": [
+      "max_review_loops",
+      "quality_threshold",
+      "max_tpm",
+      "max_rpm",
+      "filter_extractor_entities",
+      "enable_post_polish_reconciliation"
+    ],
+    "status": "pass",
+    "details": {
+      "mobile_width": 390,
+      "saves": "real API/disk/reload",
+      "sliders": "keyboard"
+    }
+  }
+]

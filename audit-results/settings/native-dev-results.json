@@ -1,0 +1,374 @@
+{
+  "notes": [
+    "Earlier unsaved model/review/chunk drafts were lost when sibling browser harness restarted Vite. Excluded until retested and persisted above.",
+    "Runtime provider transport and active-job timing not claimed by these UI save observations.",
+    "API read verifies isolated environment path. Product files unchanged.",
+    "Remaining controls audit in progress; absence of observation does not imply pass."
+  ],
+  "tool": "@oai/sky actual Windows Tauri WebView",
+  "env_file_path": "D:/Code/novel_translation_Agent/src-tauri/target/settings-audit/workspace/.env",
+  "project_path": "D:/Code/novel_translation_Agent/src-tauri/target/settings-audit/native-dev/projects/Native A",
+  "mode": "native_dev",
+  "backend": "http://127.0.0.1:15474",
+  "observations": [
+    {
+      "expected": {
+        "genre": "romance",
+        "source_language": "Chinese",
+        "target_language": "Thai",
+        "title": "Native Dev Audited"
+      },
+      "actual": {
+        "genre": "romance",
+        "source_language": "Chinese",
+        "target_language": "Thai",
+        "title": "Native Dev Audited"
+      },
+      "status": "pass",
+      "setting_ids": [
+        "project.title",
+        "project.genre",
+        "project.source_language",
+        "project.target_language"
+      ],
+      "case": "Metadata edited through UI and Ctrl+S, reloaded native app, API and YAML agree"
+    },
+    {
+      "expected": "All five false",
+      "actual": "All five false in owned YAML",
+      "status": "pass",
+      "setting_ids": [
+        "project.auto_update_bible",
+        "project.cross_folder_summaries",
+        "project.filter_scene_characters",
+        "project.filter_extractor_entities",
+        "project.enable_post_polish_reconciliation"
+      ],
+      "case": "Memory switches clicked, Ctrl+S persisted and reload returned values"
+    },
+    {
+      "expected": "false/4/mock-native-embedding/false/mock-native-reranker",
+      "actual": "false/4/mock-native-embedding/false/mock-native-reranker",
+      "status": "pass",
+      "setting_ids": [
+        "project.enable_rag",
+        "project.rag_top_k",
+        "project.rag_embedding_model",
+        "project.enable_rag_reranker",
+        "project.rag_reranker_model"
+      ],
+      "case": "RAG controls edited, saved, reloaded and YAML verified"
+    },
+    {
+      "expected": "false/10/3",
+      "actual": "false/10/3 in YAML and native reload",
+      "status": "pass",
+      "setting_ids": [
+        "project.safety_recursive_subdivision",
+        "project.safety_subdivision_min_lines",
+        "project.safety_subdivision_max_depth"
+      ],
+      "case": "Subdivision controls edited and persisted"
+    },
+    {
+      "expected": "24000/45",
+      "actual": "24000/45 in YAML and native reload",
+      "status": "pass",
+      "setting_ids": [
+        "project.max_tpm",
+        "project.max_rpm"
+      ],
+      "case": "Quota controls edited and persisted"
+    },
+    {
+      "expected": "raw native 日本 / translated native ไทย",
+      "actual": "raw native 日本 / translated native ไทย in YAML and native reload",
+      "status": "pass",
+      "setting_ids": [
+        "project.raw_dir",
+        "project.output_dir"
+      ],
+      "case": "Relative paths with spaces/nonASCII edited through native UI and saved"
+    },
+    {
+      "expected": "2/9/false",
+      "actual": "2/9/false in YAML and native reload",
+      "status": "pass",
+      "setting_ids": [
+        "project.max_review_loops",
+        "project.quality_threshold",
+        "project.enable_patch_polishing"
+      ],
+      "case": "Reflection settings edited and saved"
+    },
+    {
+      "expected": "false/900/450/5",
+      "actual": "false/900/450/5 in YAML and native reload",
+      "status": "pass",
+      "setting_ids": [
+        "project.enable_chunking",
+        "project.chunk_threshold_lines",
+        "project.target_chunk_lines",
+        "project.chunk_overlap_lines"
+      ],
+      "case": "Chunk options edited and saved"
+    },
+    {
+      "expected": "mock-native-primary-edited/mock-native-fallback-edited",
+      "actual": "mock-native-primary-edited/mock-native-fallback-edited in YAML and native reload",
+      "status": "pass",
+      "setting_ids": [
+        "project.model_name",
+        "project.fallback_model"
+      ],
+      "case": "Primary and fallback model routes native edit and save"
+    },
+    {
+      "expected": "extractor mock/0.25/low/512/off; drafter mock/0.55/high/1024/off",
+      "actual": "Exact values in YAML and native reload",
+      "status": "pass",
+      "setting_ids": [
+        "project.extractor_model",
+        "project.drafter_model",
+        "project.generation_settings.extractor.temperature",
+        "project.generation_settings.extractor.thinking_level",
+        "project.generation_settings.extractor.thinking_budget",
+        "project.generation_settings.extractor.use_interactions_api",
+        "project.generation_settings.drafter.temperature",
+        "project.generation_settings.drafter.thinking_level",
+        "project.generation_settings.drafter.thinking_budget",
+        "project.generation_settings.drafter.use_interactions_api"
+      ],
+      "case": "Extractor and drafter model and all generation controls native save"
+    },
+    {
+      "case": "All 51 exposed nonsecret global inputs edited in actual native UI and saved; API returns configured values",
+      "setting_ids": [
+        "env.DEFAULT_MODEL",
+        "env.NOVEL_MODEL",
+        "env.NOVEL_FALLBACK_MODEL",
+        "env.SOURCE_LANG",
+        "env.TARGET_LANG",
+        "env.NOVEL_THINKING_LEVEL",
+        "env.NOVEL_THINKING_BUDGET",
+        "env.NOVEL_TEMPERATURE",
+        "env.NOVEL_USE_INTERACTIONS",
+        "env.CUSTOM_API_BASE_URL",
+        "env.NOVEL_MAX_REVIEW_LOOPS",
+        "env.NOVEL_QUALITY_THRESHOLD",
+        "env.NOVEL_FILTER_EXTRACTOR_ENTITIES",
+        "env.NOVEL_POST_POLISH_RECONCILIATION",
+        "env.NOVEL_RAG_EMBEDDING_MODEL",
+        "env.NOVEL_RAG_RERANKER_MODEL",
+        "env.NOVEL_MAX_TPM",
+        "env.NOVEL_MAX_RPM",
+        "env.NOVEL_PROJECTS_DIR",
+        "env.NOVEL_SCRAPER_PATH",
+        "env.NOVEL_SCRAPER_PYTHON",
+        "env.NOVEL_EXTRACTOR_MODEL",
+        "env.NOVEL_EXTRACTOR_TEMPERATURE",
+        "env.NOVEL_EXTRACTOR_THINKING_LEVEL",
+        "env.NOVEL_EXTRACTOR_THINKING_BUDGET",
+        "env.NOVEL_EXTRACTOR_USE_INTERACTIONS",
+        "env.NOVEL_DRAFTER_MODEL",
+        "env.NOVEL_DRAFTER_TEMPERATURE",
+        "env.NOVEL_DRAFTER_THINKING_LEVEL",
+        "env.NOVEL_DRAFTER_THINKING_BUDGET",
+        "env.NOVEL_DRAFTER_USE_INTERACTIONS",
+        "env.NOVEL_CRITIC_MODEL",
+        "env.NOVEL_CRITIC_TEMPERATURE",
+        "env.NOVEL_CRITIC_THINKING_LEVEL",
+        "env.NOVEL_CRITIC_THINKING_BUDGET",
+        "env.NOVEL_CRITIC_USE_INTERACTIONS",
+        "env.NOVEL_POLISHER_MODEL",
+        "env.NOVEL_POLISHER_TEMPERATURE",
+        "env.NOVEL_POLISHER_THINKING_LEVEL",
+        "env.NOVEL_POLISHER_THINKING_BUDGET",
+        "env.NOVEL_POLISHER_USE_INTERACTIONS",
+        "env.NOVEL_CHRONICLER_MODEL",
+        "env.NOVEL_CHRONICLER_TEMPERATURE",
+        "env.NOVEL_CHRONICLER_THINKING_LEVEL",
+        "env.NOVEL_CHRONICLER_THINKING_BUDGET",
+        "env.NOVEL_CHRONICLER_USE_INTERACTIONS",
+        "env.NOVEL_SCRAPER_MODEL",
+        "env.NOVEL_SCRAPER_TEMPERATURE",
+        "env.NOVEL_SCRAPER_THINKING_LEVEL",
+        "env.NOVEL_SCRAPER_THINKING_BUDGET",
+        "env.NOVEL_SCRAPER_USE_INTERACTIONS"
+      ],
+      "status": "pass",
+      "expected": "All explicitly edited values",
+      "actual": {
+        "DEFAULT_MODEL": "mock-native-global-default",
+        "NOVEL_MODEL": "mock-native-global-primary",
+        "NOVEL_FALLBACK_MODEL": "mock-native-global-fallback",
+        "SOURCE_LANG": "Japanese",
+        "TARGET_LANG": "English",
+        "NOVEL_THINKING_LEVEL": "high",
+        "NOVEL_THINKING_BUDGET": "2048",
+        "NOVEL_TEMPERATURE": "0.45",
+        "NOVEL_USE_INTERACTIONS": "false",
+        "CUSTOM_API_BASE_URL": "http://127.0.0.1:18999/v1",
+        "NOVEL_MAX_REVIEW_LOOPS": "4",
+        "NOVEL_QUALITY_THRESHOLD": "8.8",
+        "NOVEL_FILTER_EXTRACTOR_ENTITIES": "false",
+        "NOVEL_POST_POLISH_RECONCILIATION": "false",
+        "NOVEL_RAG_EMBEDDING_MODEL": "mock-native-global-embedding",
+        "NOVEL_RAG_RERANKER_MODEL": "mock-native-global-reranker",
+        "NOVEL_MAX_TPM": "28000",
+        "NOVEL_MAX_RPM": "55",
+        "NOVEL_PROJECTS_DIR": "D:/Code/novel_translation_Agent/src-tauri/target/settings-audit/native-dev/projects/.",
+        "NOVEL_SCRAPER_PATH": "D:/Code/novel_translation_Agent/src-tauri/target/settings-audit/workspace/modules/novel_scraper",
+        "NOVEL_SCRAPER_PYTHON": "C:/Python314/python.exe",
+        "NOVEL_EXTRACTOR_MODEL": "mock-native-global-extractor",
+        "NOVEL_EXTRACTOR_TEMPERATURE": "0.15",
+        "NOVEL_EXTRACTOR_THINKING_LEVEL": "high",
+        "NOVEL_EXTRACTOR_THINKING_BUDGET": "128",
+        "NOVEL_EXTRACTOR_USE_INTERACTIONS": "false",
+        "NOVEL_DRAFTER_MODEL": "mock-native-global-drafter",
+        "NOVEL_DRAFTER_TEMPERATURE": "0.5",
+        "NOVEL_DRAFTER_THINKING_LEVEL": "high",
+        "NOVEL_DRAFTER_THINKING_BUDGET": "1024",
+        "NOVEL_DRAFTER_USE_INTERACTIONS": "false",
+        "NOVEL_CRITIC_MODEL": "mock-native-global-critic",
+        "NOVEL_CRITIC_TEMPERATURE": "0.2",
+        "NOVEL_CRITIC_THINKING_LEVEL": "high",
+        "NOVEL_CRITIC_THINKING_BUDGET": "256",
+        "NOVEL_CRITIC_USE_INTERACTIONS": "false",
+        "NOVEL_POLISHER_MODEL": "mock-native-global-polisher",
+        "NOVEL_POLISHER_TEMPERATURE": "0.6",
+        "NOVEL_POLISHER_THINKING_LEVEL": "high",
+        "NOVEL_POLISHER_THINKING_BUDGET": "1536",
+        "NOVEL_POLISHER_USE_INTERACTIONS": "false",
+        "NOVEL_CHRONICLER_MODEL": "mock-native-global-chronicler",
+        "NOVEL_CHRONICLER_TEMPERATURE": "0.3",
+        "NOVEL_CHRONICLER_THINKING_LEVEL": "high",
+        "NOVEL_CHRONICLER_THINKING_BUDGET": "512",
+        "NOVEL_CHRONICLER_USE_INTERACTIONS": "false",
+        "NOVEL_SCRAPER_MODEL": "mock-native-global-scraper",
+        "NOVEL_SCRAPER_TEMPERATURE": "0.8",
+        "NOVEL_SCRAPER_THINKING_LEVEL": "high",
+        "NOVEL_SCRAPER_THINKING_BUDGET": "384",
+        "NOVEL_SCRAPER_USE_INTERACTIONS": "false"
+      }
+    },
+    {
+      "case": "Five fictional API keys entered and saved through native UI",
+      "setting_ids": [
+        "env.GEMINI_API_KEY",
+        "env.GOOGLE_API_KEY",
+        "env.OPENAI_API_KEY",
+        "env.OPENROUTER_API_KEY",
+        "env.CUSTOM_API_KEY"
+      ],
+      "status": "pass",
+      "expected": "Configured status only, no secret values in environment values",
+      "actual": {
+        "GEMINI_API_KEY": true,
+        "GOOGLE_API_KEY": true,
+        "OPENAI_API_KEY": true,
+        "OPENROUTER_API_KEY": true,
+        "CUSTOM_API_KEY": true
+      }
+    },
+    {
+      "case": "Remaining four role models and generation controls saved through UI and YAML verified",
+      "setting_ids": [
+        "project.critic_model",
+        "project.generation_settings.critic.temperature",
+        "project.generation_settings.critic.thinking_level",
+        "project.generation_settings.critic.thinking_budget",
+        "project.generation_settings.critic.use_interactions_api",
+        "project.polisher_model",
+        "project.generation_settings.polisher.temperature",
+        "project.generation_settings.polisher.thinking_level",
+        "project.generation_settings.polisher.thinking_budget",
+        "project.generation_settings.polisher.use_interactions_api",
+        "project.chronicler_model",
+        "project.generation_settings.chronicler.temperature",
+        "project.generation_settings.chronicler.thinking_level",
+        "project.generation_settings.chronicler.thinking_budget",
+        "project.generation_settings.chronicler.use_interactions_api",
+        "project.scraper_model",
+        "project.generation_settings.scraper.temperature",
+        "project.generation_settings.scraper.thinking_level",
+        "project.generation_settings.scraper.thinking_budget",
+        "project.generation_settings.scraper.use_interactions_api"
+      ],
+      "status": "pass",
+      "expected": "critic .3/high/768/off; polisher .65/high/1536/off; chronicler .4/high/512/off; scraper .7/high/256/off; mock-native-role routes",
+      "actual": "Exact requested YAML values"
+    },
+    {
+      "case": "Project Identifier native edit and Ctrl+S persistence",
+      "setting_ids": [
+        "project.project_id"
+      ],
+      "status": "pass",
+      "expected": "native_audit_A",
+      "actual": "native_audit_A in YAML"
+    }
+  ],
+  "frontend": "http://127.0.0.1:5187",
+  "environment_values": {
+    "DEFAULT_MODEL": "mock-native-global-default",
+    "NOVEL_MODEL": "mock-native-global-primary",
+    "NOVEL_FALLBACK_MODEL": "mock-native-global-fallback",
+    "SOURCE_LANG": "Japanese",
+    "TARGET_LANG": "English",
+    "NOVEL_THINKING_LEVEL": "high",
+    "NOVEL_THINKING_BUDGET": "2048",
+    "NOVEL_TEMPERATURE": "0.45",
+    "NOVEL_USE_INTERACTIONS": "false",
+    "CUSTOM_API_BASE_URL": "http://127.0.0.1:18999/v1",
+    "NOVEL_MAX_REVIEW_LOOPS": "4",
+    "NOVEL_QUALITY_THRESHOLD": "8.8",
+    "NOVEL_FILTER_EXTRACTOR_ENTITIES": "false",
+    "NOVEL_POST_POLISH_RECONCILIATION": "false",
+    "NOVEL_RAG_EMBEDDING_MODEL": "mock-native-global-embedding",
+    "NOVEL_RAG_RERANKER_MODEL": "mock-native-global-reranker",
+    "NOVEL_MAX_TPM": "28000",
+    "NOVEL_MAX_RPM": "55",
+    "NOVEL_PROJECTS_DIR": "D:/Code/novel_translation_Agent/src-tauri/target/settings-audit/native-dev/projects/.",
+    "NOVEL_SCRAPER_PATH": "D:/Code/novel_translation_Agent/src-tauri/target/settings-audit/workspace/modules/novel_scraper",
+    "NOVEL_SCRAPER_PYTHON": "C:/Python314/python.exe",
+    "NOVEL_EXTRACTOR_MODEL": "mock-native-global-extractor",
+    "NOVEL_EXTRACTOR_TEMPERATURE": "0.15",
+    "NOVEL_EXTRACTOR_THINKING_LEVEL": "high",
+    "NOVEL_EXTRACTOR_THINKING_BUDGET": "128",
+    "NOVEL_EXTRACTOR_USE_INTERACTIONS": "false",
+    "NOVEL_DRAFTER_MODEL": "mock-native-global-drafter",
+    "NOVEL_DRAFTER_TEMPERATURE": "0.5",
+    "NOVEL_DRAFTER_THINKING_LEVEL": "high",
+    "NOVEL_DRAFTER_THINKING_BUDGET": "1024",
+    "NOVEL_DRAFTER_USE_INTERACTIONS": "false",
+    "NOVEL_CRITIC_MODEL": "mock-native-global-critic",
+    "NOVEL_CRITIC_TEMPERATURE": "0.2",
+    "NOVEL_CRITIC_THINKING_LEVEL": "high",
+    "NOVEL_CRITIC_THINKING_BUDGET": "256",
+    "NOVEL_CRITIC_USE_INTERACTIONS": "false",
+    "NOVEL_POLISHER_MODEL": "mock-native-global-polisher",
+    "NOVEL_POLISHER_TEMPERATURE": "0.6",
+    "NOVEL_POLISHER_THINKING_LEVEL": "high",
+    "NOVEL_POLISHER_THINKING_BUDGET": "1536",
+    "NOVEL_POLISHER_USE_INTERACTIONS": "false",
+    "NOVEL_CHRONICLER_MODEL": "mock-native-global-chronicler",
+    "NOVEL_CHRONICLER_TEMPERATURE": "0.3",
+    "NOVEL_CHRONICLER_THINKING_LEVEL": "high",
+    "NOVEL_CHRONICLER_THINKING_BUDGET": "512",
+    "NOVEL_CHRONICLER_USE_INTERACTIONS": "false",
+    "NOVEL_SCRAPER_MODEL": "mock-native-global-scraper",
+    "NOVEL_SCRAPER_TEMPERATURE": "0.8",
+    "NOVEL_SCRAPER_THINKING_LEVEL": "high",
+    "NOVEL_SCRAPER_THINKING_BUDGET": "384",
+    "NOVEL_SCRAPER_USE_INTERACTIONS": "false"
+  },
+  "api_key_status": {
+    "GEMINI_API_KEY": true,
+    "GOOGLE_API_KEY": true,
+    "OPENAI_API_KEY": true,
+    "OPENROUTER_API_KEY": true,
+    "CUSTOM_API_KEY": true
+  },
+  "environment_disk_mismatches": []
+}

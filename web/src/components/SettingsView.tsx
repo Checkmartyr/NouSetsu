@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { getVersion } from '@tauri-apps/api/app';
 import { invoke } from '@tauri-apps/api/core';
 import { check, type Update } from '@tauri-apps/plugin-updater';
@@ -41,6 +41,7 @@ import {
   LogsInfoResult,
 } from '../types/dashboard';
 import {
+  fetchBackendContext,
   checkLatestRelease,
   fetchMachineEnvironment,
   fetchModelCatalog,
@@ -50,6 +51,8 @@ import {
   fetchLogsInfo,
   openLogsDirectory,
 } from '../services/dashboardApi';
+
+import { dirtySettings, dirtyValues, refreshDraft } from '../services/settingsDraft';
 
 const isTauriDesktop = isTauriDesktopRuntime;
 const isLocalUpdaterTest = import.meta.env.VITE_LOCAL_UPDATER_TEST === 'true';
@@ -99,6 +102,7 @@ const SETTING_CATEGORIES: SettingCategory[] = [
   { id: 'rag', name: 'Episodic Lore & RAG', shortDesc: 'Tier 4 SQLite hybrid retrieval', icon: Sparkles, group: 'project' },
   { id: 'safety', name: 'Safety & Bisection', shortDesc: 'Recursive safety bisection', icon: ShieldAlert, group: 'project' },
   { id: 'ratelimit', name: 'Rate Limits & Quota', shortDesc: '32k TPM / 60 RPM guard', icon: Zap, group: 'project' },
+  { id: 'procedural', name: 'Procedural Learning', shortDesc: 'Graph evolution and refinement', icon: Bot, group: 'project' },
   { id: 'paths', name: 'Workspace Paths', shortDesc: 'Raw & translated directories', icon: Folder, group: 'project' },
 ];
 
@@ -162,6 +166,7 @@ const GLOBAL_ENV_GROUPS: Record<string, GlobalEnvGroup> = {
   },
   rag: { title: 'RAG Model Defaults', keys: ['NOVEL_RAG_EMBEDDING_MODEL', 'NOVEL_RAG_RERANKER_MODEL'] },
   ratelimit: { title: 'Rate Limit Defaults', keys: ['NOVEL_MAX_TPM', 'NOVEL_MAX_RPM'] },
+  procedural: { title: 'Procedural Learning Defaults', keys: ['NOVEL_ENABLE_PROCEDURAL_GRAPH_LEARNING', 'NOVEL_PROCEDURAL_LEARNING_CADENCE', 'NOVEL_PROCEDURAL_LEARNING_INTERVAL', 'NOVEL_PROCEDURAL_LEARNING_MIN_FAILURES', 'NOVEL_PROCEDURAL_REFINER_MODEL'] },
   paths: {
     title: 'Workspace Defaults',
     keys: ['NOVEL_PROJECTS_DIR', 'NOVEL_SCRAPER_PATH', 'NOVEL_SCRAPER_PYTHON'],
@@ -261,7 +266,7 @@ const ModelRouteControl: React.FC<ModelRouteControlProps> = ({
   return (
     <div className="space-y-2 text-xs">
       <div className="flex items-center justify-between gap-2">
-        <label className="font-semibold text-slate-200">{label}</label>
+        <label htmlFor={`${listId}-model`} className="font-semibold text-slate-200">{label}</label>
         {inherit && (value ? (
           <button type="button" onClick={() => { setProviderOverride(null); onChange(''); }} className="text-[10px] text-amber-300 hover:text-amber-200">Clear override</button>
         ) : <span className="text-emerald-300">Inheriting global default</span>)}
@@ -284,6 +289,7 @@ const ModelRouteControl: React.FC<ModelRouteControlProps> = ({
         </select>
         <input
           type="text"
+          id={`${listId}-model`}
           list={listId}
           aria-label={`${label} model ID`}
           value={modelIdForRoute(value)}
@@ -369,6 +375,7 @@ const GenerationSettingsEditor: React.FC<GenerationSettingsEditorProps> = ({
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+      <p className="text-[10px] text-slate-400">Thinking budget is retained and applies only when Interactions is off and the provider supports it.</p>
       {showTemperature ? <label className="block">
         <span className="block text-slate-400 mb-1 font-medium">Temperature</span>
         <input type="number" min="0" max="2" step="0.1" value={current('temperature')} placeholder={inherited('temperature') || 'Provider default'} onChange={(event) => update('temperature', event.target.value)} className={inputClass} />
@@ -416,13 +423,15 @@ interface ToggleSwitchProps {
   onChange: (val: boolean) => void;
   disabled?: boolean;
   id?: string;
+  label?: string;
 }
 
-const ToggleSwitch: React.FC<ToggleSwitchProps> = ({ checked, onChange, disabled, id }) => (
+const ToggleSwitch: React.FC<ToggleSwitchProps> = ({ checked, onChange, disabled, id, label }) => (
   <button
     id={id}
     type="button"
     role="switch"
+    aria-label={label || id}
     aria-checked={checked}
     disabled={disabled}
     onClick={() => !disabled && onChange(!checked)}
@@ -445,15 +454,27 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   section,
   onSectionChange,
 }) => {
+  const baseline = useRef<ProjectSettings | null>(null);
+  const environmentBaseline = useRef<MachineEnvironment | null>(null);
+  const requestGeneration = useRef(0);
+  const environmentGeneration = useRef(0);
+  const projectRef = useRef(activeProjectPath);
+  projectRef.current = activeProjectPath;
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [settings, setSettings] = useState<ProjectSettings | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-  const [localTab, setLocalTab] = useState('general');
+  const [localTab, setLocalTab] = useState(activeProjectPath ? 'general' : 'global');
   const activeTab = section || localTab;
   const setActiveTab = (tab: string) => { setLocalTab(tab); onSectionChange?.(tab); };
   const [categorySearch, setCategorySearch] = useSessionState(activeProjectPath, 'settings', 'categorySearch', '');
   const [machineEnvironment, setMachineEnvironment] = useState<MachineEnvironment | null>(null);
+  const [backendContext, setBackendContext] = useState<Awaited<ReturnType<typeof fetchBackendContext>>>(null);
+  const settingsRef = useRef(settings);
+  const environmentRef = useRef(machineEnvironment);
+  settingsRef.current = settings;
+  environmentRef.current = machineEnvironment;
   const [loadingEnvironment, setLoadingEnvironment] = useState(true);
   const [apiKeyInputs, setApiKeyInputs] = useState<Record<string, string>>({});
   const [clearApiKeys, setClearApiKeys] = useState<string[]>([]);
@@ -509,25 +530,54 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setTimeout(() => setToast(null), 3000);
   };
 
-  const loadSettingsData = async () => {
-    if (!activeProjectPath) {
-      setSettings(null);
-      setLoading(false);
+  const loadSettingsData = async (preserveDraft = false) => {
+    const generation = ++requestGeneration.current;
+    const path = projectRef.current;
+    if (!path) { baseline.current = null; setSettings(null); setLoading(false); return; }
+    setLoading(true);
+    let data: ProjectSettings | null;
+    try { data = await fetchSettings(path); }
+    catch (error) {
+      if (generation === requestGeneration.current && projectRef.current === path) {
+        setSaveError(getErrorMessage(error, 'Could not load project settings.'));
+        setLoading(false);
+      }
       return;
     }
-    setLoading(true);
-    const data = await fetchSettings(activeProjectPath);
-    setSettings(data);
+    if (generation !== requestGeneration.current || projectRef.current !== path) return;
+    const previousBaseline = baseline.current;
+    const draft = settingsRef.current;
+    if (preserveDraft && draft && previousBaseline && data) {
+      const refreshed = refreshDraft(draft, previousBaseline, data);
+      baseline.current = refreshed.baseline;
+      setSettings(refreshed.draft);
+      if (refreshed.conflict) setSaveError('Settings changed while you have unsaved project edits. Your edits are preserved; reload before saving again.');
+    } else {
+      baseline.current = data;
+      setSettings(data);
+    }
     setLoading(false);
   };
 
-  const loadMachineEnvironment = async () => {
+  const loadMachineEnvironment = async (preserveDraft = true) => {
+    const generation = ++environmentGeneration.current;
     setLoadingEnvironment(true);
     const data = await fetchMachineEnvironment();
-    setMachineEnvironment(data);
+    if (generation !== environmentGeneration.current) return;
+    const previous = environmentBaseline.current;
+    const draft = environmentRef.current;
+    if (preserveDraft && draft && previous && data) {
+      const dirty = dirtyValues(draft.values, previous.values);
+      const hasEdits = Object.keys(dirty).length > 0;
+      environmentBaseline.current = hasEdits ? previous : data;
+      if (hasEdits && previous.revision !== data.revision) setSaveError('Global defaults changed while you have unsaved edits. Your edits are preserved; reload before saving again.');
+      setMachineEnvironment({...data, values: {...data.values, ...dirty}});
+    } else {
+      environmentBaseline.current = data;
+      setMachineEnvironment(data);
+    }
     setLoadingEnvironment(false);
   };
-
   const loadModelCatalog = async (provider: ModelProvider) => {
     setLoadingModelCatalogs((current) => ({ ...current, [provider]: true }));
     setModelCatalogErrors((current) => ({ ...current, [provider]: '' }));
@@ -550,6 +600,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   useEffect(() => {
     loadMachineEnvironment();
+    void fetchBackendContext().then(setBackendContext);
   }, []);
 
   useEffect(() => {
@@ -590,6 +641,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       critic_model: preset.models.critic_model ?? settings.critic_model,
       polisher_model: preset.models.polisher_model ?? settings.polisher_model,
       chronicler_model: preset.models.chronicler_model ?? settings.chronicler_model,
+      scraper_model: preset.models.scraper_model ?? preset.models.model_name ?? settings.scraper_model,
     });
     showToast(`Applied preset: ${preset.name}`);
   };
@@ -607,103 +659,45 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       chronicler_model: '',
       scraper_model: '',
       generation_settings: {},
+      use_interactions_api: null,
     });
     showToast('Cleared all project model overrides (inheriting 100% from .env)');
   };
 
   const handleSave = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!activeProjectPath || !settings) return;
-    setSaving(true);
-    // Exclude nested stale config and env snapshots before sending to backend
-    const { config, env, machine_env, api_key_status, env_file_path, ...cleanSettings } = settings;
-    const sanitizedSettings = {
-      ...cleanSettings,
-      // Review
-      max_review_loops: Number(cleanSettings.max_review_loops) || 3,
-      quality_threshold: Number(cleanSettings.quality_threshold) || 8.5,
-      // Chunking
-      chunk_threshold_lines:
-        cleanSettings.chunk_threshold_lines === '' ||
-        cleanSettings.chunk_threshold_lines === undefined ||
-        isNaN(Number(cleanSettings.chunk_threshold_lines))
-          ? 85
-          : Number(cleanSettings.chunk_threshold_lines),
-      chunk_size_lines:
-        cleanSettings.chunk_size_lines === '' ||
-        cleanSettings.chunk_size_lines === undefined ||
-        isNaN(Number(cleanSettings.chunk_size_lines))
-          ? 70
-          : Number(cleanSettings.chunk_size_lines),
-      chunk_overlap_lines:
-        cleanSettings.chunk_overlap_lines === '' ||
-        cleanSettings.chunk_overlap_lines === undefined ||
-        isNaN(Number(cleanSettings.chunk_overlap_lines))
-          ? 3
-          : Number(cleanSettings.chunk_overlap_lines),
-      // RAG
-      rag_top_k: Number(cleanSettings.rag_top_k) || 2,
-      rag_embedding_model: cleanSettings.rag_embedding_model?.trim() || '',
-      rag_reranker_model: cleanSettings.rag_reranker_model?.trim() || '',
-      // Safety
-      safety_subdivision_min_lines:
-        cleanSettings.safety_subdivision_min_lines === '' ||
-        cleanSettings.safety_subdivision_min_lines === undefined ||
-        isNaN(Number(cleanSettings.safety_subdivision_min_lines))
-          ? 8
-          : Number(cleanSettings.safety_subdivision_min_lines),
-      safety_subdivision_max_depth:
-        cleanSettings.safety_subdivision_max_depth === '' ||
-        cleanSettings.safety_subdivision_max_depth === undefined ||
-        isNaN(Number(cleanSettings.safety_subdivision_max_depth))
-          ? 4
-          : Number(cleanSettings.safety_subdivision_max_depth),
-      // Rate Limits
-      max_tpm:
-        cleanSettings.max_tpm === '' ||
-        cleanSettings.max_tpm === undefined ||
-        isNaN(Number(cleanSettings.max_tpm))
-          ? 32000
-          : Number(cleanSettings.max_tpm),
-      max_rpm:
-        cleanSettings.max_rpm === '' ||
-        cleanSettings.max_rpm === undefined ||
-        isNaN(Number(cleanSettings.max_rpm))
-          ? 60
-          : Number(cleanSettings.max_rpm),
-    };
-    const success = await updateSettings(sanitizedSettings, activeProjectPath);
-    setSaving(false);
-    if (success) {
-      showToast('Settings saved to config.yaml successfully!');
-      await loadSettingsData();
-      if (onProjectUpdated) {
-        onProjectUpdated();
-      }
-    } else {
-      alert('Failed to update project settings.');
-    }
+    e?.preventDefault();
+    if (!activeProjectPath || !settings || !baseline.current) return;
+    const path = activeProjectPath;
+    ++requestGeneration.current;
+    setSaving(true); setSaveError(null);
+    try {
+      const saved = await updateSettings(dirtySettings(settings, baseline.current), path, baseline.current.revision);
+      if (projectRef.current !== path) return;
+      baseline.current = saved;
+      setSettings((current) => current ? {...saved, ...dirtySettings(current, settings)} : saved);
+      showToast('Project settings saved.'); onProjectUpdated?.();
+    } catch (error) { if (projectRef.current === path) setSaveError(getErrorMessage(error, 'Could not save settings.')); }
+    finally { setSaving(false); }
   };
 
   const handleSaveEnvironment = async () => {
-    if (!machineEnvironment) return;
-    setSavingEnvironment(true);
-    const success = await saveMachineEnvironment({
-      values: machineEnvironment.values,
-      api_keys: apiKeyInputs,
-      clear_api_keys: clearApiKeys,
-    });
-    setSavingEnvironment(false);
-    if (success) {
-      setApiKeyInputs({});
-      setClearApiKeys([]);
-      setModelCatalogs({});
-      setModelCatalogErrors({});
-      await loadMachineEnvironment();
+    if (!machineEnvironment || !environmentBaseline.current) return;
+    ++environmentGeneration.current;
+    setSavingEnvironment(true); setSaveError(null);
+    try {
+      const saved = await saveMachineEnvironment({
+        values: dirtyValues(machineEnvironment.values, environmentBaseline.current.values),
+        api_keys: apiKeyInputs, clear_api_keys: clearApiKeys,
+      }, environmentBaseline.current.revision);
+      environmentBaseline.current = saved;
+      setMachineEnvironment((current) => current ? {...saved, values: {...saved.values, ...dirtyValues(current.values, machineEnvironment.values)}} : saved);
+      setApiKeyInputs((current) => Object.fromEntries(Object.entries(current).filter(([key, value]) => value !== apiKeyInputs[key])));
+      setClearApiKeys((current) => current.filter((key) => !clearApiKeys.includes(key)));
+      setModelCatalogs({}); setModelCatalogErrors({});
+      await loadSettingsData(true);
       showToast('Local environment settings saved.');
-    } else {
-      alert('Could not save the local .env settings.');
-    }
+    } catch (error) { setSaveError(getErrorMessage(error, 'Could not save environment settings.')); }
+    finally { setSavingEnvironment(false); }
   };
 
   const handleCheckUpdates = async () => {
@@ -843,6 +837,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             return (
               <label key={key} className="block min-w-0">
                 <span className={`block text-slate-400 mb-1 ${group.agent ? 'font-medium' : 'font-mono'}`}>{label}</span>
+                <span className="block text-[10px] text-slate-400">Effective: {machineEnvironment.effective_values?.[key] ?? machineEnvironment.values[key] ?? 'Built-in default'} · {machineEnvironment.sources?.[key] ?? 'saved default'}{machineEnvironment.sources?.[key]?.startsWith('process') ? ' — external process override; saving will not change it' : ''}</span>
                 <input
                   type="text"
                   value={machineEnvironment.values[key] || ''}
@@ -918,7 +913,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           <div className="border-t border-[#4a433e] pt-4 space-y-3">
             <div>
               <h3 className="text-xs font-semibold text-slate-200">Provider API keys</h3>
-              <p className="text-[10px] text-slate-400 mt-1">Keys are stored locally and never returned to the browser. Leave blank to keep a saved key; status reflects this .env file.</p>
+              <p className="text-[10px] text-slate-400 mt-1">Keys are stored locally and never returned to the browser. Leave blank to keep a saved key; status reflects effective credentials, including process overrides.</p>
 
             </div>
             <label className="block text-xs">
@@ -1011,6 +1006,39 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   const showAll = activeTab === 'all';
 
+  const renderSettingInheritance = (key: string, label: string, defaultValue: number | boolean) => settings && (
+    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-400">
+      <span>
+        {settings[key] == null
+          ? `Inherited (${String(settings.effective_config?.[key] ?? defaultValue)})`
+          : `Project override (${String(settings[key])})`}
+      </span>
+      <button
+        type="button"
+        aria-label={`Inherit global default for ${label}`}
+        className="text-[#c9c0ad] underline underline-offset-2 hover:text-[#f7f5f0] cursor-pointer"
+        onClick={() => {
+          const envKey = key === 'enable_post_polish_reconciliation'
+            ? 'NOVEL_POST_POLISH_RECONCILIATION'
+            : `NOVEL_${key.toUpperCase()}`;
+          const raw = settings.env?.[envKey]?.trim();
+          const inherited = raw
+            ? typeof defaultValue === 'boolean'
+              ? ['true', '1', 'yes', 'on'].includes(raw.toLowerCase())
+              : Number(raw)
+            : defaultValue;
+          setSettings({
+            ...settings,
+            [key]: null,
+            effective_config: { ...settings.effective_config, [key]: inherited },
+          });
+        }}
+      >
+        Inherit global default
+      </button>
+    </div>
+  );
+
   return (
     <div className="flex flex-col h-full overflow-hidden bg-[#2b2622] text-[#f7f5f0]">
       {/* Toast Notification */}
@@ -1064,6 +1092,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         )}
       </div>
 
+      {saveError && <div role="alert" className="p-3 text-rose-200">{saveError} <button type="button" onClick={() => { void loadSettingsData(); void loadMachineEnvironment(false); setApiKeyInputs({}); setClearApiKeys([]); setSaveError(null); }} className="underline">Reload and discard edits</button></div>}
       {/* Main 2-Column Layout */}
       <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
         {/* Left Sidebar: Settings Groups */}
@@ -1077,6 +1106,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 value={categorySearch}
                 onChange={(e) => setCategorySearch(e.target.value)}
                 placeholder="Search settings..."
+                aria-label="Search settings"
                 className="input-text w-full pl-8 pr-2.5 py-1 text-xs"
               />
               {categorySearch && (
@@ -1155,6 +1185,85 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           ) : (
             <div className="max-w-4xl w-full space-y-6 pb-16">
               {settings && activeTab !== 'global' && <form onSubmit={handleSave} className="space-y-6">
+                <div className="text-xs text-[#aea69c]">Settings affect subsequent jobs. Active jobs keep their captured settings.</div>
+                {(showAll || activeTab === 'procedural') && (
+                  <section className="bg-[#383330] border border-[#3f3a36] rounded-[4px] p-5 space-y-4">
+                    <div className="flex items-center gap-2 border-b border-[#4a433e] pb-3">
+                      <Bot className="w-4 h-4 shrink-0 text-indigo-400" />
+                      <div>
+                        <h2 className="text-sm font-bold text-slate-200">Procedural Learning</h2>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          Refine agent workflows from translation feedback at story arc boundaries or chapter intervals.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                      <div className="min-w-0">
+                        <label htmlFor="procedural-learning-enabled" className="block text-slate-400 mb-1 font-medium">Enable procedural learning</label>
+                        <select
+                          id="procedural-learning-enabled"
+                          value={settings.enable_procedural_graph_learning == null ? '' : String(settings.enable_procedural_graph_learning)}
+                          onChange={(e) => setSettings({ ...settings, enable_procedural_graph_learning: e.target.value === '' ? null : e.target.value === 'true' })}
+                          className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2.5 text-slate-200 focus:outline-none focus:border-indigo-500"
+                        >
+                          <option value="">Inherit ({settings.effective_config?.enable_procedural_graph_learning ? 'Enabled' : 'Disabled'})</option>
+                          <option value="true">Enabled</option>
+                          <option value="false">Disabled</option>
+                        </select>
+                      </div>
+
+                      <div className="min-w-0">
+                        <label htmlFor="procedural-learning-cadence" className="block text-slate-400 mb-1 font-medium">Learning cadence</label>
+                        <select
+                          id="procedural-learning-cadence"
+                          value={settings.procedural_learning_cadence ?? ''}
+                          onChange={(e) => setSettings({ ...settings, procedural_learning_cadence: e.target.value || null })}
+                          className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2.5 text-slate-200 focus:outline-none focus:border-indigo-500"
+                        >
+                          <option value="">Inherit ({settings.effective_config?.procedural_learning_cadence ?? 'default'})</option>
+                          <option value="arc">Story arc boundaries</option>
+                          <option value="interval">Chapter intervals</option>
+                          <option value="both">Arc boundaries & chapter intervals</option>
+                        </select>
+                      </div>
+
+                      {([
+                        { key: 'procedural_learning_interval', label: 'Learning Interval (Chapters)', description: 'Chapters between learning runs when the cadence includes chapter intervals.' },
+                        { key: 'procedural_learning_min_failures', label: 'Minimum Failure Traces', description: 'Failure traces required before the refiner updates an agent workflow.' },
+                      ] as const).map(({ key, label, description }) => (
+                        <div key={key} className="min-w-0">
+                          <label htmlFor={key} className="block text-slate-400 mb-1 font-medium">{label}</label>
+                          <input
+                            id={key}
+                            type="number"
+                            min={1}
+                            value={settings[key] ?? ''}
+                            placeholder={String(settings.effective_config?.[key] ?? 'Inherited')}
+                            onChange={(e) => setSettings({ ...settings, [key]: e.target.value === '' ? null : Number(e.target.value) })}
+                            className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2.5 text-slate-200 focus:outline-none focus:border-indigo-500"
+                            aria-describedby={`${key}-help`}
+                          />
+                          <p id={`${key}-help`} className="text-[10px] text-slate-500 mt-1">{description}</p>
+                        </div>
+                      ))}
+
+                      <div className="min-w-0 sm:col-span-2">
+                        <label htmlFor="procedural-refiner-model" className="block text-slate-400 mb-1 font-medium">Refiner model</label>
+                        <input
+                          id="procedural-refiner-model"
+                          value={settings.procedural_refiner_model ?? ''}
+                          placeholder={settings.effective_config?.procedural_refiner_model ?? 'Inherited'}
+                          onChange={(e) => setSettings({ ...settings, procedural_refiner_model: e.target.value || null })}
+                          className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2.5 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
+                          aria-describedby="procedural-refiner-model-help"
+                        />
+                        <p id="procedural-refiner-model-help" className="text-[10px] text-slate-500 mt-1">Model used to refine agent workflows. Leave blank to inherit the global default.</p>
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-slate-400">Select Inherit or clear a field to use its global default.</p>
+                  </section>
+                )}
               {/* Group 1: General Novel Information */}
               {(showAll || activeTab === 'general') && (
                 <div className="bg-[#383330] border border-[#3f3a36] rounded-[4px] p-5 space-y-4">
@@ -1172,8 +1281,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                     <div>
-                      <label className="block text-slate-400 mb-1 font-medium">Novel Title</label>
-                      <input
+                      <label htmlFor="settings-field-1" className="block text-slate-400 mb-1 font-medium">Novel Title</label>
+                      <input id="settings-field-1"
                         type="text"
                         value={settings.title || ''}
                         onChange={(e) => setSettings({ ...settings, title: e.target.value })}
@@ -1183,8 +1292,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     </div>
 
                     <div>
-                      <label className="block text-slate-400 mb-1 font-medium">Genre</label>
-                      <input
+                      <label htmlFor="settings-field-2" className="block text-slate-400 mb-1 font-medium">Genre</label>
+                      <input id="settings-field-2"
                         type="text"
                         value={settings.genre || ''}
                         onChange={(e) => setSettings({ ...settings, genre: e.target.value })}
@@ -1194,8 +1303,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     </div>
 
                     <div>
-                      <label className="block text-slate-400 mb-1 font-medium">Source Language</label>
-                      <input
+                      <label htmlFor="settings-field-3" className="block text-slate-400 mb-1 font-medium">Source Language</label>
+                      <input id="settings-field-3"
                         type="text"
                         value={settings.source_language || ''}
                         onChange={(e) => setSettings({ ...settings, source_language: e.target.value })}
@@ -1205,8 +1314,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     </div>
 
                     <div>
-                      <label className="block text-slate-400 mb-1 font-medium">Target Language</label>
-                      <input
+                      <label htmlFor="settings-field-4" className="block text-slate-400 mb-1 font-medium">Target Language</label>
+                      <input id="settings-field-4"
                         type="text"
                         value={settings.target_language || ''}
                         onChange={(e) => setSettings({ ...settings, target_language: e.target.value })}
@@ -1216,11 +1325,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     </div>
 
                     <div className="sm:col-span-2">
-                      <label className="block text-slate-400 mb-1 font-medium">Project Identifier</label>
-                      <input
+                      <label htmlFor="settings-field-5" className="block text-slate-400 mb-1 font-medium">Project Identifier</label>
+                      <input id="settings-field-5"
                         type="text"
                         value={settings.project_id || ''}
-                        onChange={(e) => setSettings({ ...settings, project_id: e.target.value })}
+                        onChange={(e) => setSettings({...settings, project_id: e.target.value})}
                         className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-400 font-mono text-xs focus:outline-none focus:border-indigo-500"
                         placeholder="default_project"
                       />
@@ -1294,9 +1403,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                     <div className="bg-slate-950/60 border border-slate-800 rounded-lg p-3 space-y-1.5">
                       <div className="flex items-center justify-between">
-                        <label className="font-semibold text-slate-200 flex items-center gap-1.5">
+                        <div className="font-semibold text-slate-200 flex items-center gap-1.5">
                           <Sparkles className="w-3.5 h-3.5 text-indigo-400" /> Primary Default Model Override
-                        </label>
+                        </div>
                         {settings.model_name && (
                           <button
                             type="button"
@@ -1340,9 +1449,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
                     <div className="bg-slate-950/60 border border-slate-800 rounded-lg p-3 space-y-1.5">
                       <div className="flex items-center justify-between">
-                        <label className="font-semibold text-slate-200 flex items-center gap-1.5">
+                        <div className="font-semibold text-slate-200 flex items-center gap-1.5">
                           <Bot className="w-3.5 h-3.5 text-purple-400" /> Global Fallback Model Override
-                        </label>
+                        </div>
                         {settings.fallback_model && (
                           <button
                             type="button"
@@ -1450,14 +1559,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 text-xs">
                     <div>
-                      <label className="block text-slate-400 mb-1 font-medium">
-                        Max Review Loops ({settings.max_review_loops ?? 3})
+                      <label htmlFor="settings-field-6" className="block text-slate-400 mb-1 font-medium">
+                        Max Review Loops ({settings.max_review_loops ?? settings.effective_config?.max_review_loops ?? 3})
                       </label>
-                      <input
+                      <input id="settings-field-6"
                         type="range"
                         min={1}
                         max={5}
-                        value={settings.max_review_loops ?? 3}
+                        value={settings.max_review_loops ?? settings.effective_config?.max_review_loops ?? 3}
                         onChange={(e) =>
                           setSettings({
                             ...settings,
@@ -1472,18 +1581,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         <span>3 (Standard)</span>
                         <span>5 (Exhaustive)</span>
                       </div>
+                      {renderSettingInheritance('max_review_loops', 'Max Review Loops', 3)}
                     </div>
 
                     <div>
-                      <label className="block text-slate-400 mb-1 font-medium">
-                        Quality Score Threshold ({settings.quality_threshold ?? 8.5})
+                      <label htmlFor="settings-field-7" className="block text-slate-400 mb-1 font-medium">
+                        Quality Score Threshold ({settings.quality_threshold ?? settings.effective_config?.quality_threshold ?? 8.5})
                       </label>
-                      <input
+                      <input id="settings-field-7"
                         type="range"
-                        min={6.0}
-                        max={9.5}
+                        min={5.0}
+                        max={10}
                         step={0.1}
-                        value={settings.quality_threshold ?? 8.5}
+                        value={settings.quality_threshold ?? settings.effective_config?.quality_threshold ?? 8.5}
                         onChange={(e) =>
                           setSettings({
                             ...settings,
@@ -1497,6 +1607,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         <span>8.5 (Default target)</span>
                         <span>9.5 (Perfectionist)</span>
                       </div>
+                      {renderSettingInheritance('quality_threshold', 'Quality Score Threshold', 8.5)}
                     </div>
                   </div>
 
@@ -1509,6 +1620,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       </div>
                     </div>
                     <ToggleSwitch
+ label="enable patch polishing"
                       checked={settings.enable_patch_polishing !== false}
                       onChange={(val) => setSettings({ ...settings, enable_patch_polishing: val })}
                     />
@@ -1529,6 +1641,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     <div className="flex items-center gap-2 text-xs">
                       <span className="text-slate-400 text-[11px]">Chunking Enabled</span>
                       <ToggleSwitch
+ label="enable chunking"
                         checked={settings.enable_chunking !== false}
                         onChange={(val) => setSettings({ ...settings, enable_chunking: val })}
                       />
@@ -1541,10 +1654,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
                     <div>
-                      <label className="block text-slate-400 mb-1 font-medium">
+                      <label htmlFor="settings-field-8" className="block text-slate-400 mb-1 font-medium">
                         Chunk Threshold (lines)
                       </label>
-                      <input
+                      <input id="settings-field-8"
                         type="number"
                         min={1}
                         placeholder="800"
@@ -1571,8 +1684,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     </div>
 
                     <div>
-                      <label className="block text-slate-400 mb-1 font-medium">Chunk Size (lines)</label>
-                      <input
+                      <label htmlFor="settings-field-9" className="block text-slate-400 mb-1 font-medium">Chunk Size (lines)</label>
+                      <input id="settings-field-9"
                         type="number"
                         min={1}
                         placeholder="400"
@@ -1599,10 +1712,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     </div>
 
                     <div>
-                      <label className="block text-slate-400 mb-1 font-medium">
+                      <label htmlFor="settings-field-10" className="block text-slate-400 mb-1 font-medium">
                         Chunk Overlap (lines)
                       </label>
-                      <input
+                      <input id="settings-field-10"
                         type="number"
                         min={0}
                         placeholder="3"
@@ -1651,6 +1764,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         </div>
                       </div>
                       <ToggleSwitch
+ label="auto update bible"
                         checked={settings.auto_update_bible !== false}
                         onChange={(val) => setSettings({ ...settings, auto_update_bible: val })}
                       />
@@ -1665,6 +1779,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         </div>
                       </div>
                       <ToggleSwitch
+ label="cross folder summaries"
                         checked={settings.cross_folder_summaries !== false}
                         onChange={(val) => setSettings({ ...settings, cross_folder_summaries: val })}
                       />
@@ -1679,6 +1794,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         </div>
                       </div>
                       <ToggleSwitch
+ label="filter scene characters"
                         checked={settings.filter_scene_characters !== false}
                         onChange={(val) => setSettings({ ...settings, filter_scene_characters: val })}
                       />
@@ -1691,9 +1807,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         <div className="text-[11px] text-slate-400">
                           Filter known characters and glossary items before entity extraction to reduce token usage and avoid quota exhaustion.
                         </div>
+                        {renderSettingInheritance('filter_extractor_entities', 'Extractor Known Entity Filtering', true)}
                       </div>
                       <ToggleSwitch
-                        checked={settings.filter_extractor_entities !== false}
+ label="filter extractor entities"
+                        checked={settings.filter_extractor_entities ?? settings.effective_config?.filter_extractor_entities ?? true}
                         onChange={(val) => setSettings({ ...settings, filter_extractor_entities: val })}
                       />
                     </div>
@@ -1705,9 +1823,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         <div className="text-[11px] text-slate-400">
                           Chronicler Agent reconciles provisional pre-translation terms against final polished publication prose.
                         </div>
+                        {renderSettingInheritance('enable_post_polish_reconciliation', 'Post-Polish Term Reconciliation', true)}
                       </div>
                       <ToggleSwitch
-                        checked={settings.enable_post_polish_reconciliation !== false}
+ label="enable post polish reconciliation"
+                        checked={settings.enable_post_polish_reconciliation ?? settings.effective_config?.enable_post_polish_reconciliation ?? true}
                         onChange={(val) => setSettings({ ...settings, enable_post_polish_reconciliation: val })}
                       />
                     </div>
@@ -1728,6 +1848,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     <div className="flex items-center gap-2 text-xs">
                       <span className="text-slate-400 text-[11px]">Hybrid RAG Enabled</span>
                       <ToggleSwitch
+ label="enable rag"
                         checked={settings.enable_rag !== false}
                         onChange={(val) => setSettings({ ...settings, enable_rag: val })}
                       />
@@ -1740,10 +1861,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                     <div>
-                      <label className="block text-slate-400 mb-1 font-medium">
+                      <label htmlFor="settings-field-11" className="block text-slate-400 mb-1 font-medium">
                         Lore Retrieval Top-K ({settings.rag_top_k ?? 2})
                       </label>
-                      <input
+                      <input id="settings-field-11"
                         type="number"
                         min={1}
                         max={10}
@@ -1761,8 +1882,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     </div>
 
                     <div>
-                      <label className="block text-slate-400 mb-1 font-medium">Dense Embedding Model</label>
-                      <input
+                      <label htmlFor="settings-field-12" className="block text-slate-400 mb-1 font-medium">Dense Embedding Model</label>
+                      <input id="settings-field-12"
                         type="text"
                         value={settings.rag_embedding_model || ''}
                         onChange={(e) => setSettings({ ...settings, rag_embedding_model: e.target.value })}
@@ -1780,14 +1901,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         </div>
                       </div>
                       <ToggleSwitch
+ label="enable rag reranker"
                         checked={settings.enable_rag_reranker !== false}
                         onChange={(val) => setSettings({ ...settings, enable_rag_reranker: val })}
                       />
                     </div>
 
                     <div className="sm:col-span-2">
-                      <label className="block text-slate-400 mb-1 font-medium">Cross-Encoder Reranker Model</label>
-                      <input
+                      <label htmlFor="settings-field-13" className="block text-slate-400 mb-1 font-medium">Cross-Encoder Reranker Model</label>
+                      <input id="settings-field-13"
                         type="text"
                         list="model-suggestions"
                         value={settings.rag_reranker_model || ''}
@@ -1814,6 +1936,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     <div className="flex items-center gap-2 text-xs">
                       <span className="text-slate-400 text-[11px]">Subdivision Enabled</span>
                       <ToggleSwitch
+ label="safety recursive subdivision"
                         checked={settings.safety_recursive_subdivision !== false}
                         onChange={(val) => setSettings({ ...settings, safety_recursive_subdivision: val })}
                       />
@@ -1826,10 +1949,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                     <div>
-                      <label className="block text-slate-400 mb-1 font-medium">
+                      <label htmlFor="settings-field-14" className="block text-slate-400 mb-1 font-medium">
                         Subdivision Min Lines (lines)
                       </label>
-                      <input
+                      <input id="settings-field-14"
                         type="number"
                         min={2}
                         placeholder="8"
@@ -1856,10 +1979,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     </div>
 
                     <div>
-                      <label className="block text-slate-400 mb-1 font-medium">
+                      <label htmlFor="settings-field-15" className="block text-slate-400 mb-1 font-medium">
                         Subdivision Max Recursion Depth
                       </label>
-                      <input
+                      <input id="settings-field-15"
                         type="number"
                         min={1}
                         max={10}
@@ -1908,14 +2031,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                     <div>
-                      <label className="block text-slate-400 mb-1 font-medium">
+                      <label htmlFor="settings-field-16" className="block text-slate-400 mb-1 font-medium">
                         Max Tokens Per Minute (TPM)
                       </label>
-                      <input
+                      <input id="settings-field-16"
                         type="number"
-                        min={1000}
+                        min={1}
                         placeholder="32000"
-                        value={settings.max_tpm === '' ? '' : (settings.max_tpm ?? 32000)}
+                        value={settings.max_tpm === '' ? '' : (settings.max_tpm ?? settings.effective_config?.max_tpm ?? 32000)}
                         onChange={(e) => {
                           const val = e.target.value;
                           setSettings({
@@ -1929,23 +2052,24 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                             settings.max_tpm === undefined ||
                             isNaN(Number(settings.max_tpm))
                           ) {
-                            setSettings({ ...settings, max_tpm: 32000 });
+                            setSettings({ ...settings, max_tpm: null });
                           }
                         }}
                         className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
                       />
                       <span className="text-[10px] text-slate-500">60-second sliding window TPM limit (default: 32,000)</span>
+                      {renderSettingInheritance('max_tpm', 'Max Tokens Per Minute', 32000)}
                     </div>
 
                     <div>
-                      <label className="block text-slate-400 mb-1 font-medium">
+                      <label htmlFor="settings-field-17" className="block text-slate-400 mb-1 font-medium">
                         Max Requests Per Minute (RPM)
                       </label>
-                      <input
+                      <input id="settings-field-17"
                         type="number"
                         min={1}
                         placeholder="60"
-                        value={settings.max_rpm === '' ? '' : (settings.max_rpm ?? 60)}
+                        value={settings.max_rpm === '' ? '' : (settings.max_rpm ?? settings.effective_config?.max_rpm ?? 60)}
                         onChange={(e) => {
                           const val = e.target.value;
                           setSettings({
@@ -1959,12 +2083,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                             settings.max_rpm === undefined ||
                             isNaN(Number(settings.max_rpm))
                           ) {
-                            setSettings({ ...settings, max_rpm: 60 });
+                            setSettings({ ...settings, max_rpm: null });
                           }
                         }}
                         className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
                       />
                       <span className="text-[10px] text-slate-500">60-second sliding window RPM limit (default: 60)</span>
+                      {renderSettingInheritance('max_rpm', 'Max Requests Per Minute', 60)}
                     </div>
                   </div>
                 </div>
@@ -1980,24 +2105,24 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-mono">
                     <div>
-                      <label className="block text-slate-400 mb-1 font-sans font-medium">
+                      <label htmlFor="settings-field-18" className="block text-slate-400 mb-1 font-sans font-medium">
                         Raw Chapters Directory
                       </label>
-                      <input
+                      <input id="settings-field-18"
                         type="text"
                         value={settings.raw_dir || ''}
                         onChange={(e) => setSettings({ ...settings, raw_dir: e.target.value })}
                         className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 focus:outline-none focus:border-indigo-500"
                         placeholder="raw_chapters"
                       />
-                      <span className="text-[10px] text-slate-500 font-sans">Folder where raw novel text files are stored</span>
+                      <span className="text-[10px] text-slate-500 font-sans">Source root. Chapters in its volume subfolders are discovered automatically.</span>
                     </div>
 
                     <div>
-                      <label className="block text-slate-400 mb-1 font-sans font-medium">
+                      <label htmlFor="settings-field-19" className="block text-slate-400 mb-1 font-sans font-medium">
                         Translated Chapters Directory
                       </label>
-                      <input
+                      <input id="settings-field-19"
                         type="text"
                         value={settings.translated_dir || settings.output_dir || ''}
                         onChange={(e) =>
@@ -2010,9 +2135,36 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 focus:outline-none focus:border-indigo-500"
                         placeholder="translated_chapters"
                       />
-                      <span className="text-[10px] text-slate-500 font-sans">Folder where finished markdown translations are exported</span>
+                      <span className="text-[10px] text-slate-500 font-sans">Output root. Volume subfolders keep the same structure as the source root.</span>
                     </div>
                   </div>
+                  <p className="text-xs text-[#aea69c]">
+                    For example, raw_chapters/Volume_01 maps to translated_chapters/Volume_01. Existing sibling volumes keep their current output folders. Save changes to refresh discovered paths.
+                  </p>
+                  {settings.workspace_folders?.length ? (
+                    <div className="overflow-x-auto rounded-[4px] border border-[#3f3a36]">
+                      <table aria-label="Discovered volume paths" className="w-full min-w-[560px] text-left text-xs">
+                        <thead className="bg-[#332d29] text-[#aea69c]">
+                          <tr>
+                            <th scope="col" className="px-3 py-2 font-medium">Source folder</th>
+                            <th scope="col" className="px-3 py-2 font-medium">Translated folder</th>
+                            <th scope="col" className="px-3 py-2 font-medium">Chapters</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[#3f3a36]">
+                          {settings.workspace_folders.map((volume) => (
+                            <tr key={volume.raw_dir}>
+                              <th scope="row" className="px-3 py-2 font-mono font-normal text-[#f7f5f0]">{volume.raw_dir}</th>
+                              <td className="px-3 py-2 font-mono text-[#c9c0ad]">{volume.output_dir}</td>
+                              <td className="px-3 py-2 text-[#c9c0ad]">{volume.chapter_count}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-[#aea69c]">No chapter folders discovered yet. Add chapters to the source root or its volume subfolders.</p>
+                  )}
                 </div>
               )}
 
@@ -2023,19 +2175,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 ))}
               </datalist>
 
-              {/* Bottom Save Button row */}
-              {!['global', 'updates'].includes(activeTab) && (
-                <div className="pt-4 flex justify-end">
-                  <button
-                    type="submit"
-                    disabled={saving || !settings}
-                    className="flex items-center gap-1.5 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold cursor-pointer shadow-lg shadow-indigo-500/20 transition-all disabled:opacity-50"
-                  >
-                    <Save className="w-4 h-4" />
-                    {saving ? 'Saving...' : 'Save Settings to config.yaml'}
-                  </button>
-                </div>
-              )}
             </form>}
 
               {activeTab === 'global' && (
@@ -2048,7 +2187,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                           <h2 className="text-sm font-bold text-slate-200">Machine-wide Environment</h2>
                         </div>
                         <p className="text-xs text-slate-400">These defaults apply across projects unless a project setting overrides them.</p>
-                        <p className="text-[10px] text-slate-500 font-mono break-all">.env: {machineEnvironment.env_file_path}</p>
+                        <p className="text-[10px] text-slate-500 font-mono break-all">Backend: {backendContext?.mode || machineEnvironment.backend_mode || 'connected backend'} | owner: {backendContext?.owner_pid ?? 'unknown'} | .env: {machineEnvironment.env_file_path} | Registry: {backendContext?.registry_dir || machineEnvironment.registry_dir || 'backend registry'}</p>
+                        {machineEnvironment.sources && <details className="text-xs text-slate-400"><summary>Effective global defaults and origins</summary><dl>{Object.entries(machineEnvironment.sources).map(([key, source]) => <div key={key}><dt className="font-mono">{key}</dt><dd>{machineEnvironment.effective_values?.[key] ?? 'Default'} · {source}{source.startsWith('process') ? ' — External override: saving the file does not change the effective value.' : ''}</dd></div>)}</dl></details>}
                       </section>
                       {GLOBAL_ENV_ENTRIES.slice(0, FIRST_AGENT_ENV_GROUP_INDEX).map(([groupId, group]) =>
                         renderMachineEnvironmentSection(groupId, group)
@@ -2076,7 +2216,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         <button
                           type="button"
                           onClick={handleSaveEnvironment}
-                          disabled={savingEnvironment}
+                          disabled={savingEnvironment || loadingEnvironment}
                           className="btn-primary text-xs flex items-center gap-1.5 disabled:opacity-50"
                         >
                           <Save className="w-3.5 h-3.5" />
@@ -2087,7 +2227,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   ) : (
                     <section className="bg-[#383330] border border-[#3f3a36] rounded-[4px] p-4 text-xs text-slate-400 flex items-center justify-between">
                       <span>{loadingEnvironment ? 'Loading global environment settings...' : 'Could not load global environment settings.'}</span>
-                      {!loadingEnvironment && <button type="button" onClick={loadMachineEnvironment} className="text-indigo-300 hover:text-indigo-200">Retry</button>}
+                      {!loadingEnvironment && <button type="button" onClick={() => void loadMachineEnvironment()} className="text-indigo-300 hover:text-indigo-200">Retry</button>}
                     </section>
                   )}
                 </>

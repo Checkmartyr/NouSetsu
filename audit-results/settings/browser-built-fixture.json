@@ -1,0 +1,295 @@
+{
+  "mode": "built",
+  "pid": 48476,
+  "root": "C:\\Users\\Asus\\AppData\\Local\\Temp\\nousetsu-settings-built-fdgo4xib",
+  "projects": {
+    "A": "C:\\Users\\Asus\\AppData\\Local\\Temp\\nousetsu-settings-built-fdgo4xib\\projects\\Audit A",
+    "B": "C:\\Users\\Asus\\AppData\\Local\\Temp\\nousetsu-settings-built-fdgo4xib\\projects\\Audit B"
+  },
+  "env_file": "C:\\Users\\Asus\\AppData\\Local\\Temp\\nousetsu-settings-built-fdgo4xib\\audit.env",
+  "env_values": {
+    "DEFAULT_MODEL": null,
+    "NOVEL_MODEL": "mock-audit-shared",
+    "NOVEL_FALLBACK_MODEL": "mock-audit-fallback",
+    "NOVEL_SCRAPER_MODEL": null,
+    "NOVEL_SCRAPER_TEMPERATURE": null,
+    "NOVEL_SCRAPER_THINKING_LEVEL": null,
+    "NOVEL_SCRAPER_THINKING_BUDGET": null,
+    "NOVEL_SCRAPER_USE_INTERACTIONS": null,
+    "NOVEL_EXTRACTOR_MODEL": null,
+    "NOVEL_EXTRACTOR_TEMPERATURE": null,
+    "NOVEL_EXTRACTOR_USE_INTERACTIONS": null,
+    "NOVEL_DRAFTER_MODEL": null,
+    "NOVEL_DRAFTER_TEMPERATURE": null,
+    "NOVEL_DRAFTER_USE_INTERACTIONS": null,
+    "NOVEL_CRITIC_MODEL": null,
+    "NOVEL_CRITIC_TEMPERATURE": null,
+    "NOVEL_CRITIC_USE_INTERACTIONS": null,
+    "NOVEL_POLISHER_MODEL": null,
+    "NOVEL_POLISHER_TEMPERATURE": null,
+    "NOVEL_POLISHER_USE_INTERACTIONS": null,
+    "NOVEL_CHRONICLER_MODEL": null,
+    "NOVEL_CHRONICLER_TEMPERATURE": null,
+    "NOVEL_CHRONICLER_USE_INTERACTIONS": null,
+    "SOURCE_LANG": null,
+    "TARGET_LANG": null,
+    "NOVEL_MAX_TPM": "32000",
+    "NOVEL_MAX_RPM": "60",
+    "NOVEL_MAX_REVIEW_LOOPS": "3",
+    "NOVEL_QUALITY_THRESHOLD": "8.5",
+    "NOVEL_PROJECTS_DIR": "C:/Users/Asus/AppData/Local/Temp/nousetsu-settings-built-fdgo4xib/projects",
+    "NOVEL_THINKING_LEVEL": null,
+    "NOVEL_EXTRACTOR_THINKING_LEVEL": null,
+    "NOVEL_DRAFTER_THINKING_LEVEL": null,
+    "NOVEL_CRITIC_THINKING_LEVEL": null,
+    "NOVEL_POLISHER_THINKING_LEVEL": null,
+    "NOVEL_CHRONICLER_THINKING_LEVEL": null,
+    "NOVEL_THINKING_BUDGET": null,
+    "NOVEL_EXTRACTOR_THINKING_BUDGET": null,
+    "NOVEL_DRAFTER_THINKING_BUDGET": null,
+    "NOVEL_CRITIC_THINKING_BUDGET": null,
+    "NOVEL_POLISHER_THINKING_BUDGET": null,
+    "NOVEL_CHRONICLER_THINKING_BUDGET": null,
+    "NOVEL_TEMPERATURE": null,
+    "NOVEL_USE_INTERACTIONS": "true",
+    "NOVEL_FILTER_EXTRACTOR_ENTITIES": null,
+    "NOVEL_POST_POLISH_RECONCILIATION": null,
+    "NOVEL_RAG_EMBEDDING_MODEL": null,
+    "NOVEL_RAG_RERANKER_MODEL": null,
+    "NOVEL_SCRAPER_PATH": null,
+    "NOVEL_SCRAPER_PYTHON": null,
+    "CUSTOM_API_BASE_URL": null
+  },
+  "secret_hashes": {
+    "GEMINI_API_KEY": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "GOOGLE_API_KEY": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "OPENAI_API_KEY": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "OPENROUTER_API_KEY": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "CUSTOM_API_KEY": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "config": {
+    "A": {
+      "project_id": "default_project",
+      "title": "Audit A",
+      "source_language": "Japanese",
+      "target_language": "English",
+      "raw_dir": "raw_chapters",
+      "output_dir": "translated_chapters",
+      "model_name": null,
+      "fallback_model": null,
+      "extractor_model": null,
+      "drafter_model": null,
+      "critic_model": null,
+      "polisher_model": null,
+      "chronicler_model": null,
+      "scraper_model": null,
+      "generation_settings": {},
+      "use_interactions_api": null,
+      "auto_update_bible": true,
+      "max_tpm": 32000,
+      "max_rpm": 60,
+      "max_review_loops": 3,
+      "quality_threshold": 8.5,
+      "genre": "general",
+      "enable_chunking": true,
+      "chunk_threshold_lines": 800,
+      "target_chunk_lines": 400,
+      "chunk_overlap_lines": 3,
+      "cross_folder_summaries": true,
+      "safety_recursive_subdivision": true,
+      "safety_subdivision_min_lines": 8,
+      "safety_subdivision_max_depth": 4,
+      "enable_rag": true,
+      "rag_top_k": 2,
+      "rag_embedding_model": null,
+      "enable_rag_reranker": true,
+      "rag_reranker_model": null,
+      "filter_scene_characters": true,
+      "filter_extractor_entities": null,
+      "enable_patch_polishing": true,
+      "enable_post_polish_reconciliation": true,
+      "enable_procedural_graph_learning": null,
+      "procedural_learning_cadence": null,
+      "procedural_learning_interval": null,
+      "procedural_learning_min_failures": null,
+      "procedural_refiner_model": null,
+      "created_at": "2026-10-12T20:13:44.283698+00:00"
+    },
+    "B": {
+      "project_id": "default_project",
+      "title": "Audit B",
+      "source_language": "Japanese",
+      "target_language": "English",
+      "raw_dir": "raw_chapters",
+      "output_dir": "translated_chapters",
+      "model_name": null,
+      "fallback_model": null,
+      "extractor_model": null,
+      "drafter_model": null,
+      "critic_model": null,
+      "polisher_model": null,
+      "chronicler_model": null,
+      "scraper_model": null,
+      "generation_settings": {},
+      "use_interactions_api": null,
+      "auto_update_bible": true,
+      "max_tpm": 32000,
+      "max_rpm": 60,
+      "max_review_loops": 3,
+      "quality_threshold": 8.5,
+      "genre": "general",
+      "enable_chunking": true,
+      "chunk_threshold_lines": 800,
+      "target_chunk_lines": 400,
+      "chunk_overlap_lines": 3,
+      "cross_folder_summaries": true,
+      "safety_recursive_subdivision": true,
+      "safety_subdivision_min_lines": 8,
+      "safety_subdivision_max_depth": 4,
+      "enable_rag": true,
+      "rag_top_k": 2,
+      "rag_embedding_model": null,
+      "enable_rag_reranker": true,
+      "rag_reranker_model": null,
+      "filter_scene_characters": true,
+      "filter_extractor_entities": null,
+      "enable_patch_polishing": true,
+      "enable_post_polish_reconciliation": true,
+      "enable_procedural_graph_learning": null,
+      "procedural_learning_cadence": null,
+      "procedural_learning_interval": null,
+      "procedural_learning_min_failures": null,
+      "procedural_refiner_model": null,
+      "created_at": "2026-10-12T20:13:44.298513+00:00"
+    }
+  },
+  "bible": {
+    "A": {
+      "title": "Audit A",
+      "source_language": "Japanese",
+      "target_language": "English",
+      "genre": "general",
+      "characters": [],
+      "glossary": [],
+      "style_guide": {
+        "target_reading_level": "literary_fiction",
+        "tense": "past",
+        "pov": "third_person",
+        "honorific_mode": "retain",
+        "custom_rules": [],
+        "ignored_alias_tokens": []
+      },
+      "cross_folder_summaries": true,
+      "whole_story_summary": "",
+      "active_arc": null,
+      "archived_arcs": []
+    },
+    "B": {
+      "title": "Audit B",
+      "source_language": "Japanese",
+      "target_language": "English",
+      "genre": "general",
+      "characters": [],
+      "glossary": [],
+      "style_guide": {
+        "target_reading_level": "literary_fiction",
+        "tense": "past",
+        "pov": "third_person",
+        "honorific_mode": "retain",
+        "custom_rules": [],
+        "ignored_alias_tokens": []
+      },
+      "cross_folder_summaries": true,
+      "whole_story_summary": "",
+      "active_arc": null,
+      "archived_arcs": []
+    }
+  },
+  "resolved": {
+    "A": {
+      "filter_extractor_entities": true,
+      "generation": {
+        "extractor": {
+          "temperature": 0.1,
+          "thinking_level": null,
+          "thinking_budget": null,
+          "use_interactions_api": true
+        },
+        "drafter": {
+          "temperature": 1.0,
+          "thinking_level": null,
+          "thinking_budget": null,
+          "use_interactions_api": true
+        },
+        "critic": {
+          "temperature": 0.1,
+          "thinking_level": "medium",
+          "thinking_budget": null,
+          "use_interactions_api": true
+        },
+        "polisher": {
+          "temperature": 1.0,
+          "thinking_level": null,
+          "thinking_budget": null,
+          "use_interactions_api": true
+        },
+        "chronicler": {
+          "temperature": 0.2,
+          "thinking_level": null,
+          "thinking_budget": null,
+          "use_interactions_api": true
+        },
+        "scraper": {
+          "temperature": 1.0,
+          "thinking_level": null,
+          "thinking_budget": null,
+          "use_interactions_api": true
+        }
+      }
+    },
+    "B": {
+      "filter_extractor_entities": true,
+      "generation": {
+        "extractor": {
+          "temperature": 0.1,
+          "thinking_level": null,
+          "thinking_budget": null,
+          "use_interactions_api": true
+        },
+        "drafter": {
+          "temperature": 1.0,
+          "thinking_level": null,
+          "thinking_budget": null,
+          "use_interactions_api": true
+        },
+        "critic": {
+          "temperature": 0.1,
+          "thinking_level": "medium",
+          "thinking_budget": null,
+          "use_interactions_api": true
+        },
+        "polisher": {
+          "temperature": 1.0,
+          "thinking_level": null,
+          "thinking_budget": null,
+          "use_interactions_api": true
+        },
+        "chronicler": {
+          "temperature": 0.2,
+          "thinking_level": null,
+          "thinking_budget": null,
+          "use_interactions_api": true
+        },
+        "scraper": {
+          "temperature": 1.0,
+          "thinking_level": null,
+          "thinking_budget": null,
+          "use_interactions_api": true
+        }
+      }
+    }
+  },
+  "dist": "D:\\Code\\novel_translation_Agent\\src-tauri\\target\\settings-audit\\workspace\\web\\dist",
+  "frontend_index_sha256": "d6d316c19de788f284912ea5e18bcf406a3f3169d581777ac51469b76e55f409",
+  "backend_source_sha256": "c3ce016361df70bf645b81dc44bdb87d7c198089db77bca268f9d1a0dae3baae"
+}

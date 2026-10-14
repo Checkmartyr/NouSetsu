@@ -317,7 +317,7 @@ class GeminiInteractionsChatModel(BaseChatModel):
 
         # Configure thinking parameters directly in generation_config
         # Google Interactions API (/v1beta/interactions) strictly uses generation_config["thinking_level"]
-        resolved_level = self.thinking_level or os.environ.get("NOVEL_THINKING_LEVEL")
+        resolved_level = self.thinking_level
         if not resolved_level and any(h in self.model_name for h in ["2.5-pro", "2.5-flash", "3.", "reasoning"]):
             resolved_level = "medium"
 

@@ -223,6 +223,11 @@ export interface ModelCatalogResult {
 }
 
 export interface MachineEnvironment {
+  revision?: string;
+  effective_values?: Record<string, string>;
+  sources?: Record<string, string>;
+  backend_mode?: string;
+  registry_dir?: string;
   env_file_path: string;
   values: Record<string, string>;
   api_key_status: Record<string, boolean>;
@@ -246,6 +251,14 @@ export interface UpdateCheckResult {
 }
 
 export interface ProjectSettings {
+  revision?: string;
+  effective_config?: Partial<ProjectSettings>;
+  sources?: Record<string, string>;
+  enable_procedural_graph_learning?: boolean | null;
+  procedural_learning_cadence?: string | null;
+  procedural_learning_interval?: number | null;
+  procedural_learning_min_failures?: number | null;
+  procedural_refiner_model?: string | null;
   // General & Project Metadata
   project_id?: string;
   title?: string;
@@ -258,6 +271,7 @@ export interface ProjectSettings {
   raw_dir?: string;
   output_dir?: string;
   translated_dir?: string;
+  workspace_folders?: { raw_dir: string; output_dir: string; chapter_count: number }[];
 
   // Model Routing & Cascades
   model_name?: string;
@@ -286,8 +300,8 @@ export interface ProjectSettings {
   model_catalog?: string[];
 
   // Reflection Review & Polishing
-  max_review_loops?: number;
-  quality_threshold?: number;
+  max_review_loops?: number | null;
+  quality_threshold?: number | null;
   enable_patch_polishing?: boolean;
 
   // Semantic Chunking
@@ -302,7 +316,7 @@ export interface ProjectSettings {
   cross_folder_summaries?: boolean;
   filter_scene_characters?: boolean;
   filter_extractor_entities?: boolean | null;
-  enable_post_polish_reconciliation?: boolean;
+  enable_post_polish_reconciliation?: boolean | null;
 
   // Episodic Lore & Hybrid RAG (Tier 4)
   enable_rag?: boolean;
@@ -317,8 +331,8 @@ export interface ProjectSettings {
   safety_subdivision_max_depth?: number | '';
 
   // Rate Limiting & Quotas
-  max_tpm?: number | '';
-  max_rpm?: number | '';
+  max_tpm?: number | '' | null;
+  max_rpm?: number | '' | null;
 
   [key: string]: any;
 }
@@ -374,6 +388,10 @@ export interface ScraperInspectResult {
   total_chapters: number;
   chapters: ScraperChapterPreview[];
   error?: string | null;
+  inspection_id?: string | null;
+  is_complete?: boolean;
+  completeness_evidence?: string[];
+  issues?: string[];
 }
 
 export interface ScraperExtractParams {
@@ -386,6 +404,7 @@ export interface ScraperExtractParams {
   concurrency?: number;
   includeFrontmatter?: boolean;
   overwrite?: boolean;
+  inspectionId?: string;
 }
 
 export interface ScraperExtractResult {
@@ -397,7 +416,9 @@ export interface ScraperExtractResult {
 
 export interface ScraperStatusResult {
   task_id: string;
-  status: 'pending' | 'running' | 'completed' | 'failed';
+  url?: string;
+  folder?: string;
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'partial' | 'paused' | 'cancelled';
   progress_percent: number;
   current_chapter: number;
   total_chapters: number;
@@ -406,6 +427,14 @@ export interface ScraperStatusResult {
   completed_files: string[];
   output_dir?: string | null;
   error?: string | null;
+  stage?: string;
+  saved?: number;
+  skipped?: number;
+  failed?: number;
+  blocked?: number;
+  is_complete?: boolean;
+  completeness_evidence?: string[];
+  issues?: string[];
 }
 
 export interface EbookInspectChapterItem {

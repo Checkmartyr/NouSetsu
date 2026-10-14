@@ -1,6 +1,7 @@
 """Resolve the machine-wide LLM route used by the Novel-Scraper sidecar."""
 
 from dataclasses import dataclass
+from nousetsu.utils.env import resolve_env
 import os
 from typing import Mapping, Optional
 
@@ -17,7 +18,7 @@ class ScraperLLMSettings:
 
 def _provider_for_model(model: str, environ: Optional[Mapping[str, str]] = None) -> str:
     normalized = model.strip().lower()
-    env = os.environ if environ is None else environ
+    env = resolve_env() if environ is None else environ
     google_key = env.get("GEMINI_API_KEY") or env.get("GOOGLE_API_KEY")
     openai_key = env.get("OPENAI_API_KEY")
     openrouter_key = env.get("OPENROUTER_API_KEY")
@@ -52,7 +53,7 @@ def resolve_scraper_llm_settings(
     environ: Optional[Mapping[str, str]] = None,
 ) -> ScraperLLMSettings:
     """Resolve the scraper's provider route without changing process environment."""
-    env = os.environ if environ is None else environ
+    env = resolve_env() if environ is None else environ
     model = (
         env.get("NOVEL_SCRAPER_MODEL", "").strip()
         or env.get("NOVEL_MODEL", "").strip()
@@ -69,10 +70,10 @@ def resolve_scraper_llm_settings(
 
 
 def scraper_subprocess_environment(
-    config: ProjectConfig, environ: Optional[Mapping[str, str]] = None
+    config: ProjectConfig, environ: Optional[Mapping[str, str]] = None, project_root=None
 ) -> dict[str, str]:
     """Build an isolated child-process environment with resolved project scraper settings."""
-    env = dict(os.environ if environ is None else environ)
+    env = dict(resolve_env() if environ is None else environ)
     env["NOVEL_SCRAPER_MODEL"] = config.get_agent_model("scraper", environ=env)
     env["NOVEL_FALLBACK_MODEL"] = config.get_fallback_model(environ=env) or "gemini-3.5-flash-lite"
     generation = config.get_agent_generation_settings("scraper", environ=env)
@@ -87,4 +88,11 @@ def scraper_subprocess_environment(
             env.pop(env_key, None)
         else:
             env[env_key] = str(value)
+    for name, value in config.scraper_budgets.model_dump(exclude_none=True).items():
+        env[f"NOVEL_SCRAPER_{name.upper()}"] = str(value)
+    if config.scraper_session_state:
+        env["NOVEL_SCRAPER_STORAGE_STATE"] = config.scraper_session_state
+    if project_root and env.get("NOVEL_SCRAPER_STORAGE_STATE"):
+        from pathlib import Path
+        env["NOVEL_SCRAPER_STORAGE_STATE"] = str((Path(project_root) / env["NOVEL_SCRAPER_STORAGE_STATE"]).resolve())
     return env

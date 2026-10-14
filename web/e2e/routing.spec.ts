@@ -132,6 +132,14 @@ test('settings deep link and section navigation survive refresh and Back', async
   await page.goBack();
   await expect(page).toHaveURL(/section=chunking/);
   await expect(page.getByPlaceholder('800')).toBeVisible();
+  await page.getByRole('button', { name: /^Procedural Learning/ }).click();
+  await expect(page).toHaveURL(/section=procedural/);
+  await expect(page.getByRole('heading', { name: 'Procedural Learning', exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page).toHaveURL(/section=procedural/);
+  await expect(page.getByLabel('Enable procedural learning', { exact: true })).toBeVisible();
+  await page.goBack();
+  await expect(page).toHaveURL(/section=chunking/);
 });
 
 test('unfinished settings form values are excluded from navigation snapshots', async ({ page }) => {

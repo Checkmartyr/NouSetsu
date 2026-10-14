@@ -1,0 +1,11 @@
+{
+  "case": "Packaged app reuses source backend by version despite different settings file",
+  "status": "pass",
+  "actual_settings_path": "D:\\Code\\novel_translation_Agent\\src-tauri\\target\\settings-audit\\cross-mode-reuse\\source.env",
+  "owned_source_pid": 35692,
+  "desktop_pid": 46920,
+  "recommendation": "Show backend mode, owner and storage context; validate installation identity if per-install defaults are intended",
+  "classification": "Observed sharing behavior; installation-affinity policy is not established",
+  "advertised_fixture_version": "0.5.2",
+  "packaged_default_settings_context": "Packaged app-data .env and bundled sidecar"
+}

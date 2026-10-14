@@ -687,7 +687,9 @@ def test_desktop_runtime_version_endpoint_reports_launcher_version(tmp_path, mon
     response = TestClient(create_app(dist_dir=tmp_path)).get("/api/desktop-info")
 
     assert response.status_code == 200
-    assert response.json() == {"version": "0.5.0-test"}
+    assert response.json()["version"] == "0.5.0-test"
+    assert response.json()["mode"] == "source"
+    assert response.json()["owner_pid"] > 0
 
 
 def test_load_project_traces_active_chapter_retention(tmp_path):

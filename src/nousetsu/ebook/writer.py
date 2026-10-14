@@ -617,7 +617,7 @@ def _resolve_export_output_dir(repo: NovelRepository, folder: Optional[str] = No
     # 1. Explicit folder provided
     if raw_folder and raw_folder not in ("all", "default"):
         clean = raw_folder.strip("/\\")
-        direct_cand = repo.root_dir / clean
+        direct_cand = cfg.get_folder_path(repo.root_dir, clean, output=True)
         output_cand = cfg.get_volume_output_path(repo.root_dir, clean)
 
         if direct_cand.is_dir() and any(f.suffix.lower() == ".md" for f in direct_cand.iterdir() if f.is_file()):
@@ -641,7 +641,7 @@ def _resolve_export_output_dir(repo: NovelRepository, folder: Optional[str] = No
     candidates: List[Tuple[Path, int]] = []
     try:
         for _, out_name, _ in repo.discover_folders():
-            p = repo.root_dir / out_name
+            p = cfg.get_folder_path(repo.root_dir, out_name, output=True)
             if p.is_dir():
                 md_cnt = len([f for f in p.iterdir() if f.is_file() and f.suffix.lower() == ".md"])
                 if md_cnt > 0:

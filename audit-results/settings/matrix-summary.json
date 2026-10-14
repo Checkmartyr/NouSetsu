@@ -1,0 +1,41 @@
+{
+  "settings": 144,
+  "modes": {
+    "source_api": {
+      "pass": 97,
+      "fail": 34,
+      "not applicable": 10,
+      "blocked": 3
+    },
+    "frozen_api": {
+      "pass": 118,
+      "blocked": 13,
+      "fail": 2,
+      "not applicable": 11
+    },
+    "web_dev": {
+      "pass": 108,
+      "fail": 17,
+      "not applicable": 12,
+      "blocked": 7
+    },
+    "web_built": {
+      "pass": 108,
+      "fail": 17,
+      "not applicable": 12,
+      "blocked": 7
+    },
+    "native_dev": {
+      "pass": 118,
+      "not applicable": 13,
+      "blocked": 13
+    },
+    "native_release": {
+      "pass": 118,
+      "not applicable": 13,
+      "blocked": 13
+    }
+  },
+  "signoff": "FAIL: confirmed product defects and remaining blocked cells",
+  "status_definition": "Worst individually observed scenario in that mode; a persistence pass is not a live-provider or complete runtime guarantee. Shared source defects are linked separately, not inferred as native UI observations."
+}

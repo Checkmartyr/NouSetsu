@@ -2,6 +2,7 @@
 Detection and environment resolution for Novel-Scraper integration.
 """
 
+from nousetsu.utils.env import resolve_env
 import os
 import shutil
 import sys
@@ -39,7 +40,7 @@ def find_scraper_directory() -> Optional[Path]:
         return submodule_path
 
     # Tier 2: Explicit environment variable
-    env_path = os.environ.get("NOVEL_SCRAPER_PATH")
+    env_path = resolve_env().get("NOVEL_SCRAPER_PATH")
     if env_path:
         p = Path(env_path).resolve()
         if p.is_dir() and (p / "src" / "agent").is_dir():
@@ -70,7 +71,7 @@ def find_scraper_python(scraper_dir: Optional[Path] = None) -> Optional[Path]:
         return executable if executable.is_file() else None
 
     # 1. Explicit environment variable
-    env_py = os.environ.get("NOVEL_SCRAPER_PYTHON")
+    env_py = resolve_env().get("NOVEL_SCRAPER_PYTHON")
     if env_py:
         p = Path(env_py).resolve()
         if p.is_file():

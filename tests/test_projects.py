@@ -21,7 +21,8 @@ def test_project_config_defaults(tmp_path: Path):
     # Effective models resolve dynamically via getters
     assert cfg.get_model_name() is not None
     assert cfg.get_agent_model("extractor") is not None
-    assert cfg.max_tpm == 32000
+    assert cfg.max_tpm is None
+    assert cfg.resolve_value("max_tpm", {}) == 32000
     assert cfg.chunk_threshold_lines == 800
     assert cfg.target_chunk_lines == 400
     assert cfg.chunk_overlap_lines == 3

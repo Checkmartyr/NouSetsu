@@ -1,5 +1,8 @@
 """Repository for persisting Novel Bible, metadata, checkpoints, and translations."""
 import hashlib
+import base64
+from contextlib import contextmanager
+from functools import wraps
 import json
 import logging
 import os
@@ -17,8 +20,25 @@ from nousetsu.models.config import ProjectConfig
 from nousetsu.models.metadata import ChapterMetadata, CheckpointData, PipelineStage, ProjectMetadataDocument, StageStatus
 from nousetsu.models.trace import ChapterTraceDocument
 from nousetsu.utils.language import detect_language_from_dir
+from nousetsu.storage.settings_store import file_lock, SettingsLockTimeout
 
 logger = logging.getLogger(__name__)
+
+
+class ConfigLoadError(ValueError):
+    """The saved project configuration cannot be used safely."""
+
+
+class SettingsRecoveryError(OSError):
+    """Settings recovery needs attention before this project can be opened."""
+
+
+def _project_locked(method):
+    @wraps(method)
+    def wrapped(self, *args, **kwargs):
+        with self.project_lock():
+            return method(self, *args, **kwargs)
+    return wrapped
 
 
 def atomic_write_file(
@@ -26,7 +46,9 @@ def atomic_write_file(
     content: str,
     encoding: str = "utf-8",
     max_retries: int = 6,
-    initial_delay: float = 0.05
+    initial_delay: float = 0.05,
+    strict: bool = False,
+    permissions: Optional[int] = None,
 ) -> None:
     """Atomically write text content using a temporary file and atomic rename,
 
@@ -34,21 +56,34 @@ def atomic_write_file(
     """
     path = Path(file_path).resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
+    if strict and path.exists() and not path.stat().st_mode & (stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH):
+        raise PermissionError("Settings destination is read-only")
     tmp_path = path.with_name(f"{path.name}.tmp_{os.getpid()}_{time.time_ns()}")
     try:
-        with open(tmp_path, "w", encoding=encoding) as f:
+        with open(tmp_path, "w", encoding=encoding, newline="" if strict else None) as f:
+            if permissions is not None and os.name != "nt":
+                os.fchmod(f.fileno(), permissions)
             f.write(content)
+            if strict:
+                f.flush()
+                os.fsync(f.fileno())
 
         delay = initial_delay
         last_err: Optional[Exception] = None
         for attempt in range(max_retries):
             try:
-                if path.exists() and sys.platform == "win32":
+                if not strict and path.exists() and sys.platform == "win32":
                     try:
                         os.chmod(path, stat.S_IWRITE | stat.S_IREAD)
                     except Exception:
                         pass
                 os.replace(tmp_path, path)
+                if strict and os.name != "nt":
+                    fd = os.open(path.parent, os.O_RDONLY)
+                    try:
+                        os.fsync(fd)
+                    finally:
+                        os.close(fd)
                 return
             except PermissionError as pe:
                 last_err = pe
@@ -56,6 +91,8 @@ def atomic_write_file(
                     time.sleep(delay)
                     delay *= 2
                 else:
+                    if strict:
+                        raise
                     # Final fallback on Windows: if atomic replace is blocked by open readers,
                     # copy file contents in place and remove temporary file
                     try:
@@ -134,25 +171,14 @@ def get_codebase_root() -> Path:
 
 def get_projects_root_dir() -> Path:
     """Return the root directory where novel projects are stored, configured by NOVEL_PROJECTS_DIR in .env."""
-    reg_env = os.environ.get("NOVEL_REGISTRY_DIR")
-    if reg_env:
-        # In hermetic test isolation, keep projects inside the isolated test registry dir
-        # unless NOVEL_PROJECTS_DIR was explicitly overridden with a custom non-repo directory
-        env_dir = os.environ.get("NOVEL_PROJECTS_DIR")
-        if env_dir:
-            p = Path(env_dir)
-            if p.is_absolute() and p.resolve() != (get_codebase_root() / "project").resolve():
-                return p.resolve()
-        test_projects = (Path(reg_env) / "projects").resolve()
-        test_projects.mkdir(parents=True, exist_ok=True)
-        return test_projects
+    from nousetsu.utils.env import resolve_env
+    env = resolve_env()
+    reg_env = env.get("NOVEL_REGISTRY_DIR")
+    if reg_env and not env.get("NOVEL_PROJECTS_DIR"):
+        return (Path(reg_env) / "projects").resolve()
 
-    default_desktop_dir = os.environ.get("NOUSETSU_DEFAULT_PROJECTS_DIR")
-    env_dir = os.environ.get("NOVEL_PROJECTS_DIR")
-
-    # If running inside desktop with default/unconfigured NOVEL_PROJECTS_DIR, prioritize NOUSETSU_DEFAULT_PROJECTS_DIR
-    if default_desktop_dir and (not env_dir or env_dir.strip() in ("project", "projects", "./project", ".\\project")):
-        return Path(default_desktop_dir).resolve()
+    default_desktop_dir = env.get("NOUSETSU_DEFAULT_PROJECTS_DIR")
+    env_dir = env.get("NOVEL_PROJECTS_DIR")
 
     if env_dir:
         p = Path(env_dir)
@@ -254,7 +280,8 @@ class ProjectRegistry:
 
     def __init__(self, storage_dir: Optional[Path] = None):
         self.is_custom_storage = storage_dir is not None
-        reg_env = os.environ.get("NOVEL_REGISTRY_DIR")
+        from nousetsu.utils.env import resolve_env
+        reg_env = resolve_env().get("NOVEL_REGISTRY_DIR")
         default_dir = Path(reg_env) if reg_env else (Path.home() / ".novel_agent")
         self.storage_dir = storage_dir or default_dir
         self.storage_file = self.storage_dir / "projects.json"
@@ -280,9 +307,10 @@ class ProjectRegistry:
         atomic_write_json(self.storage_file, data, indent=2)
 
     def _load_data(self) -> List[str]:
+        from nousetsu.utils.env import resolve_env
         raw = self._load_raw()
         paths = raw.get("projects", [])
-        if not self.is_custom_storage and not os.environ.get("NOVEL_REGISTRY_DIR"):
+        if not self.is_custom_storage and not resolve_env().get("NOVEL_REGISTRY_DIR"):
             return [p for p in paths if "pytest" not in p and "Temp" not in p]
         return paths
 
@@ -415,6 +443,109 @@ class NovelRepository:
         self.traces_dir = self.novel_dir / "traces"
         self.procedural_graphs_dir = self.novel_dir / "procedural_graphs"
 
+    @contextmanager
+    def project_lock(self):
+        """Acquire the stable project lock and recover interrupted settings writes."""
+        with file_lock(self.novel_dir / "settings.lock"):
+            self._recover_settings()
+            yield
+
+    def _settings_paths(self):
+        return {"config": self.config_file_path(), "bible": self.bible_file_path()}
+
+    @staticmethod
+    def _bytes_hash(content):
+        return hashlib.sha256(content).hexdigest() if content is not None else None
+
+    def _recover_settings(self):
+        journal_path = self.novel_dir / "settings-transaction.json"
+        if not journal_path.exists():
+            return
+        try:
+            journal = json.loads(journal_path.read_text(encoding="utf-8"))
+            if journal.get("version") != 1 or journal.get("state") not in ("prepared", "committed"):
+                raise ValueError()
+            records = journal["files"]
+            if set(records) != {"config", "bible"}:
+                raise ValueError()
+            before = {}
+            for name, path in self._settings_paths().items():
+                record = records[name]
+                content = base64.b64decode(record["before"], validate=True) if record["before"] is not None else None
+                if self._bytes_hash(content) != record["before_hash"]:
+                    raise ValueError()
+                before[name] = content
+                if journal["state"] == "prepared":
+                    current = path.read_bytes() if path.exists() else None
+                    if self._bytes_hash(current) not in (record["before_hash"], record["after_hash"]):
+                        raise ValueError()
+            if journal["state"] == "prepared":
+                for name, path in self._settings_paths().items():
+                    if before[name] is None:
+                        path.unlink(missing_ok=True)
+                    else:
+                        atomic_write_file(path, before[name].decode("utf-8"), strict=True)
+            journal_path.unlink()
+        except Exception:
+            raise SettingsRecoveryError("Project settings recovery failed; saved files were retained for inspection") from None
+
+    @_project_locked
+    def save_settings(self, config: ProjectConfig, bible: Optional[NovelBible] = None) -> None:
+        """Commit config and settings-owned Bible metadata together, without sanitizing memory."""
+        config = ProjectConfig.model_validate(config.model_dump())
+        bible_path = self.bible_file_path()
+        if bible is not None:
+            bible = NovelBible.model_validate(bible.model_dump())
+        elif bible_path.exists():
+            bible = NovelBible.model_validate(yaml.safe_load(bible_path.read_text(encoding="utf-8")) or {})
+        else:
+            bible = NovelBible(title=config.title, source_language=config.source_language,
+                               target_language=config.target_language, genre=config.genre)
+        self._sync_bible_metadata(bible, config)
+        after = {
+            "config": yaml.safe_dump(config.model_dump(), allow_unicode=True, sort_keys=False),
+            "bible": yaml.safe_dump(bible.model_dump(exclude={"summaries"}), allow_unicode=True, sort_keys=False),
+        }
+        journal = {"version": 1, "state": "prepared", "files": {}}
+        for name, path in self._settings_paths().items():
+            before = path.read_bytes() if path.exists() else None
+            journal["files"][name] = {
+                "before": base64.b64encode(before).decode("ascii") if before is not None else None,
+                "before_hash": self._bytes_hash(before),
+                "after_hash": self._bytes_hash(after[name].encode("utf-8")),
+            }
+        journal_path = self.novel_dir / "settings-transaction.json"
+        atomic_write_file(journal_path, json.dumps(journal), strict=True)
+        try:
+            for name, path in self._settings_paths().items():
+                atomic_write_file(path, after[name], strict=True)
+            journal["state"] = "committed"
+            atomic_write_file(journal_path, json.dumps(journal), strict=True)
+        except Exception:
+            self._recover_settings()
+            raise
+        # A committed journal is safe to clean on the next access if removal fails.
+        try:
+            journal_path.unlink()
+        except OSError:
+            pass
+
+    @_project_locked
+    def save_edited_bible(self, bible: NovelBible) -> None:
+        """Apply an intentional Bible edit, committing its metadata into config too."""
+        from nousetsu.storage.bible_sanitizer import sanitize_bible
+        bible = sanitize_bible(NovelBible.model_validate(bible.model_dump()))
+        config = self.load_config()
+        changes = {name: getattr(bible, name) for name in (
+            "title", "source_language", "target_language", "genre", "cross_folder_summaries")}
+        config = ProjectConfig.model_validate({**config.model_dump(), **changes})
+        self.save_settings(config, bible=bible)
+
+    @staticmethod
+    def _sync_bible_metadata(bible, config):
+        for name in ("title", "source_language", "target_language", "genre", "cross_folder_summaries"):
+            setattr(bible, name, getattr(config, name))
+
     def load_procedural_graph(self, agent_name: str, folder: Optional[str] = None) -> Optional[Any]:
         """Load an evolved procedural graph for an agent if available on disk."""
         from nousetsu.graph.procedural import ProceduralGraph
@@ -516,6 +647,7 @@ class NovelRepository:
     def config_file_path(self) -> Path:
         return self.novel_dir / "config.yaml"
 
+    @_project_locked
     def load_config(self) -> ProjectConfig:
         """Load project configuration or return default."""
         path = self.config_file_path()
@@ -532,12 +664,14 @@ class NovelRepository:
                 data = yaml.safe_load(f) or {}
             return ProjectConfig.model_validate(data)
         except Exception:
-            return ProjectConfig()
+            raise ConfigLoadError("Project configuration is invalid; repair the saved config.yaml") from None
 
+    @_project_locked
     def save_config(self, config: ProjectConfig) -> None:
         """Save project configuration to .novel/config.yaml."""
-        atomic_write_yaml(self.config_file_path(), config.model_dump())
+        self.save_settings(config)
 
+    @_project_locked
     def initialize_project(
         self,
         title: str = "Ascendance of a Bookworm",
@@ -614,7 +748,7 @@ class NovelRepository:
         return bible
 
     def discover_folders(self) -> List[Tuple[str, str, int]]:
-        """Discover candidate raw translation folders and their matching output folders in project root.
+        """Discover source-root volumes and legacy sibling folders with matching outputs.
 
         Returns list of (raw_folder_rel, output_folder_rel, chapter_count) sorted naturally.
         """
@@ -629,11 +763,29 @@ class NovelRepository:
         if not self.root_dir.exists():
             return results
 
-        for child in self.root_dir.iterdir():
-            if not child.is_dir() or child.name in ignored_names:
-                continue
-            if cfg.is_volume_output_folder_name(child.name):
-                continue
+        raw_root = cfg.get_raw_path(self.root_dir)
+        output_root = cfg.get_output_path(self.root_dir)
+        candidates = []
+        if raw_root.is_dir():
+            for directory, children, _ in os.walk(raw_root):
+                parent = Path(directory)
+                children[:] = [name for name in children if (
+                    not name.startswith(".")
+                    and name not in ignored_names
+                    and not cfg.is_volume_output_folder_name(name)
+                    and not (parent / name).resolve().is_relative_to(output_root)
+                )]
+                if not parent.resolve().is_relative_to(output_root):
+                    candidates.append(parent)
+        candidates.extend(child for child in self.root_dir.iterdir() if (
+            child.is_dir() and not child.name.startswith(".")
+            and child.name not in ignored_names
+            and not cfg.is_volume_output_folder_name(child.name)
+            and not child.resolve().is_relative_to(raw_root)
+            and not child.resolve().is_relative_to(output_root)
+        ))
+
+        for child in candidates:
 
             # Check if directory contains text/markdown chapters
             chapter_files = [f for f in child.iterdir() if f.is_file() and f.suffix.lower() in [".txt", ".md"]]
@@ -641,16 +793,32 @@ class NovelRepository:
             if count > 0:
                 is_default_raw = child.resolve() == cfg.get_raw_path(self.root_dir).resolve()
                 default_output = cfg.get_output_path(self.root_dir) if is_default_raw else None
-                out_name = cfg.get_volume_output_path(
+                raw_name = self.folder_key(child)
+                out_path = cfg.get_volume_output_path(
                     self.root_dir,
-                    child.name,
+                    raw_name,
                     default_output_path=default_output,
-                ).name
-                results.append((child.name, out_name, count))
+                )
+                results.append((raw_name, self.folder_key(out_path), count))
 
         from natsort import natsorted
         return natsorted(results, key=lambda r: r[0])
 
+    def folder_key(self, directory: Path) -> str:
+        """Preserve volume identity relative to the project or configured external root."""
+        try:
+            return directory.resolve().relative_to(self.root_dir.resolve()).as_posix()
+        except ValueError:
+            cfg = self.load_config()
+            for root in (cfg.get_raw_path(self.root_dir), cfg.get_output_path(self.root_dir)):
+                try:
+                    relative = directory.resolve().relative_to(root)
+                    return (Path(root.name) / relative).as_posix()
+                except ValueError:
+                    continue
+            return directory.name
+
+    @_project_locked
     def set_active_folder(self, raw_dir: str, output_dir: Optional[str] = None) -> ProjectConfig:
         """Update active input and output folder paths in config.yaml."""
         cfg = self.load_config()
@@ -666,9 +834,10 @@ class NovelRepository:
         for raw_folder, _, _ in self.discover_folders():
             folders.add(raw_folder)
         if self.summaries_dir.exists():
-            for child in self.summaries_dir.iterdir():
-                if child.is_dir() and child.name not in ["arcs", "__pycache__", ".git"]:
-                    folders.add(child.name)
+            for summary_file in self.summaries_dir.rglob("chapter_*.json"):
+                relative = summary_file.parent.relative_to(self.summaries_dir)
+                if relative != Path(".") and relative.parts[0] not in ["arcs", "__pycache__", ".git"]:
+                    folders.add(relative.as_posix())
         from natsort import natsorted
         return natsorted(list(folders))
 
@@ -688,6 +857,7 @@ class NovelRepository:
     def bible_file_path(self) -> Path:
         return self.bible_dir / "bible.yaml"
 
+    @_project_locked
     def load_bible(self, folder: Optional[str] = None, load_summaries: bool = True) -> NovelBible:
         """Load Novel Bible from YAML, and sync chapter summaries (with folder scoping)."""
         path = self.bible_file_path()
@@ -716,12 +886,12 @@ class NovelRepository:
             # Check subfolders (e.g. summaries/Villainess_04/, summaries/Villainess_05/)
             for child in self.summaries_dir.iterdir():
                 if child.is_dir():
-                    for s_file in sorted(child.glob("chapter_*.json")):
+                    for s_file in sorted(child.rglob("chapter_*.json")):
                         try:
                             with open(s_file, "r", encoding="utf-8") as sf:
                                 sm = ChapterSummary.model_validate(json.load(sf))
                                 if not sm.folder:
-                                    sm.folder = child.name
+                                    sm.folder = s_file.parent.relative_to(self.summaries_dir).as_posix()
                                 summaries.append(sm)
                         except Exception:
                             continue
@@ -779,16 +949,21 @@ class NovelRepository:
 
         return NovelBible.model_validate(data)
 
+    @_project_locked
     def save_bible(self, bible: NovelBible) -> None:
         """Save Novel Bible to YAML and sync chapter summaries into folder subdirectories."""
         from nousetsu.storage.bible_sanitizer import sanitize_bible
+        if self.config_file_path().exists():
+            self._sync_bible_metadata(bible, self.load_config())
         bible = sanitize_bible(bible)
+        if self.config_file_path().exists():
+            self._sync_bible_metadata(bible, self.load_config())
 
         self.bible_dir.mkdir(parents=True, exist_ok=True)
         self.summaries_dir.mkdir(parents=True, exist_ok=True)
 
         data = bible.model_dump(exclude={"summaries"})
-        atomic_write_yaml(self.bible_file_path(), data)
+        atomic_write_file(self.bible_file_path(), yaml.safe_dump(data, allow_unicode=True, sort_keys=False), strict=True)
 
         # Save summaries as individual JSON records for fast rolling context
         for summary in bible.summaries:
@@ -808,6 +983,7 @@ class NovelRepository:
                 arc_file = self.arcs_dir / f"arc_{arc.arc_num:04d}.json"
                 atomic_write_json(arc_file, arc.model_dump(), indent=2)
 
+    @_project_locked
     def update_bible_memory(
         self,
         new_characters: List[CharacterProfile],
@@ -1013,22 +1189,19 @@ class NovelRepository:
         self.save_bible(bible)
         return bible
 
-    def set_languages(self, source_lang: Optional[str] = None, target_lang: Optional[str] = None) -> NovelBible:
+    @_project_locked
+    def set_languages(self, source_lang: Optional[str] = None, target_lang: Optional[str] = None,
+                      expected_source_language: Optional[str] = None) -> NovelBible:
         """Update source and/or target languages in both Novel Bible and ProjectConfig."""
-        bible = self.load_bible()
-        if source_lang:
-            bible.source_language = source_lang
-        if target_lang:
-            bible.target_language = target_lang
-        self.save_bible(bible)
-
         cfg = self.load_config()
+        if expected_source_language is not None and cfg.source_language != expected_source_language:
+            return self.load_bible()
         if source_lang:
             cfg.source_language = source_lang
         if target_lang:
             cfg.target_language = target_lang
-        self.save_config(cfg)
-        return bible
+        self.save_settings(cfg)
+        return self.load_bible()
 
     @staticmethod
     def compute_sha256(file_path: Path) -> str:
@@ -1090,21 +1263,13 @@ class NovelRepository:
     def load_metadata(self, output_file: Path) -> Optional[ChapterMetadata]:
         """Load chapter metadata by composite folder/stem or stem from single project metadata file."""
         stem = output_file.stem
-        parent_name = output_file.parent.name if (output_file.parent and output_file.parent.name and output_file.parent.name not in [".", ""]) else "root"
+        parent_name = self.folder_key(output_file.parent)
         folder_prefix = f"{parent_name}/{stem}"
         doc = self.load_project_metadata_doc()
 
-        # 1. Composite key takes highest precedence for multi-folder isolation
-        if folder_prefix in doc.chapters:
-            return doc.chapters[folder_prefix]
-
-        # 2. Match by bare stem
-        if stem in doc.chapters:
-            return doc.chapters[stem]
-
-        # 3. Check by filename as fallback
-        if output_file.name in doc.chapters:
-            return doc.chapters[output_file.name]
+        meta = self.metadata_for_output(output_file, doc.chapters)
+        if meta is not None:
+            return meta
 
         # Legacy fallback: check for individual <stem>.meta.json in output directory
         legacy_meta_path = self.get_metafile_path(output_file)
@@ -1122,10 +1287,26 @@ class NovelRepository:
 
         return None
 
+    def metadata_for_output(self, output_file: Path, records: Dict[str, ChapterMetadata]) -> Optional[ChapterMetadata]:
+        """Resolve nested outputs without borrowing another volume's legacy record."""
+        folder = self.folder_key(output_file.parent)
+        exact = records.get(f"{folder}/{output_file.stem}")
+        if exact is not None:
+            return exact
+        for key in (f"{output_file.parent.name}/{output_file.stem}", output_file.stem, output_file.name):
+            meta = records.get(key)
+            if meta is not None and (
+                "/" not in folder
+                or Path(meta.output_file).resolve() == output_file.resolve()
+                or (self.root_dir / meta.output_file).resolve() == output_file.resolve()
+            ):
+                return meta
+        return None
+
     def save_metadata(self, metadata: ChapterMetadata, output_file: Path) -> Path:
         """Save chapter metadata into the single project metadata file with composite and stem keys."""
         stem = output_file.stem
-        parent_name = output_file.parent.name if (output_file.parent and output_file.parent.name and output_file.parent.name not in [".", ""]) else "root"
+        parent_name = self.folder_key(output_file.parent)
         folder_prefix = f"{parent_name}/{stem}"
         doc = self.load_project_metadata_doc()
         doc.chapters[folder_prefix] = metadata

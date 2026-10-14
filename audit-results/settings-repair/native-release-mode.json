@@ -1,0 +1,11 @@
+{
+  "status": "pass",
+  "context": {
+    "version": "0.5.3",
+    "mode": "frozen",
+    "owner_pid": 68044,
+    "env_file_path": "C:\\Users\\Asus\\AppData\\Local\\Packages\\OpenAI.Codex_2p2nqsd0c76g0\\LocalCache\\Roaming\\com.nousetsu.settingsrepair\\.env",
+    "registry_dir": "D:\\Code\\novel_translation_Agent\\src-tauri\\target\\settings-repair\\native-release\\registry",
+    "projects_dir": "D:\\Code\\novel_translation_Agent\\src-tauri\\target\\settings-repair\\native-release\\projects"
+  }
+}

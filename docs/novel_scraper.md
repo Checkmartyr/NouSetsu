@@ -1,316 +1,179 @@
-# 🌐 Automated Web Novel Scraper Integration Guide
+# Autonomous novel discovery and extraction
 
-> **Architecture, Submodule Setup, and Web Studio Ingestion for Online Fiction**  
-> Powered by `Novel-Scraper`, [`NovelScraperBridge`](file:///D:/Code/novel_translation_Agent/src/nousetsu/scraper/bridge.py), and React 19 Web Studio.
+NouSetsu accepts a novel landing-page or chapter URL, discovers its accessible catalog,
+validates extraction, and saves raw Markdown in the selected project folder.
+Translation is a separate action. Unknown layouts have bounded recovery; CAPTCHA,
+expired sessions, inaccessible paid content, and unsupported image/canvas chapters
+produce explicit blockers.
 
----
+## Using Web Studio
 
-## 📑 Table of Contents
+In Upload Chapters, choose the URL tab and enter the URL. **Scrape & Import**
+can start directly; **Inspect TOC** is optional when you want a preview or a range.
+Inspection in an existing project returns an identifier that extraction uses to
+reuse the catalog snapshot.
 
-1. [Executive Overview](#-1-executive-overview)
-2. [Supported Webnovel Platforms](#-2-supported-webnovel-platforms)
-3. [Architecture & Submodule Integration](#-3-architecture--submodule-integration)
-4. [Python Environment & Auto-Detection](#-4-python-environment--auto-detection)
-5. [Title Romanization & Slug Normalization](#-5-title-romanization--slug-normalization)
-6. [Web Studio Ingestion Workflow](#-6-web-studio-ingestion-workflow)
-7. [REST API Specifications](#-7-rest-api-specifications)
-8. [Headless CLI & Scripting Usage](#-8-headless-cli--scripting-usage)
-9. [Troubleshooting & FAQs](#-9-troubleshooting--faqs)
+The progress panel shows discovery, validation, downloading, repair, and terminal
+status. Partial or paused runs remain visible. **Stop extraction** retains verified
+files; **Resume extraction** retries the same job. Reopening the modal restores the
+latest unfinished job. Renew an expired session before resuming.
 
----
+Existing files are protected by default. Source receipts bind a canonical URL to
+its output filename and SHA-256 hash. Changing a title does not create a second
+file. A different source cannot replace an occupied chapter index, including when
+overwrite is enabled. Explicit overwrite updates a file owned by the same source.
 
-## 🌟 1. Executive Overview
-
-Translating online serial web novels often requires tedious manual extraction: copying chapter HTML, cleaning up navigation links and author footnotes, reformatting dialogue, and organizing files into clean numbering sequences.
-
-NouSetsu integrates an automated, headless scraping subsystem powered by **`Novel-Scraper`** (embedded as a Git submodule in `modules/novel_scraper`). Through [`NovelScraperBridge`](file:///D:/Code/novel_translation_Agent/src/nousetsu/scraper/bridge.py), NouSetsu enables:
-* **Zero-Touch Table of Contents (TOC) Discovery**: Instantly fetches novel metadata, total available chapters, titles, and publication dates directly from novel landing page URLs.
-* **Granular Chapter Range Extraction**: Ingest specific volume slices (e.g. chapters `1` to `50`) without downloading the entire multi-hundred chapter backlog.
-* **Automatic Title Romanization**: Converts East Asian novel titles (Japanese Kanji/Kana, Chinese, Korean) into clean filesystem directory slugs (e.g. `douyara-tensei...`).
-* **Seamless Project Pipeline Setup**: Automatically initializes the target novel project, creates `raw_chapters/` or volume subfolders (e.g. `raw_chapters/0001_Chapter 1.txt`), and generates the initial **Novel Bible** (`bible.yaml`) in a single click.
-
----
-
-## 🌐 2. Supported Webnovel Platforms
-
-The underlying scraper engine supports major East Asian web novel publishing portals:
-
-| Platform | Domain | Primary Language | Features & Notes |
-| :--- | :--- | :---: | :--- |
-| **Shousetsuka ni Narou (小説家になろう)** | `ncode.syosetu.com` | Japanese | Full TOC parsing, episode extraction, author notes cleanup. |
-| **Kakuyomu (カクヨム)** | `kakuyomu.jp` | Japanese | Episode parsing, volume division preservation. |
-| **Hameln (ハーメルン)** | `syosetu.org` | Japanese | Fanfiction & original webnovels, episode extraction. |
-| **Pixiv Novels (ピクシブ文芸)** | `pixiv.net` | Japanese | Series and standalone novel extraction (requires cookies if private). |
-| **Alphapolis (アルファポリス)** | `alphapolis.co.jp` | Japanese | Rental/free episode parsing. |
-| **General Webnovel Sites** | *Various* | ZH / KO / EN | Extensible scrapers via modular scrapers catalog. |
-
----
-
-## 🏛️ 3. Architecture & Submodule Integration
+## Workflow and acceptance rules
 
 ```mermaid
-graph TD
-    subgraph UI ["Presentation Layer"]
-        Modal["NewProjectModal.tsx<br/>('Import from URL' Toggle)"]
-    end
-
-    subgraph API ["Web Studio Backend (/src/nousetsu/cli/web_server.py)"]
-        InspectEndpoint["POST /api/scraper/inspect<br/>(URL ➔ TOC & Metadata)"]
-        ImportEndpoint["POST /api/scraper/import<br/>(Extract & Init Project)"]
-        StatusEndpoint["GET /api/scraper/status<br/>(Detector Diagnostics)"]
-    end
-
-    subgraph Bridge ["Bridge & Integration Layer (/src/nousetsu/scraper/)"]
-        Detector["detector.py<br/>(find_scraper_python, get_scraper_info)"]
-        BridgeClass["bridge.py<br/>(NovelScraperBridge)"]
-        Models["models.py<br/>(ScraperChapterItem, ScraperInspectResponse)"]
-    end
-
-    subgraph Engine ["Submodule Engine (modules/novel_scraper/)"]
-        ScraperCore["Novel-Scraper Core<br/>(CLI & Scraper Engines)"]
-        Playwright["Playwright & BeautifulSoup<br/>(Dynamic DOM Extraction)"]
-    end
-
-    subgraph Storage ["NouSetsu Project Storage"]
-        RawDir["raw_chapters/<br/>0001_Title.txt ..."]
-        BibleFile[".novel/bible/bible.yaml"]
-        ConfigFile[".novel/config.yaml"]
-    end
-
-    Modal --> InspectEndpoint
-    Modal --> ImportEndpoint
-    InspectEndpoint --> BridgeClass
-    ImportEndpoint --> BridgeClass
-    StatusEndpoint --> Detector
-    BridgeClass --> Detector
-    BridgeClass --> ScraperCore
-    ScraperCore --> Playwright
-    ImportEndpoint --> RawDir
-    ImportEndpoint --> BibleFile
-    ImportEndpoint --> ConfigFile
+flowchart TD
+    URL["Novel or chapter URL"] --> Discover["Recipe / handler / HTTP discovery"]
+    Discover --> Browser["Render and observe DOM / JSON responses when needed"]
+    Browser --> Frontier["Expand catalog and crawl pagination / API cursors"]
+    Frontier --> Audit["Audit count, scope, navigation closure, and budgets"]
+    Audit --> Samples["Validate representative chapter layouts"]
+    Samples --> Workers["Bounded chapter workers"]
+    Workers --> Repair["Render suspicious output and audit repairs"]
+    Repair --> Workers
+    Workers --> Commit["Atomic raw files, receipts, and checkpoints"]
+    Commit --> Result["Complete / partial / paused / failed / cancelled"]
 ```
 
-### Component Breakdown
-* [`src/nousetsu/scraper/detector.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/scraper/detector.py): Development and CLI runs auto-discover the `modules/novel_scraper` directory and a working Python interpreter. Frozen desktop builds report the scraper bundled into the NouSetsu backend sidecar and ignore external checkout overrides.
-* [`src/nousetsu/scraper/bridge.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/scraper/bridge.py): Spawns headless sub-processes to execute scraper commands, parses JSON output streams, handles error recovery, and converts East Asian titles into filesystem-safe slugs. Desktop builds invoke the backend executable in scraper-worker mode rather than launching a separate Python or external checkout.
-* [`src/nousetsu/scraper/models.py`](file:///D:/Code/novel_translation_Agent/src/nousetsu/scraper/models.py): Strongly-typed Pydantic schemas validating inspect requests, TOC chapter items, and extraction jobs.
+- Discovery reads embedded state and DOM links, recursively visits observed
+  pagination and cursor endpoints, accumulates virtualized lists while scrolling,
+  and can follow an evidenced previous/next chapter chain when no TOC exists.
+- Conflicting novel identifiers and external chapter candidates are rejected.
+  Ambiguous route layouts still require chapter validation. Model output does
+  not establish catalog coverage.
+- The advertised count, discovered count, confidence, issues, and completeness
+  evidence are separate. An incomplete or empty catalog stays incomplete.
+- Browser actions are typed clicks, scrolling, and stopping. Click targets are
+  witnessed controls; model suggestions are not executable scripts.
+- Initial validation samples first, middle, and last chapters, plus observed volume
+  boundaries or quarter points, up to five representative samples. A new layout
+  encountered in the batch requires its own audited repair before use.
+- Reviews receive actual beginning, middle, and ending excerpts. Extraction
+  preserves direct prose, inline markup, paragraph blocks, and line breaks.
+- Chapter continuations must retain chapter identity. Failed, cyclic, inaccessible,
+  or unfinished continuations cannot be published as complete chapters.
+- Each requested chapter receives an outcome. Exceptions and access blocks are
+  counted; failed chapters do not become placeholder Markdown.
+- Working recipes are retained under versions by domain, structural fingerprint,
+  and route family. Warm verified recipes use deterministic checks without
+  another model call. Concurrent repairs for the same layout share one result.
 
----
+## Jobs, sessions, and configuration
 
-## 🐍 4. Python Environment & Auto-Detection
+Project-local runtime files live under `.novel/scraper/`:
 
-In development and CLI runs, the scraper bridge automatically locates a valid Python execution environment using [`find_scraper_python`](file:///D:/Code/novel_translation_Agent/src/nousetsu/scraper/detector.py):
+| Directory | Purpose |
+| --- | --- |
+| `jobs/` | Persisted requests and status; cancellation markers |
+| `inspections/` | Preview catalogs identified by inspection ID |
+| `snapshots/` | Catalog snapshot for each extraction job |
+| `checkpoints/<job>/` | One atomic record per source: outcome, hash, attempts, and recipe fingerprint |
+| `sources-*/` | Source ownership receipts scoped to the output directory |
+| `locks/` | Process-owned destination locks that release on interruption |
+| `results/` | Job-scoped terminal payloads for large catalogs |
 
-1. **Explicit interpreter**: Uses `NOVEL_SCRAPER_PYTHON` when set to an existing file.
-2. **Scraper virtualenv**: Checks `.venv` and `venv` inside the selected scraper checkout.
-3. **Current interpreter**: Falls back to the currently running Python executable.
+A backend restart recovers a previously running job as paused when its status is
+read or jobs are listed. Resume validates saved file hashes before skipping work.
+Incomplete catalogs are rediscovered on retry. If new ordering conflicts with
+existing chapter indices, files stay protected and the conflict is reported.
 
-Packaged Tauri builds do not use this discovery cascade: the scraper engine and runtime dependencies are included in `nousetsu-backend`, which launches its own `--scraper-worker` mode. External `NOVEL_SCRAPER_PATH` and `NOVEL_SCRAPER_PYTHON` settings are ignored by the frozen desktop build.
+Provider credentials and browser state are excluded from job documents and
+recipes. Use a Playwright storage-state file from an authorized session via
+`NOVEL_SCRAPER_STORAGE_STATE`, project `scraper_session_state`, or extraction
+request `session_state`. Project-relative paths resolve against the project root.
+Keep the state file private; it contains authentication material. HTTP preserves
+cookie domain/path scope; browser contexts also restore local storage and browser
+state. An HTTP authorization failure can escalate to the authenticated browser.
 
-### Submodule Initialization
-When cloning NouSetsu for the first time, initialize the submodule:
-```bash
-git submodule update --init --recursive
+Budget precedence is extraction request `budgets`, project `scraper_budgets`,
+machine environment, then defaults:
+
+| Budget key | Environment variable | Default |
+| --- | --- | --- |
+| `toc_cycles` | `NOVEL_SCRAPER_TOC_CYCLES` | 8 |
+| `review_iterations` | `NOVEL_SCRAPER_REVIEW_ITERATIONS` | 6 |
+| `repair_attempts` | `NOVEL_SCRAPER_REPAIR_ATTEMPTS` | 3 per layout |
+| `discovery_seconds` | `NOVEL_SCRAPER_DISCOVERY_SECONDS` | 600 |
+| `toc_pages` | `NOVEL_SCRAPER_TOC_PAGES` | 1000 |
+| `browser_pages` | `NOVEL_SCRAPER_BROWSER_PAGES` | 2 per origin |
+| `request_attempts` | `NOVEL_SCRAPER_REQUEST_ATTEMPTS` | 3 |
+| `no_progress_attempts` | `NOVEL_SCRAPER_NO_PROGRESS_ATTEMPTS` | 2 |
+
+Chapter concurrency defaults to three and accepts 1–10 workers. One HTTP client
+is pooled per extraction runtime; browser contexts are reused per origin with
+bounded pages. Each owned browser server uses an isolated port. Request pacing
+and Retry-After cooldowns are shared within that runtime. Development/CLI runs
+discover the scraper checkout and interpreter; packaged desktop builds retain
+the bundled `--scraper-worker` entrypoint and app-data recipe storage.
+
+Example project configuration:
+
+```yaml
+scraper_budgets:
+  discovery_seconds: 600
+  toc_pages: 1000
+scraper_session_state: .novel/scraper/sessions/authorized.json
 ```
 
-Development runs can use an external checkout through `NOVEL_SCRAPER_PATH` and `NOVEL_SCRAPER_PYTHON`. The installed desktop app instead runs the pinned scraper source shipped inside its backend sidecar, so it does not depend on a companion repository or Python installation. Downloaded Obscura binaries, learned recipes, and logs are stored under the Tauri application data directory; Obscura is fetched on first use when absent. A system Chrome installation may still be used for the interactive Cloudflare fallback.
+## API and standalone CLI
 
-If the scraper submodule uses standalone dependencies, you can install them in the main virtual environment:
-```bash
-uv pip install -e modules/novel_scraper
-# Or install required browser binaries if needed:
-playwright install chromium
+| Method and route | Behavior |
+| --- | --- |
+| `GET /api/scraper/check` | Runtime availability and non-secret model route |
+| `POST /api/scraper/inspect` | Discover metadata, catalog, issues, coverage evidence |
+| `POST /api/scraper/extract` | Start extraction from URL and project/folder |
+| `GET /api/scraper/status/{task_id}` | Status; use `project_path` for restart recovery |
+| `GET /api/scraper/jobs` | List project jobs; requires `project_path` |
+| `POST /api/scraper/cancel/{task_id}` | Request cancellation; requires `project_path` |
+| `POST /api/scraper/resume/{task_id}` | Resume the same job; requires `project_path` |
+
+Extraction retains range/custom selection, frontmatter, concurrency, and overwrite
+arguments. Additive fields include `inspection_id`, `session_state`, and `budgets`.
+Empty or nonexistent explicit selections are errors. Counts describe saved,
+skipped, failed, blocked, and cancelled chapters. Only `completed` denotes both
+resolved catalog coverage and all selected output verified.
+
+The subprocess protocol requires one explicit terminal JSON event and a successful
+exit. Both output pipes are drained; old destination files never imply success.
+Large terminal payloads use an atomic job-scoped result file so the JSON-lines
+event stays bounded. Chapter checkpoint and receipt writes remain constant-size
+as the catalog grows.
+
+From `modules/novel_scraper`, with the main project's installed runtime:
+
+```powershell
+uv run --project ../.. python -m src.main --auto --url https://example.org/novel
+uv run --project ../.. python -m src.api_bridge extract --url https://example.org/novel --dest ./raw --state-dir ./.scraper-state --job-id novel-job
 ```
 
----
+The headless CLI shares the autonomous extraction engine and uses a stable URL
+job identity for restart. The JSON worker accepts `--indices`, `--start`,
+`--end`, `--concurrency`, `--frontmatter`, `--overwrite`, and `--snapshot-file`.
 
-## 🔤 5. Title Romanization & Slug Normalization
+## Verification and performance
 
-Web novel titles frequently contain Kanji, Katakana, Hangul, or special punctuation that can cause encoding or path length issues across different operating systems.
+Run both repositories separately to keep their `src` namespaces isolated:
 
-The scraper bridge automatically converts original East Asian titles into clean project directory slugs:
-* **Japanese**: Uses `pykakasi` (when installed) or ASCII character transliteration (e.g. `どうやら異世界に転生したらしい` $\to$ `douyara-isekai-ni-tensei-shitarashii`).
-* **Chinese**: Uses `pypinyin` or unicode decomposition.
-* **Korean**: Uses `korean-romanizer` or syllable decomposition.
-* **Path Sanitization**: Strips invalid filesystem characters (`:`, `?`, `*`, `"`, `<`, `>`, `|`, `/`, `\`), collapses whitespace into hyphens (`-`), and enforces a 64-character limit to avoid Windows `MAX_PATH` collisions.
-
----
-
-## 🎨 6. Web Studio Ingestion Workflow
-
-The React 19 Web Studio (`nousetsu web`) provides a graphical setup flow in the **New Project Modal** (`NewProjectModal.tsx`):
-
-```text
-┌─ Create New Novel Project ──────────────────────────────────────┐
-│                                                                 │
-│  Project Mode: [ Manual Local ]  [● Import from Web URL ]       │
-│                                                                 │
-│  Novel URL: [ https://ncode.syosetu.com/n1234xx/        ] [🔍]  │
-│                                                                 │
-│  📖 Title:    どうやら転生した悪役令嬢のようです                  │
-│  ✍️ Author:   Author Name                                       │
-│  📑 Chapters: 142 chapters found                                │
-│                                                                 │
-│  Import Range: [ 1 ] to [ 50 ]  (Volume 1 Slice)                │
-│  Project Slug: [ douyara-tensei-akuyaku-reijou         ]        │
-│  Source Lang:  [ Japanese   ▼ ]    Target Lang: [ English   ▼ ] │
-│  Genre:        [ Isekai     ▼ ]                                 │
-│                                                                 │
-│  [ Cancel ]                                  [ ⚡ Import Novel ] │
-└─────────────────────────────────────────────────────────────────┘
+```powershell
+uv run --no-sync pytest
+# Then, from modules/novel_scraper:
+uv run --no-sync --project ../.. python -m pytest
+uv run --no-sync --project ../.. python -m pytest tests/test_autonomous.py -k benchmark -s
 ```
 
-### Steps to Ingest a Novel:
-1. Open the Web Studio in your browser (`http://localhost:5173`) and click **`+ New Project`**.
-2. Enable **Import chapters from a novel URL into raw_chapters**.
-3. Paste the webnovel series landing page URL and click **Inspect**.
-4. `POST /api/scraper/inspect` returns the original and romanized titles, author, description, and TOC list. Empty **Novel Title** and **Project Name** fields use the trimmed romanized title (or original title when unavailable); existing manual text is preserved. The preview retains the original title.
-5. Specify the **Chapter Range** (e.g. `1` to `50` for Volume 1, or `1` to all).
-6. Click **Create & Import Chapters**. The backend will:
-   - Scrape the selected chapter text and clean HTML tags.
-   - Save zero-padded chapter Markdown files into `raw_chapters/`.
-   - Initialize `.novel/config.yaml` with title, languages, and genre.
-   - Initialize `.novel/bible/bible.yaml` with initial series metadata.
-   - Automatically switch Web Studio to the newly created project!
+The benchmark uses synthetic HTML, a mocked model, and local disk writes. It
+compares cold and warm discovery/extraction on identical chapter inputs and
+checks that warm recipes make zero model calls. Its throughput is an offline
+baseline, not a claim about live website speed.
 
-If extraction fails after project creation, **Retry Chapter Import** retries into the same project. Changing the URL requires a new inspection; outdated inspection responses cannot autofill the form.
-
----
-
-## 🔌 7. REST API Specifications
-
-The Web Studio backend (`src/nousetsu/cli/web_server.py`) exposes three dedicated scraper endpoints:
-
-### 1. `GET /api/scraper/status`
-Queries the availability and configuration of the scraper engine.
-
-**Response**:
-```json
-{
-  "available": true,
-  "scraper_dir": "D:/Code/novel_translation_Agent/modules/novel_scraper",
-  "python_executable": "D:/Code/novel_translation_Agent/.venv/Scripts/python.exe",
-  "supported_domains": ["ncode.syosetu.com", "kakuyomu.jp", "syosetu.org"]
-}
-```
-
----
-
-### 2. `POST /api/scraper/inspect`
-Inspects a web novel landing page and returns the parsed table of contents.
-
-**Request Body**:
-```json
-{
-  "url": "https://ncode.syosetu.com/n1234xx/"
-}
-```
-
-**Response**:
-```json
-{
-  "title": "どうやら異世界に転生したらしい",
-  "author": "田中太郎",
-  "description": "トラックに轢かれた主人公が...",
-  "suggested_slug": "douyara-isekai-ni-tensei-shitarashii",
-  "source_language": "Japanese",
-  "total_chapters": 120,
-  "chapters": [
-    {
-      "index": 1,
-      "title": "プロローグ：終わりの始まり",
-      "url": "https://ncode.syosetu.com/n1234xx/1/"
-    },
-    {
-      "index": 2,
-      "title": "第１話：目覚めと違和感",
-      "url": "https://ncode.syosetu.com/n1234xx/2/"
-    }
-  ]
-}
-```
-
----
-
-### 3. `POST /api/scraper/import`
-Executes asynchronous batch extraction and creates the project.
-
-**Request Body**:
-```json
-{
-  "url": "https://ncode.syosetu.com/n1234xx/",
-  "project_name": "douyara-isekai",
-  "title": "どうやら異世界に転生したらしい",
-  "start_chapter": 1,
-  "end_chapter": 50,
-  "source_lang": "Japanese",
-  "target_lang": "English",
-  "genre": "isekai"
-}
-```
-
-**Response**:
-```json
-{
-  "status": "success",
-  "project_dir": "D:/Code/novel_translation_Agent/projects/douyara-isekai",
-  "chapters_extracted": 50,
-  "first_chapter": "0001_プロローグ：終わりの始まり.txt",
-  "last_chapter": "0050_第４９話：決戦前夜.txt"
-}
-```
-
----
-
-## 💻 8. Headless CLI & Scripting Usage
-
-You can also use [`NovelScraperBridge`](file:///D:/Code/novel_translation_Agent/src/nousetsu/scraper/bridge.py) programmatically in custom automation scripts:
-
-```python
-from nousetsu.scraper.bridge import NovelScraperBridge
-
-bridge = NovelScraperBridge()
-
-# 1. Check readiness
-info = bridge.get_info()
-print(f"Scraper ready: {info.available} using {info.python_executable}")
-
-# 2. Inspect TOC
-toc = bridge.inspect_url("https://ncode.syosetu.com/n1234xx/")
-print(f"Found {len(toc.chapters)} chapters for '{toc.title}' by {toc.author}")
-
-# 3. Extract range into directory
-output_dir = "raw_chapters/Vol_01"
-result = bridge.extract_chapters(
-    url="https://ncode.syosetu.com/n1234xx/",
-    output_dir=output_dir,
-    start_chapter=1,
-    end_chapter=25,
-)
-print(f"Extracted {result.chapters_extracted} chapters into {output_dir}")
-```
-
----
-
-## ❓ 9. Troubleshooting & FAQs
-
-### Q1: The scraper status says `available: false`.
-* Ensure the submodule is checked out:
-  ```bash
-  git submodule update --init --recursive
-  ```
-* Verify that the directory `modules/novel_scraper` contains `scraper` or `novel_scraper` python source files.
-
-### Q2: Scraping Kakuyomu or Cloudflare-protected sites times out.
-* Some sites require Playwright headless browser rendering to pass anti-bot JavaScript challenges. Ensure browser binaries are installed:
-  ```bash
-  playwright install chromium
-  ```
-* If running behind a corporate proxy, set the standard `HTTP_PROXY` and `HTTPS_PROXY` environment variables before launching NouSetsu.
-
-### Q3: Romanized slug is just "novel-project" instead of the romaji title.
-* Install `pykakasi` (for Japanese) or `pypinyin` (for Chinese) into your virtual environment:
-  ```bash
-  uv pip install pykakasi pypinyin
-  ```
-* If these optional libraries are absent, the bridge falls back to safe transliteration or standard default slugs.
+External acceptance is opt-in with `NOVEL_SCRAPER_LIVE_TESTS=1`. Set
+`NOVEL_SCRAPER_LIVE_MATRIX` to a JSON array of entries with `url`, optional
+`name`, and optional `session_state` to include unfamiliar static, JavaScript,
+paginated, and authorized signed-in sites. Keep this private configuration outside
+Git. A live result must provide validated catalog evidence or an explicit blocker;
+no universal website success guarantee is made. OCR and automatic translation
+are outside this version.

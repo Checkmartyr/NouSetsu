@@ -1,0 +1,1264 @@
+{
+  "mode": "dev",
+  "tool": "Playwright CDP attached to actual Tauri WebView2",
+  "project_path": "D:\\Code\\novel_translation_Agent\\src-tauri\\target\\settings-repair\\native-dev\\projects\\Native A",
+  "observations": [
+    {
+      "case": "Actual Tauri runtime and isolated settings path",
+      "setting_ids": [],
+      "status": "pass",
+      "actual": {
+        "native": true,
+        "env_file_path": "D:\\Code\\novel_translation_Agent\\src-tauri\\target\\settings-repair\\workspace\\.env",
+        "url": "http://127.0.0.1:5187/"
+      },
+      "expected": {
+        "native": true,
+        "env_file_path": "D:\\Code\\novel_translation_Agent\\src-tauri\\target\\settings-repair\\workspace\\.env",
+        "url": "http://127.0.0.1:5187/"
+      }
+    },
+    {
+      "case": "Native procedural enable/cadence persisted",
+      "setting_ids": [
+        "project.enable_procedural_graph_learning",
+        "project.procedural_learning_cadence"
+      ],
+      "status": "pass",
+      "actual": [
+        true,
+        "interval"
+      ],
+      "expected": [
+        true,
+        "interval"
+      ]
+    },
+    {
+      "case": "Native project control persisted",
+      "setting_ids": [
+        "project.title"
+      ],
+      "status": "pass",
+      "actual": "CDP dev 日本",
+      "expected": "CDP dev 日本"
+    },
+    {
+      "case": "Native project control persisted",
+      "setting_ids": [
+        "project.genre"
+      ],
+      "status": "pass",
+      "actual": "fantasy",
+      "expected": "fantasy"
+    },
+    {
+      "case": "Native project control persisted",
+      "setting_ids": [
+        "project.source_language"
+      ],
+      "status": "pass",
+      "actual": "Japanese",
+      "expected": "Japanese"
+    },
+    {
+      "case": "Native project control persisted",
+      "setting_ids": [
+        "project.target_language"
+      ],
+      "status": "pass",
+      "actual": "English",
+      "expected": "English"
+    },
+    {
+      "case": "Native project control persisted",
+      "setting_ids": [
+        "project.project_id"
+      ],
+      "status": "pass",
+      "actual": "audit-dev",
+      "expected": "audit-dev"
+    },
+    {
+      "case": "Native project control persisted",
+      "setting_ids": [
+        "project.chunk_threshold_lines"
+      ],
+      "status": "pass",
+      "actual": "900",
+      "expected": "900"
+    },
+    {
+      "case": "Native project control persisted",
+      "setting_ids": [
+        "project.target_chunk_lines"
+      ],
+      "status": "pass",
+      "actual": "450",
+      "expected": "450"
+    },
+    {
+      "case": "Native project control persisted",
+      "setting_ids": [
+        "project.chunk_overlap_lines"
+      ],
+      "status": "pass",
+      "actual": "5",
+      "expected": "5"
+    },
+    {
+      "case": "Native project control persisted",
+      "setting_ids": [
+        "project.rag_top_k"
+      ],
+      "status": "pass",
+      "actual": "4",
+      "expected": "4"
+    },
+    {
+      "case": "Native project control persisted",
+      "setting_ids": [
+        "project.rag_embedding_model"
+      ],
+      "status": "pass",
+      "actual": "mock-embedding",
+      "expected": "mock-embedding"
+    },
+    {
+      "case": "Native project control persisted",
+      "setting_ids": [
+        "project.rag_reranker_model"
+      ],
+      "status": "pass",
+      "actual": "mock-reranker",
+      "expected": "mock-reranker"
+    },
+    {
+      "case": "Native project control persisted",
+      "setting_ids": [
+        "project.safety_subdivision_min_lines"
+      ],
+      "status": "pass",
+      "actual": "10",
+      "expected": "10"
+    },
+    {
+      "case": "Native project control persisted",
+      "setting_ids": [
+        "project.safety_subdivision_max_depth"
+      ],
+      "status": "pass",
+      "actual": "5",
+      "expected": "5"
+    },
+    {
+      "case": "Native project control persisted",
+      "setting_ids": [
+        "project.max_tpm"
+      ],
+      "status": "pass",
+      "actual": "50000",
+      "expected": "50000"
+    },
+    {
+      "case": "Native project control persisted",
+      "setting_ids": [
+        "project.max_rpm"
+      ],
+      "status": "pass",
+      "actual": "80",
+      "expected": "80"
+    },
+    {
+      "case": "Native project control persisted",
+      "setting_ids": [
+        "project.raw_dir"
+      ],
+      "status": "pass",
+      "actual": "raw cdp 日本",
+      "expected": "raw cdp 日本"
+    },
+    {
+      "case": "Native project control persisted",
+      "setting_ids": [
+        "project.output_dir"
+      ],
+      "status": "pass",
+      "actual": "translated cdp ไทย",
+      "expected": "translated cdp ไทย"
+    },
+    {
+      "case": "Native project control persisted",
+      "setting_ids": [
+        "project.max_review_loops"
+      ],
+      "status": "pass",
+      "actual": "2",
+      "expected": "2"
+    },
+    {
+      "case": "Native project control persisted",
+      "setting_ids": [
+        "project.quality_threshold"
+      ],
+      "status": "pass",
+      "actual": "9",
+      "expected": "9"
+    },
+    {
+      "case": "Native project control persisted",
+      "setting_ids": [
+        "project.procedural_learning_interval"
+      ],
+      "status": "pass",
+      "actual": "20",
+      "expected": "20"
+    },
+    {
+      "case": "Native project control persisted",
+      "setting_ids": [
+        "project.procedural_learning_min_failures"
+      ],
+      "status": "pass",
+      "actual": "3",
+      "expected": "3"
+    },
+    {
+      "case": "Native project control persisted",
+      "setting_ids": [
+        "project.procedural_refiner_model"
+      ],
+      "status": "pass",
+      "actual": "mock-refiner",
+      "expected": "mock-refiner"
+    },
+    {
+      "case": "Native model route persisted",
+      "setting_ids": [
+        "project.model_name"
+      ],
+      "status": "pass",
+      "actual": "mock-cdp-primary",
+      "expected": "mock-cdp-primary"
+    },
+    {
+      "case": "Native model route persisted",
+      "setting_ids": [
+        "project.fallback_model"
+      ],
+      "status": "pass",
+      "actual": "mock-cdp-fallback",
+      "expected": "mock-cdp-fallback"
+    },
+    {
+      "case": "Native model route persisted",
+      "setting_ids": [
+        "project.extractor_model"
+      ],
+      "status": "pass",
+      "actual": "mock-cdp-extractor",
+      "expected": "mock-cdp-extractor"
+    },
+    {
+      "case": "Native model route persisted",
+      "setting_ids": [
+        "project.drafter_model"
+      ],
+      "status": "pass",
+      "actual": "mock-cdp-drafter",
+      "expected": "mock-cdp-drafter"
+    },
+    {
+      "case": "Native model route persisted",
+      "setting_ids": [
+        "project.critic_model"
+      ],
+      "status": "pass",
+      "actual": "mock-cdp-critic",
+      "expected": "mock-cdp-critic"
+    },
+    {
+      "case": "Native model route persisted",
+      "setting_ids": [
+        "project.polisher_model"
+      ],
+      "status": "pass",
+      "actual": "mock-cdp-polisher",
+      "expected": "mock-cdp-polisher"
+    },
+    {
+      "case": "Native model route persisted",
+      "setting_ids": [
+        "project.chronicler_model"
+      ],
+      "status": "pass",
+      "actual": "mock-cdp-chronicler",
+      "expected": "mock-cdp-chronicler"
+    },
+    {
+      "case": "Native model route persisted",
+      "setting_ids": [
+        "project.scraper_model"
+      ],
+      "status": "pass",
+      "actual": "mock-cdp-scraper",
+      "expected": "mock-cdp-scraper"
+    },
+    {
+      "case": "Native switch persisted",
+      "setting_ids": [
+        "project.enable_patch_polishing"
+      ],
+      "status": "pass",
+      "actual": false,
+      "expected": false
+    },
+    {
+      "case": "Native switch persisted",
+      "setting_ids": [
+        "project.enable_chunking"
+      ],
+      "status": "pass",
+      "actual": false,
+      "expected": false
+    },
+    {
+      "case": "Native switch persisted",
+      "setting_ids": [
+        "project.auto_update_bible"
+      ],
+      "status": "pass",
+      "actual": false,
+      "expected": false
+    },
+    {
+      "case": "Native switch persisted",
+      "setting_ids": [
+        "project.cross_folder_summaries"
+      ],
+      "status": "pass",
+      "actual": false,
+      "expected": false
+    },
+    {
+      "case": "Native switch persisted",
+      "setting_ids": [
+        "project.filter_scene_characters"
+      ],
+      "status": "pass",
+      "actual": false,
+      "expected": false
+    },
+    {
+      "case": "Native switch persisted",
+      "setting_ids": [
+        "project.filter_extractor_entities"
+      ],
+      "status": "pass",
+      "actual": false,
+      "expected": false
+    },
+    {
+      "case": "Native switch persisted",
+      "setting_ids": [
+        "project.enable_post_polish_reconciliation"
+      ],
+      "status": "pass",
+      "actual": false,
+      "expected": false
+    },
+    {
+      "case": "Native switch persisted",
+      "setting_ids": [
+        "project.enable_rag"
+      ],
+      "status": "pass",
+      "actual": false,
+      "expected": false
+    },
+    {
+      "case": "Native switch persisted",
+      "setting_ids": [
+        "project.enable_rag_reranker"
+      ],
+      "status": "pass",
+      "actual": false,
+      "expected": false
+    },
+    {
+      "case": "Native switch persisted",
+      "setting_ids": [
+        "project.safety_recursive_subdivision"
+      ],
+      "status": "pass",
+      "actual": false,
+      "expected": false
+    },
+    {
+      "case": "Native role generation persisted",
+      "setting_ids": [
+        "project.generation_settings.extractor.temperature",
+        "project.generation_settings.extractor.thinking_level",
+        "project.generation_settings.extractor.thinking_budget",
+        "project.generation_settings.extractor.use_interactions_api"
+      ],
+      "status": "pass",
+      "actual": {
+        "temperature": 0.3,
+        "thinking_level": "low",
+        "thinking_budget": 100,
+        "use_interactions_api": false
+      },
+      "expected": {
+        "temperature": 0.3,
+        "thinking_level": "low",
+        "thinking_budget": 100,
+        "use_interactions_api": false
+      }
+    },
+    {
+      "case": "Native role generation persisted",
+      "setting_ids": [
+        "project.generation_settings.drafter.temperature",
+        "project.generation_settings.drafter.thinking_level",
+        "project.generation_settings.drafter.thinking_budget",
+        "project.generation_settings.drafter.use_interactions_api"
+      ],
+      "status": "pass",
+      "actual": {
+        "temperature": 0.4,
+        "thinking_level": "low",
+        "thinking_budget": 101,
+        "use_interactions_api": false
+      },
+      "expected": {
+        "temperature": 0.4,
+        "thinking_level": "low",
+        "thinking_budget": 101,
+        "use_interactions_api": false
+      }
+    },
+    {
+      "case": "Native role generation persisted",
+      "setting_ids": [
+        "project.generation_settings.critic.temperature",
+        "project.generation_settings.critic.thinking_level",
+        "project.generation_settings.critic.thinking_budget",
+        "project.generation_settings.critic.use_interactions_api"
+      ],
+      "status": "pass",
+      "actual": {
+        "temperature": 0.5,
+        "thinking_level": "low",
+        "thinking_budget": 102,
+        "use_interactions_api": false
+      },
+      "expected": {
+        "temperature": 0.5,
+        "thinking_level": "low",
+        "thinking_budget": 102,
+        "use_interactions_api": false
+      }
+    },
+    {
+      "case": "Native role generation persisted",
+      "setting_ids": [
+        "project.generation_settings.polisher.temperature",
+        "project.generation_settings.polisher.thinking_level",
+        "project.generation_settings.polisher.thinking_budget",
+        "project.generation_settings.polisher.use_interactions_api"
+      ],
+      "status": "pass",
+      "actual": {
+        "temperature": 0.6,
+        "thinking_level": "low",
+        "thinking_budget": 103,
+        "use_interactions_api": false
+      },
+      "expected": {
+        "temperature": 0.6,
+        "thinking_level": "low",
+        "thinking_budget": 103,
+        "use_interactions_api": false
+      }
+    },
+    {
+      "case": "Native role generation persisted",
+      "setting_ids": [
+        "project.generation_settings.chronicler.temperature",
+        "project.generation_settings.chronicler.thinking_level",
+        "project.generation_settings.chronicler.thinking_budget",
+        "project.generation_settings.chronicler.use_interactions_api"
+      ],
+      "status": "pass",
+      "actual": {
+        "temperature": 0.7,
+        "thinking_level": "low",
+        "thinking_budget": 104,
+        "use_interactions_api": false
+      },
+      "expected": {
+        "temperature": 0.7,
+        "thinking_level": "low",
+        "thinking_budget": 104,
+        "use_interactions_api": false
+      }
+    },
+    {
+      "case": "Native role generation persisted",
+      "setting_ids": [
+        "project.generation_settings.scraper.temperature",
+        "project.generation_settings.scraper.thinking_level",
+        "project.generation_settings.scraper.thinking_budget",
+        "project.generation_settings.scraper.use_interactions_api"
+      ],
+      "status": "pass",
+      "actual": {
+        "temperature": 0.8,
+        "thinking_level": "low",
+        "thinking_budget": 105,
+        "use_interactions_api": false
+      },
+      "expected": {
+        "temperature": 0.8,
+        "thinking_level": "low",
+        "thinking_budget": 105,
+        "use_interactions_api": false
+      }
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.SOURCE_LANG"
+      ],
+      "status": "pass",
+      "actual": "Japanese",
+      "expected": "Japanese"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.TARGET_LANG"
+      ],
+      "status": "pass",
+      "actual": "English",
+      "expected": "English"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_MAX_REVIEW_LOOPS"
+      ],
+      "status": "pass",
+      "actual": "1",
+      "expected": "1"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_QUALITY_THRESHOLD"
+      ],
+      "status": "pass",
+      "actual": "9.0",
+      "expected": "9.0"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_FILTER_EXTRACTOR_ENTITIES"
+      ],
+      "status": "pass",
+      "actual": "false",
+      "expected": "false"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_POST_POLISH_RECONCILIATION"
+      ],
+      "status": "pass",
+      "actual": "false",
+      "expected": "false"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_RAG_EMBEDDING_MODEL"
+      ],
+      "status": "pass",
+      "actual": "mock-global-embedding",
+      "expected": "mock-global-embedding"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_RAG_RERANKER_MODEL"
+      ],
+      "status": "pass",
+      "actual": "mock-global-reranker",
+      "expected": "mock-global-reranker"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_MAX_TPM"
+      ],
+      "status": "pass",
+      "actual": "45000",
+      "expected": "45000"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_MAX_RPM"
+      ],
+      "status": "pass",
+      "actual": "70",
+      "expected": "70"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_ENABLE_PROCEDURAL_GRAPH_LEARNING"
+      ],
+      "status": "pass",
+      "actual": "true",
+      "expected": "true"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_PROCEDURAL_LEARNING_CADENCE"
+      ],
+      "status": "pass",
+      "actual": "interval",
+      "expected": "interval"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_PROCEDURAL_LEARNING_INTERVAL"
+      ],
+      "status": "pass",
+      "actual": "20",
+      "expected": "20"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_PROCEDURAL_LEARNING_MIN_FAILURES"
+      ],
+      "status": "pass",
+      "actual": "3",
+      "expected": "3"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_PROCEDURAL_REFINER_MODEL"
+      ],
+      "status": "pass",
+      "actual": "mock-refiner",
+      "expected": "mock-refiner"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_PROJECTS_DIR"
+      ],
+      "status": "pass",
+      "actual": "D:\\Code\\novel_translation_Agent\\src-tauri\\target\\settings-repair\\native-dev\\projects",
+      "expected": "D:\\Code\\novel_translation_Agent\\src-tauri\\target\\settings-repair\\native-dev\\projects"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_SCRAPER_PATH"
+      ],
+      "status": "pass",
+      "actual": "D:\\Code\\novel_translation_Agent\\src-tauri\\target\\settings-repair\\native-dev\\projects\\scraper",
+      "expected": "D:\\Code\\novel_translation_Agent\\src-tauri\\target\\settings-repair\\native-dev\\projects\\scraper"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_SCRAPER_PYTHON"
+      ],
+      "status": "pass",
+      "actual": "D:\\Code\\novel_translation_Agent\\src-tauri\\target\\settings-repair\\native-dev\\projects\\python.exe",
+      "expected": "D:\\Code\\novel_translation_Agent\\src-tauri\\target\\settings-repair\\native-dev\\projects\\python.exe"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.DEFAULT_MODEL"
+      ],
+      "status": "pass",
+      "actual": "mock-cdp-global-default_model",
+      "expected": "mock-cdp-global-default_model"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_MODEL"
+      ],
+      "status": "pass",
+      "actual": "mock-cdp-global-novel_model",
+      "expected": "mock-cdp-global-novel_model"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_FALLBACK_MODEL"
+      ],
+      "status": "pass",
+      "actual": "mock-cdp-global-novel_fallback_model",
+      "expected": "mock-cdp-global-novel_fallback_model"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_TEMPERATURE"
+      ],
+      "status": "pass",
+      "actual": "0.4",
+      "expected": "0.4"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_THINKING_LEVEL"
+      ],
+      "status": "pass",
+      "actual": "low",
+      "expected": "low"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_THINKING_BUDGET"
+      ],
+      "status": "pass",
+      "actual": "101",
+      "expected": "101"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_USE_INTERACTIONS"
+      ],
+      "status": "pass",
+      "actual": "false",
+      "expected": "false"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_EXTRACTOR_MODEL"
+      ],
+      "status": "pass",
+      "actual": "mock-cdp-global-extractor",
+      "expected": "mock-cdp-global-extractor"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_EXTRACTOR_TEMPERATURE"
+      ],
+      "status": "pass",
+      "actual": "0.5",
+      "expected": "0.5"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_EXTRACTOR_THINKING_LEVEL"
+      ],
+      "status": "pass",
+      "actual": "low",
+      "expected": "low"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_EXTRACTOR_THINKING_BUDGET"
+      ],
+      "status": "pass",
+      "actual": "200",
+      "expected": "200"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_EXTRACTOR_USE_INTERACTIONS"
+      ],
+      "status": "pass",
+      "actual": "false",
+      "expected": "false"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_DRAFTER_MODEL"
+      ],
+      "status": "pass",
+      "actual": "mock-cdp-global-drafter",
+      "expected": "mock-cdp-global-drafter"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_DRAFTER_TEMPERATURE"
+      ],
+      "status": "pass",
+      "actual": "0.5",
+      "expected": "0.5"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_DRAFTER_THINKING_LEVEL"
+      ],
+      "status": "pass",
+      "actual": "low",
+      "expected": "low"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_DRAFTER_THINKING_BUDGET"
+      ],
+      "status": "pass",
+      "actual": "201",
+      "expected": "201"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_DRAFTER_USE_INTERACTIONS"
+      ],
+      "status": "pass",
+      "actual": "false",
+      "expected": "false"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_CRITIC_MODEL"
+      ],
+      "status": "pass",
+      "actual": "mock-cdp-global-critic",
+      "expected": "mock-cdp-global-critic"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_CRITIC_TEMPERATURE"
+      ],
+      "status": "pass",
+      "actual": "0.5",
+      "expected": "0.5"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_CRITIC_THINKING_LEVEL"
+      ],
+      "status": "pass",
+      "actual": "low",
+      "expected": "low"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_CRITIC_THINKING_BUDGET"
+      ],
+      "status": "pass",
+      "actual": "202",
+      "expected": "202"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_CRITIC_USE_INTERACTIONS"
+      ],
+      "status": "pass",
+      "actual": "false",
+      "expected": "false"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_POLISHER_MODEL"
+      ],
+      "status": "pass",
+      "actual": "mock-cdp-global-polisher",
+      "expected": "mock-cdp-global-polisher"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_POLISHER_TEMPERATURE"
+      ],
+      "status": "pass",
+      "actual": "0.5",
+      "expected": "0.5"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_POLISHER_THINKING_LEVEL"
+      ],
+      "status": "pass",
+      "actual": "low",
+      "expected": "low"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_POLISHER_THINKING_BUDGET"
+      ],
+      "status": "pass",
+      "actual": "203",
+      "expected": "203"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_POLISHER_USE_INTERACTIONS"
+      ],
+      "status": "pass",
+      "actual": "false",
+      "expected": "false"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_CHRONICLER_MODEL"
+      ],
+      "status": "pass",
+      "actual": "mock-cdp-global-chronicler",
+      "expected": "mock-cdp-global-chronicler"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_CHRONICLER_TEMPERATURE"
+      ],
+      "status": "pass",
+      "actual": "0.5",
+      "expected": "0.5"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_CHRONICLER_THINKING_LEVEL"
+      ],
+      "status": "pass",
+      "actual": "low",
+      "expected": "low"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_CHRONICLER_THINKING_BUDGET"
+      ],
+      "status": "pass",
+      "actual": "204",
+      "expected": "204"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_CHRONICLER_USE_INTERACTIONS"
+      ],
+      "status": "pass",
+      "actual": "false",
+      "expected": "false"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_SCRAPER_MODEL"
+      ],
+      "status": "pass",
+      "actual": "mock-cdp-global-scraper",
+      "expected": "mock-cdp-global-scraper"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_SCRAPER_TEMPERATURE"
+      ],
+      "status": "pass",
+      "actual": "0.5",
+      "expected": "0.5"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_SCRAPER_THINKING_LEVEL"
+      ],
+      "status": "pass",
+      "actual": "low",
+      "expected": "low"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_SCRAPER_THINKING_BUDGET"
+      ],
+      "status": "pass",
+      "actual": "205",
+      "expected": "205"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.NOVEL_SCRAPER_USE_INTERACTIONS"
+      ],
+      "status": "pass",
+      "actual": "false",
+      "expected": "false"
+    },
+    {
+      "case": "Native global input persisted",
+      "setting_ids": [
+        "env.CUSTOM_API_BASE_URL"
+      ],
+      "status": "pass",
+      "actual": "http://127.0.0.1:5193/v1",
+      "expected": "http://127.0.0.1:5193/v1"
+    },
+    {
+      "case": "Native synthetic key saved and response redacted",
+      "setting_ids": [
+        "env.GEMINI_API_KEY"
+      ],
+      "status": "pass",
+      "actual": true,
+      "expected": true
+    },
+    {
+      "case": "Native synthetic key saved and response redacted",
+      "setting_ids": [
+        "env.GOOGLE_API_KEY"
+      ],
+      "status": "pass",
+      "actual": true,
+      "expected": true
+    },
+    {
+      "case": "Native synthetic key saved and response redacted",
+      "setting_ids": [
+        "env.OPENAI_API_KEY"
+      ],
+      "status": "pass",
+      "actual": true,
+      "expected": true
+    },
+    {
+      "case": "Native synthetic key saved and response redacted",
+      "setting_ids": [
+        "env.OPENROUTER_API_KEY"
+      ],
+      "status": "pass",
+      "actual": true,
+      "expected": true
+    },
+    {
+      "case": "Native synthetic key saved and response redacted",
+      "setting_ids": [
+        "env.CUSTOM_API_KEY"
+      ],
+      "status": "pass",
+      "actual": true,
+      "expected": true
+    },
+    {
+      "case": "Native blank key preservation and explicit clear",
+      "setting_ids": [
+        "env.GEMINI_API_KEY",
+        "env.GOOGLE_API_KEY",
+        "env.OPENAI_API_KEY",
+        "env.OPENROUTER_API_KEY",
+        "env.CUSTOM_API_KEY"
+      ],
+      "status": "pass",
+      "actual": true,
+      "expected": true
+    },
+    {
+      "case": "Native invalid temperature rejected without persistence",
+      "setting_ids": [
+        "project.generation_settings.extractor.temperature"
+      ],
+      "status": "pass",
+      "actual": 422,
+      "expected": 422
+    },
+    {
+      "case": "Native stale save rejected and draft preserved",
+      "setting_ids": [
+        "project.title",
+        "project.genre"
+      ],
+      "status": "pass",
+      "actual": true,
+      "expected": true
+    },
+    {
+      "case": "Native zero overlap persists and reloads",
+      "setting_ids": [
+        "project.chunk_overlap_lines"
+      ],
+      "status": "pass",
+      "actual": 0,
+      "expected": 0
+    },
+    {
+      "case": "Native UI-started fresh mock translation completes",
+      "setting_ids": [],
+      "status": "pass",
+      "actual": {
+        "completed": 2,
+        "chapter": 1,
+        "source_file": "0001.txt",
+        "models": [
+          "mock-cdp-primary"
+        ]
+      },
+      "expected": {
+        "completed": 2,
+        "chapter": 1,
+        "source_file": "0001.txt",
+        "models": [
+          "mock-cdp-primary"
+        ]
+      }
+    },
+    {
+      "case": "Native settings category search",
+      "setting_ids": [
+        "action.category_search"
+      ],
+      "status": "pass",
+      "actual": true,
+      "expected": true
+    },
+    {
+      "case": "Native complete model preset",
+      "setting_ids": [
+        "action.apply_model_preset"
+      ],
+      "status": "pass",
+      "actual": true,
+      "expected": true
+    },
+    {
+      "case": "Native model and legacy reset",
+      "setting_ids": [
+        "action.clear_model_overrides"
+      ],
+      "status": "pass",
+      "actual": true,
+      "expected": true
+    },
+    {
+      "case": "Native load environment preset",
+      "setting_ids": [
+        "action.load_env_presets"
+      ],
+      "status": "pass",
+      "actual": true,
+      "expected": true
+    },
+    {
+      "case": "Native local provider catalog",
+      "setting_ids": [
+        "action.provider_catalog"
+      ],
+      "status": "pass",
+      "actual": true,
+      "expected": true
+    },
+    {
+      "case": "Native diagnostics refresh",
+      "setting_ids": [
+        "action.logs_refresh"
+      ],
+      "status": "pass",
+      "actual": true,
+      "expected": true
+    },
+    {
+      "case": "Native controlled update error",
+      "setting_ids": [
+        "action.check_updates"
+      ],
+      "status": "pass",
+      "actual": {
+        "local_feed": "204 no update",
+        "fallback": "502 refused loopback proxy",
+        "installed": false
+      },
+      "expected": {
+        "local_feed": "204 no update",
+        "fallback": "502 refused loopback proxy",
+        "installed": false
+      }
+    },
+    {
+      "case": "Native creation defaults UI/API/disk/reload",
+      "setting_ids": [
+        "creation.title",
+        "creation.folder_name",
+        "creation.source_language",
+        "creation.target_language",
+        "creation.genre",
+        "creation.model"
+      ],
+      "status": "pass",
+      "actual": {
+        "title": "Created native defaults",
+        "source_language": "Chinese",
+        "target_language": "French",
+        "genre": "romance",
+        "model_name": "mock-created"
+      },
+      "expected": {
+        "title": "Created native defaults",
+        "source_language": "Chinese",
+        "target_language": "French",
+        "genre": "romance",
+        "model_name": "mock-created"
+      }
+    },
+    {
+      "case": "Native creation override UI/API/disk/reload",
+      "setting_ids": [
+        "creation.title",
+        "creation.folder_name",
+        "creation.source_language",
+        "creation.target_language",
+        "creation.genre",
+        "creation.model"
+      ],
+      "status": "pass",
+      "actual": {
+        "title": "Created native override",
+        "source_language": "Korean",
+        "target_language": "English",
+        "genre": "romance",
+        "model_name": "mock-created"
+      },
+      "expected": {
+        "title": "Created native override",
+        "source_language": "Korean",
+        "target_language": "English",
+        "genre": "romance",
+        "model_name": "mock-created"
+      }
+    }
+  ]
+}

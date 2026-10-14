@@ -56,10 +56,11 @@ class ProceduralGraphRefiner:
     def __init__(
         self,
         model_name: Optional[str] = None,
-        rejection_memory_path: Optional[Path] = None
+        rejection_memory_path: Optional[Path] = None,
+        environ=None,
     ):
         self.model_name = model_name or "gemini-3.5-flash-lite"
-        self.llm = get_llm(model_name=self.model_name, temperature=0.2)
+        self.llm = get_llm(model_name=self.model_name, temperature=0.2, environ=environ)
         self.rejection_memory: List[Dict[str, Any]] = []
         self.rejection_memory_path = rejection_memory_path
         self.last_committed_edits: List[GraphEditOperation] = []
