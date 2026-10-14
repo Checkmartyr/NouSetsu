@@ -1764,8 +1764,9 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
         document = read_scraper_job(repo.root_dir, task_id)
         req = ScraperExtractRequest.model_validate(document["request"])
         req.project_path = str(repo.root_dir.resolve())
+        cfg = repo.load_config()
         destination = Path(document["destination"]).resolve()
-        if not destination.is_relative_to(repo.root_dir.resolve()):
+        if not destination.is_relative_to(repo.root_dir.resolve()) and not destination.is_relative_to(cfg.get_raw_path(repo.root_dir)):
             raise HTTPException(status_code=400, detail="Saved destination is outside this project")
         for active_id, active_task in _SCRAPER_TASKS.items():
             if not active_task.done() and active_id != task_id:
@@ -1778,7 +1779,7 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
         document["status"] = running.model_dump()
         write_scraper_json(scraper_job_path(repo.root_dir, task_id), document)
         _ACTIVE_SCRAPER_JOBS[task_id] = running
-        env = scraper_subprocess_environment(repo.load_config(), environ=resolve_env(repo.root_dir), project_root=repo.root_dir)
+        env = scraper_subprocess_environment(cfg, environ=resolve_env(repo.root_dir), project_root=repo.root_dir)
         _SCRAPER_TASKS[task_id] = asyncio.create_task(_run_scraper_task(NovelScraperBridge(), req,
             destination, repo, document["folder"], task_id, event_bus, env))
         return {"success": True, "task_id": task_id, "folder": document["folder"], "message": running.message}

@@ -92,6 +92,64 @@ def test_restart_recovery_cancel_and_resume(tmp_path, monkeypatch):
     assert not job_path(tmp_path, job_id).with_suffix(".cancel").exists()
 
 
+@pytest.mark.parametrize("location,expected_status", [
+    ("project", 200),
+    ("external", 200),
+    ("external_volume", 200),
+    ("unrelated", 400),
+    ("previous_root", 400),
+])
+def test_resume_validates_current_source_roots(tmp_path, monkeypatch, location, expected_status):
+    project = tmp_path / "project"
+    repo = NovelRepository(project)
+    repo.initialize_project("Fixture", "Japanese", "English", model_name="mock-model")
+    cfg = repo.load_config()
+    source = project / "raw_chapters" if location == "project" else tmp_path / ("previous_sources" if location == "previous_root" else "sources")
+    source.mkdir(parents=True, exist_ok=True)
+    cfg.raw_dir = str(source)
+    repo.save_config(cfg)
+    destinations = {
+        "project": source,
+        "external": source,
+        "external_volume": source / "Vol_01",
+        "unrelated": tmp_path / "unrelated",
+        "previous_root": source / "Vol_01",
+    }
+    destination = destinations[location]
+    destination.mkdir(parents=True, exist_ok=True)
+    job_id = "e" * 32
+    request = ScraperExtractRequest(url="https://fixture.test/book", project_path=str(project))
+    document = {
+        "task_id": job_id, "request": request.model_dump(), "destination": str(destination),
+        "folder": source.name,
+        "status": ScraperStatusResponse(task_id=job_id, status="paused").model_dump(),
+    }
+    write_json(job_path(project, job_id), document)
+    if location == "previous_root":
+        cfg.raw_dir = str(tmp_path / "current_sources")
+        repo.save_config(cfg)
+    marker = job_path(project, job_id).with_suffix(".cancel")
+    marker.touch()
+    monkeypatch.setattr(web_server, "_ACTIVE_SCRAPER_JOBS", {})
+    monkeypatch.setattr(web_server, "_SCRAPER_TASKS", {})
+    resumed = []
+
+    async def run(*args, **kwargs):
+        resumed.append(args)
+
+    monkeypatch.setattr(web_server, "_run_scraper_task", run)
+    with TestClient(web_server.create_app()) as client:
+        response = client.post(f"/api/scraper/resume/{job_id}", params={"project_path": str(project)})
+        assert response.status_code == expected_status
+    if expected_status == 200:
+        assert resumed[0][2] == destination.resolve()
+        assert not marker.exists()
+    else:
+        assert resumed == []
+        assert marker.exists()
+        assert json.loads(job_path(project, job_id).read_text(encoding="utf-8"))["status"]["status"] == "paused"
+
+
 @pytest.mark.parametrize("selection", [{"chapter_indices": []}, {"start_chapter": 4, "end_chapter": 2}, {"start_chapter": 0}])
 def test_invalid_selections_are_rejected(selection):
     with pytest.raises(ValueError):
