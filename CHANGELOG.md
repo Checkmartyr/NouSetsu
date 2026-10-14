@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-10-14
+
+### Added
+- Add durable autonomous URL extraction with persisted scraper jobs, progress reporting, and resume support.
+- Add reader contents pagination and chapter sorting in the reader and Studio.
+
+### Changed
+- Redesign character relationship graphs for clearer navigation and readability.
+- Consolidate settings inheritance controls and expose effective configuration and backend storage paths.
+- Update the Novel-Scraper submodule and locked dependencies.
+
+### Fixed
+- Validate global and project settings before saving, save changes atomically, and reject stale settings revisions.
+- Isolate project configuration and apply resolved settings consistently across translation agents, RAG, and scraper jobs.
+- Respect configured language defaults, workspace paths, cross-volume memory, scene filtering, and zero chunk overlap.
+- Resume scraper jobs under configured external source roots.
+- Romanize imported titles and preserve routed navigation across reloads.
+- Synchronize Python and desktop versions for signed release builds.
+
 ## [0.5.2] - 2026-10-07
 
 ### Added
