@@ -1093,6 +1093,13 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
         expose_headers=["ETag"],
     )
 
+    @app.middleware("http")
+    async def prevent_stale_html(request: Request, call_next: Callable) -> Response:
+        response = await call_next(request)
+        if response.headers.get("content-type", "").startswith("text/html"):
+            response.headers["Cache-Control"] = "no-store"
+        return response
+
     @app.get("/api/desktop-info")
     async def get_desktop_info() -> Dict[str, Any]:
         info = {"version": os.environ.get("NOUSETSU_DESKTOP_VERSION", __version__),

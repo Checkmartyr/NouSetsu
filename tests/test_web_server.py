@@ -422,7 +422,7 @@ def test_spa_fallback(live_server):
         assert "Visualizer" in content
 
 
-@pytest.mark.parametrize("route", ["/", "/studio", "/reader", "/traces", "/bible", "/settings"])
+@pytest.mark.parametrize("route", ["/", "/index.html", "/studio", "/reader", "/traces", "/bible", "/settings"])
 def test_fastapi_production_spa_deep_links(tmp_path, route):
     """Production route refreshes serve the SPA independently of Vite fallback."""
     from fastapi.testclient import TestClient
@@ -436,6 +436,7 @@ def test_fastapi_production_spa_deep_links(tmp_path, route):
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
+    assert response.headers["cache-control"] == "no-store"
     assert response.text == index
 
 
@@ -456,6 +457,7 @@ def test_fastapi_production_spa_preserves_api_404_and_static_assets(tmp_path):
     asset = client.get("/assets/app.js")
     assert asset.status_code == 200
     assert asset.text == "console.log('SPA')"
+    assert "cache-control" not in asset.headers
 
 
 def test_cmd_web_panel_renders(sample_web_project):

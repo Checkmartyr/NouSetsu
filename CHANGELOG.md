@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Prevent the desktop app from loading cached frontend HTML after updates without clearing saved reader preferences or bookmarks.
+- Verify frozen desktop HTML, JavaScript, and CSS against the freshly built frontend before packaging.
+
 ## [0.5.3] - 2026-10-14
 
 ### Added

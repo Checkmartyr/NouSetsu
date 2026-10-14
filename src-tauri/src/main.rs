@@ -18,7 +18,10 @@ use tauri::Manager;
 const BACKEND_HOST: &str = "127.0.0.1";
 const BACKEND_PORT: u16 = 15474;
 #[cfg(not(debug_assertions))]
-const BACKEND_URL: &str = "http://127.0.0.1:15474";
+const BACKEND_URL: &str = concat!(
+    "http://127.0.0.1:15474/?desktop_version=",
+    env!("CARGO_PKG_VERSION")
+);
 
 #[derive(Default)]
 struct BackendProcess(Mutex<Option<Child>>);

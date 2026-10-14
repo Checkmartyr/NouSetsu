@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -151,6 +152,35 @@ def _smoke_test_scraper_worker(backend: Path) -> None:
         )
 
 
+def _smoke_test_frontend(base_url: str) -> None:
+    """Reject stale or incomplete frontend files in a freshly frozen backend."""
+    expected_html = (FRONTEND_DIST / "index.html").read_bytes()
+    version = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
+
+    def fetch(path: str, *, html: bool = False) -> bytes:
+        try:
+            with urllib.request.urlopen(f"{base_url}{path}", timeout=5) as response:
+                if html and "no-store" not in response.headers.get("Cache-Control", ""):
+                    raise RuntimeError(f"Frozen frontend HTML is cacheable: {path}")
+                return response.read()
+        except (urllib.error.URLError, TimeoutError, OSError) as error:
+            raise RuntimeError(f"Frozen frontend could not serve {path}: {error}") from error
+
+    for route in ("/", "/reader"):
+        if fetch(f"{route}?desktop_version={version}", html=True) != expected_html:
+            raise RuntimeError(f"Frozen frontend HTML does not match the current build: {route}")
+
+    assets = re.findall(
+        r"""(?:src|href)=["'](/assets/[^"']+\.(?:js|css))["']""",
+        expected_html.decode("utf-8"),
+    )
+    if not any(asset.endswith(".js") for asset in assets) or not any(asset.endswith(".css") for asset in assets):
+        raise RuntimeError("Built frontend HTML must reference JavaScript and CSS assets.")
+    for asset in dict.fromkeys(assets):
+        if fetch(asset) != (FRONTEND_DIST / asset.lstrip("/")).read_bytes():
+            raise RuntimeError(f"Frozen frontend asset does not match the current build: {asset}")
+
+
 def _smoke_test_backend(backend: Path) -> None:
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
@@ -188,6 +218,7 @@ def _smoke_test_backend(backend: Path) -> None:
                             raise RuntimeError(
                                 f"Frozen backend did not detect its bundled scraper: {scraper_info}"
                             )
+                        _smoke_test_frontend(f"http://127.0.0.1:{port}")
                         return
             except (urllib.error.URLError, TimeoutError, OSError):
                 time.sleep(0.2)
