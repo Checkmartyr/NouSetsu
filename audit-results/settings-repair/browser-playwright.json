@@ -5,7 +5,9 @@
       "D:\\Code\\novel_translation_Agent\\web\\node_modules\\@playwright\\test\\cli.js",
       "test",
       "--config",
-      "playwright.settings-audit.config.ts"
+      "playwright.settings-audit.config.ts",
+      "--grep",
+      "settings appear once"
     ],
     "configFile": "D:\\Code\\novel_translation_Agent\\web\\playwright.settings-audit.config.ts",
     "rootDir": "D:/Code/novel_translation_Agent/web/e2e",
@@ -89,7 +91,7 @@
       "line": 0,
       "specs": [
         {
-          "title": "all editable project controls save through real API, disk, and reload",
+          "title": "settings appear once with inline inheritance and persist overrides and resets",
           "ok": true,
           "tags": [],
           "tests": [
@@ -104,12 +106,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 11730,
+                  "duration": 15662,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-10-13T13:46:54.185Z",
+                  "startTime": "2026-10-14T03:57:34.993Z",
                   "annotations": [],
                   "attachments": []
                 }
@@ -117,251 +119,13 @@
               "status": "expected"
             }
           ],
-          "id": "e72186241e3794cdcb0f-7351bf02d92940695ffc",
+          "id": "e72186241e3794cdcb0f-47770a23640847459834",
           "file": "settings-audit.spec.ts",
           "line": 91,
           "column": 1
         },
         {
-          "title": "all global controls and five secrets persist, preserve, replace, and clear",
-          "ok": true,
-          "tags": [],
-          "tests": [
-            {
-              "timeout": 120000,
-              "annotations": [],
-              "expectedStatus": "passed",
-              "projectId": "web-dev",
-              "projectName": "web-dev",
-              "results": [
-                {
-                  "workerIndex": 0,
-                  "parallelIndex": 0,
-                  "status": "passed",
-                  "duration": 15354,
-                  "errors": [],
-                  "stdout": [],
-                  "stderr": [],
-                  "retry": 0,
-                  "startTime": "2026-10-13T13:47:06.410Z",
-                  "annotations": [],
-                  "attachments": []
-                }
-              ],
-              "status": "expected"
-            }
-          ],
-          "id": "e72186241e3794cdcb0f-620d32b03bfce2f7f7d9",
-          "file": "settings-audit.spec.ts",
-          "line": 162,
-          "column": 1
-        },
-        {
-          "title": "presets, reset, provider catalog, stale effective values, navigation and project isolation",
-          "ok": true,
-          "tags": [],
-          "tests": [
-            {
-              "timeout": 120000,
-              "annotations": [],
-              "expectedStatus": "passed",
-              "projectId": "web-dev",
-              "projectName": "web-dev",
-              "results": [
-                {
-                  "workerIndex": 0,
-                  "parallelIndex": 0,
-                  "status": "passed",
-                  "duration": 17927,
-                  "errors": [],
-                  "stdout": [],
-                  "stderr": [],
-                  "retry": 0,
-                  "startTime": "2026-10-13T13:47:21.782Z",
-                  "annotations": [],
-                  "attachments": []
-                }
-              ],
-              "status": "expected"
-            }
-          ],
-          "id": "e72186241e3794cdcb0f-3a1a090fc201e0d0bdd8",
-          "file": "settings-audit.spec.ts",
-          "line": 228,
-          "column": 1
-        },
-        {
-          "title": "numeric boundaries, blank fallback, accessibility, diagnostics and failed update check",
-          "ok": true,
-          "tags": [],
-          "tests": [
-            {
-              "timeout": 120000,
-              "annotations": [],
-              "expectedStatus": "passed",
-              "projectId": "web-dev",
-              "projectName": "web-dev",
-              "results": [
-                {
-                  "workerIndex": 0,
-                  "parallelIndex": 0,
-                  "status": "passed",
-                  "duration": 6371,
-                  "errors": [],
-                  "stdout": [],
-                  "stderr": [],
-                  "retry": 0,
-                  "startTime": "2026-10-13T13:47:39.733Z",
-                  "annotations": [],
-                  "attachments": []
-                }
-              ],
-              "status": "expected"
-            }
-          ],
-          "id": "e72186241e3794cdcb0f-e77f36a9e6b69ed7de0d",
-          "file": "settings-audit.spec.ts",
-          "line": 283,
-          "column": 1
-        },
-        {
-          "title": "two real browser forms reveal stale full-form save overwrite",
-          "ok": true,
-          "tags": [],
-          "tests": [
-            {
-              "timeout": 120000,
-              "annotations": [],
-              "expectedStatus": "passed",
-              "projectId": "web-dev",
-              "projectName": "web-dev",
-              "results": [
-                {
-                  "workerIndex": 0,
-                  "parallelIndex": 0,
-                  "status": "passed",
-                  "duration": 5216,
-                  "errors": [],
-                  "stdout": [],
-                  "stderr": [],
-                  "retry": 0,
-                  "startTime": "2026-10-13T13:47:46.122Z",
-                  "annotations": [],
-                  "attachments": []
-                }
-              ],
-              "status": "expected"
-            }
-          ],
-          "id": "e72186241e3794cdcb0f-1f97ea4ad0d10aa87c6f",
-          "file": "settings-audit.spec.ts",
-          "line": 329,
-          "column": 1
-        },
-        {
-          "title": "global malformed values and no-project settings remain observable",
-          "ok": true,
-          "tags": [],
-          "tests": [
-            {
-              "timeout": 120000,
-              "annotations": [],
-              "expectedStatus": "passed",
-              "projectId": "web-dev",
-              "projectName": "web-dev",
-              "results": [
-                {
-                  "workerIndex": 0,
-                  "parallelIndex": 0,
-                  "status": "passed",
-                  "duration": 6133,
-                  "errors": [],
-                  "stdout": [],
-                  "stderr": [],
-                  "retry": 0,
-                  "startTime": "2026-10-13T13:47:51.352Z",
-                  "annotations": [],
-                  "attachments": []
-                }
-              ],
-              "status": "expected"
-            }
-          ],
-          "id": "e72186241e3794cdcb0f-6f9aee2e3069c38fdbad",
-          "file": "settings-audit.spec.ts",
-          "line": 347,
-          "column": 1
-        },
-        {
-          "title": "inherited entity toggle and legacy Interactions survive apparent clear-all",
-          "ok": true,
-          "tags": [],
-          "tests": [
-            {
-              "timeout": 120000,
-              "annotations": [],
-              "expectedStatus": "passed",
-              "projectId": "web-dev",
-              "projectName": "web-dev",
-              "results": [
-                {
-                  "workerIndex": 0,
-                  "parallelIndex": 0,
-                  "status": "passed",
-                  "duration": 6275,
-                  "errors": [],
-                  "stdout": [],
-                  "stderr": [],
-                  "retry": 0,
-                  "startTime": "2026-10-13T13:47:57.501Z",
-                  "annotations": [],
-                  "attachments": []
-                }
-              ],
-              "status": "expected"
-            }
-          ],
-          "id": "e72186241e3794cdcb0f-58486147180c4b9fd504",
-          "file": "settings-audit.spec.ts",
-          "line": 376,
-          "column": 1
-        },
-        {
-          "title": "creation controls inherit global languages and persist explicit overrides",
-          "ok": true,
-          "tags": [],
-          "tests": [
-            {
-              "timeout": 120000,
-              "annotations": [],
-              "expectedStatus": "passed",
-              "projectId": "web-dev",
-              "projectName": "web-dev",
-              "results": [
-                {
-                  "workerIndex": 0,
-                  "parallelIndex": 0,
-                  "status": "passed",
-                  "duration": 4362,
-                  "errors": [],
-                  "stdout": [],
-                  "stderr": [],
-                  "retry": 0,
-                  "startTime": "2026-10-13T13:48:03.798Z",
-                  "annotations": [],
-                  "attachments": []
-                }
-              ],
-              "status": "expected"
-            }
-          ],
-          "id": "e72186241e3794cdcb0f-e7f4f8bf6e09edb8ff21",
-          "file": "settings-audit.spec.ts",
-          "line": 398,
-          "column": 1
-        },
-        {
-          "title": "all editable project controls save through real API, disk, and reload",
+          "title": "settings appear once with inline inheritance and persist overrides and resets",
           "ok": true,
           "tags": [],
           "tests": [
@@ -376,12 +140,12 @@
                   "workerIndex": 1,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 7549,
+                  "duration": 10471,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-10-13T13:48:09.824Z",
+                  "startTime": "2026-10-14T03:57:52.515Z",
                   "annotations": [],
                   "attachments": []
                 }
@@ -389,247 +153,9 @@
               "status": "expected"
             }
           ],
-          "id": "e72186241e3794cdcb0f-9d4eca3308679d6b69f8",
+          "id": "e72186241e3794cdcb0f-60b372d232adba4586ba",
           "file": "settings-audit.spec.ts",
           "line": 91,
-          "column": 1
-        },
-        {
-          "title": "all global controls and five secrets persist, preserve, replace, and clear",
-          "ok": true,
-          "tags": [],
-          "tests": [
-            {
-              "timeout": 120000,
-              "annotations": [],
-              "expectedStatus": "passed",
-              "projectId": "web-built",
-              "projectName": "web-built",
-              "results": [
-                {
-                  "workerIndex": 1,
-                  "parallelIndex": 0,
-                  "status": "passed",
-                  "duration": 12466,
-                  "errors": [],
-                  "stdout": [],
-                  "stderr": [],
-                  "retry": 0,
-                  "startTime": "2026-10-13T13:48:17.659Z",
-                  "annotations": [],
-                  "attachments": []
-                }
-              ],
-              "status": "expected"
-            }
-          ],
-          "id": "e72186241e3794cdcb0f-4004c0a6697eff5328e2",
-          "file": "settings-audit.spec.ts",
-          "line": 162,
-          "column": 1
-        },
-        {
-          "title": "presets, reset, provider catalog, stale effective values, navigation and project isolation",
-          "ok": true,
-          "tags": [],
-          "tests": [
-            {
-              "timeout": 120000,
-              "annotations": [],
-              "expectedStatus": "passed",
-              "projectId": "web-built",
-              "projectName": "web-built",
-              "results": [
-                {
-                  "workerIndex": 1,
-                  "parallelIndex": 0,
-                  "status": "passed",
-                  "duration": 16382,
-                  "errors": [],
-                  "stdout": [],
-                  "stderr": [],
-                  "retry": 0,
-                  "startTime": "2026-10-13T13:48:30.143Z",
-                  "annotations": [],
-                  "attachments": []
-                }
-              ],
-              "status": "expected"
-            }
-          ],
-          "id": "e72186241e3794cdcb0f-70e2aadf4138b4bfe15e",
-          "file": "settings-audit.spec.ts",
-          "line": 228,
-          "column": 1
-        },
-        {
-          "title": "numeric boundaries, blank fallback, accessibility, diagnostics and failed update check",
-          "ok": true,
-          "tags": [],
-          "tests": [
-            {
-              "timeout": 120000,
-              "annotations": [],
-              "expectedStatus": "passed",
-              "projectId": "web-built",
-              "projectName": "web-built",
-              "results": [
-                {
-                  "workerIndex": 1,
-                  "parallelIndex": 0,
-                  "status": "passed",
-                  "duration": 5243,
-                  "errors": [],
-                  "stdout": [],
-                  "stderr": [],
-                  "retry": 0,
-                  "startTime": "2026-10-13T13:48:46.543Z",
-                  "annotations": [],
-                  "attachments": []
-                }
-              ],
-              "status": "expected"
-            }
-          ],
-          "id": "e72186241e3794cdcb0f-051e833257d93fbab064",
-          "file": "settings-audit.spec.ts",
-          "line": 283,
-          "column": 1
-        },
-        {
-          "title": "two real browser forms reveal stale full-form save overwrite",
-          "ok": true,
-          "tags": [],
-          "tests": [
-            {
-              "timeout": 120000,
-              "annotations": [],
-              "expectedStatus": "passed",
-              "projectId": "web-built",
-              "projectName": "web-built",
-              "results": [
-                {
-                  "workerIndex": 1,
-                  "parallelIndex": 0,
-                  "status": "passed",
-                  "duration": 4712,
-                  "errors": [],
-                  "stdout": [],
-                  "stderr": [],
-                  "retry": 0,
-                  "startTime": "2026-10-13T13:48:51.801Z",
-                  "annotations": [],
-                  "attachments": []
-                }
-              ],
-              "status": "expected"
-            }
-          ],
-          "id": "e72186241e3794cdcb0f-5cffb6df2d38c01bdc58",
-          "file": "settings-audit.spec.ts",
-          "line": 329,
-          "column": 1
-        },
-        {
-          "title": "global malformed values and no-project settings remain observable",
-          "ok": true,
-          "tags": [],
-          "tests": [
-            {
-              "timeout": 120000,
-              "annotations": [],
-              "expectedStatus": "passed",
-              "projectId": "web-built",
-              "projectName": "web-built",
-              "results": [
-                {
-                  "workerIndex": 1,
-                  "parallelIndex": 0,
-                  "status": "passed",
-                  "duration": 3597,
-                  "errors": [],
-                  "stdout": [],
-                  "stderr": [],
-                  "retry": 0,
-                  "startTime": "2026-10-13T13:48:56.527Z",
-                  "annotations": [],
-                  "attachments": []
-                }
-              ],
-              "status": "expected"
-            }
-          ],
-          "id": "e72186241e3794cdcb0f-ce761038d29ee116af21",
-          "file": "settings-audit.spec.ts",
-          "line": 347,
-          "column": 1
-        },
-        {
-          "title": "inherited entity toggle and legacy Interactions survive apparent clear-all",
-          "ok": true,
-          "tags": [],
-          "tests": [
-            {
-              "timeout": 120000,
-              "annotations": [],
-              "expectedStatus": "passed",
-              "projectId": "web-built",
-              "projectName": "web-built",
-              "results": [
-                {
-                  "workerIndex": 1,
-                  "parallelIndex": 0,
-                  "status": "passed",
-                  "duration": 6256,
-                  "errors": [],
-                  "stdout": [],
-                  "stderr": [],
-                  "retry": 0,
-                  "startTime": "2026-10-13T13:49:00.138Z",
-                  "annotations": [],
-                  "attachments": []
-                }
-              ],
-              "status": "expected"
-            }
-          ],
-          "id": "e72186241e3794cdcb0f-ec6f4ab40010ef257d03",
-          "file": "settings-audit.spec.ts",
-          "line": 376,
-          "column": 1
-        },
-        {
-          "title": "creation controls inherit global languages and persist explicit overrides",
-          "ok": true,
-          "tags": [],
-          "tests": [
-            {
-              "timeout": 120000,
-              "annotations": [],
-              "expectedStatus": "passed",
-              "projectId": "web-built",
-              "projectName": "web-built",
-              "results": [
-                {
-                  "workerIndex": 1,
-                  "parallelIndex": 0,
-                  "status": "passed",
-                  "duration": 3930,
-                  "errors": [],
-                  "stdout": [],
-                  "stderr": [],
-                  "retry": 0,
-                  "startTime": "2026-10-13T13:49:06.409Z",
-                  "annotations": [],
-                  "attachments": []
-                }
-              ],
-              "status": "expected"
-            }
-          ],
-          "id": "e72186241e3794cdcb0f-e0c23db7852e38a64ef6",
-          "file": "settings-audit.spec.ts",
-          "line": 398,
           "column": 1
         }
       ]
@@ -637,9 +163,9 @@
   ],
   "errors": [],
   "stats": {
-    "startTime": "2026-10-13T13:46:44.426Z",
-    "duration": 149523.132,
-    "expected": 16,
+    "startTime": "2026-10-14T03:57:26.147Z",
+    "duration": 39520.303,
+    "expected": 2,
     "skipped": 0,
     "unexpected": 0,
     "flaky": 0

@@ -1,5 +1,5 @@
 import type { ProjectSettings } from '../types/dashboard';
-const readOnly = new Set(['config', 'env', 'machine_env', 'api_key_status', 'env_file_path', 'revision', 'sources', 'effective_config', 'available_presets', 'env_presets', 'model_catalog', 'created_at']);
+const readOnly = new Set(['config', 'env', 'machine_env', 'api_key_status', 'env_file_path', 'revision', 'sources', 'effective_config', 'available_presets', 'env_presets', 'model_catalog', 'created_at', 'workspace_folders']);
 const numericDefaults: Record<string, number> = {chunk_threshold_lines: 800, chunk_size_lines: 400, target_chunk_lines: 400, chunk_overlap_lines: 3, safety_subdivision_min_lines: 8, safety_subdivision_max_depth: 4, rag_top_k: 2};
 const inheritedNumbers = new Set(['max_review_loops', 'quality_threshold', 'max_tpm', 'max_rpm', 'procedural_learning_interval', 'procedural_learning_min_failures']);
 export function dirtySettings(draft: ProjectSettings, baseline: ProjectSettings): Partial<ProjectSettings> {

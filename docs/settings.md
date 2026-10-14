@@ -53,6 +53,12 @@ Each job captures its environment and controls when its runner is constructed. S
 
 Procedural learning controls are supported in both global defaults and project overrides. Thinking budget is retained when switching transport, but only supported non-Interactions transport receives it; the Interactions API has no supported budget mapping.
 
+## Workspace roots and volumes
+
+Workspace Directory Paths accepts one source root and one translated output root. Chapters directly in the source root use the output root. Chapter folders at any depth beneath the source root are discovered automatically and retain their structure in the output root: `raw_chapters/Volume_01/0001.txt` produces `translated_chapters/Volume_01/0001.md`. Discovery uses natural volume order, skips hidden folders and the configured output tree, and keeps complete folder paths so repeated chapter numbers and leaf-folder names stay separate.
+
+The settings page lists discovered source/output pairs and chapter counts from the saved configuration. Roots can be project-relative or absolute paths. Save root changes to refresh that list. Existing sibling volume folders retain their language-suffixed output convention; changing roots does not move existing chapter files.
+
 ## Failed writes and recovery
 
 Global saves prepare a complete dotenv candidate and replace the file atomically. They preserve comments and unrelated keys. Strict settings writes do not clear read-only protection or fall back to in-place copying.

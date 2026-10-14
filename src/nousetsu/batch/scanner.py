@@ -200,15 +200,12 @@ class ChapterScanner:
         if all_metadata is None:
             all_metadata = self.repo.load_all_metadata()
 
-        out_parent_name = output_path.name
-
         # 4. Parallel SHA-256 pre-computation for completed or resumable chapters (when explicitly requested)
         if parallel and compute_hashes:
             entries_to_hash: List[Tuple[Path, int, float]] = []
             for filename, src_file, st in sorted_entries:
                 stem = src_file.stem
-                composite_key = f"{out_parent_name}/{stem}"
-                meta = all_metadata.get(composite_key) or all_metadata.get(stem) or all_metadata.get(f"{stem}.md")
+                meta = self.repo.metadata_for_output(output_path / f"{stem}.md", all_metadata)
                 out_filename = f"{stem}.md"
                 out_exists = out_filename in existing_outputs
                 if meta is None and out_exists:
@@ -257,8 +254,7 @@ class ChapterScanner:
 
             # Fast in-memory metadata lookup
             stem = src_file.stem
-            composite_key = f"{out_parent_name}/{stem}"
-            meta = all_metadata.get(composite_key) or all_metadata.get(stem) or all_metadata.get(out_filename)
+            meta = self.repo.metadata_for_output(out_file, all_metadata)
 
             # Fallback only if metadata is missing and a legacy file exists on disk
             if meta is None and out_exists:
@@ -311,7 +307,7 @@ class ChapterScanner:
                 last_error=last_err,
                 needs_resume=needs_resume,
                 resume_stage=resume_stage,
-                folder=input_path.name
+                folder=self.repo.folder_key(input_path)
             ))
 
         return tasks
@@ -331,7 +327,7 @@ class ChapterScanner:
         cfg = self.repo.load_config()
 
         if folder and folder != "all":
-            folder_cand = self.repo.root_dir / folder
+            folder_cand = cfg.get_folder_path(self.repo.root_dir, folder)
             if folder_cand.exists() and folder_cand.is_dir():
                 raw_path = folder_cand
                 default_output = (
@@ -361,44 +357,10 @@ class ChapterScanner:
         if raw_path.exists():
             candidate_pairs.append((raw_path, output_path))
 
-        ignored_dir_names = {
-            "node_modules", "web", "src-tauri", "dist", ".git", ".novel", ".venv",
-            "__pycache__", "translated_chapters", "raw_chapters", raw_path.name, output_path.name,
-            "modules", "docs", "tests", "ideabook", "project", "src", "scripts", "external"
-        }
-
-        discovered_subdirs: List[Path] = []
-        try:
-            with os.scandir(self.repo.root_dir) as it:
-                for entry in it:
-                    if (
-                        entry.is_dir()
-                        and not entry.name.startswith(".")
-                        and not cfg.is_volume_output_folder_name(entry.name)
-                        and entry.name not in ignored_dir_names
-                    ):
-                        child = Path(entry.path)
-                        # Fast check if directory has any chapter files
-                        has_chapters = False
-                        try:
-                            with os.scandir(child) as sub_it:
-                                for sub_entry in sub_it:
-                                    if sub_entry.is_file() and sub_entry.name.lower().endswith((".txt", ".md")):
-                                        has_chapters = True
-                                        break
-                        except Exception:
-                            pass
-
-                        if has_chapters:
-                            discovered_subdirs.append(child)
-        except Exception as e:
-            logger.warning("Error auto-discovering volume subfolders during scan: %s", e)
-
-        # Naturally sort discovered subdirectories for deterministic ordering
-        sorted_subdirs = natsorted(discovered_subdirs, key=lambda p: p.name)
-        for child in sorted_subdirs:
-            sub_out = cfg.get_volume_output_path(self.repo.root_dir, child.name)
-            candidate_pairs.append((child, sub_out))
+        for raw_folder, out_folder, _ in self.repo.discover_folders():
+            child = cfg.get_folder_path(self.repo.root_dir, raw_folder)
+            if child.resolve() != raw_path.resolve():
+                candidate_pairs.append((child, cfg.get_folder_path(self.repo.root_dir, out_folder, output=True)))
 
         if not candidate_pairs:
             return []

@@ -88,6 +88,87 @@ test.afterEach(async ({}, info) => {
   fs.writeFileSync(filename, JSON.stringify([...previous.filter(row => !replacements.has(`${row.mode}:${row.scenario}`)), ...rows], null, 2));
 });
 
+test('settings appear once with inline inheritance and persist overrides and resets', async ({ page, request }) => {
+  const environment = await (await request.get(`${backend(test.info().project.name)}/api/environment`)).json();
+  const defaults = {
+    NOVEL_MAX_REVIEW_LOOPS: '2', NOVEL_QUALITY_THRESHOLD: '7.5',
+    NOVEL_MAX_TPM: '12345', NOVEL_MAX_RPM: '23',
+    NOVEL_FILTER_EXTRACTOR_ENTITIES: 'false', NOVEL_POST_POLISH_RECONCILIATION: 'false',
+  };
+  expect((await request.put(`${backend(test.info().project.name)}/api/environment`, {
+    headers: { 'If-Match': `"${environment.revision}"` }, data: { values: defaults },
+  })).status()).toBe(200);
+
+  const sections = [
+    { section: 'review', fields: [
+      { key: 'max_review_loops', label: 'Max Review Loops', visible: /^Max Review Loops(?: \([\d.]+\))?$/, role: 'slider', inherited: '2', override: '4', steps: 1 },
+      { key: 'quality_threshold', label: 'Quality Score Threshold', visible: /^Quality Score Threshold(?: \([\d.]+\))?$/, role: 'slider', inherited: '7.5', override: '9.2', steps: 8 },
+    ] },
+    { section: 'ratelimit', fields: [
+      { key: 'max_tpm', label: 'Max Tokens Per Minute', visible: /^Max Tokens Per Minute(?: \(TPM\))?$/, role: 'spinbutton', inherited: '12345', override: '50000', steps: 0 },
+      { key: 'max_rpm', label: 'Max Requests Per Minute', visible: /^Max Requests Per Minute(?: \(RPM\))?$/, role: 'spinbutton', inherited: '23', override: '80', steps: 0 },
+    ] },
+    { section: 'memory', fields: [
+      { key: 'filter_extractor_entities', label: 'Extractor Known Entity Filtering', visible: /^Extractor Known Entity Filtering$/, role: 'switch', inherited: 'false', override: 'true', steps: 0 },
+      { key: 'enable_post_polish_reconciliation', label: 'Post-Polish Term Reconciliation', visible: /^Post-Polish Term Reconciliation$/, role: 'switch', inherited: 'false', override: 'true', steps: 0 },
+    ] },
+  ] as const;
+
+  for (const { section, fields } of sections) {
+    await open(page, section);
+    for (const field of fields) {
+      await expect(page.locator('form').getByText(field.visible)).toHaveCount(1);
+      const control = page.getByRole(field.role, { name: field.role === 'switch' ? field.key.replaceAll('_', ' ') : field.visible, exact: true });
+      await expect(control).toHaveCount(1);
+      const reset = page.getByRole('button', { name: `Inherit global default for ${field.label}`, exact: true });
+      await expect(reset.locator('..')).toContainText(`Inherited (${field.inherited})`);
+      if (field.role === 'switch') {
+        await expect(control).toHaveAttribute('aria-checked', field.inherited);
+        await control.click();
+      } else if (field.role === 'slider') {
+        await expect(control).toHaveValue(field.inherited);
+        await control.press('End');
+        for (let step = 0; step < field.steps; step++) await control.press('ArrowLeft');
+      } else {
+        await expect(control).toHaveValue(field.inherited);
+        await control.fill(field.override);
+      }
+      await expect(reset.locator('..')).toContainText(`Project override (${field.override})`);
+    }
+    await saveProject(page);
+    await page.reload();
+    const overridden = await snapshot(request);
+    for (const field of fields) {
+      expect(String(overridden.config.A[field.key])).toBe(field.override);
+      const reset = page.getByRole('button', { name: `Inherit global default for ${field.label}`, exact: true });
+      await expect(reset.locator('..')).toContainText(`Project override (${field.override})`);
+      await reset.click();
+      await expect(reset.locator('..')).toContainText(`Inherited (${field.inherited})`);
+      const control = page.getByRole(field.role, { name: field.role === 'switch' ? field.key.replaceAll('_', ' ') : field.visible, exact: true });
+      if (field.role === 'switch') await expect(control).toHaveAttribute('aria-checked', field.inherited);
+      else await expect(control).toHaveValue(field.inherited);
+    }
+    await saveProject(page);
+    await page.reload();
+    const inherited = await snapshot(request);
+    for (const field of fields) {
+      expect(inherited.config.A[field.key]).toBeNull();
+      await expect(page.getByRole('button', { name: `Inherit global default for ${field.label}`, exact: true }).locator('..')).toContainText(`Inherited (${field.inherited})`);
+    }
+    await page.screenshot({ path: path.join(fixture.root, `${section}-desktop.png`), fullPage: true });
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1)).toBe(false);
+    await page.getByRole('button', { name: /^Inherit global default for/ }).last().scrollIntoViewIfNeeded();
+    await page.screenshot({ path: path.join(fixture.root, `${section}-mobile.png`), fullPage: true });
+    await page.setViewportSize({ width: 1440, height: 900 });
+  }
+  await open(page, 'all');
+  for (const { fields } of sections) {
+    for (const field of fields) await expect(page.locator('form').getByText(field.visible)).toHaveCount(1);
+  }
+  record('single setting presentation and inline inheritance lifecycle', sections.flatMap(({ fields }) => fields.map(({ key }) => key)), 'pass', { mobile_width: 390, saves: 'real API/disk/reload', sliders: 'keyboard' });
+});
+
 test('all editable project controls save through real API, disk, and reload', async ({ page, request }) => {
   await open(page, 'all');
   const form = page.locator('form');
@@ -125,8 +206,8 @@ test('all editable project controls save through real API, disk, and reload', as
     enable_post_polish_reconciliation: 'Post-Polish Term Reconciliation', enable_rag: 'Hybrid RAG Enabled',
     enable_rag_reranker: 'Enable Cross-Encoder Reranker', safety_recursive_subdivision: 'Subdivision Enabled',
   };
-  for (const [, label] of Object.entries(toggles)) {
-    const toggle = form.getByText(label, { exact: true }).locator('xpath=ancestor::*[.//button[@role="switch"]][1]').getByRole('switch');
+  for (const key of Object.keys(toggles)) {
+    const toggle = form.getByRole('switch', { name: key.replaceAll('_', ' '), exact: true });
     if (await toggle.getAttribute('aria-checked') === 'true') await toggle.click();
   }
   await saveProject(page);
@@ -142,7 +223,7 @@ test('all editable project controls save through real API, disk, and reload', as
   await page.reload();
   await expect(field(page.locator('form'), /^Novel Title$/)).toHaveValue(values.title[0]);
   for (const [, [value, label]] of Object.entries(values)) await expect(field(page.locator('form'), label)).toHaveValue(value);
-  for (const [, label] of Object.entries(toggles)) await expect(page.locator('form').getByText(label, { exact: true }).locator('xpath=ancestor::*[.//button[@role="switch"]][1]').getByRole('switch')).toHaveAttribute('aria-checked', 'false');
+  for (const key of Object.keys(toggles)) await expect(page.locator('form').getByRole('switch', { name: key.replaceAll('_', ' '), exact: true })).toHaveAttribute('aria-checked', 'false');
   for (const [index, [role, title]] of roles.entries()) {
     const model = page.locator('form').getByLabel(`${title} model model ID`, { exact: true });
     await expect(model).toHaveValue(models[`${role}_model`]);
@@ -157,6 +238,39 @@ test('all editable project controls save through real API, disk, and reload', as
   const tested = ['enable_procedural_graph_learning', 'procedural_learning_cadence', ...Object.keys(values), ...Object.keys(models), ...Object.keys(toggles), ...roles.flatMap(([role]) => ['temperature', 'thinking_level', 'thinking_budget', 'use_interactions_api'].map(key => `generation_settings.${role}.${key}`))];
   record('project UI/save/disk/reload', tested, 'pass', { isolated_B_unchanged: true, bible_metadata_synced: true, runtime_execution: 'Covered separately by backend audit; browser validates persistence and resolved API values.' });
   await page.screenshot({ path: path.join(evidence, `${test.info().project.name}-project.png`), fullPage: true });
+});
+
+test('workspace roots discover volume subfolders and persist mirrored output paths', async ({ page, request }) => {
+  const base = backend(test.info().project.name);
+  for (const folder of ['raw_chapters/Volume_2', 'raw_chapters/Volume_10', 'raw_chapters/Arc_A/Volume_1', 'raw_chapters/Arc_B/Volume_1']) {
+    const uploaded = await request.post(`${base}/api/chapters/upload`, { data: {
+      project_path: fixture.projects.A, folder, files: [{ name: '0001.txt', content: folder }],
+    } });
+    expect(uploaded.status()).toBe(200);
+  }
+  await open(page, 'paths');
+  const table = page.getByRole('table', { name: 'Discovered volume paths' });
+  await expect(table.getByRole('rowheader', { name: 'raw_chapters/Arc_A/Volume_1', exact: true })).toBeVisible();
+  await expect(table.getByText('translated_chapters/Arc_B/Volume_1', { exact: true })).toBeVisible();
+  expect(await table.getByRole('rowheader').allTextContents()).toEqual([
+    'raw_chapters', 'raw_chapters/Arc_A/Volume_1', 'raw_chapters/Arc_B/Volume_1', 'raw_chapters/Volume_2', 'raw_chapters/Volume_10',
+  ]);
+  await page.getByLabel('Translated Chapters Directory', { exact: true }).fill('published');
+  await saveProject(page);
+  await expect(table.getByText('published/Arc_A/Volume_1', { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByLabel('Translated Chapters Directory', { exact: true })).toHaveValue('published');
+  await expect(table.getByText('published/Volume_10', { exact: true })).toBeVisible();
+  const chapters = await (await request.get(`${base}/api/chapters?${new URLSearchParams({ project_path: fixture.projects.A })}`)).json();
+  expect(chapters.filter((chapter: {folder: string}) => chapter.folder.startsWith('raw_chapters/')).map((chapter: {folder: string}) => chapter.folder).sort()).toEqual([
+    'raw_chapters/Arc_A/Volume_1', 'raw_chapters/Arc_B/Volume_1', 'raw_chapters/Volume_10', 'raw_chapters/Volume_2',
+  ]);
+  for (const width of [1024, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    if (width === 390) expect(await table.evaluate(table => table.parentElement!.scrollWidth > table.parentElement!.clientWidth)).toBe(true);
+  }
+  record('workspace source-root volume discovery', ['raw_dir', 'output_dir'], 'pass', { mirrored_outputs: true, repeated_leaf_names_isolated: true });
 });
 
 test('all global controls and five secrets persist, preserve, replace, and clear', async ({ page, request }) => {
@@ -377,7 +491,7 @@ test('inherited entity toggle and legacy Interactions survive apparent clear-all
   const base = backend(test.info().project.name);
   expect((await request.put(`${base}/api/environment`, { headers: {'If-Match': `"${(await (await request.get(`${base}/api/environment`)).json()).revision}"`}, data: { values: { NOVEL_FILTER_EXTRACTOR_ENTITIES: 'false', NOVEL_USE_INTERACTIONS: 'true' } } })).status()).toBe(200);
   await open(page, 'memory');
-  const toggle = page.getByText('Extractor Known Entity Filtering', { exact: true }).locator('xpath=ancestor::*[.//button[@role="switch"]][1]').getByRole('switch');
+  const toggle = page.getByRole('switch', { name: 'filter extractor entities', exact: true });
   const disk = await snapshot(request);
   const displayed = await toggle.getAttribute('aria-checked');
   expect(disk.config.A.filter_extractor_entities).toBeNull();

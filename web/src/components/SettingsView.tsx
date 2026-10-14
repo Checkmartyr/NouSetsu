@@ -1006,6 +1006,39 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   const showAll = activeTab === 'all';
 
+  const renderSettingInheritance = (key: string, label: string, defaultValue: number | boolean) => settings && (
+    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-400">
+      <span>
+        {settings[key] == null
+          ? `Inherited (${String(settings.effective_config?.[key] ?? defaultValue)})`
+          : `Project override (${String(settings[key])})`}
+      </span>
+      <button
+        type="button"
+        aria-label={`Inherit global default for ${label}`}
+        className="text-[#c9c0ad] underline underline-offset-2 hover:text-[#f7f5f0] cursor-pointer"
+        onClick={() => {
+          const envKey = key === 'enable_post_polish_reconciliation'
+            ? 'NOVEL_POST_POLISH_RECONCILIATION'
+            : `NOVEL_${key.toUpperCase()}`;
+          const raw = settings.env?.[envKey]?.trim();
+          const inherited = raw
+            ? typeof defaultValue === 'boolean'
+              ? ['true', '1', 'yes', 'on'].includes(raw.toLowerCase())
+              : Number(raw)
+            : defaultValue;
+          setSettings({
+            ...settings,
+            [key]: null,
+            effective_config: { ...settings.effective_config, [key]: inherited },
+          });
+        }}
+      >
+        Inherit global default
+      </button>
+    </div>
+  );
+
   return (
     <div className="flex flex-col h-full overflow-hidden bg-[#2b2622] text-[#f7f5f0]">
       {/* Toast Notification */}
@@ -1152,8 +1185,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           ) : (
             <div className="max-w-4xl w-full space-y-6 pb-16">
               {settings && activeTab !== 'global' && <form onSubmit={handleSave} className="space-y-6">
-                <div className="text-xs text-slate-400">Settings affect subsequent jobs. Active jobs keep their captured settings.</div>
-                {['all', 'review', 'ratelimit', 'memory'].includes(activeTab) && <div className="flex flex-wrap gap-3 text-xs">{['max_review_loops', 'quality_threshold', 'max_tpm', 'max_rpm', 'filter_extractor_entities', 'enable_post_polish_reconciliation'].map((key) => <div key={key}>{key}: {settings[key] == null ? `Inherited (${String(settings.effective_config?.[key] ?? 'default')})` : `Project override (${String(settings[key])})`} <button type="button" className="underline" onClick={() => setSettings({...settings, [key]: null})}>Inherit global default</button></div>)}</div>}
+                <div className="text-xs text-[#aea69c]">Settings affect subsequent jobs. Active jobs keep their captured settings.</div>
                 {(showAll || activeTab === 'procedural') && (
                   <section className="bg-[#383330] border border-[#3f3a36] rounded-[4px] p-5 space-y-4">
                     <div className="flex items-center gap-2 border-b border-[#4a433e] pb-3">
@@ -1549,6 +1581,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         <span>3 (Standard)</span>
                         <span>5 (Exhaustive)</span>
                       </div>
+                      {renderSettingInheritance('max_review_loops', 'Max Review Loops', 3)}
                     </div>
 
                     <div>
@@ -1574,6 +1607,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         <span>8.5 (Default target)</span>
                         <span>9.5 (Perfectionist)</span>
                       </div>
+                      {renderSettingInheritance('quality_threshold', 'Quality Score Threshold', 8.5)}
                     </div>
                   </div>
 
@@ -1773,6 +1807,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         <div className="text-[11px] text-slate-400">
                           Filter known characters and glossary items before entity extraction to reduce token usage and avoid quota exhaustion.
                         </div>
+                        {renderSettingInheritance('filter_extractor_entities', 'Extractor Known Entity Filtering', true)}
                       </div>
                       <ToggleSwitch
  label="filter extractor entities"
@@ -1788,6 +1823,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         <div className="text-[11px] text-slate-400">
                           Chronicler Agent reconciles provisional pre-translation terms against final polished publication prose.
                         </div>
+                        {renderSettingInheritance('enable_post_polish_reconciliation', 'Post-Polish Term Reconciliation', true)}
                       </div>
                       <ToggleSwitch
  label="enable post polish reconciliation"
@@ -2022,6 +2058,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
                       />
                       <span className="text-[10px] text-slate-500">60-second sliding window TPM limit (default: 32,000)</span>
+                      {renderSettingInheritance('max_tpm', 'Max Tokens Per Minute', 32000)}
                     </div>
 
                     <div>
@@ -2052,6 +2089,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
                       />
                       <span className="text-[10px] text-slate-500">60-second sliding window RPM limit (default: 60)</span>
+                      {renderSettingInheritance('max_rpm', 'Max Requests Per Minute', 60)}
                     </div>
                   </div>
                 </div>
@@ -2077,7 +2115,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 focus:outline-none focus:border-indigo-500"
                         placeholder="raw_chapters"
                       />
-                      <span className="text-[10px] text-slate-500 font-sans">Folder where raw novel text files are stored</span>
+                      <span className="text-[10px] text-slate-500 font-sans">Source root. Chapters in its volume subfolders are discovered automatically.</span>
                     </div>
 
                     <div>
@@ -2097,9 +2135,36 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 focus:outline-none focus:border-indigo-500"
                         placeholder="translated_chapters"
                       />
-                      <span className="text-[10px] text-slate-500 font-sans">Folder where finished markdown translations are exported</span>
+                      <span className="text-[10px] text-slate-500 font-sans">Output root. Volume subfolders keep the same structure as the source root.</span>
                     </div>
                   </div>
+                  <p className="text-xs text-[#aea69c]">
+                    For example, raw_chapters/Volume_01 maps to translated_chapters/Volume_01. Existing sibling volumes keep their current output folders. Save changes to refresh discovered paths.
+                  </p>
+                  {settings.workspace_folders?.length ? (
+                    <div className="overflow-x-auto rounded-[4px] border border-[#3f3a36]">
+                      <table aria-label="Discovered volume paths" className="w-full min-w-[560px] text-left text-xs">
+                        <thead className="bg-[#332d29] text-[#aea69c]">
+                          <tr>
+                            <th scope="col" className="px-3 py-2 font-medium">Source folder</th>
+                            <th scope="col" className="px-3 py-2 font-medium">Translated folder</th>
+                            <th scope="col" className="px-3 py-2 font-medium">Chapters</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[#3f3a36]">
+                          {settings.workspace_folders.map((volume) => (
+                            <tr key={volume.raw_dir}>
+                              <th scope="row" className="px-3 py-2 font-mono font-normal text-[#f7f5f0]">{volume.raw_dir}</th>
+                              <td className="px-3 py-2 font-mono text-[#c9c0ad]">{volume.output_dir}</td>
+                              <td className="px-3 py-2 text-[#c9c0ad]">{volume.chapter_count}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-[#aea69c]">No chapter folders discovered yet. Add chapters to the source root or its volume subfolders.</p>
+                  )}
                 </div>
               )}
 
@@ -2110,19 +2175,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 ))}
               </datalist>
 
-              {/* Bottom Save Button row */}
-              {!['global', 'updates'].includes(activeTab) && (
-                <div className="pt-4 flex justify-end">
-                  <button
-                    type="submit"
-                    disabled={saving || !settings}
-                    className="flex items-center gap-1.5 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold cursor-pointer shadow-lg shadow-indigo-500/20 transition-all disabled:opacity-50"
-                  >
-                    <Save className="w-4 h-4" />
-                    {saving ? 'Saving...' : 'Save Settings to config.yaml'}
-                  </button>
-                </div>
-              )}
             </form>}
 
               {activeTab === 'global' && (

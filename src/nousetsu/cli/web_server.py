@@ -563,7 +563,7 @@ def _load_project_traces(
     for tf in candidate_files:
         try:
             rel_parts = tf.relative_to(traces_dir).parts
-            folder = rel_parts[0] if len(rel_parts) > 1 else None
+            folder = tf.parent.relative_to(traces_dir).as_posix() if len(rel_parts) > 1 else None
             if folder_filter and folder != folder_filter:
                 continue
 
@@ -659,7 +659,7 @@ def _find_chapter_files(
 
     # 1. Primary requested folder
     if folder and folder != "all":
-        cand = repo.root_dir / folder
+        cand = cfg.get_folder_path(repo.root_dir, folder)
         if cand.is_dir():
             raw_dirs.append((folder, cand))
 
@@ -668,26 +668,11 @@ def _find_chapter_files(
     if raw_default.is_dir() and not any(d == raw_default for _, d in raw_dirs):
         raw_dirs.append((None, raw_default))
 
-    # 3. Discovered subdirectories (if folder is not specified or chapter not found in folder)
-    ignored = {
-        "node_modules", "web", "src-tauri", "dist", ".git", ".novel", ".venv",
-        "__pycache__", "translated_chapters", "raw_chapters",
-        "modules", "docs", "tests", "ideabook", "project", "src", "scripts", "external"
-    }
-    try:
-        with os.scandir(repo.root_dir) as it:
-            for e in it:
-                if (
-                    e.is_dir()
-                    and not e.name.startswith(".")
-                    and not cfg.is_volume_output_folder_name(e.name)
-                    and e.name not in ignored
-                ):
-                    p = Path(e.path)
-                    if not any(d == p for _, d in raw_dirs):
-                        raw_dirs.append((e.name, p))
-    except Exception:
-        pass
+    # 3. Share volume discovery with the scanner, including nested source folders.
+    for raw_folder, _, _ in repo.discover_folders():
+        candidate = cfg.get_folder_path(repo.root_dir, raw_folder)
+        if not any(directory == candidate for _, directory in raw_dirs):
+            raw_dirs.append((raw_folder, candidate))
 
     for f_name, r_dir in raw_dirs:
         try:
@@ -893,20 +878,18 @@ def _get_translated_word_count(file_path: Path) -> int:
 
 
 def _ensure_volume_output_dir(repo: NovelRepository, raw_dir: Path, cfg: ProjectConfig) -> None:
-    """Create a translated sibling for a new top-level volume folder."""
+    """Create the configured output pairing for an uploaded volume."""
     root_dir = repo.root_dir.resolve()
     raw_dir = raw_dir.resolve()
-    try:
-        raw_dir.relative_to(root_dir)
-    except ValueError:
+    if not raw_dir.is_relative_to(root_dir) and not raw_dir.is_relative_to(cfg.get_raw_path(root_dir)):
         return
 
-    if raw_dir == cfg.get_raw_path(root_dir).resolve() or raw_dir.parent != root_dir:
+    if raw_dir == cfg.get_raw_path(root_dir).resolve():
         return
     if cfg.is_volume_output_folder_name(raw_dir.name):
         return
 
-    cfg.get_volume_output_path(root_dir, raw_dir.name).mkdir(parents=True, exist_ok=True)
+    cfg.get_volume_output_path(root_dir, repo.folder_key(raw_dir)).mkdir(parents=True, exist_ok=True)
 
 
 def _process_chapter_files(
@@ -928,11 +911,9 @@ def _process_chapter_files(
         clean_folder = os.path.normpath(folder.strip()).lstrip("/\\")
         if not clean_folder or ".." in clean_folder.split(os.sep):
             raise HTTPException(status_code=400, detail="Invalid folder name.")
-        dest_dir = (repo.root_dir / clean_folder).resolve()
-        # Security check: must reside inside project root
-        try:
-            dest_dir.relative_to(repo.root_dir.resolve())
-        except ValueError:
+        dest_dir = cfg.get_folder_path(repo.root_dir, clean_folder)
+        # Restrict writes to the project or its explicitly configured source root.
+        if not dest_dir.is_relative_to(repo.root_dir.resolve()) and not dest_dir.is_relative_to(cfg.get_raw_path(repo.root_dir)):
             raise HTTPException(status_code=400, detail="Target folder outside of project root is not permitted.")
         target_folder_name = clean_folder
 
@@ -1483,10 +1464,14 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
         except Exception as e:
             logger.warning("Error listing project folders: %s", e)
 
+        for raw_folder, _, _ in repo.discover_folders():
+            if raw_folder not in folders:
+                folders.append(raw_folder)
+
         # Enumerate translated folders
         translated_folders: List[Dict[str, Any]] = []
         seen_trans_names = set()
-        default_out_name = Path(cfg.output_dir).name if cfg.output_dir else "translated_chapters"
+        default_out_name = repo.folder_key(cfg.get_output_path(repo.root_dir))
 
         # 1. Configured output directory
         def_out_dir = cfg.get_output_path(repo.root_dir)
@@ -1494,26 +1479,26 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
         if def_out_dir.is_dir():
             def_out_count = len([f for f in def_out_dir.iterdir() if f.is_file() and f.suffix.lower() == ".md"])
             translated_folders.append({
-                "folder": def_out_dir.name,
+                "folder": default_out_name,
                 "name": def_out_dir.name,
                 "chapter_count": def_out_count,
                 "is_default": True,
             })
-            seen_trans_names.add(def_out_dir.name)
+            seen_trans_names.add(default_out_name)
 
         # 2. Discover translated pairings from repo
         try:
             for _, out_name, _ in repo.discover_folders():
-                p = repo.root_dir / out_name
-                if p.is_dir() and p.name not in seen_trans_names:
+                p = cfg.get_folder_path(repo.root_dir, out_name, output=True)
+                if p.is_dir() and out_name not in seen_trans_names:
                     cnt = len([f for f in p.iterdir() if f.is_file() and f.suffix.lower() == ".md"])
                     translated_folders.append({
-                        "folder": p.name,
-                        "name": p.name,
+                        "folder": out_name,
+                        "name": out_name,
                         "chapter_count": cnt,
                         "is_default": False,
                     })
-                    seen_trans_names.add(p.name)
+                    seen_trans_names.add(out_name)
         except Exception:
             pass
 
@@ -1541,7 +1526,7 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
                 default_output_path=def_out_dir,
             )
             match = next(
-                (t["folder"] for t in translated_folders if t["folder"] in (af, volume_output.name)),
+                (t["folder"] for t in translated_folders if t["folder"] in (af, repo.folder_key(volume_output))),
                 None,
             )
             if match:
@@ -1677,10 +1662,8 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
             clean_folder = os.path.normpath(folder.strip()).lstrip("/\\")
             if not clean_folder or ".." in clean_folder.split(os.sep):
                 raise HTTPException(status_code=400, detail="Invalid folder name.")
-            dest_dir = (repo.root_dir / clean_folder).resolve()
-            try:
-                dest_dir.relative_to(repo.root_dir.resolve())
-            except ValueError:
+            dest_dir = cfg.get_folder_path(repo.root_dir, clean_folder)
+            if not dest_dir.is_relative_to(repo.root_dir.resolve()) and not dest_dir.is_relative_to(cfg.get_raw_path(repo.root_dir)):
                 raise HTTPException(status_code=400, detail="Target folder outside of project root is not permitted.")
             target_folder_name = clean_folder
 
@@ -2351,6 +2334,10 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
                 "raw_dir": cfg.raw_dir,
                 "translated_dir": cfg.output_dir,
                 "output_dir": cfg.output_dir,
+                "workspace_folders": [
+                    {"raw_dir": raw, "output_dir": output, "chapter_count": count}
+                    for raw, output, count in repo.discover_folders()
+                ],
                 "model_name": cfg.model_name or "",
                 "fallback_model": cfg.fallback_model or "",
                 "extractor_model": cfg.extractor_model or "",

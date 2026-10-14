@@ -1,12 +1,12 @@
 {
   "mode": "built",
-  "pid": 76552,
-  "root": "C:\\Users\\Asus\\AppData\\Local\\Temp\\nousetsu-settings-built-3l20zehv",
+  "pid": 82076,
+  "root": "C:\\Users\\Asus\\AppData\\Local\\Temp\\nousetsu-settings-built-6mvydp62",
   "projects": {
-    "A": "C:\\Users\\Asus\\AppData\\Local\\Temp\\nousetsu-settings-built-3l20zehv\\projects\\Audit A",
-    "B": "C:\\Users\\Asus\\AppData\\Local\\Temp\\nousetsu-settings-built-3l20zehv\\projects\\Audit B"
+    "A": "C:\\Users\\Asus\\AppData\\Local\\Temp\\nousetsu-settings-built-6mvydp62\\projects\\Audit A",
+    "B": "C:\\Users\\Asus\\AppData\\Local\\Temp\\nousetsu-settings-built-6mvydp62\\projects\\Audit B"
   },
-  "env_file": "C:\\Users\\Asus\\AppData\\Local\\Temp\\nousetsu-settings-built-3l20zehv\\audit.env",
+  "env_file": "C:\\Users\\Asus\\AppData\\Local\\Temp\\nousetsu-settings-built-6mvydp62\\audit.env",
   "env_values": {
     "DEFAULT_MODEL": null,
     "NOVEL_MODEL": "mock-audit-shared",
@@ -37,7 +37,7 @@
     "NOVEL_MAX_RPM": "60",
     "NOVEL_MAX_REVIEW_LOOPS": "3",
     "NOVEL_QUALITY_THRESHOLD": "8.5",
-    "NOVEL_PROJECTS_DIR": "C:/Users/Asus/AppData/Local/Temp/nousetsu-settings-built-3l20zehv/projects",
+    "NOVEL_PROJECTS_DIR": "C:/Users/Asus/AppData/Local/Temp/nousetsu-settings-built-6mvydp62/projects",
     "NOVEL_THINKING_LEVEL": null,
     "NOVEL_EXTRACTOR_THINKING_LEVEL": null,
     "NOVEL_DRAFTER_THINKING_LEVEL": null,
@@ -88,6 +88,17 @@
       "polisher_model": null,
       "chronicler_model": null,
       "scraper_model": null,
+      "scraper_budgets": {
+        "toc_cycles": null,
+        "review_iterations": null,
+        "repair_attempts": null,
+        "discovery_seconds": null,
+        "toc_pages": null,
+        "browser_pages": null,
+        "request_attempts": null,
+        "no_progress_attempts": null
+      },
+      "scraper_session_state": null,
       "generation_settings": {},
       "use_interactions_api": null,
       "auto_update_bible": true,
@@ -118,7 +129,7 @@
       "procedural_learning_interval": null,
       "procedural_learning_min_failures": null,
       "procedural_refiner_model": null,
-      "created_at": "2026-10-13T13:46:52.496293+00:00"
+      "created_at": "2026-10-14T03:57:32.986284+00:00"
     },
     "B": {
       "project_id": "default_project",
@@ -135,6 +146,17 @@
       "polisher_model": null,
       "chronicler_model": null,
       "scraper_model": null,
+      "scraper_budgets": {
+        "toc_cycles": null,
+        "review_iterations": null,
+        "repair_attempts": null,
+        "discovery_seconds": null,
+        "toc_pages": null,
+        "browser_pages": null,
+        "request_attempts": null,
+        "no_progress_attempts": null
+      },
+      "scraper_session_state": null,
       "generation_settings": {},
       "use_interactions_api": null,
       "auto_update_bible": true,
@@ -165,7 +187,7 @@
       "procedural_learning_interval": null,
       "procedural_learning_min_failures": null,
       "procedural_refiner_model": null,
-      "created_at": "2026-10-13T13:46:52.557474+00:00"
+      "created_at": "2026-10-14T03:57:33.050094+00:00"
     }
   },
   "bible": {
@@ -294,7 +316,7 @@
       }
     }
   },
-  "dist": "D:\\Code\\novel_translation_Agent\\audit-results\\settings-repair\\web-dist",
-  "frontend_index_sha256": "fbb1022b8b2f63915b5553cb9f5fa34a45b614a0ba0314d586b977b86cd9c5ab",
-  "backend_source_sha256": "5873abab4d3ba7eb629f9547516cf9aa31839d18498c110ed4f5bff6cef4c81e"
+  "dist": "D:\\Code\\novel_translation_Agent\\web\\dist",
+  "frontend_index_sha256": "1158bb7a55ef5ccf5ce0ae770e6fe221a114ad6ebbfce073a5c614062a6f1486",
+  "backend_source_sha256": "7765a2f42c666b87f89492dc2bb0eb697b1fedad4ac20f6567bfb49a8a961cb5"
 }

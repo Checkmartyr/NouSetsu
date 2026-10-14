@@ -748,7 +748,7 @@ class NovelRepository:
         return bible
 
     def discover_folders(self) -> List[Tuple[str, str, int]]:
-        """Discover candidate raw translation folders and their matching output folders in project root.
+        """Discover source-root volumes and legacy sibling folders with matching outputs.
 
         Returns list of (raw_folder_rel, output_folder_rel, chapter_count) sorted naturally.
         """
@@ -763,11 +763,29 @@ class NovelRepository:
         if not self.root_dir.exists():
             return results
 
-        for child in self.root_dir.iterdir():
-            if not child.is_dir() or child.name in ignored_names:
-                continue
-            if cfg.is_volume_output_folder_name(child.name):
-                continue
+        raw_root = cfg.get_raw_path(self.root_dir)
+        output_root = cfg.get_output_path(self.root_dir)
+        candidates = []
+        if raw_root.is_dir():
+            for directory, children, _ in os.walk(raw_root):
+                parent = Path(directory)
+                children[:] = [name for name in children if (
+                    not name.startswith(".")
+                    and name not in ignored_names
+                    and not cfg.is_volume_output_folder_name(name)
+                    and not (parent / name).resolve().is_relative_to(output_root)
+                )]
+                if not parent.resolve().is_relative_to(output_root):
+                    candidates.append(parent)
+        candidates.extend(child for child in self.root_dir.iterdir() if (
+            child.is_dir() and not child.name.startswith(".")
+            and child.name not in ignored_names
+            and not cfg.is_volume_output_folder_name(child.name)
+            and not child.resolve().is_relative_to(raw_root)
+            and not child.resolve().is_relative_to(output_root)
+        ))
+
+        for child in candidates:
 
             # Check if directory contains text/markdown chapters
             chapter_files = [f for f in child.iterdir() if f.is_file() and f.suffix.lower() in [".txt", ".md"]]
@@ -775,15 +793,30 @@ class NovelRepository:
             if count > 0:
                 is_default_raw = child.resolve() == cfg.get_raw_path(self.root_dir).resolve()
                 default_output = cfg.get_output_path(self.root_dir) if is_default_raw else None
-                out_name = cfg.get_volume_output_path(
+                raw_name = self.folder_key(child)
+                out_path = cfg.get_volume_output_path(
                     self.root_dir,
-                    child.name,
+                    raw_name,
                     default_output_path=default_output,
-                ).name
-                results.append((child.name, out_name, count))
+                )
+                results.append((raw_name, self.folder_key(out_path), count))
 
         from natsort import natsorted
         return natsorted(results, key=lambda r: r[0])
+
+    def folder_key(self, directory: Path) -> str:
+        """Preserve volume identity relative to the project or configured external root."""
+        try:
+            return directory.resolve().relative_to(self.root_dir.resolve()).as_posix()
+        except ValueError:
+            cfg = self.load_config()
+            for root in (cfg.get_raw_path(self.root_dir), cfg.get_output_path(self.root_dir)):
+                try:
+                    relative = directory.resolve().relative_to(root)
+                    return (Path(root.name) / relative).as_posix()
+                except ValueError:
+                    continue
+            return directory.name
 
     @_project_locked
     def set_active_folder(self, raw_dir: str, output_dir: Optional[str] = None) -> ProjectConfig:
@@ -801,9 +834,10 @@ class NovelRepository:
         for raw_folder, _, _ in self.discover_folders():
             folders.add(raw_folder)
         if self.summaries_dir.exists():
-            for child in self.summaries_dir.iterdir():
-                if child.is_dir() and child.name not in ["arcs", "__pycache__", ".git"]:
-                    folders.add(child.name)
+            for summary_file in self.summaries_dir.rglob("chapter_*.json"):
+                relative = summary_file.parent.relative_to(self.summaries_dir)
+                if relative != Path(".") and relative.parts[0] not in ["arcs", "__pycache__", ".git"]:
+                    folders.add(relative.as_posix())
         from natsort import natsorted
         return natsorted(list(folders))
 
@@ -852,12 +886,12 @@ class NovelRepository:
             # Check subfolders (e.g. summaries/Villainess_04/, summaries/Villainess_05/)
             for child in self.summaries_dir.iterdir():
                 if child.is_dir():
-                    for s_file in sorted(child.glob("chapter_*.json")):
+                    for s_file in sorted(child.rglob("chapter_*.json")):
                         try:
                             with open(s_file, "r", encoding="utf-8") as sf:
                                 sm = ChapterSummary.model_validate(json.load(sf))
                                 if not sm.folder:
-                                    sm.folder = child.name
+                                    sm.folder = s_file.parent.relative_to(self.summaries_dir).as_posix()
                                 summaries.append(sm)
                         except Exception:
                             continue
@@ -1229,21 +1263,13 @@ class NovelRepository:
     def load_metadata(self, output_file: Path) -> Optional[ChapterMetadata]:
         """Load chapter metadata by composite folder/stem or stem from single project metadata file."""
         stem = output_file.stem
-        parent_name = output_file.parent.name if (output_file.parent and output_file.parent.name and output_file.parent.name not in [".", ""]) else "root"
+        parent_name = self.folder_key(output_file.parent)
         folder_prefix = f"{parent_name}/{stem}"
         doc = self.load_project_metadata_doc()
 
-        # 1. Composite key takes highest precedence for multi-folder isolation
-        if folder_prefix in doc.chapters:
-            return doc.chapters[folder_prefix]
-
-        # 2. Match by bare stem
-        if stem in doc.chapters:
-            return doc.chapters[stem]
-
-        # 3. Check by filename as fallback
-        if output_file.name in doc.chapters:
-            return doc.chapters[output_file.name]
+        meta = self.metadata_for_output(output_file, doc.chapters)
+        if meta is not None:
+            return meta
 
         # Legacy fallback: check for individual <stem>.meta.json in output directory
         legacy_meta_path = self.get_metafile_path(output_file)
@@ -1261,10 +1287,26 @@ class NovelRepository:
 
         return None
 
+    def metadata_for_output(self, output_file: Path, records: Dict[str, ChapterMetadata]) -> Optional[ChapterMetadata]:
+        """Resolve nested outputs without borrowing another volume's legacy record."""
+        folder = self.folder_key(output_file.parent)
+        exact = records.get(f"{folder}/{output_file.stem}")
+        if exact is not None:
+            return exact
+        for key in (f"{output_file.parent.name}/{output_file.stem}", output_file.stem, output_file.name):
+            meta = records.get(key)
+            if meta is not None and (
+                "/" not in folder
+                or Path(meta.output_file).resolve() == output_file.resolve()
+                or (self.root_dir / meta.output_file).resolve() == output_file.resolve()
+            ):
+                return meta
+        return None
+
     def save_metadata(self, metadata: ChapterMetadata, output_file: Path) -> Path:
         """Save chapter metadata into the single project metadata file with composite and stem keys."""
         stem = output_file.stem
-        parent_name = output_file.parent.name if (output_file.parent and output_file.parent.name and output_file.parent.name not in [".", ""]) else "root"
+        parent_name = self.folder_key(output_file.parent)
         folder_prefix = f"{parent_name}/{stem}"
         doc = self.load_project_metadata_doc()
         doc.chapters[folder_prefix] = metadata

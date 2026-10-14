@@ -394,6 +394,7 @@ class BatchRunner:
         initial_state = TranslationState(
             chapter_id=f"chapter_{task.chapter_num:04d}",
             chapter_num=task.chapter_num,
+            folder=task.folder,
             source_file=str(task.source_file),
             source_sha256=task.source_sha256,
             output_file=str(task.output_file),

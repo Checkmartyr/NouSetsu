@@ -271,6 +271,7 @@ export interface ProjectSettings {
   raw_dir?: string;
   output_dir?: string;
   translated_dir?: string;
+  workspace_folders?: { raw_dir: string; output_dir: string; chapter_count: number }[];
 
   // Model Routing & Cascades
   model_name?: string;

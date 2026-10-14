@@ -225,12 +225,27 @@ class ProjectConfig(BaseModel):
         base_name = normalized.split("_", 1)[0]
         return LANGUAGE_FOLDER_CODES.get(normalized) or LANGUAGE_FOLDER_CODES.get(base_name) or normalized or "target"
 
+    def get_folder_path(self, base_dir: Path, folder: str, output: bool = False) -> Path:
+        """Resolve a project folder key, including keys beneath external roots."""
+        path = Path(folder)
+        root = self.get_output_path(base_dir) if output else self.get_raw_path(base_dir)
+        if not path.is_absolute() and not root.is_relative_to(Path(base_dir).resolve()) and path.parts and path.parts[0] == root.name:
+            return root.joinpath(*path.parts[1:])
+        return (Path(base_dir) / path).resolve()
+
     def get_volume_output_path(
         self,
         base_dir: Path,
         raw_folder: str,
         default_output_path: Optional[Path] = None,
     ) -> Path:
+        source_path = self.get_folder_path(base_dir, raw_folder)
+        try:
+            relative = source_path.relative_to(self.get_raw_path(base_dir))
+        except ValueError:
+            relative = None
+        if relative is not None and relative != Path("."):
+            return self.get_output_path(base_dir) / relative
         target_path = Path(base_dir) / f"{raw_folder}_{self.target_language_code}"
         suffixes = dict.fromkeys((self.target_language_code, "trans"))
         for suffix in suffixes:

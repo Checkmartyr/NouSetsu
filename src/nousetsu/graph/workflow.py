@@ -442,7 +442,7 @@ class NovelTranslationWorkflow:
         else:
             est_draft = int(estimate_tokens(state.source_text) * 1.5) + 2000
 
-        current_folder = Path(state.source_file).parent.name if state.source_file else None
+        current_folder = state.folder or (Path(state.source_file).parent.name if state.source_file else None)
         cross_folder = self.cross_folder_summaries
         if hasattr(state.novel_bible, "get_rolling_context"):
             active_summaries = state.novel_bible.get_rolling_context(
@@ -599,7 +599,7 @@ class NovelTranslationWorkflow:
         if self.enable_rag and self.rag_engine:
             if is_initial_draft:
                 try:
-                    current_folder = Path(state.source_file).parent.name if state.source_file else None
+                    current_folder = state.folder or (Path(state.source_file).parent.name if state.source_file else None)
                     allowed_folders = self._get_allowed_folders(state.novel_bible, current_folder)
                     query_text = self._build_critique_rag_query(state, text_to_audit)
                     query_vec = None
@@ -960,7 +960,7 @@ class NovelTranslationWorkflow:
         chr_rag_hits = []
         if self.enable_rag and self.rag_engine:
             try:
-                current_folder = Path(state.source_file).parent.name if state.source_file else None
+                current_folder = state.folder or (Path(state.source_file).parent.name if state.source_file else None)
                 allowed_folders = self._get_allowed_folders(state.novel_bible, current_folder)
                 chr_query = self._build_chronicler_rag_query(state, final_text)
                 chr_vec = None
@@ -1003,7 +1003,7 @@ class NovelTranslationWorkflow:
             extracted_terms=state.extracted_terms if self.enable_post_polish_reconciliation else []
         )
 
-        current_folder = Path(state.source_file).parent.name if state.source_file else None
+        current_folder = state.folder or (Path(state.source_file).parent.name if state.source_file else None)
         if summary and current_folder and not getattr(summary, "folder", None):
             summary.folder = current_folder
 

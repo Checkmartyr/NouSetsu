@@ -3,7 +3,7 @@ import { dirtySettings, dirtyValues, refreshDraft } from '../src/services/settin
 
 test('dirty patches exclude derived fields and preserve false, zero, and reset values', () => {
   const baseline = { title: 'Old', revision: 'r1', max_tpm: 100, enable_rag: true, chunk_overlap_lines: 3 };
-  expect(dirtySettings({...baseline, title: 'New', revision: 'r2', effective_model_name: 'mock', enable_rag: false, chunk_overlap_lines: 0, max_tpm: null}, baseline)).toEqual({title: 'New', enable_rag: false, chunk_overlap_lines: 0, max_tpm: null});
+  expect(dirtySettings({...baseline, title: 'New', revision: 'r2', effective_model_name: 'mock', workspace_folders: [{raw_dir: 'raw/Vol_1', output_dir: 'translated/Vol_1', chapter_count: 1}], enable_rag: false, chunk_overlap_lines: 0, max_tpm: null}, baseline)).toEqual({title: 'New', enable_rag: false, chunk_overlap_lines: 0, max_tpm: null});
 });
 test('blank chunk fields use display defaults while inherited fields reset', () => {
   expect(dirtySettings({chunk_threshold_lines: '', chunk_size_lines: '', max_tpm: '', max_rpm: ''}, {chunk_threshold_lines: 900, chunk_size_lines: 450, max_tpm: 100, max_rpm: 10})).toEqual({chunk_threshold_lines: 800, chunk_size_lines: 400, max_tpm: null, max_rpm: null});
