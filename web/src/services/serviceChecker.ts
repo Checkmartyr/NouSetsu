@@ -67,7 +67,7 @@ export const INITIAL_SERVICE_CHECKS: ServiceCheckItem[] = [
   {
     id: 'models',
     label: 'AI Environment & Models',
-    description: 'Validating LLM provider credentials, rate limits & agent catalog',
+    description: 'Reading local configuration; AI connections are tested explicitly in Setup',
     status: 'pending',
   },
   {

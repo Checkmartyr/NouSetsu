@@ -64,11 +64,8 @@ class EmbeddingClient:
             or env.get("NOVEL_USE_MOCK_EMBEDDINGS", "").lower() in ("1", "true")
         )
 
-        resolved_key = (
-            api_key
-            or env.get("GEMINI_API_KEY")
-            or env.get("GOOGLE_API_KEY")
-        )
+        from nousetsu.utils.providers import provider_key, usable_key
+        resolved_key = api_key if usable_key(api_key) else provider_key("gemini", env)
 
         self._client = None
         if not self.is_mock and resolved_key:

@@ -14,7 +14,7 @@ export interface WorkspaceRoute {
   section?: string;
 }
 
-const workspaces = ['studio', 'reader', 'traces', 'bible', 'settings'];
+const workspaces = ['studio', 'reader', 'traces', 'bible', 'settings', 'setup'];
 const bibleSections = ['characters', 'visualizer', 'glossary', 'memory', 'raw'];
 const settingsSections = ['global', 'updates', 'logs', 'all', 'general', 'models', 'review', 'chunking', 'memory', 'rag', 'safety', 'ratelimit', 'procedural', 'paths'];
 const stages = ['extraction', 'drafting', 'critique', 'polishing', 'chronicling'];
@@ -93,6 +93,19 @@ export function navigateRoute(route: WorkspaceRoute, replace = false): void {
 
 export function patchRoute(update: Partial<WorkspaceRoute>, replace = false): void {
   navigateRoute({ ...getRoute(), ...update }, replace);
+}
+
+export function openSetup(returnTo = getRoute(), replace = false): void {
+  if (returnTo.workspace !== 'setup') writeSession('nousetsu_setup_return', routeUrl(returnTo));
+  navigateRoute({ workspace: 'setup' }, replace);
+}
+
+export function consumeSetupReturn(): WorkspaceRoute | null {
+  const saved = readSession('nousetsu_setup_return');
+  memory.delete('nousetsu_setup_return');
+  try { sessionStorage.removeItem('nousetsu_setup_return'); } catch { /* Navigation still works. */ }
+  const parsed = saved ? parseRoute(saved) : null;
+  return parsed?.workspace === 'setup' ? null : parsed;
 }
 
 export function navigateWorkspace(workspace: WorkspaceTab, project?: string, replace = false): void {

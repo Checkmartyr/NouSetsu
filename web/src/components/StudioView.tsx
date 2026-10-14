@@ -191,7 +191,7 @@ export const StudioView: React.FC<StudioViewProps> = ({
       });
       await refreshData();
     } catch (e: any) {
-      alert(`Could not start translation: ${e.message}`);
+      if (e.code !== 'connect_ai') alert(`Could not start translation: ${e.message}`);
     } finally {
       setIsStarting(false);
     }

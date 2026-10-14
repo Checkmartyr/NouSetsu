@@ -53,6 +53,8 @@ from nousetsu.batch.runner import BatchRunner
 from nousetsu.batch.scanner import ChapterScanner, ChapterTask, extract_chapter_num, LEADING_SEQ_PATTERN
 from nousetsu.models.bible import CharacterProfile, GlossaryItem, NovelBible
 from nousetsu.models.config import ProjectConfig
+from nousetsu.setup import SetupCandidate, SetupCheck
+import nousetsu.setup as setup_service
 from nousetsu.models.exceptions import BatchStoppedException
 from nousetsu.models.metadata import StageStatus
 from nousetsu.storage.repository import (
@@ -1047,7 +1049,8 @@ async def _run_scraper_task(
 
 def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
     """Create and configure the FastAPI application."""
-    dist_path = dist_dir or (Path(__file__).resolve().parent.parent.parent.parent / "web" / "dist")
+    from nousetsu.utils.runtime_paths import frontend_dist
+    dist_path = dist_dir or frontend_dist()
 
     app = FastAPI(
         title="NouSetsu Web Dashboard & API",
@@ -1409,6 +1412,9 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
             raise HTTPException(status_code=409, detail="A translation job is already in progress.")
 
         repo = _resolve_repo(body.project_path)
+        from nousetsu.setup import missing_translation_routes
+        if missing_translation_routes(repo.load_config(), resolve_env(repo.root_dir), body.model, body.fallback_model):
+            raise HTTPException(status_code=409, detail={"code": "connect_ai", "message": "Connect AI before translating chapters."})
         try:
             active_job.start(
                 _run_batch_worker,
@@ -2110,6 +2116,75 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
     # ------------------------------------------------------------------------
     # Machine Environment and Desktop Updates
     # ------------------------------------------------------------------------
+
+    from nousetsu.setup import (
+        SetupCandidate, SetupCheck, get_setup, candidate_environment, validate_candidate,
+        choose_folder, test_connection, connection_error, connection_fingerprint, complete_setup,
+    )
+    from nousetsu.utils.providers import provider_key
+    connection_results: Dict[str, Tuple[float, bool]] = {}
+
+    def record_connection_result(env, success):
+        now = time.time()
+        for key, (timestamp, _) in list(connection_results.items()):
+            if now - timestamp > 900:
+                connection_results.pop(key, None)
+        if len(connection_results) >= 100:
+            connection_results.pop(next(iter(connection_results)))
+        connection_results[connection_fingerprint(env)] = (now, success)
+
+    @app.get("/api/setup")
+    async def read_setup(request: Request, response: Response):
+        _require_local_settings_origin(request)
+        result = await asyncio.to_thread(get_setup)
+        response.headers["ETag"] = f'"{result["revision"]}"'
+        return result
+
+    @app.post("/api/setup/check")
+    async def check_setup(request: Request, body: SetupCheck):
+        _require_local_settings_origin(request)
+        if body.kind == "folder":
+            return {"path": await asyncio.to_thread(choose_folder)}
+        if body.kind == "local":
+            _, env, origins = await asyncio.to_thread(validate_candidate, body.candidate)
+            return {"success": True, "overridden_fields": [key for key in (*body.candidate.values, *body.candidate.api_keys) if origins.get(key) == "process"]}
+        _, env, _ = candidate_environment(body.candidate)
+        try:
+            if body.kind == "catalog":
+                models = await asyncio.to_thread(fetch_model_catalog, body.candidate.provider, provider_key(body.candidate.provider, env), env.get("CUSTOM_API_BASE_URL"))
+                return {"success": True, "models": models}
+            await asyncio.to_thread(validate_candidate, body.candidate, False)
+            await asyncio.wait_for(asyncio.to_thread(setup_service.test_connection, body.candidate, env), timeout=30)
+            record_connection_result(env, True)
+            return {"success": True, "readiness": "tested"}
+        except EnvironmentValidationError:
+            if body.kind == "connection":
+                record_connection_result(env, False)
+            raise
+        except Exception as error:
+            if body.kind == "connection":
+                record_connection_result(env, False)
+            code, message = connection_error(error)
+            return JSONResponse(status_code=502, content={"code": code, "message": message})
+
+    @app.post("/api/setup/complete")
+    async def finish_setup(request: Request, response: Response, body: SetupCandidate):
+        _require_local_settings_origin(request)
+        revision = _required_revision(request)
+        _, env, _ = candidate_environment(body)
+        fingerprint = connection_fingerprint(env)
+        timestamp, success = connection_results.get(fingerprint, (0, False))
+        recent = time.time() - timestamp < 900
+        verified = fingerprint if recent and success else ""
+        failed = fingerprint if recent and not success else ""
+        try:
+            result = await asyncio.to_thread(complete_setup, body, revision, verified, failed)
+        except SettingsRevisionConflict:
+            raise HTTPException(status_code=412, detail="Settings changed; reload before saving.") from None
+        except OSError:
+            raise HTTPException(status_code=500, detail="Could not save settings. Check the configuration folder permissions.") from None
+        response.headers["ETag"] = f'"{result["revision"]}"'
+        return result
 
     @app.get("/api/model-catalog")
     async def get_model_catalog(request: Request, provider: str = Query(...)) -> Dict[str, Any]:

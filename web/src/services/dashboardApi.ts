@@ -88,6 +88,10 @@ export async function startTranslation(params: {
   });
   const data = await res.json();
   if (!res.ok) {
+    if (data.detail?.code === 'connect_ai') {
+      window.dispatchEvent(new CustomEvent('nousetsu:connect-ai', { detail: { chapter: params.chapter, folder: params.folder } }));
+      throw Object.assign(new Error(data.detail.message), { code: 'connect_ai' });
+    }
     throw new Error(data.detail || 'Failed to start translation');
   }
   return data;

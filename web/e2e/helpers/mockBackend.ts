@@ -77,6 +77,7 @@ export async function mockBackend(page: Page, options: {
     const url = new URL(request.url());
     const endpoint = url.pathname;
     if (endpoint === '/api/desktop-info') { state.desktop++; return fulfill({ json: { version: 'test' } }); }
+    if (endpoint === '/api/setup') return fulfill({ json: { completed: true, existing: true, locale: 'en' } });
     if (endpoint === '/api/environment') { state.environment++; return fulfill({ json: { values: {}, api_key_status: {}, configured_keys: {}, resolved_models: {}, env_file_path: 'test.env' } }); }
     if (endpoint === '/api/stream/events') return fulfill({ contentType: 'text/event-stream', body: ': connected\n\n' });
     if (endpoint === '/api/scraper/jobs' && request.method() === 'GET') return fulfill({ json: { jobs: [] } });

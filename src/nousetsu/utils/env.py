@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 from typing import Dict, Optional, Union
 import dotenv
+from nousetsu.utils.providers import usable_key
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +89,13 @@ def resolve_env_file() -> Path:
     configured_path = os.environ.get("NOUSETSU_ENV_FILE")
     if configured_path:
         return Path(configured_path).expanduser().resolve()
-    return find_repo_root() / ".env"
+    root = find_repo_root()
+    if (root / "pyproject.toml").is_file() or (root / ".git").exists():
+        return root / ".env"
+    if (Path.cwd() / ".env").is_file():
+        return Path.cwd() / ".env"
+    from nousetsu.utils.runtime_paths import user_config_dir
+    return user_config_dir() / ".env"
 
 
 def _apply_desktop_projects_default() -> None:
@@ -121,6 +128,10 @@ def find_repo_root() -> Path:
         if exe.parent.name == "binaries":
             return exe.parent.parent.resolve()
         return exe.parent.resolve()
+
+    if "site-packages" in Path(__file__).resolve().parts:
+        from nousetsu.utils.runtime_paths import user_config_dir
+        return user_config_dir()
 
     current = Path(__file__).resolve().parent
     for parent in [current] + list(current.parents):
@@ -201,10 +212,10 @@ def _read_dotenv(path: Path) -> Dict[str, Optional[str]]:
     return {binding.key: binding.value for binding in bindings if binding.key is not None}
 
 
-def resolve_env_with_sources(project_dir=None, environ=None):
+def resolve_env_with_sources(project_dir=None, environ=None, machine_updates=None):
     """Resolve file layers without modifying the process environment."""
     process = dict(os.environ if environ is None else environ)
-    selected = Path(process["NOUSETSU_ENV_FILE"]).expanduser().resolve() if process.get("NOUSETSU_ENV_FILE") else find_repo_root() / ".env"
+    selected = Path(process["NOUSETSU_ENV_FILE"]).expanduser().resolve() if process.get("NOUSETSU_ENV_FILE") else resolve_env_file()
     layers = []
     cwd_file = Path.cwd() / ".env"
     if not process.get("NOUSETSU_ENV_FILE") and cwd_file.resolve() != selected.resolve():
@@ -217,7 +228,14 @@ def resolve_env_with_sources(project_dir=None, environ=None):
     raw = {}
     sources = {}
     for path, origin in layers:
-        for key, value in _read_dotenv(path).items():
+        entries = _read_dotenv(path)
+        if origin == "machine" and machine_updates:
+            for key, value in machine_updates.items():
+                if value is None:
+                    entries.pop(key, None)
+                else:
+                    entries[key] = value
+        for key, value in entries.items():
             # A bare key has no value and does not shadow a lower layer.
             if value is not None:
                 raw[key] = value
@@ -395,7 +413,7 @@ def _get_env_settings() -> Dict[str, object]:
         "effective_values": get_env_snapshot(effective),
         "sources": {key: origins.get(key, "builtin") for key in ENV_CONFIG_KEYS},
         "validation_errors": errors,
-        "api_key_status": {key: bool(effective.get(key)) for key in ENV_SECRET_KEYS},
+        "api_key_status": {key: usable_key(effective.get(key)) for key in ENV_SECRET_KEYS},
         "revision": settings_revision(env_path, effective),
     }, effective)
 

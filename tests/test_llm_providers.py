@@ -64,7 +64,8 @@ def test_explicit_openai_does_not_fall_through_to_openrouter(monkeypatch):
     configure_provider_test(monkeypatch)
     monkeypatch.setenv("OPENROUTER_API_KEY", "router-test-key")
 
-    assert isinstance(get_llm(model_name="openai:gpt-4o"), MockNovelLLM)
+    with pytest.raises(ValueError, match="Connect AI"):
+        get_llm(model_name="openai:gpt-4o").invoke("Translate this")
 
 
 def test_openrouter_provider_model_id_uses_openrouter(monkeypatch):
@@ -140,14 +141,15 @@ def test_custom_provider_uses_its_model_key_and_base_url(monkeypatch):
     ("api_key", "base_url"),
     [("custom-test-key", ""), ("", "https://custom.example/v1")],
 )
-def test_custom_route_without_key_or_base_url_stays_offline_mock(monkeypatch, api_key, base_url):
+def test_custom_route_without_key_or_base_url_refuses_translation(monkeypatch, api_key, base_url):
     configure_provider_test(monkeypatch)
     if api_key:
         monkeypatch.setenv("CUSTOM_API_KEY", api_key)
     if base_url:
         monkeypatch.setenv("CUSTOM_API_BASE_URL", base_url)
 
-    assert isinstance(get_llm(model_name="custom:my-model"), MockNovelLLM)
+    with pytest.raises(ValueError, match="Connect AI"):
+        get_llm(model_name="custom:my-model").invoke("Translate this")
 
 
 def test_non_openai_model_with_reasoning_like_name_keeps_temperature(monkeypatch):
@@ -162,11 +164,12 @@ def test_non_openai_model_with_reasoning_like_name_keeps_temperature(monkeypatch
     assert llm.kwargs["temperature"] == 0.35
 
 
-def test_missing_provider_key_keeps_offline_mock(monkeypatch):
+def test_missing_provider_key_refuses_translation(monkeypatch):
     configure_provider_test(monkeypatch)
 
-    assert isinstance(get_llm(model_name="gpt-4o"), MockNovelLLM)
-    assert isinstance(get_llm(model_name="anthropic/claude-3.7-sonnet"), MockNovelLLM)
+    for model in ("gpt-4o", "anthropic/claude-3.7-sonnet"):
+        with pytest.raises(ValueError, match="Connect AI"):
+            get_llm(model_name=model).invoke("Translate this")
 
 
 @pytest.mark.parametrize("model_name", ["mock-test-model", "test-model"])

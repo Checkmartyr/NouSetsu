@@ -18,9 +18,8 @@ if sys.platform == "win32":
 
 
 def _frontend_dist() -> Path:
-    if getattr(sys, "frozen", False):
-        return Path(getattr(sys, "_MEIPASS")) / "web" / "dist"
-    return Path(__file__).resolve().parents[2] / "web" / "dist"
+    from nousetsu.utils.runtime_paths import frontend_dist
+    return frontend_dist()
 
 
 def _run_scraper_worker(args: list[str]) -> None:

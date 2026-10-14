@@ -40,6 +40,8 @@ On first launch, NouSetsu copies the bundled `.env.example` into its application
 
 ## Configure model providers and API keys
 
+Fresh installations open the [five-step setup wizard](./setup.md). Choose English or Thai, connect an AI service or skip it, select translation defaults and a novel folder, then review and finish. Existing users can reopen it through **Settings → Open guided setup**. Connection testing sends a small fixed sample and may incur provider charges; an untested saved key is labeled accordingly.
+
 Open **Settings → Environment & API Keys**. This is the machine-wide settings area shared by projects on that installation. Add the API key for the provider you use, then click **Save Global Settings**. Supported providers include Gemini/Google, OpenAI, OpenRouter, and OpenAI-compatible custom endpoints.
 
 Keys are saved locally in the application’s `.env` file. The UI masks key entry and reports whether a key is configured; it does not display the saved value. Leave a key field blank to keep its saved value, or choose **Clear saved key** to remove it. Protect the `.env` file like any other file containing credentials.

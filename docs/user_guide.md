@@ -44,6 +44,7 @@ Traditional machine translation tools (e.g. Google Translate, DeepL) process tex
 * Optional but recommended: [uv](https://github.com/astral-sh/uv) (ultra-fast Python package installer).
 
 ### Windows Desktop Installer
+New users can follow the English/Thai [guided setup](./setup.md), also available through `nousetsu setup` for Python packages or `nousetsu setup --terminal` for headless use. It supports connecting AI later and optional first-project creation.
 The Windows desktop installer bundles the Python backend, so Python is not required separately. On first launch, NouSetsu copies the packaged `.env.example` to its application-data directory as `.env` if no local environment file exists. Existing settings are preserved on later launches and upgrades. Configure provider keys in **Settings → Environment & API Keys**; keys are stored locally in `.env`, so protect that file and never put live secrets in `.env.example`. See the [Web Studio & Desktop App Guide](./web_desktop_guide.md) for the complete workflow.
 
 ### Option A: Install from Local Repository / Pip (Recommended)
