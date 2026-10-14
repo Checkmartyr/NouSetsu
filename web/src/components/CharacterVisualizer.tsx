@@ -23,6 +23,7 @@ import {
   ObsidianRelationshipGraph,
   getEnhancedRelationshipCategory,
   RelationshipCategoryInfo,
+  resolveCharacterIndex,
 } from './ObsidianRelationshipGraph';
 
 interface CharacterVisualizerProps {
@@ -110,11 +111,13 @@ export const CharacterVisualizer: React.FC<CharacterVisualizerProps> = ({
   const [roleFilter, setRoleFilter] = useState('all');
   const [relViewMode, setRelViewMode] = useState<'graph' | 'matrix'>('graph');
   const [matrixSearch, setMatrixSearch] = useState('');
+  const [selectionRevision, setSelectionRevision] = useState(0);
 
   const activeIndex = selectedCharacterIndex ?? internalSelectedIndex;
   const activeChar = characters[activeIndex] || characters[0];
 
   const selectCharacterByIndex = (index: number) => {
+    setSelectionRevision(revision => revision + 1);
     setInternalSelectedIndex(index);
     if (onSelectCharacter) {
       onSelectCharacter(index);
@@ -152,12 +155,8 @@ export const CharacterVisualizer: React.FC<CharacterVisualizerProps> = ({
   const personalRelationships = useMemo(() => {
     if (!activeChar || !activeChar.relationships) return [];
     return Object.entries(activeChar.relationships).map(([targetName, relation]) => {
-      const targetChar = characters.find(
-        (c) =>
-          c.name.toLowerCase() === targetName.toLowerCase() ||
-          c.original_name.toLowerCase() === targetName.toLowerCase()
-      );
-      const targetIndex = targetChar ? characters.indexOf(targetChar) : -1;
+      const targetIndex = resolveCharacterIndex(characters, targetName);
+      const targetChar = targetIndex >= 0 ? characters[targetIndex] : undefined;
       return {
         targetName,
         relation,
@@ -243,9 +242,9 @@ export const CharacterVisualizer: React.FC<CharacterVisualizerProps> = ({
       </div>
 
       {/* Main Grid: Left Roster & Right Canvas */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden">
         {/* Left Column: Character Roster */}
-        <div className="w-72 border-r border-[#3f3a36] bg-[#2b2622] flex flex-col shrink-0">
+        <div className="w-full md:w-72 max-h-52 md:max-h-none border-b md:border-b-0 md:border-r border-[#3f3a36] bg-[#2b2622] flex flex-col shrink-0">
           {/* Roster Search & Role Filters */}
           <div className="p-2.5 border-b border-[#3f3a36] space-y-2">
             <div className="relative">
@@ -292,10 +291,12 @@ export const CharacterVisualizer: React.FC<CharacterVisualizerProps> = ({
                 const relCount = c.relationships ? Object.keys(c.relationships).length : 0;
 
                 return (
-                  <div
+                  <button
+                    type="button"
+                    aria-pressed={isSelected}
                     key={origIndex}
                     onClick={() => selectCharacterByIndex(origIndex)}
-                    className={`p-2.5 cursor-pointer transition-colors flex items-center justify-between gap-2.5 select-none ${
+                    className={`w-full text-left p-2.5 cursor-pointer transition-colors flex items-center justify-between gap-2.5 select-none focus-visible:outline focus-visible:outline-[#d9a05b] ${
                       isSelected
                         ? 'bg-[#383330] border-l-2 border-[#f7f5f0]'
                         : 'hover:bg-[#383330]/40 border-l-2 border-transparent'
@@ -350,7 +351,7 @@ export const CharacterVisualizer: React.FC<CharacterVisualizerProps> = ({
                         </span>
                       )}
                     </div>
-                  </div>
+                  </button>
                 );
               })
             )}
@@ -358,7 +359,7 @@ export const CharacterVisualizer: React.FC<CharacterVisualizerProps> = ({
         </div>
 
         {/* Right Column: Visualization Canvas */}
-        <div className="flex-1 flex flex-col overflow-y-auto bg-[#24201d] p-5 space-y-4">
+        <div className="flex-none md:flex-1 min-w-0 min-h-0 flex flex-col overflow-visible md:overflow-y-auto bg-[#24201d] p-3 md:p-5 space-y-4">
           {viewMode === 'dossier' && activeChar ? (
             /* DOSSIER VIEW MODE */
             <div className="space-y-4 max-w-4xl mx-auto w-full">
@@ -743,167 +744,21 @@ export const CharacterVisualizer: React.FC<CharacterVisualizerProps> = ({
             </div>
           ) : (
             /* FULL RELATIONSHIP WEB MODE */
-            <div className="space-y-4 max-w-5xl mx-auto w-full h-full flex flex-col">
-              <div className="bg-[#383330] border border-[#3f3a36] rounded-[4px] p-4 flex-1 flex flex-col">
-                <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <h3 className="text-xs font-bold text-[#f7f5f0] flex items-center gap-1.5 font-mono uppercase tracking-wide">
-                      <Network className="w-3.5 h-3.5 text-[#b0a89f]" />
-                      Global Character Ecosystem & Graph
-                    </h3>
-                    <p className="text-[11px] text-[#857d75] mt-0.5">
-                      Visual map of all registered characters and connections.
-                    </p>
-                  </div>
-
-                  {/* Legend */}
-                  <div className="flex items-center gap-2.5 text-[10px] font-mono text-[#857d75]">
-                    <span className="flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-[1px] bg-[#d9a05b]" /> Protagonist
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-[1px] bg-[#cf6659]" /> Antagonist
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-[1px] bg-[#8b9bb4]" /> Supporting
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-[1px] bg-[#b0a89f]" /> Mentor
-                    </span>
-                  </div>
-                </div>
-
-                {/* SVG Canvas for Global Network */}
-                <div className="flex-1 bg-[#24201d] rounded-[3px] border border-[#3f3a36] p-4 flex items-center justify-center relative overflow-hidden">
-                  <svg
-                    viewBox="0 0 700 450"
-                    className="w-full h-full select-none"
-                    style={{ minHeight: '350px' }}
-                  >
-                    {/* Render connections */}
-                    {characters.map((c, i) => {
-                      const count = characters.length;
-                      const angle = (2 * Math.PI * i) / count - Math.PI / 2;
-                      const cx = 350;
-                      const cy = 225;
-                      const r = Math.min(180, 70 + count * 14);
-                      const x1 = cx + r * Math.cos(angle);
-                      const y1 = cy + r * Math.sin(angle);
-
-                      const lines = [];
-                      if (c.relationships) {
-                        for (const [targetName, rel] of Object.entries(c.relationships)) {
-                          const targetIdx = characters.findIndex(
-                            (tc) =>
-                              tc.name.toLowerCase() === targetName.toLowerCase() ||
-                              tc.original_name.toLowerCase() === targetName.toLowerCase()
-                          );
-                          if (targetIdx !== -1 && targetIdx > i) {
-                            const targetAngle = (2 * Math.PI * targetIdx) / count - Math.PI / 2;
-                            const x2 = cx + r * Math.cos(targetAngle);
-                            const y2 = cy + r * Math.sin(targetAngle);
-                            const relCat = getRelationshipCategory(rel);
-
-                            lines.push(
-                              <g key={`${i}-${targetIdx}`}>
-                                <line
-                                  x1={x1}
-                                  y1={y1}
-                                  x2={x2}
-                                  y2={y2}
-                                  stroke={relCat.color}
-                                  strokeWidth="1.5"
-                                  strokeOpacity="0.5"
-                                  strokeDasharray="3 3"
-                                />
-                                <rect
-                                  x={(x1 + x2) / 2 - 22}
-                                  y={(y1 + y2) / 2 - 7}
-                                  width={44}
-                                  height={14}
-                                  rx={2}
-                                  fill="#24201d"
-                                  stroke={relCat.color}
-                                  strokeWidth="0.8"
-                                />
-                                <text
-                                  x={(x1 + x2) / 2}
-                                  y={(y1 + y2) / 2 + 3}
-                                  textAnchor="middle"
-                                  fill={relCat.color}
-                                  fontSize="8"
-                                  fontWeight="bold"
-                                  className="font-mono"
-                                >
-                                  {rel.length > 8 ? `${rel.slice(0, 7)}…` : rel}
-                                </text>
-                              </g>
-                            );
-                          }
-                        }
-                      }
-                      return lines;
-                    })}
-
-                    {/* Nodes */}
-                    {characters.map((c, i) => {
-                      const count = characters.length;
-                      const angle = (2 * Math.PI * i) / count - Math.PI / 2;
-                      const cx = 350;
-                      const cy = 225;
-                      const r = Math.min(180, 70 + count * 14);
-                      const x = cx + r * Math.cos(angle);
-                      const y = cy + r * Math.sin(angle);
-                      const cRole = getRoleConfig(c.role);
-                      const isSelected = i === activeIndex;
-
-                      return (
-                        <g
-                          key={i}
-                          onClick={() => {
-                            selectCharacterByIndex(i);
-                            setViewMode('dossier');
-                          }}
-                          className="cursor-pointer"
-                        >
-                          <circle
-                            cx={x}
-                            cy={y}
-                            r={isSelected ? 20 : 16}
-                            fill={isSelected ? '#383330' : '#2b2622'}
-                            stroke={cRole.color}
-                            strokeWidth={isSelected ? 2.5 : 1.5}
-                          />
-                          <text
-                            x={x}
-                            y={y + 4}
-                            textAnchor="middle"
-                            fill="#f7f5f0"
-                            fontSize="10"
-                            fontWeight="bold"
-                            className="pointer-events-none select-none font-mono"
-                          >
-                            {c.name.charAt(0).toUpperCase()}
-                          </text>
-
-                          {/* Character Name Label */}
-                          <text
-                            x={x}
-                            y={y + 26}
-                            textAnchor="middle"
-                            fill={isSelected ? '#f7f5f0' : '#857d75'}
-                            fontSize="9"
-                            fontWeight="bold"
-                            className="pointer-events-none select-none font-mono"
-                          >
-                            {c.name.length > 10 ? `${c.name.slice(0, 9)}…` : c.name}
-                          </text>
-                        </g>
-                      );
-                    })}
-                  </svg>
-                </div>
+            <div className="w-full min-w-0 space-y-3">
+              <div>
+                <h3 className="text-sm font-semibold text-[#f7f5f0]">Relationship Web</h3>
+                <p className="text-xs text-[#b0a89f] mt-1">Explore the whole cast. Select a character to highlight their connections.</p>
               </div>
+              <ObsidianRelationshipGraph
+                centerCharacter={activeChar}
+                relationships={personalRelationships}
+                characters={characters}
+                selectedCharacterIndex={activeIndex}
+                selectionRevision={selectionRevision}
+                onSelectCharacterByIndex={selectCharacterByIndex}
+                onSelectCharacterByName={selectCharacterByName}
+                onOpenDossier={(index) => { selectCharacterByIndex(index); setViewMode('dossier'); }}
+              />
             </div>
           )}
         </div>

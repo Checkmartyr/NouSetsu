@@ -5,7 +5,9 @@ import {
   forceCollide,
   forceLink,
   forceCenter,
-  Simulation,
+  forceX,
+  forceY,
+  type Simulation,
 } from 'd3-force';
 import {
   Search,
@@ -195,873 +197,414 @@ export function getEnhancedRelationshipCategory(rel: string): RelationshipCatego
   };
 }
 
-export interface GraphNode {
+interface GraphNode {
   id: string;
   name: string;
   originalName?: string;
+  aliases: string[];
   role?: string;
-  relation?: string;
-  categoryInfo: RelationshipCategoryInfo;
-  isCenter: boolean;
   targetIndex: number;
   radius: number;
   x: number;
   y: number;
-  vx?: number;
-  vy?: number;
   fx?: number | null;
   fy?: number | null;
 }
-
-export interface GraphLink {
-  source: GraphNode | string;
-  target: GraphNode | string;
+interface RelationshipRecord {
+  from: string;
+  to: string;
   relation: string;
-  color: string;
-  category: string;
+  categoryInfo: RelationshipCategoryInfo;
 }
-
+interface GraphLink {
+  source: string | GraphNode;
+  target: string | GraphNode;
+  records: RelationshipRecord[];
+}
+interface PersonalRelationship {
+  targetName: string;
+  relation: string;
+  targetChar?: BibleCharacter;
+  targetIndex: number;
+  categoryInfo: RelationshipCategoryInfo;
+}
 interface ObsidianRelationshipGraphProps {
   centerCharacter: BibleCharacter;
-  relationships: Array<{
-    targetName: string;
-    relation: string;
-    targetChar?: BibleCharacter;
-    targetIndex: number;
-    categoryInfo: RelationshipCategoryInfo;
-  }>;
+  relationships: PersonalRelationship[];
   onSelectCharacterByIndex: (index: number) => void;
   onSelectCharacterByName: (name: string) => void;
+  characters?: BibleCharacter[];
+  selectedCharacterIndex?: number;
+  selectionRevision?: number;
+  onOpenDossier?: (index: number) => void;
+}
+
+const normalize = (name: string) => name.trim().toLocaleLowerCase();
+const endpointId = (endpoint: string | GraphNode) => typeof endpoint === 'string' ? endpoint : endpoint.id;
+const roleColors: Record<string, string> = {
+  protagonist: '#d9a05b', antagonist: '#cf6659', supporting: '#8b9bb4', mentor: '#b0a89f', minor: '#857d75',
+};
+const categories = ['family', 'rival', 'ally', 'mentor', 'acquaintance'] as const;
+const categoryNames = { family: 'Family & Bond', rival: 'Rival & Hostile', ally: 'Ally & Friend', mentor: 'Mentor & Order', acquaintance: 'Acquaintance' };
+const categoryColors = { family: '#e699b8', rival: '#cf6659', ally: '#7fa678', mentor: '#d9a05b', acquaintance: '#8b9bb4' };
+
+// Resolve exact identities before aliases; ambiguous aliases stay unresolved.
+export function resolveCharacterIndex(characters: BibleCharacter[], name: string): number {
+  const key = normalize(name);
+  const exact = characters.map((c, i) => ({ c, i })).filter(({ c }) => normalize(c.name) === key || normalize(c.original_name) === key);
+  if (exact.length === 1) return exact[0].i;
+  if (exact.length > 1) return -1;
+  const aliases = characters.map((c, i) => ({ c, i })).filter(({ c }) => c.aliases?.some(a => normalize(a) === key));
+  return aliases.length === 1 ? aliases[0].i : -1;
+}
+
+export function buildRelationshipNetwork(characters: BibleCharacter[]) {
+  const identities = new Map<string, number>();
+  const nodes: GraphNode[] = characters.map((c, index) => {
+    const identity = JSON.stringify([normalize(c.original_name), normalize(c.name)]);
+    const occurrence = identities.get(identity) || 0;
+    identities.set(identity, occurrence + 1);
+    return {
+      id: `character:${identity}:${occurrence}`, name: c.name, originalName: c.original_name,
+      aliases: c.aliases || [], role: c.role, targetIndex: index, radius: 19, x: 0, y: 0,
+    };
+  });
+  const pairs = new Map<string, GraphLink>();
+  characters.forEach((c, index) => {
+    Object.entries(c.relationships || {}).forEach(([name, relation]) => {
+      const targetIndex = resolveCharacterIndex(characters, name);
+      const targetId = targetIndex >= 0 ? nodes[targetIndex].id : `unresolved:${normalize(name)}`;
+      if (!nodes.some(n => n.id === targetId)) nodes.push({ id: targetId, name, aliases: [], targetIndex: -1, radius: 17, x: 0, y: 0 });
+      const sourceId = nodes[index].id;
+      const key = JSON.stringify([sourceId, targetId].sort());
+      const link = pairs.get(key) || { source: sourceId, target: targetId, records: [] };
+      link.records.push({ from: sourceId, to: targetId, relation, categoryInfo: getEnhancedRelationshipCategory(relation) });
+      pairs.set(key, link);
+    });
+  });
+  return { nodes, links: [...pairs.values()] };
 }
 
 export const ObsidianRelationshipGraph: React.FC<ObsidianRelationshipGraphProps> = ({
-  centerCharacter,
-  relationships,
-  onSelectCharacterByIndex,
-  onSelectCharacterByName,
+  centerCharacter, relationships, onSelectCharacterByIndex, onSelectCharacterByName,
+  characters, selectedCharacterIndex, selectionRevision = 0, onOpenDossier,
 }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const global = characters !== undefined;
   const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  // Filter & Search states
-  const [activeCategoryFilter, setActiveCategoryFilter] = useState<string>('all');
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [showSettings, setShowSettings] = useState<boolean>(false);
-  const [showLabels, setShowLabels] = useState<boolean>(true);
-
-  // Physics parameter adjustments (Obsidian-style sliders)
-  const [repulsionStrength, setRepulsionStrength] = useState<number>(-340);
-  const [linkDistance, setLinkDistance] = useState<number>(120);
-  const [collisionPadding, setCollisionPadding] = useState<number>(18);
-
-  // Camera Pan and Zoom state
-  const [zoom, setZoom] = useState<number>(1.0);
-  const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-  const [hoveredNode, setHoveredNode] = useState<GraphNode | null>(null);
-
-  // Dragging interaction state
-  const isDraggingNodeRef = useRef<boolean>(false);
-  const isPanningCanvasRef = useRef<boolean>(false);
-  const draggedNodeRef = useRef<GraphNode | null>(null);
-  const dragStartPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-  const panStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-  const simulationRef = useRef<Simulation<GraphNode, any> | null>(null);
-  const animationFrameIdRef = useRef<number | null>(null);
-
-  // Synchronized Nodes and Links data
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const simulationRef = useRef<Simulation<GraphNode, GraphLink> | null>(null);
   const nodesRef = useRef<GraphNode[]>([]);
   const linksRef = useRef<GraphLink[]>([]);
+  const frameRef = useRef<number | null>(null);
+  const drawRef = useRef<() => void>(() => {});
+  const camera = useRef({ zoom: 1, x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [query, setQuery] = useState('');
+  const [category, setCategory] = useState('all');
+  const [hovered, setHovered] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [showLabels, setShowLabels] = useState(true);
+  const [showSettings, setShowSettings] = useState(false);
+  const [repulsion, setRepulsion] = useState(340);
+  const [distance, setDistance] = useState(170);
+  const [padding, setPadding] = useState(18);
+  const gesture = useRef<{ node?: GraphNode; x: number; y: number; panX: number; panY: number; moved: boolean } | null>(null);
+  const buttonClass = 'px-2 py-1.5 rounded border border-[#3f3a36] bg-[#24201d] text-[#dad2c1] hover:bg-[#383330] focus-visible:outline focus-visible:outline-[#d9a05b] cursor-pointer';
 
-  // Category counts
-  const categoryCounts = useMemo(() => {
-    const counts: Record<string, number> = {
-      all: relationships.length,
-      ally: 0,
-      rival: 0,
-      family: 0,
-      mentor: 0,
-      acquaintance: 0,
-    };
-    relationships.forEach((r) => {
-      const catId = r.categoryInfo.id;
-      counts[catId] = (counts[catId] || 0) + 1;
+  const globalData = useMemo(() => characters ? buildRelationshipNetwork(characters) : null, [characters]);
+  const lastSelection = useRef({ index: selectedCharacterIndex, revision: selectionRevision });
+  const data = useMemo(() => {
+    if (globalData) return globalData;
+    const center: GraphNode = { id: 'center', name: centerCharacter.name, originalName: centerCharacter.original_name,
+      aliases: centerCharacter.aliases || [], role: centerCharacter.role, targetIndex: -1, radius: 25, x: 0, y: 0, fx: 0, fy: 0 };
+    const nodes: GraphNode[] = [center];
+    const links: GraphLink[] = [];
+    relationships.forEach(r => {
+      const id = r.targetIndex >= 0 ? `character:${r.targetIndex}` : `unresolved:${normalize(r.targetName)}`;
+      if (!nodes.some(n => n.id === id)) nodes.push({ id, name: r.targetChar?.name || r.targetName,
+        originalName: r.targetChar?.original_name, aliases: r.targetChar?.aliases || [], role: r.targetChar?.role,
+        targetIndex: r.targetIndex, radius: 19, x: 0, y: 0 });
+      const record = { from: center.id, to: id, relation: r.relation, categoryInfo: r.categoryInfo };
+      const existing = links.find(l => l.target === id);
+      if (existing) existing.records.push(record);
+      else links.push({ source: center.id, target: id, records: [record] });
     });
-    return counts;
-  }, [relationships]);
+    return { nodes, links };
+  }, [globalData, centerCharacter, relationships]);
 
-  // Construct Nodes & Links based on active filters
-  useEffect(() => {
-    const q = searchQuery.toLowerCase().trim();
+  const filtered = useMemo(() => {
+    const q = normalize(query);
+    const matched = new Set(data.nodes.filter(n => [n.name, n.originalName || '', ...n.aliases].some(s => normalize(s).includes(q))).map(n => n.id));
+    const links = data.links.map(l => ({ ...l, records: l.records.filter(r => category === 'all' || r.categoryInfo.id === category) }))
+      .filter(l => l.records.length && (!q || matched.has(endpointId(l.source)) || matched.has(endpointId(l.target)) || l.records.some(r => normalize(r.relation).includes(q))));
+    const endpoints = new Set(links.flatMap(l => [endpointId(l.source), endpointId(l.target)]));
+    const nodes = data.nodes.filter(n => (!q && category === 'all') || endpoints.has(n.id) || (category === 'all' && matched.has(n.id)) || (!global && n.id === 'center'));
+    return { nodes, links };
+  }, [data, query, category, global]);
 
-    // 1. Center node
-    const centerNode: GraphNode = {
-      id: '__center__',
-      name: centerCharacter.name,
-      originalName: centerCharacter.original_name,
-      role: centerCharacter.role || 'protagonist',
-      isCenter: true,
-      targetIndex: -1,
-      radius: 25,
-      x: 0,
-      y: 0,
-      fx: 0,
-      fy: 0,
-      categoryInfo: {
-        color: '#d9a05b',
-        badge: 'bg-[#383330] text-[#d9a05b] border-[#3f3a36]',
-        category: 'Active Subject',
-        id: 'ally',
-      },
-    };
-
-    // 2. Peripheral nodes
-    const filteredRels = relationships.filter((rel) => {
-      // Category filter
-      if (activeCategoryFilter !== 'all' && rel.categoryInfo.id !== activeCategoryFilter) {
-        return false;
-      }
-      // Search query filter
-      if (q) {
-        const matchName = rel.targetName.toLowerCase().includes(q);
-        const matchRel = rel.relation.toLowerCase().includes(q);
-        const matchOrig = rel.targetChar?.original_name?.toLowerCase().includes(q);
-        if (!matchName && !matchRel && !matchOrig) return false;
-      }
-      return true;
-    });
-
-    const newNodes: GraphNode[] = [centerNode];
-    const newLinks: GraphLink[] = [];
-
-    // Pre-calculate initial angles to seed the simulation gracefully
-    const count = filteredRels.length;
-    filteredRels.forEach((rel, idx) => {
-      const angle = (2 * Math.PI * idx) / Math.max(1, count) - Math.PI / 2;
-      const initialDist = 110 + (idx % 2) * 45;
-      const x = Math.cos(angle) * initialDist;
-      const y = Math.sin(angle) * initialDist;
-
-      const node: GraphNode = {
-        id: `rel_${idx}_${rel.targetName}`,
-        name: rel.targetName,
-        originalName: rel.targetChar?.original_name,
-        role: rel.targetChar?.role || 'supporting',
-        relation: rel.relation,
-        categoryInfo: rel.categoryInfo,
-        isCenter: false,
-        targetIndex: rel.targetIndex,
-        radius: 17,
-        x,
-        y,
-      };
-
-      newNodes.push(node);
-      newLinks.push({
-        source: centerNode.id,
-        target: node.id,
-        relation: rel.relation,
-        color: rel.categoryInfo.color,
-        category: rel.categoryInfo.category,
-      });
-    });
-
-    nodesRef.current = newNodes;
-    linksRef.current = newLinks;
-
-    // Initialize or restart D3 physics simulation
-    if (simulationRef.current) {
-      simulationRef.current.stop();
-    }
-
-    const sim = forceSimulation<GraphNode>(newNodes)
-      .force(
-        'charge',
-        forceManyBody<GraphNode>().strength((d) => (d.isCenter ? repulsionStrength * 1.5 : repulsionStrength))
-      )
-      .force(
-        'collide',
-        forceCollide<GraphNode>().radius((d) => d.radius + collisionPadding).iterations(3)
-      )
-      .force(
-        'link',
-        forceLink<GraphNode, any>(newLinks)
-          .id((d) => d.id)
-          .distance(linkDistance)
-          .strength(0.65)
-      )
-      .force('center', forceCenter(0, 0).strength(0.04))
-      .alphaDecay(0.025);
-
-    simulationRef.current = sim;
-    sim.alpha(1).restart();
-
-    // Trigger re-render
-    requestDraw();
-
-    return () => {
-      sim.stop();
-    };
-  }, [
-    centerCharacter,
-    relationships,
-    activeCategoryFilter,
-    searchQuery,
-    repulsionStrength,
-    linkDistance,
-    collisionPadding,
-  ]);
-
-  // Request Animation Frame drawing function
   const requestDraw = useCallback(() => {
-    if (animationFrameIdRef.current) return;
-    animationFrameIdRef.current = requestAnimationFrame(() => {
-      animationFrameIdRef.current = null;
-      drawCanvas();
-    });
+    if (frameRef.current !== null) return;
+    frameRef.current = requestAnimationFrame(() => { frameRef.current = null; drawRef.current(); });
   }, []);
-
-  // Main Canvas Rendering Routine
-  const drawCanvas = useCallback(() => {
+  const setCamera = useCallback((next: { zoom: number; x: number; y: number }) => {
+    camera.current = next; setZoom(next.zoom); requestDraw();
+  }, [requestDraw]);
+  const fit = useCallback(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const width = canvas.clientWidth;
-    const height = canvas.clientHeight;
-    const dpr = window.devicePixelRatio || 1;
-
-    if (canvas.width !== width * dpr || canvas.height !== height * dpr) {
-      canvas.width = width * dpr;
-      canvas.height = height * dpr;
-    }
-
-    ctx.save();
-    ctx.scale(dpr, dpr);
-    ctx.clearRect(0, 0, width, height);
-
-    // Background fill (Obsidian dark Warm Canvas aesthetic)
-    ctx.fillStyle = '#201c19';
-    ctx.fillRect(0, 0, width, height);
-
-    // Subtle background coordinate grid dots
-    ctx.fillStyle = '#2d2723';
-    const gridSize = 40 * zoom;
-    const offsetX = (width / 2 + pan.x) % gridSize;
-    const offsetY = (height / 2 + pan.y) % gridSize;
-    for (let x = offsetX; x < width; x += gridSize) {
-      for (let y = offsetY; y < height; y += gridSize) {
-        ctx.beginPath();
-        ctx.arc(x, y, 1, 0, 2 * Math.PI);
-        ctx.fill();
-      }
-    }
-
-    // Apply Camera Transform (Centered Pan & Zoom)
-    ctx.translate(width / 2 + pan.x, height / 2 + pan.y);
-    ctx.scale(zoom, zoom);
-
     const nodes = nodesRef.current;
-    const links = linksRef.current;
-    const hovered = hoveredNode;
+    if (!canvas || !nodes.length) return;
+    const extent = (n: GraphNode) => Math.max(n.radius + 12, n.name.length * 3.8 + 8);
+    const minX = Math.min(...nodes.map(n => n.x - extent(n)));
+    const maxX = Math.max(...nodes.map(n => n.x + extent(n)));
+    const minY = Math.min(...nodes.map(n => n.y - n.radius - 12));
+    const maxY = Math.max(...nodes.map(n => n.y + n.radius + 32));
+    const z = Math.min(1.6, Math.max(0.08, Math.min((canvas.clientWidth - 48) / (maxX - minX), (canvas.clientHeight - 48) / (maxY - minY))));
+    setCamera({ zoom: z, x: -(minX + maxX) * z / 2, y: -(minY + maxY) * z / 2 });
+  }, [setCamera]);
 
-    // 1. Draw Links (Obsidian spring connection lines)
-    links.forEach((link) => {
-      const source = typeof link.source === 'object' ? link.source : nodes.find((n) => n.id === link.source);
-      const target = typeof link.target === 'object' ? link.target : nodes.find((n) => n.id === link.target);
-      if (!source || !target) return;
-
-      const isConnectedToHover =
-        hovered && (hovered.id === source.id || hovered.id === target.id);
-
-      ctx.save();
-      ctx.beginPath();
-      ctx.moveTo(source.x, source.y);
-      ctx.lineTo(target.x, target.y);
-
-      if (isConnectedToHover) {
-        ctx.strokeStyle = link.color;
-        ctx.lineWidth = 2.4;
-        ctx.globalAlpha = 0.95;
-        ctx.shadowColor = link.color;
-        ctx.shadowBlur = 8;
-        ctx.stroke();
-      } else {
-        ctx.strokeStyle = link.color;
-        ctx.lineWidth = 1.2;
-        ctx.globalAlpha = 0.35;
-        ctx.setLineDash([3, 4]);
-        ctx.stroke();
-      }
-      ctx.restore();
-
-      // Render relationship text pill on the link if hovered or small roster
-      const shouldDrawPill = isConnectedToHover || (nodes.length <= 10 && zoom >= 0.85);
-      if (shouldDrawPill && link.relation) {
-        const midX = (source.x + target.x) / 2;
-        const midY = (source.y + target.y) / 2;
-        const text = link.relation.length > 14 ? `${link.relation.slice(0, 13)}…` : link.relation;
-
-        ctx.save();
-        ctx.font = 'bold 9px "DM Mono", monospace';
-        const textWidth = ctx.measureText(text).width;
-        const pillW = textWidth + 12;
-        const pillH = 16;
-
-        ctx.fillStyle = '#24201d';
-        ctx.strokeStyle = isConnectedToHover ? link.color : '#3f3a36';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.roundRect(midX - pillW / 2, midY - pillH / 2, pillW, pillH, 3);
-        ctx.fill();
-        ctx.stroke();
-
-        ctx.fillStyle = isConnectedToHover ? link.color : '#dad2c1';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(text, midX, midY + 0.5);
-        ctx.restore();
-      }
-    });
-
-    // 2. Draw Nodes (Obsidian celestial spheres)
-    nodes.forEach((node) => {
-      const isHovered = hovered?.id === node.id;
-      const isConnected =
-        hovered &&
-        links.some((l) => {
-          const sId = typeof l.source === 'object' ? l.source.id : l.source;
-          const tId = typeof l.target === 'object' ? l.target.id : l.target;
-          return (sId === hovered.id && tId === node.id) || (tId === hovered.id && sId === node.id);
-        });
-
-      const isDimmed = hovered && !isHovered && !isConnected && !node.isCenter;
-      const alpha = isDimmed ? 0.2 : 1.0;
-
-      ctx.save();
-      ctx.globalAlpha = alpha;
-
-      // Outer Glow Halo on Center or Hovered node
-      if (node.isCenter || isHovered) {
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, node.radius + (node.isCenter ? 8 : 6), 0, 2 * Math.PI);
-        ctx.fillStyle = node.isCenter ? 'rgba(217, 160, 91, 0.18)' : `${node.categoryInfo.color}25`;
-        ctx.fill();
-      }
-
-      // Main Node Circle
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, node.radius, 0, 2 * Math.PI);
-      ctx.fillStyle = node.isCenter ? '#383330' : '#2b2622';
-      ctx.fill();
-
-      // Border Ring
-      ctx.lineWidth = node.isCenter ? 3 : isHovered ? 2.5 : 1.8;
-      ctx.strokeStyle = node.isCenter
-        ? '#d9a05b'
-        : isHovered
-        ? '#ffffff'
-        : node.categoryInfo.color;
-      if (isHovered || node.isCenter) {
-        ctx.shadowColor = node.isCenter ? '#d9a05b' : node.categoryInfo.color;
-        ctx.shadowBlur = node.isCenter ? 12 : 10;
-      }
-      ctx.stroke();
-
-      // Node Initial Icon/Letter
-      ctx.fillStyle = '#f7f5f0';
-      ctx.font = `bold ${node.isCenter ? 12 : 10}px "DM Mono", monospace`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      const initial = (node.name || '?').charAt(0).toUpperCase();
-      ctx.fillText(initial, node.x, node.y + (node.isCenter ? 0.5 : 0));
-
-      // Node Label Text (Obsidian dynamic LOD)
-      if (showLabels || isHovered || node.isCenter) {
-        const labelText =
-          node.name.length > 13 && !isHovered ? `${node.name.slice(0, 12)}…` : node.name;
-
-        ctx.font = `${node.isCenter ? 'bold 11px' : isHovered ? 'bold 10px' : '500 10px'} "DM Mono", monospace`;
-        const labelY = node.y + node.radius + (node.isCenter ? 14 : 11);
-
-        // Label pill background for optimal legibility
-        const textWidth = ctx.measureText(labelText).width;
-        ctx.fillStyle = isHovered ? '#181513' : 'rgba(36, 32, 29, 0.85)';
-        ctx.beginPath();
-        ctx.roundRect(node.x - textWidth / 2 - 4, labelY - 7, textWidth + 8, 14, 2);
-        ctx.fill();
-
-        ctx.fillStyle = node.isCenter ? '#d9a05b' : isHovered ? '#f7f5f0' : '#dad2c1';
-        ctx.fillText(labelText, node.x, labelY);
-      }
-
-      ctx.restore();
-    });
-
-    ctx.restore();
-  }, [pan, zoom, hoveredNode, showLabels]);
-
-  // Keep drawing while simulation is actively moving
   useEffect(() => {
-    let animId: number;
-    const loop = () => {
-      drawCanvas();
-      if (simulationRef.current && simulationRef.current.alpha() > 0.005) {
-        animId = requestAnimationFrame(loop);
+    const previous = new Map(nodesRef.current.map(n => [n.id, n]));
+    const nodes = filtered.nodes.map((n, i) => {
+      const old = previous.get(n.id);
+      const angle = i * Math.PI * (3 - Math.sqrt(5));
+      const radius = 65 * Math.sqrt(i + 1);
+      return { ...n, x: old?.x ?? Math.cos(angle) * radius, y: old?.y ?? Math.sin(angle) * radius };
+    });
+    const links = filtered.links.map(l => ({ ...l }));
+    nodesRef.current = nodes; linksRef.current = links;
+    const sim = forceSimulation<GraphNode>(nodes)
+      .force('charge', forceManyBody<GraphNode>().strength(-repulsion))
+      .force('collide', forceCollide<GraphNode>().radius(n => Math.max(n.radius + padding, n.name.length * 3.8 + padding)).iterations(3))
+      .force('link', forceLink<GraphNode, GraphLink>(links).id(n => n.id).distance(distance).strength(0.35))
+      .force('center', forceCenter(0, 0)).stop();
+    const aspect = Math.max(1, (canvasRef.current?.clientWidth || 600) / (canvasRef.current?.clientHeight || 400));
+    // Keep isolates near the cast and favor a wide layout on desktop.
+    sim.force('x', forceX<GraphNode>(0).strength(0.025 / aspect));
+    sim.force('y', forceY<GraphNode>(0).strength(0.07 * aspect));
+    // Settle once before fitting so filtering never opens on an overlapping layout.
+    sim.tick(180);
+    simulationRef.current = sim;
+    sim.on('tick', requestDraw);
+    fit(); requestDraw();
+    return () => { sim.stop(); if (simulationRef.current === sim) simulationRef.current = null; };
+  }, [filtered, repulsion, distance, padding, fit, requestDraw]);
+
+  useEffect(() => {
+    if (!global || (lastSelection.current.index === selectedCharacterIndex && lastSelection.current.revision === selectionRevision)) return;
+    lastSelection.current = { index: selectedCharacterIndex, revision: selectionRevision };
+    setSelected(data.nodes.find(n => n.targetIndex === selectedCharacterIndex)?.id || null);
+  }, [selectedCharacterIndex, selectionRevision, data, global]);
+  useEffect(() => { setHovered(null); }, [filtered]);
+  useEffect(() => {
+    const observer = new ResizeObserver(() => { fit(); requestDraw(); });
+    if (viewportRef.current) observer.observe(viewportRef.current);
+    return () => { observer.disconnect(); if (frameRef.current !== null) cancelAnimationFrame(frameRef.current); frameRef.current = null; };
+  }, [fit, requestDraw]);
+
+  const focused = filtered.nodes.find(n => n.id === (hovered || selected));
+  const focusedId = focused?.id || null;
+  const incident = filtered.links.filter(l => endpointId(l.source) === focusedId || endpointId(l.target) === focusedId);
+  const neighbors = new Set(incident.flatMap(l => [endpointId(l.source), endpointId(l.target)]));
+  drawRef.current = () => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
+    const w = canvas.clientWidth, h = canvas.clientHeight, dpr = window.devicePixelRatio || 1;
+    if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) { canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr); }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = '#201c19'; ctx.fillRect(0, 0, w, h);
+    const cam = camera.current;
+    ctx.translate(w / 2 + cam.x, h / 2 + cam.y); ctx.scale(cam.zoom, cam.zoom);
+    const byId = new Map(nodesRef.current.map(n => [n.id, n]));
+    linksRef.current.forEach(l => {
+      const a = byId.get(endpointId(l.source)), b = byId.get(endpointId(l.target));
+      if (!a || !b) return;
+      const active = a.id === focusedId || b.id === focusedId;
+      ctx.globalAlpha = focusedId ? active ? 0.9 : 0.12 : 0.45;
+      ctx.strokeStyle = l.records[0].categoryInfo.color; ctx.lineWidth = (active ? 2 : 1) / cam.zoom;
+      ctx.beginPath(); ctx.moveTo(a.x, a.y);
+      if (a.id === b.id) ctx.arc(a.x + 22, a.y - 22, 26, 0, 2 * Math.PI);
+      else ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+      if (active) {
+        const text = l.records.map(r => r.relation).join(' / ');
+        const label = text.length > 30 ? text.slice(0, 29) + '…' : text;
+        const x = (a.x + b.x) / 2, y = (a.y + b.y) / 2;
+        ctx.font = `${12 / cam.zoom}px sans-serif`;
+        const tw = ctx.measureText(label).width;
+        ctx.fillStyle = '#24201d'; ctx.fillRect(x - tw / 2 - 5 / cam.zoom, y - 9 / cam.zoom, tw + 10 / cam.zoom, 18 / cam.zoom);
+        ctx.fillStyle = '#f7f5f0'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(label, x, y);
       }
-    };
-    animId = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(animId);
-  }, [drawCanvas]);
-
-  // Coordinate Conversion Helper (Screen viewport -> Canvas World space)
-  const screenToWorld = useCallback(
-    (screenX: number, screenY: number) => {
-      const canvas = canvasRef.current;
-      if (!canvas) return { x: 0, y: 0 };
-      const rect = canvas.getBoundingClientRect();
-      const x = screenX - rect.left - canvas.clientWidth / 2 - pan.x;
-      const y = screenY - rect.top - canvas.clientHeight / 2 - pan.y;
-      return { x: x / zoom, y: y / zoom };
-    },
-    [pan, zoom]
-  );
-
-  // Find node under mouse coordinates
-  const findNodeAt = useCallback(
-    (worldX: number, worldY: number): GraphNode | null => {
-      const nodes = nodesRef.current;
-      for (let i = nodes.length - 1; i >= 0; i--) {
-        const node = nodes[i];
-        const dx = worldX - node.x;
-        const dy = worldY - node.y;
-        if (dx * dx + dy * dy <= (node.radius + 6) * (node.radius + 6)) {
-          return node;
+    });
+    nodesRef.current.forEach(n => {
+      const active = n.id === focusedId;
+      ctx.globalAlpha = focusedId && !active && !neighbors.has(n.id) ? 0.25 : 1;
+      const color = roleColors[(n.role || 'minor').toLowerCase()] || roleColors.minor;
+      ctx.fillStyle = active ? '#383330' : '#2b2622'; ctx.strokeStyle = active ? '#f7f5f0' : color; ctx.lineWidth = (active ? 3 : 1.5) / cam.zoom;
+      ctx.beginPath(); ctx.arc(n.x, n.y, n.radius, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#f7f5f0'; ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(Array.from(n.name)[0] || '?', n.x, n.y);
+    });
+    // ponytail: bounded label placement for novel casts; use spatial indexing if large rosters make redraws slow.
+    // Place screen-sized name labels independently of physics to avoid overlaps at fit zoom.
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const anchors = nodesRef.current.map(n => ({ n, x: w / 2 + cam.x + n.x * cam.zoom, y: h / 2 + cam.y + n.y * cam.zoom, r: n.radius * cam.zoom }));
+    const occupied: { x: number; y: number; w: number; h: number }[] = [];
+    const labels: { n: GraphNode; x: number; y: number; r: number; active: boolean; text: string; font: string; box: { x: number; y: number; w: number; h: number } }[] = [];
+    let needsLabelGrid = false;
+    anchors.sort((a, b) => Number(b.n.id === focusedId) - Number(a.n.id === focusedId));
+    anchors.forEach(({ n, x, y, r }) => {
+      const active = n.id === focusedId;
+      if (x + r < 0 || x - r > w || y + r < 0 || y - r > h) return;
+      if (!showLabels && !active && n.id !== 'center') return;
+      ctx.font = `${active ? 'bold ' : ''}${w < 500 ? 11 : 12}px sans-serif`;
+      const label = n.name.length > 26 ? n.name.slice(0, 25) + '…' : n.name;
+      const width = ctx.measureText(label).width + 8;
+      const offsets = [[0, r + 16], [0, -r - 16], [r + width / 2 + 8, 0], [-r - width / 2 - 8, 0]];
+      for (let ring = 1; ring <= 16; ring++) {
+        for (let step = 0; step < 12; step++) {
+          const angle = step * Math.PI / 6;
+          offsets.push([Math.cos(angle) * ring * 20, Math.sin(angle) * ring * 20]);
         }
       }
-      return null;
-    },
-    []
-  );
-
-  // Mouse Interaction Handlers (Drag, Pan, Click, Hover)
-  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (e.button !== 0) return; // Only primary button
-    const world = screenToWorld(e.clientX, e.clientY);
-    const clickedNode = findNodeAt(world.x, world.y);
-
-    dragStartPosRef.current = { x: e.clientX, y: e.clientY };
-
-    if (clickedNode) {
-      isDraggingNodeRef.current = true;
-      draggedNodeRef.current = clickedNode;
-
-      if (!clickedNode.isCenter) {
-        clickedNode.fx = clickedNode.x;
-        clickedNode.fy = clickedNode.y;
+      let box = { x: x - width / 2, y: y + r + 7, w: width, h: 18 };
+      let placed = false;
+      const isFree = (candidate: typeof box) => {
+        const intersectsLabel = occupied.some(b => candidate.x < b.x + b.w + 4 && candidate.x + candidate.w + 4 > b.x && candidate.y < b.y + b.h + 3 && candidate.y + candidate.h + 3 > b.y);
+        const intersectsNode = anchors.some(a => candidate.x < a.x + a.r + 3 && candidate.x + candidate.w > a.x - a.r - 3 && candidate.y < a.y + a.r + 3 && candidate.y + candidate.h > a.y - a.r - 3);
+        return !intersectsLabel && !intersectsNode;
+      };
+      for (const [dx, dy] of offsets) {
+        const candidate = { x: Math.min(w - width - 4, Math.max(4, x + dx - width / 2)), y: Math.min(h - 22, Math.max(4, y + dy - 9)), w: width, h: 18 };
+        if (isFree(candidate)) { box = candidate; placed = true; break; }
       }
-
-      if (simulationRef.current) {
-        simulationRef.current.alphaTarget(0.3).restart();
+      needsLabelGrid ||= !placed;
+      occupied.push(box);
+      labels.push({ n, x, y, r, active, text: label, font: ctx.font, box });
+    });
+    // If local placement runs out of room, use aligned labels with leader lines.
+    // This preserves every name on narrow canvases instead of stacking labels.
+    if (needsLabelGrid && labels.length) {
+      const columnWidth = Math.max(...labels.map(l => l.box.w)) + 8;
+      const columns = Math.max(1, Math.floor((w - 8) / columnWidth));
+      const rows = Math.ceil(labels.length / columns);
+      labels.sort((a, b) => a.y - b.y);
+      for (let row = 0; row < rows; row++) {
+        const group = labels.slice(row * columns, (row + 1) * columns).sort((a, b) => a.x - b.x);
+        group.forEach((label, column) => {
+          label.box.x = (column + 0.5) * w / columns - label.box.w / 2;
+          label.box.y = (row + 0.5) * h / rows - 9;
+        });
       }
-    } else {
-      isPanningCanvasRef.current = true;
-      panStartRef.current = { x: pan.x, y: pan.y };
     }
+    labels.forEach(({ n, x, y, r, active, text: label, font, box }) => {
+      ctx.font = font;
+      ctx.globalAlpha = focusedId && !active && !neighbors.has(n.id) ? 0.25 : 1;
+      const labelX = box.x + box.w / 2, labelY = box.y + box.h / 2;
+      if (Math.hypot(labelX - x, labelY - y) > r + 22) {
+        ctx.strokeStyle = '#857d75'; ctx.lineWidth = 0.6;
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(labelX, labelY); ctx.stroke();
+      }
+      ctx.fillStyle = '#201c19'; ctx.fillRect(box.x, box.y, box.w, box.h);
+      ctx.fillStyle = active ? '#ffffff' : '#dad2c1'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(label, labelX, labelY);
+    });
+    ctx.globalAlpha = 1;
   };
+  useEffect(() => { requestDraw(); }, [focusedId, filtered, showLabels, requestDraw]);
 
-  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const world = screenToWorld(e.clientX, e.clientY);
-
-    // 1. Dragging Node (Obsidian dynamic spring physics)
-    if (isDraggingNodeRef.current && draggedNodeRef.current) {
-      const node = draggedNodeRef.current;
-      if (!node.isCenter) {
-        node.fx = world.x;
-        node.fy = world.y;
-      }
-      requestDraw();
-      return;
-    }
-
-    // 2. Panning Canvas
-    if (isPanningCanvasRef.current) {
-      const dx = e.clientX - dragStartPosRef.current.x;
-      const dy = e.clientY - dragStartPosRef.current.y;
-      setPan({
-        x: panStartRef.current.x + dx,
-        y: panStartRef.current.y + dy,
-      });
-      requestDraw();
-      return;
-    }
-
-    // 3. Hovering check
-    const node = findNodeAt(world.x, world.y);
-    if (node !== hoveredNode) {
-      setHoveredNode(node);
-      requestDraw();
-    }
+  const hit = (clientX: number, clientY: number) => {
+    const canvas = canvasRef.current!;
+    const rect = canvas.getBoundingClientRect(), cam = camera.current;
+    const x = (clientX - rect.left - canvas.clientWidth / 2 - cam.x) / cam.zoom;
+    const y = (clientY - rect.top - canvas.clientHeight / 2 - cam.y) / cam.zoom;
+    return { x, y, node: [...nodesRef.current].reverse().find(n => Math.hypot(n.x - x, n.y - y) <= n.radius + 6 / cam.zoom) };
   };
-
-  const handleMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const dx = Math.abs(e.clientX - dragStartPosRef.current.x);
-    const dy = Math.abs(e.clientY - dragStartPosRef.current.y);
-    const isClick = dx < 5 && dy < 5;
-
-    if (isDraggingNodeRef.current && draggedNodeRef.current) {
-      const node = draggedNodeRef.current;
-
-      if (isClick) {
-        // Node was clicked! Navigate to dossier
-        if (!node.isCenter) {
-          if (node.targetIndex !== -1) {
-            onSelectCharacterByIndex(node.targetIndex);
-          } else {
-            onSelectCharacterByName(node.name);
-          }
-        }
-      }
-
-      if (!node.isCenter) {
-        // Release spring pin
-        node.fx = null;
-        node.fy = null;
-      }
-
-      isDraggingNodeRef.current = false;
-      draggedNodeRef.current = null;
-
-      if (simulationRef.current) {
-        simulationRef.current.alphaTarget(0);
-      }
-    }
-
-    isPanningCanvasRef.current = false;
+  const choose = (node: GraphNode) => {
+    if (global) { setSelected(node.id); if (node.targetIndex >= 0) onSelectCharacterByIndex(node.targetIndex); }
+    else if (node.id !== 'center') { if (node.targetIndex >= 0) onSelectCharacterByIndex(node.targetIndex); else onSelectCharacterByName(node.name); }
   };
-
-  const handleMouseLeave = () => {
-    if (isDraggingNodeRef.current && draggedNodeRef.current) {
-      if (!draggedNodeRef.current.isCenter) {
-        draggedNodeRef.current.fx = null;
-        draggedNodeRef.current.fy = null;
-      }
-      isDraggingNodeRef.current = false;
-      draggedNodeRef.current = null;
-      if (simulationRef.current) {
-        simulationRef.current.alphaTarget(0);
-      }
+  const endGesture = (e: React.PointerEvent<HTMLCanvasElement>, cancelled = false) => {
+    const g = gesture.current;
+    if (!g) return;
+    if (g.node) {
+      if (!g.moved && !cancelled) choose(g.node);
+      if (g.node.id !== 'center') { g.node.fx = null; g.node.fy = null; }
     }
-    isPanningCanvasRef.current = false;
-    setHoveredNode(null);
+    gesture.current = null;
+    simulationRef.current?.alphaTarget(0);
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
     requestDraw();
   };
-
-  // Mouse Wheel Zoom centered on cursor
-  const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
-    e.preventDefault();
-    const zoomFactor = e.deltaY < 0 ? 1.15 : 0.87;
-    const newZoom = Math.min(3.5, Math.max(0.35, zoom * zoomFactor));
-
+  const zoomAt = (factor: number, x = 0, y = 0) => {
+    const cam = camera.current, z = Math.min(4, Math.max(0.08, cam.zoom * factor));
+    setCamera({ zoom: z, x: x - (x - cam.x) * z / cam.zoom, y: y - (y - cam.y) * z / cam.zoom });
+  };
+  useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left - canvas.clientWidth / 2;
-    const mouseY = e.clientY - rect.top - canvas.clientHeight / 2;
+    const wheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      zoomAt(e.deltaY < 0 ? 1.15 : 1 / 1.15, e.clientX - rect.left - canvas.clientWidth / 2, e.clientY - rect.top - canvas.clientHeight / 2);
+    };
+    canvas.addEventListener('wheel', wheel, { passive: false });
+    return () => canvas.removeEventListener('wheel', wheel);
+  }, [setCamera]);
 
-    // Anchor zoom around cursor position
-    const newPanX = mouseX - (mouseX - pan.x) * (newZoom / zoom);
-    const newPanY = mouseY - (mouseY - pan.y) * (newZoom / zoom);
-
-    setZoom(newZoom);
-    setPan({ x: newPanX, y: newPanY });
-    requestDraw();
-  };
-
-  // Reset Camera View
-  const handleResetCamera = () => {
-    setZoom(1.0);
-    setPan({ x: 0, y: 0 });
-    if (simulationRef.current) {
-      simulationRef.current.alpha(0.3).restart();
-    }
-    requestDraw();
-  };
-
-  return (
-    <div
-      ref={containerRef}
-      className="relative w-full h-[460px] bg-[#201c19] rounded-[4px] border border-[#3f3a36] overflow-hidden select-none flex flex-col"
-    >
-      {/* Top Floating Control Bar */}
-      <div className="absolute top-2.5 left-2.5 right-2.5 z-10 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
-        {/* Left: Search & Category Filter Pills */}
-        <div className="flex items-center gap-1.5 flex-wrap pointer-events-auto">
-          {/* Quick Search Input */}
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 absolute left-2.5 top-2 text-[#857d75]" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search graph..."
-              className="pl-8 pr-6 py-1 bg-[#24201d]/90 backdrop-blur-sm border border-[#3f3a36] hover:border-[#b0a89f]/40 focus:border-[#d9a05b] rounded-[3px] text-xs font-mono text-[#f7f5f0] placeholder-[#857d75] focus:outline-none w-36 sm:w-44 transition-all"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-2 top-2 text-[#857d75] hover:text-[#f7f5f0] cursor-pointer"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            )}
-          </div>
-
-          {/* Category Filter Pills */}
-          <div className="flex items-center gap-1 bg-[#24201d]/90 backdrop-blur-sm p-0.5 rounded-[3px] border border-[#3f3a36] text-[11px] font-mono">
-            <button
-              onClick={() => setActiveCategoryFilter('all')}
-              className={`px-2 py-0.5 rounded-[2px] transition-colors cursor-pointer ${
-                activeCategoryFilter === 'all'
-                  ? 'bg-[#f7f5f0] text-[#2b2622] font-semibold'
-                  : 'text-[#857d75] hover:text-[#f7f5f0]'
-              }`}
-            >
-              All ({categoryCounts.all})
-            </button>
-            {categoryCounts.ally > 0 && (
-              <button
-                onClick={() => setActiveCategoryFilter('ally')}
-                className={`px-2 py-0.5 rounded-[2px] flex items-center gap-1 transition-colors cursor-pointer ${
-                  activeCategoryFilter === 'ally'
-                    ? 'bg-[#7fa678] text-[#1c241a] font-semibold'
-                    : 'text-[#7fa678] hover:bg-[#7fa678]/10'
-                }`}
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-[#7fa678]" />
-                Allies ({categoryCounts.ally})
-              </button>
-            )}
-            {categoryCounts.rival > 0 && (
-              <button
-                onClick={() => setActiveCategoryFilter('rival')}
-                className={`px-2 py-0.5 rounded-[2px] flex items-center gap-1 transition-colors cursor-pointer ${
-                  activeCategoryFilter === 'rival'
-                    ? 'bg-[#cf6659] text-[#261614] font-semibold'
-                    : 'text-[#cf6659] hover:bg-[#cf6659]/10'
-                }`}
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-[#cf6659]" />
-                Rivals ({categoryCounts.rival})
-              </button>
-            )}
-            {categoryCounts.family > 0 && (
-              <button
-                onClick={() => setActiveCategoryFilter('family')}
-                className={`px-2 py-0.5 rounded-[2px] flex items-center gap-1 transition-colors cursor-pointer ${
-                  activeCategoryFilter === 'family'
-                    ? 'bg-[#e699b8] text-[#2b1822] font-semibold'
-                    : 'text-[#e699b8] hover:bg-[#e699b8]/10'
-                }`}
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-[#e699b8]" />
-                Family ({categoryCounts.family})
-              </button>
-            )}
-            {categoryCounts.mentor > 0 && (
-              <button
-                onClick={() => setActiveCategoryFilter('mentor')}
-                className={`px-2 py-0.5 rounded-[2px] flex items-center gap-1 transition-colors cursor-pointer ${
-                  activeCategoryFilter === 'mentor'
-                    ? 'bg-[#d9a05b] text-[#2b2114] font-semibold'
-                    : 'text-[#d9a05b] hover:bg-[#d9a05b]/10'
-                }`}
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-[#d9a05b]" />
-                Mentors ({categoryCounts.mentor})
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Right: Physics Sliders Toggle & Zoom Status */}
-        <div className="flex items-center gap-1 pointer-events-auto">
-          <button
-            onClick={() => setShowLabels(!showLabels)}
-            className={`px-2 py-1 rounded-[3px] border border-[#3f3a36] text-[10px] font-mono cursor-pointer transition-colors ${
-              showLabels
-                ? 'bg-[#383330] text-[#f7f5f0]'
-                : 'bg-[#24201d]/90 text-[#857d75] hover:text-[#f7f5f0]'
-            }`}
-            title="Toggle character labels"
-          >
-            Aa Labels
-          </button>
-          <button
-            onClick={() => setShowSettings(!showSettings)}
-            className={`p-1.5 rounded-[3px] border border-[#3f3a36] cursor-pointer transition-colors ${
-              showSettings
-                ? 'bg-[#d9a05b] text-[#2b2622]'
-                : 'bg-[#24201d]/90 text-[#857d75] hover:text-[#f7f5f0]'
-            }`}
-            title="Physics Simulation Settings"
-          >
-            <SlidersHorizontal className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      </div>
-
-      {/* Physics Sliders Drawer (Obsidian Graph Forces) */}
-      {showSettings && (
-        <div className="absolute top-12 right-2.5 z-20 w-64 bg-[#24201d]/95 backdrop-blur-md border border-[#3f3a36] rounded-[4px] p-3 text-xs font-mono shadow-xl space-y-3">
-          <div className="flex items-center justify-between pb-1.5 border-b border-[#3f3a36]">
-            <span className="text-[11px] font-bold uppercase text-[#d9a05b] flex items-center gap-1">
-              <SlidersHorizontal className="w-3 h-3" />
-              Obsidian Physics Forces
-            </span>
-            <button
-              onClick={() => setShowSettings(false)}
-              className="text-[#857d75] hover:text-[#f7f5f0] cursor-pointer"
-            >
-              <X className="w-3 h-3" />
-            </button>
-          </div>
-
-          <div className="space-y-1">
-            <div className="flex justify-between text-[10px] text-[#857d75]">
-              <span>Node Repulsion</span>
-              <span className="text-[#f7f5f0]">{Math.abs(repulsionStrength)}</span>
-            </div>
-            <input
-              type="range"
-              min="100"
-              max="700"
-              step="20"
-              value={Math.abs(repulsionStrength)}
-              onChange={(e) => setRepulsionStrength(-Number(e.target.value))}
-              className="w-full accent-[#d9a05b] cursor-pointer"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <div className="flex justify-between text-[10px] text-[#857d75]">
-              <span>Link Distance (Spring)</span>
-              <span className="text-[#f7f5f0]">{linkDistance}px</span>
-            </div>
-            <input
-              type="range"
-              min="60"
-              max="240"
-              step="10"
-              value={linkDistance}
-              onChange={(e) => setLinkDistance(Number(e.target.value))}
-              className="w-full accent-[#d9a05b] cursor-pointer"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <div className="flex justify-between text-[10px] text-[#857d75]">
-              <span>Collision Padding</span>
-              <span className="text-[#f7f5f0]">{collisionPadding}px</span>
-            </div>
-            <input
-              type="range"
-              min="8"
-              max="35"
-              step="2"
-              value={collisionPadding}
-              onChange={(e) => setCollisionPadding(Number(e.target.value))}
-              className="w-full accent-[#d9a05b] cursor-pointer"
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Main Interactive HTML5 Canvas */}
-      <canvas
-        ref={canvasRef}
-        className="w-full h-full cursor-grab active:cursor-grabbing block"
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseLeave}
-        onWheel={handleWheel}
-      />
-
-      {/* Hover Inspector Tooltip HUD (Obsidian Floating Card) */}
-      {hoveredNode && !isDraggingNodeRef.current && (
-        <div className="absolute bottom-3 left-3 z-10 bg-[#24201d]/95 backdrop-blur-md border border-[#3f3a36] rounded-[4px] p-3 max-w-xs shadow-xl pointer-events-none transition-all">
-          <div className="flex items-center gap-2">
-            <div
-              className="w-7 h-7 rounded-full flex items-center justify-center font-mono font-bold text-xs border"
-              style={{
-                borderColor: hoveredNode.categoryInfo.color,
-                backgroundColor: '#383330',
-                color: '#f7f5f0',
-              }}
-            >
-              {(hoveredNode.name || '?').charAt(0).toUpperCase()}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-xs font-bold text-[#f7f5f0] truncate">{hoveredNode.name}</div>
-              {hoveredNode.originalName && (
-                <div className="text-[10px] font-mono text-[#857d75] truncate">
-                  {hoveredNode.originalName}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="mt-2 pt-2 border-t border-[#3f3a36]/60 flex items-center justify-between gap-2">
-            <span
-              className={`text-[9px] px-1.5 py-0.5 rounded-[2px] font-mono border ${hoveredNode.categoryInfo.badge}`}
-            >
-              {hoveredNode.relation || hoveredNode.categoryInfo.category}
-            </span>
-            {!hoveredNode.isCenter && (
-              <span className="text-[9px] font-mono text-[#857d75] flex items-center gap-1">
-                Click to inspect dossier <ArrowRight className="w-2.5 h-2.5 text-[#d9a05b]" />
-              </span>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Bottom-Right Camera Navigation Controls */}
-      <div className="absolute bottom-3 right-3 z-10 flex items-center gap-1 bg-[#24201d]/90 backdrop-blur-sm p-1 rounded-[3px] border border-[#3f3a36]">
-        <button
-          onClick={() => {
-            const newZoom = Math.min(3.5, zoom * 1.25);
-            setZoom(newZoom);
-            requestDraw();
-          }}
-          className="p-1 text-[#857d75] hover:text-[#f7f5f0] cursor-pointer transition-colors"
-          title="Zoom In"
-        >
-          <ZoomIn className="w-3.5 h-3.5" />
-        </button>
-        <button
-          onClick={() => {
-            const newZoom = Math.max(0.35, zoom * 0.8);
-            setZoom(newZoom);
-            requestDraw();
-          }}
-          className="p-1 text-[#857d75] hover:text-[#f7f5f0] cursor-pointer transition-colors"
-          title="Zoom Out"
-        >
-          <ZoomOut className="w-3.5 h-3.5" />
-        </button>
-        <button
-          onClick={handleResetCamera}
-          className="p-1 text-[#857d75] hover:text-[#d9a05b] cursor-pointer transition-colors"
-          title="Reset Camera & Center"
-        >
-          <RotateCcw className="w-3.5 h-3.5" />
-        </button>
-        <div className="px-1 text-[10px] font-mono text-[#857d75] border-l border-[#3f3a36]">
-          {Math.round(zoom * 100)}%
-        </div>
-      </div>
+  return <section aria-label={global ? 'Global relationship graph' : 'Personal relationship graph'} className="w-full min-w-0 rounded border border-[#3f3a36] bg-[#201c19] text-xs text-[#dad2c1]">
+    <div className="flex flex-wrap items-center gap-2 p-3 border-b border-[#3f3a36]">
+      <label className="flex items-center gap-2"><Search size={14} /><input aria-label="Search graph" placeholder="Search graph..." value={query} onChange={e => setQuery(e.target.value)} className="w-40 bg-[#24201d] border border-[#3f3a36] rounded p-1.5" /></label>
+      <button className={buttonClass} aria-pressed={category === 'all'} onClick={() => setCategory('all')}>All</button>
+      {categories.map(id => <button key={id} className={buttonClass} style={{ color: categoryColors[id], borderColor: category === id ? categoryColors[id] : undefined }} aria-pressed={category === id} onClick={() => setCategory(id)}>{categoryNames[id]}</button>)}
+      <button className={buttonClass} title="Toggle character labels" aria-pressed={showLabels} onClick={() => setShowLabels(v => !v)}>Aa Labels</button>
+      <button className={buttonClass} title="Physics Simulation Settings" aria-expanded={showSettings} onClick={() => setShowSettings(v => !v)}><SlidersHorizontal size={14} /><span className="sr-only">Layout settings</span></button>
     </div>
-  );
+    {showSettings && <div className="flex flex-wrap gap-4 p-3 border-b border-[#3f3a36]">
+      <strong>Obsidian Physics Forces</strong>
+      {([['Node Repulsion', repulsion, 100, 700, setRepulsion], ['Link Distance', distance, 60, 300, setDistance], ['Collision Padding', padding, 8, 40, setPadding]] as const).map(([label, value, min, max, setter]) => <label key={label}>{label} ({value})<input aria-label={label} type="range" min={min} max={max} value={value} onChange={e => setter(Number(e.target.value))} className="block accent-[#d9a05b]" /></label>)}
+    </div>}
+    <div className="flex flex-wrap items-center gap-3 p-2 text-[11px] text-[#b0a89f]">
+      <span role="status">{filtered.nodes.length} characters · {filtered.links.length} connections</span>
+      {Object.entries(roleColors).map(([role, color]) => <span key={role} className="flex items-center gap-1 capitalize"><span style={{ background: color }} className="w-2 h-2 rounded-full" />{role}</span>)}
+      <span>Node: role · Line: relationship</span>
+    </div>
+    <div ref={viewportRef} className={global ? 'relative h-[52vh] min-h-[350px] max-h-[700px]' : 'relative h-[400px]'}>
+      <canvas ref={canvasRef} aria-label="Interactive character relationship canvas; use the roster or character buttons below for keyboard selection" className="block w-full h-full touch-none cursor-grab active:cursor-grabbing"
+        onPointerDown={e => {
+          if (e.button !== 0) return;
+          const { node } = hit(e.clientX, e.clientY);
+          gesture.current = { node, x: e.clientX, y: e.clientY, panX: camera.current.x, panY: camera.current.y, moved: false };
+          e.currentTarget.setPointerCapture(e.pointerId);
+        }}
+        onPointerMove={e => {
+          const world = hit(e.clientX, e.clientY), g = gesture.current;
+          if (!g) { setHovered(world.node?.id || null); return; }
+          const dx = e.clientX - g.x, dy = e.clientY - g.y;
+          g.moved ||= Math.hypot(dx, dy) > 5;
+          if (!g.moved) return;
+          if (g.node && g.node.id !== 'center') { g.node.fx = world.x; g.node.fy = world.y; simulationRef.current?.alphaTarget(0.15).restart(); }
+          else if (!g.node) setCamera({ ...camera.current, x: g.panX + dx, y: g.panY + dy });
+          requestDraw();
+        }} onPointerUp={e => endGesture(e)} onPointerCancel={e => endGesture(e, true)} onLostPointerCapture={e => endGesture(e, true)} onPointerLeave={() => { if (!gesture.current) setHovered(null); }} />
+      {filtered.nodes.length === 0 && <p className="absolute inset-0 flex items-center justify-center pointer-events-none">No matching characters or relationships.</p>}
+    </div>
+    <div className="flex flex-wrap gap-2 items-center p-2 border-t border-[#3f3a36]">
+      <button className={buttonClass} title="Zoom In" onClick={() => zoomAt(1.25)}><ZoomIn size={14} /><span className="sr-only">Zoom in</span></button>
+      <button className={buttonClass} title="Zoom Out" onClick={() => zoomAt(0.8)}><ZoomOut size={14} /><span className="sr-only">Zoom out</span></button>
+      <button className={buttonClass} title="Reset Camera & Center" onClick={fit}><RotateCcw size={14} className="inline mr-1" />Fit graph</button>
+      {global && <button className={buttonClass} onClick={() => { setSelected(null); setHovered(null); }}><X size={12} className="inline mr-1" />Clear selection</button>}
+      <span aria-label="Graph zoom">{Math.round(zoom * 100)}%</span><span className="text-[#857d75]">Drag nodes to arrange · Drag background to pan · Scroll to zoom</span>
+    </div>
+    <div aria-label="Relationship details" className="p-3 border-t border-[#3f3a36] max-h-64 overflow-y-auto">
+      {focused ? <>
+        <div className="flex flex-wrap gap-2 items-center"><strong className="text-[#f7f5f0]">{focused.name}</strong><span>{focused.originalName}</span>
+          {global && focused.targetIndex >= 0 && onOpenDossier && <button className={buttonClass} onClick={() => onOpenDossier(focused.targetIndex)}>Open dossier <ArrowRight size={12} className="inline" /></button>}
+          {focused.targetIndex < 0 && global && <span>Unregistered character</span>}
+        </div>
+        {incident.length ? <ul className="mt-2 space-y-2">{incident.flatMap(l => l.records).map((r, i) => <li key={i} style={{ borderColor: r.categoryInfo.color }} className="border-l-2 pl-2 break-words">
+          <span>{data.nodes.find(n => n.id === r.from)?.name} → {data.nodes.find(n => n.id === r.to)?.name}: </span><span>{r.relation}</span>
+        </li>)}</ul> : <p className="mt-2">No connections in this view.</p>}
+      </> : <p>Select or hover a character to explore their connections.</p>}
+    </div>
+    <details className="border-t border-[#3f3a36] p-2"><summary className="cursor-pointer">Choose a character ({filtered.nodes.length})</summary><div className="flex flex-wrap gap-2 mt-2">{filtered.nodes.map(n => <button key={n.id} className={buttonClass} aria-pressed={selected === n.id} onClick={() => choose(n)}>{n.name}</button>)}</div></details>
+  </section>;
 };
