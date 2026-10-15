@@ -28,6 +28,17 @@ from nousetsu.scraper.models import (
 
 logger = logging.getLogger("nousetsu.scraper.bridge")
 
+
+def _bounded_progress(current: Any, total: Any):
+    """Normalize selected chapter counts and derive a safe progress percentage."""
+    current = max(0, int(current or 0))
+    total = max(0, int(total or 0))
+    if total == 0:
+        return current, total, 0.0
+    current = min(current, total)
+    return current, total, round(current / total * 100, 1)
+
+
 _BUNDLED_BRIDGE_RUNNER = (
     "import runpy, sys; "
     "scraper_root, bridge_path = sys.argv[1:3]; "
@@ -316,9 +327,9 @@ class NovelScraperBridge:
                     continue
                 if payload.get("type") == "progress":
                     status_obj.stage = payload.get("stage", "downloading")
-                    status_obj.current_chapter = payload.get("current", 0)
-                    status_obj.total_chapters = payload.get("total", 0)
-                    status_obj.progress_percent = max(0, min(100, payload.get("percent", 0)))
+                    (status_obj.current_chapter, status_obj.total_chapters,
+                     status_obj.progress_percent) = _bounded_progress(
+                        payload.get("current"), payload.get("total"))
                     status_obj.current_title = payload.get("title") or payload.get("message")
                     status_obj.message = payload.get("message", "")
                     if on_progress:
@@ -399,7 +410,9 @@ class NovelScraperBridge:
                         setattr(status_obj, field, sum(outcome.get("status") == field for outcome in status_obj.outcomes))
                 status_obj.total_chapters = terminal.get("total_selected", status_obj.total_chapters)
                 status_obj.current_chapter = len(status_obj.outcomes) or terminal.get("completed", 0)
-                status_obj.progress_percent = round(status_obj.current_chapter / max(status_obj.total_chapters, 1) * 100, 1)
+                (status_obj.current_chapter, status_obj.total_chapters,
+                 status_obj.progress_percent) = _bounded_progress(
+                    status_obj.current_chapter, status_obj.total_chapters)
                 status_obj.stage = state
                 status_obj.message = (f"Saved {status_obj.saved}, skipped {status_obj.skipped}, "
                     f"failed {status_obj.failed}, blocked {status_obj.blocked}. Status: {state}.")
