@@ -1,0 +1,34 @@
+name: GLib security backport
+
+on:
+  push:
+    paths:
+      - "src-tauri/Cargo.toml"
+      - "src-tauri/Cargo.lock"
+      - "src-tauri/vendor/glib/**"
+      - ".github/workflows/glib-security.yml"
+  pull_request:
+    paths:
+      - "src-tauri/Cargo.toml"
+      - "src-tauri/Cargo.lock"
+      - "src-tauri/vendor/glib/**"
+      - ".github/workflows/glib-security.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  optimized-iterator-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install GLib development libraries
+        run: sudo apt-get update && sudo apt-get install -y libglib2.0-dev
+      - name: Verify desktop resolves the patched GLib
+        run: |
+          cargo tree --manifest-path src-tauri/Cargo.toml --locked --target x86_64-unknown-linux-gnu -i glib | tee /tmp/glib-tree.txt
+          grep -F "vendor/glib" /tmp/glib-tree.txt
+      - name: Exercise string iterators with optimizations enabled
+        run: cargo test --manifest-path src-tauri/vendor/glib/Cargo.toml --release --lib variant_iter::tests
