@@ -1493,14 +1493,14 @@ wheels = [
 
 [[package]]
 name = "pythainlp"
-version = "5.3.8"
+version = "5.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "tzdata", marker = "sys_platform == 'win32'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a6/64/2a6f498cd05b15960e036c543d2efdfd9f2dddf784aaa491d980e2a7eddc/pythainlp-5.3.8.tar.gz", hash = "sha256:ef8cd131421b3f80a1262c63ce3391ccdfb155a60453051b09e6b5fdf1e62c0a", size = 19309864, upload-time = "2026-09-24T18:41:20.237Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/9f/7f/7fa41bea1a9927eedf831f6ddcd71e104650c4881260984575fe4b84cc55/pythainlp-5.4.0.tar.gz", hash = "sha256:85cd4eed4a5a942c978d751be969a496581d7acc250fc9c8a2d54088cb6d19cd", size = 21481113, upload-time = "2026-10-09T00:59:27.424Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c6/21/eec2b16a7e4f1ffb9577c62ef786e1eaad315ce2320c642835d11610b2de/pythainlp-5.3.8-py3-none-any.whl", hash = "sha256:7f4367782d250afa936f65a1c151129fb80c316c3b3dbaa08923de04705b53b3", size = 19852536, upload-time = "2026-09-24T18:41:17.248Z" },
+    { url = "https://files.pythonhosted.org/packages/6d/13/3304199eec02b89573b6042078fd780e627d6637228dd6f69fad45f3262e/pythainlp-5.4.0-py3-none-any.whl", hash = "sha256:9239753df877202da1a50dd2842d9569eff764034f31f20222b3df4def5df193", size = 21936258, upload-time = "2026-10-09T00:59:24.506Z" },
 ]
 
 [[package]]
