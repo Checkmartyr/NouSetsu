@@ -59,6 +59,62 @@ test('a URL can extract without inspection and a partial result stays reviewable
   expect(polls).toBe(stoppedAt);
 });
 
+test('range progress uses the selected chapter count and stays within the bar', async ({ page }) => {
+  await openUpload(page);
+  const chapters = Array.from({ length: 110 }, (_, index) => ({
+    index: index + 1, title: `Chapter ${index + 1}`, url: `https://fixture.test/novel/${index + 1}`,
+  }));
+  await page.route('**/api/scraper/inspect', (route) => route.fulfill({ json: {
+    success: true, url: 'https://fixture.test/novel', novel_title: 'Fixture Novel', total_chapters: 110,
+    chapters, is_complete: true,
+  } }));
+
+  let extraction: Record<string, unknown> | undefined;
+  let extractionCount = 0;
+  let finish = false;
+  let holdNextStatus = false;
+  let releaseHeldStatus: (() => void) | undefined;
+  await page.route('**/api/scraper/extract', async (route) => {
+    extraction = route.request().postDataJSON();
+    extractionCount++;
+    await route.fulfill({ json: { success: true, task_id: `${terminal.task_id}-${extractionCount}` } });
+  });
+  await page.route('**/api/scraper/status/**', async (route) => {
+    if (holdNextStatus) {
+      holdNextStatus = false;
+      await new Promise<void>((resolve) => { releaseHeldStatus = resolve; });
+    }
+    await route.fulfill({ json: finish ? terminal : {
+      ...terminal, status: 'running', stage: 'downloading', progress_percent: 10,
+      current_chapter: 1, total_chapters: 10, message: 'Downloading selected chapters',
+    } });
+  });
+
+  await page.getByPlaceholder(/https:\/\//).fill('https://fixture.test/novel');
+  await page.getByRole('button', { name: 'Inspect TOC' }).click();
+  await expect(page.getByText('110 Chapters')).toBeVisible();
+  await page.getByLabel('Range', { exact: true }).check();
+  const rangeInputs = page.locator('input[type="number"]');
+  await rangeInputs.nth(0).fill('101');
+  await rangeInputs.nth(1).fill('110');
+  await page.getByRole('button', { name: 'Scrape & Import' }).click();
+
+  await expect(page.getByText('downloading: 10%', { exact: true })).toBeVisible();
+  await expect(page.locator('div[style="width: 10%;"]')).toBeVisible();
+  expect(extraction).toMatchObject({ start_chapter: 101, end_chapter: 110 });
+
+  finish = true;
+  await expect(page.getByText(terminal.message, { exact: true }).first()).toBeVisible();
+
+  finish = false;
+  holdNextStatus = true;
+  await page.getByRole('button', { name: 'Scrape & Import' }).click();
+  await expect.poll(() => releaseHeldStatus !== undefined).toBe(true);
+  await expect(page.getByText('partial: 100%', { exact: true })).toHaveCount(0);
+  releaseHeldStatus?.();
+  await expect(page.getByText('downloading: 10%', { exact: true })).toBeVisible();
+});
+
 test('a persisted paused job resumes and an active job can be cancelled', async ({ page }) => {
   await openUpload(page, [{ ...terminal, status: 'paused' }]);
   let action = '';

@@ -178,6 +178,8 @@ export const UploadModal: React.FC<UploadModalProps> = ({
     return () => { stopped = true; window.clearTimeout(timer); };
   }, [isOpen, activeProjectPath, scraperTaskId]);
 
+  const scraperProgressPercent = Math.max(0, Math.min(100, scraperStatus?.progress_percent ?? 0));
+
   if (!isOpen) return null;
 
   // --------------------------------------------------------------------------
@@ -394,6 +396,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
     }
 
     setIsScraping(true);
+    setScraperStatus(null);
     jobLoadGeneration.current++;
     setErrorMsg(null);
     setSuccessMsg(null);
@@ -1135,7 +1138,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                     Downloading Chapters...
                   </span>
                   <span className="text-[#d9a05b] font-bold">
-                    {scraperStatus.stage || scraperStatus.status}: {scraperStatus.progress_percent}%
+                    {scraperStatus.stage || scraperStatus.status}: {scraperProgressPercent}%
                   </span>
                 </div>
 
@@ -1143,7 +1146,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                 <div className="w-full h-1.5 bg-[#383330] rounded-full overflow-hidden">
                   <div
                     className="h-full bg-[#d9a05b] transition-all duration-300"
-                    style={{ width: `${Math.max(5, scraperStatus.progress_percent)}%` }}
+                    style={{ width: `${scraperProgressPercent}%` }}
                   />
                 </div>
 

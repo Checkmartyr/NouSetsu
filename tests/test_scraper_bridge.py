@@ -23,6 +23,15 @@ from nousetsu.scraper import (
     resolve_scraper_llm_settings,
     scraper_subprocess_environment,
 )
+from nousetsu.scraper.bridge import _bounded_progress
+
+
+@pytest.mark.parametrize(
+    "current,total,expected",
+    [(1, 10, (1, 10, 10.0)), (1, 1, (1, 1, 100.0)), (12, 10, (10, 10, 100.0)), (-1, 10, (0, 10, 0.0)), (3, 0, (3, 0, 0.0))],
+)
+def test_bounded_progress_uses_selected_chapter_counts(current, total, expected):
+    assert _bounded_progress(current, total) == expected
 
 
 def test_frozen_scraper_detector_ignores_external_checkout(tmp_path, monkeypatch):
