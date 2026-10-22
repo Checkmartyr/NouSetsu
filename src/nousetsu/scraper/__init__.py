@@ -5,6 +5,7 @@ Provides URL inspection, TOC discovery, and headless batch extraction powered by
 
 from nousetsu.scraper.models import (
     ScraperChapterItem,
+    ScraperChapterRange,
     ScraperInspectRequest,
     ScraperInspectResponse,
     ScraperExtractRequest,
@@ -24,6 +25,7 @@ from nousetsu.scraper.llm_config import (
 
 __all__ = [
     "ScraperChapterItem",
+    "ScraperChapterRange",
     "ScraperInspectRequest",
     "ScraperInspectResponse",
     "ScraperExtractRequest",

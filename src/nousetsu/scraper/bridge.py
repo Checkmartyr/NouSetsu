@@ -6,6 +6,7 @@ from nousetsu.utils.env import resolve_env
 import asyncio
 import json
 import logging
+import math
 import os
 import sys
 import uuid
@@ -35,6 +36,19 @@ _BUNDLED_BRIDGE_RUNNER = (
     "sys.argv = [bridge_path, *sys.argv[3:]]; "
     "runpy.run_path(bridge_path, run_name='__main__')"
 )
+
+
+def _inspection_timeout(env: Optional[Dict[str, str]]) -> float:
+    """Allow discovery, bounded browser cleanup, and subprocess startup overhead."""
+    effective = os.environ if env is None else env
+    mode = effective.get("NOVEL_SCRAPER_RECOVERY_MODE", "standard")
+    if mode not in {"standard", "maximum"}:
+        raise ValueError("NOVEL_SCRAPER_RECOVERY_MODE must be standard or maximum")
+    discovery = float(effective.get("NOVEL_SCRAPER_DISCOVERY_SECONDS", "900" if mode == "maximum" else "600"))
+    cleanup = int(effective.get("NOVEL_SCRAPER_CLEANUP_SECONDS", "5"))
+    if not math.isfinite(discovery) or discovery <= 0 or cleanup <= 0:
+        raise ValueError("Scraper discovery and cleanup budgets must be positive and finite")
+    return discovery + cleanup + 15
 
 
 class NovelScraperBridge:
@@ -165,6 +179,7 @@ class NovelScraperBridge:
         logger.info("Executing inspect: %s in %s", " ".join(cmd), working_dir)
 
         try:
+            timeout = _inspection_timeout(env)
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
                 cwd=str(working_dir),
@@ -174,7 +189,7 @@ class NovelScraperBridge:
             )
 
             try:
-                stdout_data, stderr_data = await asyncio.wait_for(proc.communicate(), timeout=float((env or {}).get("NOVEL_SCRAPER_DISCOVERY_SECONDS", "600")) + 15)
+                stdout_data, stderr_data = await asyncio.wait_for(proc.communicate(), timeout=timeout)
             except (asyncio.TimeoutError, asyncio.CancelledError):
                 proc.kill()
                 await proc.wait()
@@ -205,6 +220,13 @@ class NovelScraperBridge:
                 url=url,
                 page_type=data.get("page_type", "TOC"),
                 toc_url=data.get("toc_url"),
+                final_url=data.get("final_url"),
+                source_scope=data.get("source_scope", {}),
+                linked_entry_count=data.get("linked_entry_count"),
+                observed_linked_entry_count=data.get("observed_linked_entry_count"),
+                highest_observed_chapter_number=data.get("highest_observed_chapter_number"),
+                highest_chapter_number=data.get("highest_chapter_number"),
+                numbered_chapter_ranges=data.get("numbered_chapter_ranges", []),
                 novel_title=novel_title,
                 romanized_title=romanized_title,
                 author=data.get("author"),

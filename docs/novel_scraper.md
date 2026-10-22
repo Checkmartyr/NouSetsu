@@ -110,6 +110,19 @@ and Retry-After cooldowns are shared within that runtime. Development/CLI runs
 discover the scraper checkout and interpreter; packaged desktop builds retain
 the bundled `--scraper-worker` entrypoint and app-data recipe storage.
 
+Recovery defaults to `NOVEL_SCRAPER_RECOVERY_MODE=standard`. Set it to `maximum`
+to use a 900-second discovery budget, 16 TOC cycles, five repair attempts, ten
+ranked candidates, and two visual attempts. Explicit `NOVEL_SCRAPER_<LIMIT>`
+overrides take precedence over profile defaults; project and request budgets
+retain their existing precedence. Browser cleanup defaults to five seconds
+(`NOVEL_SCRAPER_CLEANUP_SECONDS`). NouSetsu's inspection timeout allows the
+effective discovery budget plus cleanup and 15 seconds for process overhead.
+
+Visual recovery remains opt-in through `NOVEL_SCRAPER_VISUAL_RECOVERY=1` and
+requires an image-capable model. It sends in-memory viewport screenshots to the
+configured provider to choose among witnessed controls. Maximum mode alone
+does not enable it.
+
 Example project configuration:
 
 ```yaml
@@ -142,6 +155,15 @@ exit. Both output pipes are drained; old destination files never imply success.
 Large terminal payloads use an atomic job-scoped result file so the JSON-lines
 event stays bounded. Chapter checkpoint and receipt writes remain constant-size
 as the catalog grows.
+
+Inspection responses and saved inspection snapshots retain `final_url`,
+`source_scope`, `linked_entry_count`, `observed_linked_entry_count`,
+`highest_chapter_number`, `highest_observed_chapter_number`, and
+`numbered_chapter_ranges` (each with `url`, `start`, and `end`). Linked entries and
+chapter-number labels are distinct: a post containing chapters 1–3 is one entry.
+Observed labels do not establish accessible or complete coverage. These fields
+are additive; older workers and snapshots can omit them. Recovery measurements
+remain available under `metrics.recovery_stages`.
 
 From `modules/novel_scraper`, with the main project's installed runtime:
 

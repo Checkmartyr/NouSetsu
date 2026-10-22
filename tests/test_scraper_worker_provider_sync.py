@@ -5,9 +5,13 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import pytest
 
 
-def test_desktop_scraper_worker_keeps_src_namespace_and_loads_routing(tmp_path: Path):
+@pytest.mark.parametrize("operation", [
+    ["provider-info"], ["inspect", "--help"], ["extract", "--help"], ["romanize", "悪役貴族"],
+])
+def test_desktop_scraper_worker_keeps_src_namespace_and_loads_routing(tmp_path: Path, operation):
     repo_root = Path(__file__).resolve().parents[1]
     backend_entry = repo_root / "src" / "nousetsu" / "desktop_backend.py"
     scraper_root = repo_root / "modules" / "novel_scraper"
@@ -35,7 +39,7 @@ def test_desktop_scraper_worker_keeps_src_namespace_and_loads_routing(tmp_path: 
         environment.pop(key, None)
 
     process = subprocess.run(
-        [sys.executable, str(backend_entry), "--scraper-worker", "provider-info"],
+        [sys.executable, str(backend_entry), "--scraper-worker", *operation],
         cwd=tmp_path,
         env=environment,
         capture_output=True,
@@ -45,6 +49,14 @@ def test_desktop_scraper_worker_keeps_src_namespace_and_loads_routing(tmp_path: 
     )
 
     assert process.returncode == 0, process.stderr
+    if operation[0] in {"inspect", "extract"}:
+        assert "--url" in process.stdout
+        if operation[0] == "extract":
+            assert "--snapshot-file" in process.stdout
+        return
+    if operation[0] == "romanize":
+        assert process.stdout.strip() and "悪役貴族" not in process.stdout
+        return
     assert json.loads(process.stdout) == {
         "model": "openrouter:worker-test-model",
         "provider": "Unconfigured",

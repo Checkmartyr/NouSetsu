@@ -30,12 +30,26 @@ class ScraperInspectRequest(BaseModel):
         return value.strip()
 
 
+class ScraperChapterRange(BaseModel):
+    """Source chapter labels; one linked entry may contain a bundled range."""
+    url: str
+    start: float
+    end: float
+
+
 class ScraperInspectResponse(BaseModel):
     """Response payload containing novel metadata and discovered chapter list."""
     success: bool
     url: str
     page_type: Optional[str] = "TOC"
     toc_url: Optional[str] = None
+    final_url: Optional[str] = None
+    source_scope: Dict[str, Any] = Field(default_factory=dict)
+    linked_entry_count: Optional[int] = None
+    observed_linked_entry_count: Optional[int] = None
+    highest_observed_chapter_number: Optional[float] = None
+    highest_chapter_number: Optional[float] = None
+    numbered_chapter_ranges: List[ScraperChapterRange] = Field(default_factory=list)
     novel_title: str = "Unknown Novel"
     romanized_title: Optional[str] = None
     author: Optional[str] = None
