@@ -6,13 +6,131 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-from nousetsu.scraper.bridge import NovelScraperBridge
+from nousetsu.scraper.bridge import NovelScraperBridge, _inspection_timeout
 from nousetsu.scraper.models import ScraperExtractRequest, ScraperStatusResponse
 from nousetsu.scraper.jobs import write_json, job_path
 from nousetsu.storage.repository import NovelRepository
 from nousetsu.models.config import ProjectConfig
 from nousetsu.scraper.llm_config import scraper_subprocess_environment
 from nousetsu.cli import web_server
+
+
+@pytest.mark.parametrize("env,expected", [
+    ({}, 620),
+    ({"NOVEL_SCRAPER_RECOVERY_MODE": "maximum"}, 920),
+    ({"NOVEL_SCRAPER_RECOVERY_MODE": "maximum", "NOVEL_SCRAPER_DISCOVERY_SECONDS": "17",
+      "NOVEL_SCRAPER_CLEANUP_SECONDS": "7"}, 39),
+])
+def test_inspection_timeout_matches_worker_profile(env, expected):
+    assert _inspection_timeout(env) == expected
+
+
+def test_inspection_timeout_inherits_worker_environment(monkeypatch):
+    monkeypatch.setenv("NOVEL_SCRAPER_RECOVERY_MODE", "maximum")
+    monkeypatch.delenv("NOVEL_SCRAPER_DISCOVERY_SECONDS", raising=False)
+    monkeypatch.delenv("NOVEL_SCRAPER_CLEANUP_SECONDS", raising=False)
+    assert _inspection_timeout(None) == 920
+    assert _inspection_timeout({}) == 620
+
+
+@pytest.mark.parametrize("env", [
+    {"NOVEL_SCRAPER_RECOVERY_MODE": "unknown"},
+    {"NOVEL_SCRAPER_DISCOVERY_SECONDS": "nan"},
+    {"NOVEL_SCRAPER_DISCOVERY_SECONDS": "inf"},
+    {"NOVEL_SCRAPER_DISCOVERY_SECONDS": "0"},
+    {"NOVEL_SCRAPER_CLEANUP_SECONDS": "-1"},
+])
+def test_inspection_timeout_rejects_invalid_budgets(env):
+    with pytest.raises(ValueError):
+        _inspection_timeout(env)
+
+
+@pytest.mark.parametrize("legacy", [False, True])
+def test_inspection_metadata_survives_api_snapshot_and_extraction(tmp_path, monkeypatch, legacy):
+    repo = NovelRepository(tmp_path)
+    repo.initialize_project("Fixture", "Japanese", "English", model_name="mock-model")
+    url = "https://fixture.test/book"
+    metadata = {} if legacy else {
+        "final_url": "https://fixture.test/novel/book",
+        "source_scope": {"catalogs": [url], "approved_links": [url + "/chapter-1"]},
+        "linked_entry_count": 1, "observed_linked_entry_count": 2,
+        "highest_chapter_number": 3.5, "highest_observed_chapter_number": 5.5,
+        "numbered_chapter_ranges": [{"url": url + "/chapter-1", "start": 1, "end": 3.5}],
+        "api_recipe_candidates": [{"method": "GET", "endpoint": "https://fixture.test/api/chapters"}],
+        "pending_catalog_controls": [{"selector": "button.more", "label": "Load more"}],
+    }
+    payload = {"success": True, "url": url, "novel_title": "Fixture", "is_complete": True,
+                   "chapters": [{"index": 1, "title": "Chapters 1–3.5", "url": url + "/chapter-1"}], **metadata}
+    script = tmp_path / "worker.py"
+    script.write_text(
+        "import sys,json\nfrom pathlib import Path\n"
+        "if sys.argv[1] == 'inspect':\n"
+        " assert ('--refresh' in sys.argv) == " + repr(not legacy) + "\n"
+        " assert Path(sys.argv[sys.argv.index('--state-dir')+1]).name == 'scraper'\n"
+        " print(json.dumps(" + repr(payload) + "))\n"
+        "else:\n snapshot=json.loads(Path(sys.argv[sys.argv.index('--snapshot-file')+1]).read_text(encoding='utf-8'))\n"
+        " assert ('--refresh' in sys.argv) == " + repr(not legacy) + "\n"
+        " print(json.dumps({'type':'completed','status':'partial','success':False,'metrics':{'snapshot':snapshot},'files':[]}))\n",
+        encoding="utf-8")
+    bridge = NovelScraperBridge(scraper_dir=tmp_path, python_exe=Path(sys.executable))
+    bridge._api_bridge_command = lambda operation, *args: [sys.executable, str(script), operation, *args]
+
+    async def romanize(title):
+        return title
+
+    monkeypatch.setattr(bridge, "romanize_title", romanize)
+    monkeypatch.setattr(web_server, "NovelScraperBridge", lambda: bridge)
+    with TestClient(web_server.create_app()) as client:
+        response = client.post("/api/scraper/inspect", json={"url": url, "project_path": str(tmp_path), "refresh": not legacy})
+    assert response.status_code == 200
+    inspected = response.json()
+    snapshot_path = tmp_path / ".novel" / "scraper" / "inspections" / (inspected["inspection_id"] + ".json")
+    snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+    assert snapshot == inspected
+    if legacy:
+        assert snapshot["final_url"] is None
+        assert snapshot["source_scope"] == {}
+        assert snapshot["linked_entry_count"] is None
+        assert snapshot["numbered_chapter_ranges"] == []
+        assert snapshot["pending_catalog_controls"] == []
+        assert snapshot["api_recipe_candidates"] == []
+    else:
+        assert {key: snapshot[key] for key in metadata} == metadata
+    request = ScraperExtractRequest(url=url, project_path=str(tmp_path), inspection_id=inspected["inspection_id"], refresh=not legacy)
+    result = asyncio.run(bridge.extract_chapters(request, tmp_path / "raw_chapters"))
+    assert result.metrics["snapshot"] == snapshot
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("outcome", ["source_update_available", "local_modified", "index_conflict"])
+async def test_refresh_conflicts_remain_counted_as_failures(tmp_path, outcome):
+    terminal = {"type": "completed", "success": False, "status": "partial", "is_complete": True,
+                "total_selected": 1, "failed": 1, "files": [],
+                "outcomes": [{"index": 1, "status": outcome, "success": False}]}
+    script = tmp_path / "worker.py"
+    script.write_text("import json\nprint(json.dumps(" + repr(terminal) + "))", encoding="utf-8")
+    bridge = NovelScraperBridge(scraper_dir=tmp_path, python_exe=Path(sys.executable))
+    bridge._api_bridge_command = lambda *args: [sys.executable, str(script)]
+    result = await bridge.extract_chapters(ScraperExtractRequest(url="https://fixture.test/book", refresh=True), tmp_path)
+    assert result.status == "partial" and result.failed == 1
+    assert result.outcomes[0]["status"] == outcome
+
+
+@pytest.mark.asyncio
+async def test_incomplete_catalog_preserves_blockers_and_counts(tmp_path):
+    terminal = {"type": "completed", "success": False, "status": "paused", "is_complete": False,
+                "total_selected": 0, "total_chapters": 12, "claimed_chapter_count": 20,
+                "pending_catalog_controls": [{"selector": "button.more"}], "blocked": 1,
+                "issues": ["Catalog coverage unresolved"], "files": []}
+    script = tmp_path / "worker.py"
+    script.write_text("import json\nprint(json.dumps(" + repr(terminal) + "))", encoding="utf-8")
+    bridge = NovelScraperBridge(scraper_dir=tmp_path, python_exe=Path(sys.executable))
+    bridge._api_bridge_command = lambda *args: [sys.executable, str(script)]
+    result = await bridge.extract_chapters(ScraperExtractRequest(url="https://fixture.test/book"), tmp_path)
+    assert result.status == "paused" and result.blocked == 1
+    assert result.total_chapters == 12 and result.claimed_chapter_count == 20
+    assert result.pending_catalog_controls == terminal["pending_catalog_controls"]
+    assert result.issues == terminal["issues"]
 
 
 @pytest.mark.asyncio

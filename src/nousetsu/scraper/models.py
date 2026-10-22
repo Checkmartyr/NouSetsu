@@ -20,6 +20,7 @@ class ScraperInspectRequest(BaseModel):
     """Request payload to inspect a webnovel URL."""
     url: str = Field(..., description="Webnovel Table of Contents or chapter URL")
     project_path: Optional[str] = Field(None, description="Project whose scraper model settings should be used")
+    refresh: bool = False
 
     @field_validator("url")
     @classmethod
@@ -30,12 +31,28 @@ class ScraperInspectRequest(BaseModel):
         return value.strip()
 
 
+class ScraperChapterRange(BaseModel):
+    """Source chapter labels; one linked entry may contain a bundled range."""
+    url: str
+    start: float
+    end: float
+
+
 class ScraperInspectResponse(BaseModel):
     """Response payload containing novel metadata and discovered chapter list."""
     success: bool
     url: str
     page_type: Optional[str] = "TOC"
     toc_url: Optional[str] = None
+    final_url: Optional[str] = None
+    source_scope: Dict[str, Any] = Field(default_factory=dict)
+    linked_entry_count: Optional[int] = None
+    observed_linked_entry_count: Optional[int] = None
+    highest_observed_chapter_number: Optional[float] = None
+    highest_chapter_number: Optional[float] = None
+    numbered_chapter_ranges: List[ScraperChapterRange] = Field(default_factory=list)
+    api_recipe_candidates: List[Dict[str, Any]] = Field(default_factory=list)
+    pending_catalog_controls: List[Dict[str, Any]] = Field(default_factory=list)
     novel_title: str = "Unknown Novel"
     romanized_title: Optional[str] = None
     author: Optional[str] = None
@@ -63,6 +80,7 @@ class ScraperExtractRequest(BaseModel):
     concurrency: int = Field(3, ge=1, le=10, description="Concurrent download workers")
     include_frontmatter: bool = Field(False, description="Whether to include YAML frontmatter in markdown files")
     overwrite: bool = Field(False, description="Whether to overwrite existing chapter files")
+    refresh: bool = Field(False, description="Revalidate the catalog and selected chapter sources")
     inspection_id: Optional[str] = Field(None, pattern=r"^[a-f0-9]{32}$")
     session_state: Optional[str] = None
     budgets: Optional[ScraperBudgets] = None
@@ -100,6 +118,8 @@ class ScraperStatusResponse(BaseModel):
     blocked: int = 0
     cancelled: int = 0
     is_complete: bool = False
+    claimed_chapter_count: Optional[int] = None
+    pending_catalog_controls: List[Dict[str, Any]] = Field(default_factory=list)
     completeness_evidence: List[str] = Field(default_factory=list)
     issues: List[str] = Field(default_factory=list)
     metrics: Dict[str, Any] = Field(default_factory=dict)

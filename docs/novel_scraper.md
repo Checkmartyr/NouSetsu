@@ -47,6 +47,8 @@ flowchart TD
   not establish catalog coverage.
 - The advertised count, discovered count, confidence, issues, and completeness
   evidence are separate. An incomplete or empty catalog stays incomplete.
+- Chapter extraction pauses until the full catalog is verified. Pending catalog
+  controls and advertised counts remain visible in inspection and job status.
 - Browser actions are typed clicks, scrolling, and stopping. Click targets are
   witnessed controls; model suggestions are not executable scripts.
 - Initial validation samples first, middle, and last chapters, plus observed volume
@@ -110,6 +112,19 @@ and Retry-After cooldowns are shared within that runtime. Development/CLI runs
 discover the scraper checkout and interpreter; packaged desktop builds retain
 the bundled `--scraper-worker` entrypoint and app-data recipe storage.
 
+Recovery defaults to `NOVEL_SCRAPER_RECOVERY_MODE=standard`. Set it to `maximum`
+to use a 900-second discovery budget, 16 TOC cycles, five repair attempts, ten
+ranked candidates, and two visual attempts. Explicit `NOVEL_SCRAPER_<LIMIT>`
+overrides take precedence over profile defaults; project and request budgets
+retain their existing precedence. Browser cleanup defaults to five seconds
+(`NOVEL_SCRAPER_CLEANUP_SECONDS`). NouSetsu's inspection timeout allows the
+effective discovery budget plus cleanup and 15 seconds for process overhead.
+
+Visual recovery remains opt-in through `NOVEL_SCRAPER_VISUAL_RECOVERY=1` and
+requires an image-capable model. It sends in-memory viewport screenshots to the
+configured provider to choose among witnessed controls. Maximum mode alone
+does not enable it.
+
 Example project configuration:
 
 ```yaml
@@ -142,6 +157,30 @@ exit. Both output pipes are drained; old destination files never imply success.
 Large terminal payloads use an atomic job-scoped result file so the JSON-lines
 event stays bounded. Chapter checkpoint and receipt writes remain constant-size
 as the catalog grows.
+
+Inspection responses and saved inspection snapshots retain `final_url`,
+`source_scope`, `linked_entry_count`, `observed_linked_entry_count`,
+`highest_chapter_number`, `highest_observed_chapter_number`, and
+`numbered_chapter_ranges` (each with `url`, `start`, and `end`). Linked entries and
+chapter-number labels are distinct: a post containing chapters 1–3 is one entry.
+Observed labels do not establish accessible or complete coverage. These fields
+are additive; older workers and snapshots can omit them. Recovery measurements
+remain available under `metrics.recovery_stages`.
+
+Inspection also retains `api_recipe_candidates` and `pending_catalog_controls`.
+API replay uses witnessed, sanitized requests and verifies output through the
+ordinary extraction checks. New runtime modules are included by the desktop
+build's existing scraper package collection.
+
+Both inspection and extraction requests accept optional `refresh: true`
+(default `false`), forwarded as `--refresh` to the worker. Project inspection
+uses `.novel/scraper/` as its state directory so conditional GET response caching
+can be reused during extraction. Refresh revalidates catalog and chapter sources;
+explicit selections stay bound to the supplied inspection snapshot's source URLs.
+Unfiltered refresh uses the new catalog. A changed source without overwrite
+reports `source_update_available`; local edits report `local_modified` even with
+overwrite enabled. Overwrite replaces only an unchanged, source-owned file.
+Interrupted refresh jobs retain their generation when resumed.
 
 From `modules/novel_scraper`, with the main project's installed runtime:
 

@@ -6,6 +6,7 @@ from nousetsu.utils.env import resolve_env
 import asyncio
 import json
 import logging
+import math
 import os
 import sys
 import uuid
@@ -35,6 +36,19 @@ _BUNDLED_BRIDGE_RUNNER = (
     "sys.argv = [bridge_path, *sys.argv[3:]]; "
     "runpy.run_path(bridge_path, run_name='__main__')"
 )
+
+
+def _inspection_timeout(env: Optional[Dict[str, str]]) -> float:
+    """Allow discovery, bounded browser cleanup, and subprocess startup overhead."""
+    effective = os.environ if env is None else env
+    mode = effective.get("NOVEL_SCRAPER_RECOVERY_MODE", "standard")
+    if mode not in {"standard", "maximum"}:
+        raise ValueError("NOVEL_SCRAPER_RECOVERY_MODE must be standard or maximum")
+    discovery = float(effective.get("NOVEL_SCRAPER_DISCOVERY_SECONDS", "900" if mode == "maximum" else "600"))
+    cleanup = int(effective.get("NOVEL_SCRAPER_CLEANUP_SECONDS", "5"))
+    if not math.isfinite(discovery) or discovery <= 0 or cleanup <= 0:
+        raise ValueError("Scraper discovery and cleanup budgets must be positive and finite")
+    return discovery + cleanup + 15
 
 
 class NovelScraperBridge:
@@ -149,7 +163,8 @@ class NovelScraperBridge:
             return cleaned_title
 
     async def inspect_url(
-        self, url: str, env: Optional[Dict[str, str]] = None
+        self, url: str, env: Optional[Dict[str, str]] = None, *,
+        refresh: bool = False, state_dir: Optional[Path] = None,
     ) -> ScraperInspectResponse:
         """Inspect a webnovel URL (TOC or chapter), discovering chapter list and metadata."""
         if not self.is_available():
@@ -160,11 +175,16 @@ class NovelScraperBridge:
             )
 
         cmd = self._api_bridge_command("inspect", "--url", url)
+        if refresh:
+            cmd.append("--refresh")
+        if state_dir is not None:
+            cmd.extend(["--state-dir", str(state_dir)])
 
         working_dir = self._working_directory()
         logger.info("Executing inspect: %s in %s", " ".join(cmd), working_dir)
 
         try:
+            timeout = _inspection_timeout(env)
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
                 cwd=str(working_dir),
@@ -174,7 +194,7 @@ class NovelScraperBridge:
             )
 
             try:
-                stdout_data, stderr_data = await asyncio.wait_for(proc.communicate(), timeout=float((env or {}).get("NOVEL_SCRAPER_DISCOVERY_SECONDS", "600")) + 15)
+                stdout_data, stderr_data = await asyncio.wait_for(proc.communicate(), timeout=timeout)
             except (asyncio.TimeoutError, asyncio.CancelledError):
                 proc.kill()
                 await proc.wait()
@@ -205,6 +225,15 @@ class NovelScraperBridge:
                 url=url,
                 page_type=data.get("page_type", "TOC"),
                 toc_url=data.get("toc_url"),
+                final_url=data.get("final_url"),
+                source_scope=data.get("source_scope", {}),
+                linked_entry_count=data.get("linked_entry_count"),
+                observed_linked_entry_count=data.get("observed_linked_entry_count"),
+                highest_observed_chapter_number=data.get("highest_observed_chapter_number"),
+                highest_chapter_number=data.get("highest_chapter_number"),
+                numbered_chapter_ranges=data.get("numbered_chapter_ranges", []),
+                api_recipe_candidates=data.get("api_recipe_candidates", []),
+                pending_catalog_controls=data.get("pending_catalog_controls", []),
                 novel_title=novel_title,
                 romanized_title=romanized_title,
                 author=data.get("author"),
@@ -259,6 +288,8 @@ class NovelScraperBridge:
             cmd.append("--frontmatter")
         if req.overwrite:
             cmd.append("--overwrite")
+        if req.refresh:
+            cmd.append("--refresh")
         if req.inspection_id:
             snapshot = state_dir / "inspections" / f"{req.inspection_id}.json"
             if not snapshot.is_file():
@@ -390,14 +421,16 @@ class NovelScraperBridge:
                 status_obj.status = state
                 status_obj.completed_files = terminal.get("files", [])
                 for field in ("saved", "skipped", "failed", "blocked", "cancelled", "is_complete",
+                              "claimed_chapter_count", "pending_catalog_controls",
                               "completeness_evidence", "issues", "metrics", "outcomes"):
                     if field in terminal:
                         setattr(status_obj, field, terminal[field])
                 status_obj.error = terminal.get("error")
                 if status_obj.outcomes:
                     for field in ("saved", "skipped", "failed", "blocked", "cancelled"):
-                        setattr(status_obj, field, sum(outcome.get("status") == field for outcome in status_obj.outcomes))
-                status_obj.total_chapters = terminal.get("total_selected", status_obj.total_chapters)
+                        statuses = {"failed", "source_update_available", "local_modified", "index_conflict"} if field == "failed" else {field}
+                        setattr(status_obj, field, sum(outcome.get("status") in statuses for outcome in status_obj.outcomes))
+                status_obj.total_chapters = terminal.get("total_selected") or terminal.get("total_chapters", status_obj.total_chapters)
                 status_obj.current_chapter = len(status_obj.outcomes) or terminal.get("completed", 0)
                 status_obj.progress_percent = round(status_obj.current_chapter / max(status_obj.total_chapters, 1) * 100, 1)
                 status_obj.stage = state
