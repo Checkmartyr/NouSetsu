@@ -292,7 +292,7 @@ export const App: React.FC = () => {
       const setup = await setupRequest<SetupSnapshot>('');
       if (typeof setup.completed === 'boolean' && typeof setup.existing === 'boolean') {
         setSetupSnapshot(setup);
-        if (!setup.completed && !setup.existing && getRoute().workspace !== 'setup') {
+        if (!setup.completed && !setup.existing && !['setup', 'settings'].includes(getRoute().workspace)) {
           setupReturn.current = getRoute();
           openSetup(setupReturn.current, true);
         }
