@@ -112,8 +112,11 @@ class MockNovelLLM(BaseChatModel):
     model_name: str = "mock-novel-llm"
     temperature: float = 1.0
     responses: list[str] = Field(default_factory=list)
+    allow_mock_output: bool = True
 
     def _generate(self, messages: list[BaseMessage], stop: Optional[list[str]] = None, run_manager: Any = None, **kwargs: Any) -> ChatResult:
+        if not self.allow_mock_output:
+            raise ValueError("Connect AI in Setup or Settings before translating. The selected model has no usable provider configuration.")
         if self.responses:
             content = self.responses.pop(0) if len(self.responses) > 1 else self.responses[0]
         else:
@@ -159,7 +162,7 @@ class MockNovelLLM(BaseChatModel):
 
     @property
     def _llm_type(self) -> str:
-        return "mock_novel_llm"
+        return "mock_novel_llm" if self.allow_mock_output else "unconfigured"
 
     def with_structured_output(
         self,
@@ -519,10 +522,14 @@ def _create_single_llm(
         return MockNovelLLM(model_name=requested_model, temperature=resolved_temp)
 
 
-    google_key = env.get("GEMINI_API_KEY") or env.get("GOOGLE_API_KEY")
-    openai_key = env.get("OPENAI_API_KEY")
-    openrouter_key = env.get("OPENROUTER_API_KEY")
-    custom_key = env.get("CUSTOM_API_KEY")
+    from nousetsu.utils.providers import provider_key
+    google_key = provider_key("gemini", env)
+    openai_key = provider_key("openai", env)
+    openrouter_key = provider_key("openrouter", env)
+    custom_key = provider_key("custom", env)
+    def unconfigured():
+        # Preserve the scraper's offline-type contract, but refuse all generated output.
+        return MockNovelLLM(model_name=requested_model, temperature=resolved_temp, allow_mock_output=False)
     custom_base_url = env.get("CUSTOM_API_BASE_URL", "").strip().rstrip("/")
     openrouter_base_url = "https://openrouter.ai/api/v1"
 
@@ -533,7 +540,7 @@ def _create_single_llm(
             return _create_openai_compatible_llm(
                 custom_model, custom_key, resolved_temp, base_url=custom_base_url
             )
-        return MockNovelLLM(model_name=requested_model, temperature=resolved_temp)
+        return unconfigured()
 
     if normalized_model.startswith("openrouter:"):
         router_model = requested_model.split(":", 1)[1].strip()
@@ -541,13 +548,13 @@ def _create_single_llm(
             return _create_openai_compatible_llm(
                 router_model, openrouter_key, resolved_temp, base_url=openrouter_base_url
             )
-        return MockNovelLLM(model_name=requested_model, temperature=resolved_temp)
+        return unconfigured()
 
     if normalized_model.startswith("openai:"):
         direct_model = requested_model.split(":", 1)[1].strip()
         if openai_key and direct_model:
             return _create_openai_compatible_llm(direct_model, openai_key, resolved_temp)
-        return MockNovelLLM(model_name=requested_model, temperature=resolved_temp)
+        return unconfigured()
 
     if _is_gemini_model(requested_model):
         if google_key:
@@ -565,7 +572,7 @@ def _create_single_llm(
                         thinking_budget=thinking_budget,
                     )
                 except Exception:
-                    pass
+                    raise ValueError("Could not initialize the selected AI transport. Check your installation and configuration.") from None
 
             try:
                 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -582,8 +589,8 @@ def _create_single_llm(
                     genai_kwargs["thinking_config"] = {"thinking_level": thinking_level.upper()}
                 return ChatGoogleGenerativeAI(**genai_kwargs)
             except Exception:
-                pass
-        return MockNovelLLM(model_name=requested_model, temperature=resolved_temp)
+                raise ValueError("Could not initialize the selected AI transport. Check your installation and configuration.") from None
+        return unconfigured()
 
     # OpenRouter's native model IDs are provider/model strings, for example
     # "anthropic/claude-3.7-sonnet". The explicit openrouter: prefix also
@@ -597,7 +604,7 @@ def _create_single_llm(
             return _create_openai_compatible_llm(
                 requested_model.split("/", 1)[1], openai_key, resolved_temp
             )
-        return MockNovelLLM(model_name=requested_model, temperature=resolved_temp)
+        return unconfigured()
 
     if _is_openai_model(requested_model):
         if openai_key:
@@ -607,8 +614,7 @@ def _create_single_llm(
                 f"openai/{requested_model}", openrouter_key, resolved_temp, base_url=openrouter_base_url
             )
 
-    # Keep the deterministic offline behavior when no matching key is configured.
-    return MockNovelLLM(model_name=requested_model, temperature=resolved_temp)
+    return unconfigured()
 
 
 def get_llm(

@@ -38,7 +38,7 @@
     "createUpdaterArtifacts": false,
     "resources": {
       "binaries/nousetsu-backend/": "binaries/nousetsu-backend/",
-      "../.env.example": "defaults/.env.example"
+      "../src/nousetsu/data/defaults.env": "defaults/.env.example"
     },
     "icon": [
       "icons/32x32.png",

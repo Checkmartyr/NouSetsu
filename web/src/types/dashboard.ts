@@ -1,4 +1,4 @@
-export type WorkspaceTab = 'studio' | 'reader' | 'bible' | 'traces' | 'settings';
+export type WorkspaceTab = 'studio' | 'reader' | 'bible' | 'traces' | 'settings' | 'setup';
 
 export interface TokenMetricTotals {
   total_tokens: number;

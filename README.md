@@ -60,6 +60,8 @@ NouSetsu orchestrates five specialized agents within a cyclic **LangGraph** refl
 
 ### Windows Desktop App
 
+Fresh installations open a guided English/Thai setup wizard. Python-package users run `nousetsu setup` (or `nousetsu setup --terminal` without a browser). Released packages include the web UI and do not require Node.js at runtime. See [First-install setup](docs/setup.md).
+
 [Download the latest Windows installer](https://github.com/Checkmartyr/NouSetsu/releases/latest). It bundles the Python backend, so a separate Python installation is not required. See the [Web Studio & Desktop App Guide](docs/web_desktop_guide.md) for setup and updates.
 
 ### 1. Install `uv` and NouSetsu

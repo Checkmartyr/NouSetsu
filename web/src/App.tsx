@@ -22,8 +22,11 @@ import { SettingsView } from './components/SettingsView';
 import { NewProjectModal } from './components/NewProjectModal';
 import { StartupLoadingScreen } from './components/StartupLoadingScreen';
 import { UploadCloud, AlertCircle, CheckCircle2 } from 'lucide-react';
-import { getNavigationRevision, getRoute, navigateRoute, navigateWorkspace, patchRoute, useSessionState, useWorkspaceRoute, WorkspaceRoute } from './services/navigation';
+import { getNavigationRevision, getRoute, navigateRoute, navigateWorkspace, openSetup, consumeSetupReturn, patchRoute, useSessionState, useWorkspaceRoute, WorkspaceRoute } from './services/navigation';
 import type { StartupData } from './services/serviceChecker';
+import { SetupView } from './components/SetupView';
+import { OpenProjectDialog } from './components/OpenProjectDialog';
+import { SetupSnapshot, setupRequest } from './services/setupApi';
 
 const sameProject = (a?: string | null, b?: string | null) =>
   (a || '').replace(/\\/g, '/').toLowerCase() === (b || '').replace(/\\/g, '/').toLowerCase();
@@ -32,6 +35,20 @@ export const App: React.FC = () => {
   const route = useWorkspaceRoute();
   const activeWorkspace = route.workspace;
   const [isAppReady, setIsAppReady] = useState(false);
+  const [setupSnapshot, setSetupSnapshot] = useState<SetupSnapshot | null>(null);
+  const [setupDismissed, setSetupDismissed] = useState(false);
+  const [openProjectDialog, setOpenProjectDialog] = useState(false);
+  const setupReturn = useRef<WorkspaceRoute | null>(null);
+  useEffect(() => {
+    const connect = (event: Event) => {
+      const selected = (event as CustomEvent<{ chapter?: string | number; folder?: string }>).detail;
+      const chapter = Number(selected?.chapter);
+      setupReturn.current = { ...getRoute(), ...(Number.isSafeInteger(chapter) && chapter > 0 ? { chapter, folder: selected?.folder } : {}) };
+      openSetup(setupReturn.current);
+    };
+    window.addEventListener('nousetsu:connect-ai', connect);
+    return () => window.removeEventListener('nousetsu:connect-ai', connect);
+  }, []);
   const [primedChapters, setPrimedChapters] = useState<ChapterItem[]>([]);
   const [logs, setLogs] = useState<string[]>([]);
   const [chapters, setChapters] = useState<LoadedChapter[]>([{
@@ -259,7 +276,7 @@ export const App: React.FC = () => {
     } catch { /* Polling retries while offline. */ }
   }, [applyProject, loadTracesFromBackend, triggerToast]);
 
-  const handleStartupReady = useCallback((data: StartupData) => {
+  const handleStartupReady = useCallback(async (data: StartupData) => {
     projectsRef.current = [...data.projects];
     if (data.activeProject && !projectsRef.current.some((project) => sameProject(project.path, data.activeProject?.path))) projectsRef.current.push(data.activeProject);
     setProjects(projectsRef.current);
@@ -271,6 +288,16 @@ export const App: React.FC = () => {
       if (Object.keys(incoming).length === 1) navigateWorkspace(incoming.workspace, data.activeProject?.path, true);
       else patchRoute({ project: data.activeProject?.path }, true);
     }
+    try {
+      const setup = await setupRequest<SetupSnapshot>('');
+      if (typeof setup.completed === 'boolean' && typeof setup.existing === 'boolean') {
+        setSetupSnapshot(setup);
+        if (!setup.completed && !setup.existing && getRoute().workspace !== 'setup') {
+          setupReturn.current = getRoute();
+          openSetup(setupReturn.current, true);
+        }
+      }
+    } catch { /* Older backends and offline settings retain the existing workspace. */ }
     setIsAppReady(true);
   }, [applyProject]);
 
@@ -390,6 +417,17 @@ export const App: React.FC = () => {
     return <StartupLoadingScreen onReady={handleStartupReady} />;
   }
 
+  if (activeWorkspace === 'setup') return <SetupView initial={setupSnapshot} onExit={(action) => {
+    void setupRequest<SetupSnapshot>('').then(setSetupSnapshot).catch(() => {});
+    setSetupDismissed(true);
+    const restored = consumeSetupReturn();
+    if (setupReturn.current || restored) navigateRoute(setupReturn.current || restored!);
+    else navigateWorkspace('studio', activeProject?.path);
+    setupReturn.current = null;
+    if (action === 'create') setIsNewProjectModalOpen(true);
+    if (action === 'open') setOpenProjectDialog(true);
+  }} />;
+
   const handleSelectWorkspaceTab = (tab: WorkspaceTab) => navigateWorkspace(tab, activeProject?.path);
 
   return (
@@ -412,6 +450,11 @@ export const App: React.FC = () => {
       />
 
       {/* Sync Toast */}
+      {setupSnapshot?.existing && !setupSnapshot.completed && !setupDismissed && <div className="px-4 py-3 flex flex-wrap gap-3 items-center border-b border-[#544d47]">
+        <span>{setupSnapshot.locale === 'th' ? 'ตรวจสอบการตั้งค่าด้วยขั้นตอนแนะนำ' : 'Review your installation with guided setup.'}</span>
+        <button className="underline" onClick={() => { setupReturn.current = getRoute(); openSetup(); }}>{setupSnapshot.locale === 'th' ? 'เปิดการตั้งค่า' : 'Open setup'}</button>
+        <button onClick={() => setSetupDismissed(true)}>{setupSnapshot.locale === 'th' ? 'ภายหลัง' : 'Later'}</button>
+      </div>}
       {syncToast && (
         <div className="fixed top-16 right-6 z-50 bg-[#383330] text-[#f7f5f0] border border-[#3f3a36] px-3.5 py-2 rounded-[4px] text-xs font-medium shadow-md flex items-center gap-2 animate-fade-in pointer-events-none">
           <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
@@ -622,6 +665,13 @@ export const App: React.FC = () => {
       )}
 
       {/* New Project Modal */}
+      {openProjectDialog && <OpenProjectDialog locale={setupSnapshot?.locale || 'en'} onClose={() => setOpenProjectDialog(false)} onOpened={project => {
+        backendProjectRef.current = project;
+        projectsRef.current = [...projectsRef.current.filter(item => !sameProject(item.path, project.path)), project];
+        setProjects(projectsRef.current); applyProject(project);
+        navigateWorkspace('studio', project.path, true);
+        void syncWithBackend(true);
+      }} />}
       <NewProjectModal
         isOpen={isNewProjectModalOpen}
         onClose={() => setIsNewProjectModalOpen(false)}

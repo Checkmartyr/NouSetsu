@@ -1,5 +1,7 @@
 # Settings persistence and resolution
 
+The [guided setup wizard](./setup.md) uses the same validated settings writer and revision contract. GET `/api/setup` returns safe first-install state and an ETag. POST `/api/setup/check` previews unsaved candidates, checks storage, discovers models or explicitly tests a connection; it never saves submitted keys. POST `/api/setup/complete` requires `If-Match`, saves the reviewed machine settings and writes a separate secret-free `setup.json` beside `.env`. A response with `settings_saved: true` and `success: false` means the completion record needs an idempotent retry using the returned revision. All setup endpoints enforce the existing local-origin settings restriction.
+
 The settings API validates a complete candidate configuration before saving. Project settings live in `.novel/config.yaml`; settings-owned Bible metadata is synchronized into `.novel/bible/bible.yaml`. Global defaults and credentials live in the selected machine dotenv file. Settings responses include saved values, effective values, and origins so a saved override can be distinguished from inheritance.
 
 ## Editing through HTTP

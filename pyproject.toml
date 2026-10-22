@@ -68,11 +68,15 @@ novel = "nousetsu.cli.app:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/nousetsu"]
 
+[tool.hatch.build.hooks.custom]
+path = "scripts/package_frontend.py"
+
 [tool.hatch.build.targets.sdist]
 include = [
     "/src",
     "/README.md",
     "/pyproject.toml",
+    "/scripts/package_frontend.py",
 ]
 
 [tool.pytest.ini_options]

@@ -996,15 +996,18 @@ def cmd_web(args: argparse.Namespace) -> None:
     # Locate web/ directory relative to codebase root or repo
     repo_root = Path(__file__).resolve().parent.parent.parent.parent
     web_dir = repo_root / "web"
-    if not web_dir.exists():
+    from nousetsu.utils.runtime_paths import frontend_dist
+    dist_dir = frontend_dist()
+    if not web_dir.exists() and not (dist_dir / "index.html").is_file():
         repo = NovelRepository(project_dir=project_dir)
         web_dir = repo.root_dir / "web"
 
-    if not web_dir.exists():
+    if (dev_mode or do_build) and not (web_dir / "package.json").is_file():
+        console.print("[red]Development/build mode requires a source checkout. Run nousetsu web or nousetsu setup to use the packaged UI.[/]")
+        return
+    if not web_dir.exists() and not (dist_dir / "index.html").is_file():
         console.print(f"[bold red]Web frontend directory not found at:[/] {web_dir}")
         return
-
-    dist_dir = web_dir / "dist"
 
     if do_build or (not dev_mode and not dist_dir.exists()):
         console.print("[cyan]Building frontend assets with npm run build...[/]")
@@ -1073,6 +1076,26 @@ def cmd_web(args: argparse.Namespace) -> None:
             border_style="cyan"
         ))
         run_web_server(port=port, host=host, open_browser=open_browser, dist_dir=dist_dir)
+
+
+def cmd_setup(args: argparse.Namespace) -> None:
+    from nousetsu.setup import run_terminal_setup
+    if args.terminal:
+        run_terminal_setup(console)
+        return
+    import threading
+    import webbrowser
+    from nousetsu.cli.web_server import run_web_server
+    from nousetsu.utils.runtime_paths import frontend_dist
+    dist = frontend_dist()
+    if not (dist / "index.html").is_file():
+        console.print("[red]The setup UI is unavailable. Run nousetsu setup --terminal, or build the frontend in your source checkout.[/]")
+        return
+    port = _find_free_port(args.port)
+    console.print(f"Setup: http://127.0.0.1:{port}/setup")
+    if args.open_browser:
+        threading.Timer(1.0, lambda: webbrowser.open(f"http://127.0.0.1:{port}/setup")).start()
+    run_web_server(port=port, host="127.0.0.1", open_browser=False, dist_dir=dist)
 
 
 def cmd_import(args: argparse.Namespace) -> None:
@@ -1313,6 +1336,11 @@ def main() -> None:
     p_tui.add_argument("--interactions", action=argparse.BooleanOptionalAction, default=True, help="Use Gemini Interactions API (/v1beta/interactions) (default: True)")
     p_tui.add_argument("--chunking", action=argparse.BooleanOptionalAction, default=True, help="Enable line-based semantic chunking for long chapters (default: True)")
 
+    p_setup = subparsers.add_parser("setup", help="Configure NouSetsu in a browser or terminal")
+    p_setup.add_argument("--terminal", action="store_true", help="Use terminal prompts without a browser")
+    p_setup.add_argument("--port", type=int, default=5173)
+    p_setup.add_argument("--open-browser", action=argparse.BooleanOptionalAction, default=True)
+
     # web
     p_web = subparsers.add_parser("web", help="Launch interactive Trace Visualizer web app in your browser")
     p_web.add_argument("--project-dir", "-P", default=None, help="Folder or name of novel project (resolves in NOVEL_PROJECTS_DIR or current directory)")
@@ -1366,6 +1394,8 @@ def main() -> None:
         cmd_traces(args)
     elif args.command == "web":
         cmd_web(args)
+    elif args.command == "setup":
+        cmd_setup(args)
     elif args.command == "skills":
         cmd_skills(args)
     elif args.command == "graph-info":

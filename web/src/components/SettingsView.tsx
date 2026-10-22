@@ -29,7 +29,7 @@ import {
   FolderOpen,
 } from 'lucide-react';
 import { isTauriDesktopRuntime } from '../services/apiBase';
-import { useSessionState } from '../services/navigation';
+import { openSetup, useSessionState } from '../services/navigation';
 import {
   GenerationRole,
   GenerationSettings,
@@ -113,7 +113,7 @@ interface GlobalEnvGroup {
   agent?: boolean;
 }
 
-const GLOBAL_ENV_GROUPS: Record<string, GlobalEnvGroup> = {
+export const GLOBAL_ENV_GROUPS: Record<string, GlobalEnvGroup> = {
   general: { title: 'Language Defaults', keys: ['SOURCE_LANG', 'TARGET_LANG'] },
   models: {
     title: 'Shared Model Defaults',
@@ -177,7 +177,7 @@ const GLOBAL_ENV_ENTRIES = Object.entries(GLOBAL_ENV_GROUPS);
 const FIRST_AGENT_ENV_GROUP_INDEX = GLOBAL_ENV_ENTRIES.findIndex(([, group]) => group.agent);
 const AGENT_ENV_GROUPS = GLOBAL_ENV_ENTRIES.filter(([, group]) => group.agent);
 
-const GLOBAL_ENV_LABELS: Record<string, string> = {
+export const GLOBAL_ENV_LABELS: Record<string, string> = {
   DEFAULT_MODEL: 'Default model',
   NOVEL_MODEL: 'Primary model',
   NOVEL_FALLBACK_MODEL: 'Fallback model',
@@ -207,12 +207,12 @@ const GENERATION_ROLES: { role: GenerationRole; title: string; stage: string; de
 
 const MODEL_INPUT_CLASS = 'w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500';
 
-const providerForRoute = (route: string): ModelProvider =>
+export const providerForRoute = (route: string): ModelProvider =>
   route.startsWith('openai:') ? 'openai'
     : route.startsWith('openrouter:') ? 'openrouter'
       : route.startsWith('custom:') ? 'custom' : 'gemini';
 
-const modelIdForRoute = (route: string): string =>
+export const modelIdForRoute = (route: string): string =>
   route.startsWith('openai:') || route.startsWith('openrouter:') || route.startsWith('custom:')
     ? route.slice(route.indexOf(':') + 1) : route;
 
@@ -223,6 +223,7 @@ const isOpenAIReasoningModel = (provider: ModelProvider | 'all', model: string):
 };
 
 interface ModelRouteControlProps {
+  locale?: 'en' | 'th';
   label: string;
   value: string;
   effectiveValue?: string;
@@ -236,9 +237,10 @@ interface ModelRouteControlProps {
   inherit?: boolean;
 }
 
-const ModelRouteControl: React.FC<ModelRouteControlProps> = ({
-  label, value, effectiveValue, onChange, catalogs, loadingCatalogs, catalogErrors, apiKeyStatus, customBaseUrl, onLoadCatalog, inherit,
+export const ModelRouteControl: React.FC<ModelRouteControlProps> = ({
+  label, value, effectiveValue, onChange, catalogs, loadingCatalogs, catalogErrors, apiKeyStatus, customBaseUrl, onLoadCatalog, inherit, locale = 'en',
 }) => {
+  const t = (en: string, th: string) => locale === 'th' ? th : en;
   const [providerOverride, setProviderOverride] = useState<ModelProvider | null>(null);
   const provider = providerOverride || providerForRoute(value || effectiveValue || '');
   const catalog = catalogs[provider];
@@ -268,12 +270,12 @@ const ModelRouteControl: React.FC<ModelRouteControlProps> = ({
       <div className="flex items-center justify-between gap-2">
         <label htmlFor={`${listId}-model`} className="font-semibold text-slate-200">{label}</label>
         {inherit && (value ? (
-          <button type="button" onClick={() => { setProviderOverride(null); onChange(''); }} className="text-[10px] text-amber-300 hover:text-amber-200">Clear override</button>
-        ) : <span className="text-emerald-300">Inheriting global default</span>)}
+          <button type="button" onClick={() => { setProviderOverride(null); onChange(''); }} className="text-[10px] text-amber-300 hover:text-amber-200">{t('Clear override', 'ใช้ค่าเริ่มต้น')}</button>
+        ) : <span className="text-emerald-300">{t('Inheriting global default', 'ใช้ค่าเริ่มต้นของแอป')}</span>)}
       </div>
       <div className="grid grid-cols-[minmax(110px,0.45fr)_minmax(0,1fr)] gap-2">
         <select
-          aria-label={`${label} provider`}
+          aria-label={`${label} ${t('provider', 'ผู้ให้บริการ')}`}
           value={provider}
           onChange={(event) => {
             const nextProvider = event.target.value as ModelProvider;
@@ -285,16 +287,16 @@ const ModelRouteControl: React.FC<ModelRouteControlProps> = ({
           <option value="gemini">Gemini</option>
           <option value="openai">OpenAI</option>
           <option value="openrouter">OpenRouter</option>
-          <option value="custom">Custom OpenAI-compatible</option>
+          <option value="custom">{t('Custom OpenAI-compatible', 'บริการกำหนดเองที่รองรับ OpenAI')}</option>
         </select>
         <input
           type="text"
           id={`${listId}-model`}
           list={listId}
-          aria-label={`${label} model ID`}
+          aria-label={`${label} ${t('model ID', 'รหัสโมเดล')}`}
           value={modelIdForRoute(value)}
           onChange={(event) => updateModel(event.target.value)}
-          placeholder={effectiveValue && (!providerOverride || providerForRoute(effectiveValue) === provider) ? modelIdForRoute(effectiveValue) : 'Search catalog or enter a model ID'}
+          placeholder={effectiveValue && (!providerOverride || providerForRoute(effectiveValue) === provider) ? modelIdForRoute(effectiveValue) : t('Search catalog or enter a model ID', 'ค้นหาหรือป้อนรหัสโมเดล')}
           className={MODEL_INPUT_CLASS}
         />
       </div>
@@ -303,19 +305,20 @@ const ModelRouteControl: React.FC<ModelRouteControlProps> = ({
       </datalist>
       <div className="flex flex-wrap items-center justify-between gap-2 text-[10px]">
         <span className="text-slate-500">
-          {value ? `Route: ${value}` : effectiveValue ? `Effective: ${effectiveValue}` : 'Enter a model ID or inherit the configured default.'}
+          {value ? `${t('Route', 'โมเดลที่เลือก')}: ${value}` : effectiveValue ? `${t('Effective', 'โมเดลที่ใช้')}: ${effectiveValue}` : t('Enter a model ID or inherit the configured default.', 'ป้อนรหัสโมเดลหรือใช้ค่าเริ่มต้น')}
         </span>
         <button type="button" onClick={() => onLoadCatalog(provider)} disabled={catalogLoading} className="text-indigo-300 hover:text-indigo-200 disabled:opacity-50">
-          {catalogLoading ? 'Loading catalog…' : catalog ? `Refresh ${provider} catalog (${catalog.models.length})` : `Load ${provider} catalog`}
+          {catalogLoading ? t('Loading catalog…', 'กำลังโหลดโมเดล…') : catalog ? t(`Refresh ${provider} catalog (${catalog.models.length})`, `โหลดโมเดล ${provider} ใหม่ (${catalog.models.length})`) : t(`Load ${provider} catalog`, `โหลดโมเดล ${provider}`)}
         </button>
       </div>
-      {configured === false && <p className="text-amber-300">{provider === 'custom' ? 'Configure CUSTOM_API_KEY and CUSTOM_API_BASE_URL in global settings.' : `No ${provider} API key is configured. You can still enter a model ID and save it after adding a key.`}</p>}
+      {configured === false && <p className="text-amber-300">{t(provider === 'custom' ? 'Configure CUSTOM_API_KEY and CUSTOM_API_BASE_URL in global settings.' : `No ${provider} API key is configured. You can still enter a model ID and save it after adding a key.`, 'ยังไม่มีคีย์ของบริการนี้ เพิ่มคีย์และที่อยู่บริการในหัวข้อบริการเพิ่มเติมก่อนบันทึก')}</p>}
       {catalogError && <p role="alert" className="text-rose-300">{catalogError}</p>}
     </div>
   );
 };
 
 interface GenerationSettingsEditorProps {
+  locale?: 'en' | 'th';
   role: GenerationRole | 'default';
   provider: ModelProvider | 'all';
   model?: string;
@@ -326,9 +329,10 @@ interface GenerationSettingsEditorProps {
   onEnvironmentChange?: (key: string, value: string) => void;
 }
 
-const GenerationSettingsEditor: React.FC<GenerationSettingsEditorProps> = ({
-  role, provider, model = '', projectValue, effectiveValue, environmentValues, onProjectChange, onEnvironmentChange,
+export const GenerationSettingsEditor: React.FC<GenerationSettingsEditorProps> = ({
+  role, provider, model = '', projectValue, effectiveValue, environmentValues, onProjectChange, onEnvironmentChange, locale = 'en',
 }) => {
+  const t = (en: string, th: string) => locale === 'th' ? th : en;
   const isProject = Boolean(onProjectChange);
   const prefix = role === 'default' ? 'NOVEL' : `NOVEL_${role.toUpperCase()}`;
   const interactionKey = role === 'default' ? 'NOVEL_USE_INTERACTIONS' : `${prefix}_USE_INTERACTIONS`;
@@ -375,37 +379,37 @@ const GenerationSettingsEditor: React.FC<GenerationSettingsEditorProps> = ({
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-      <p className="text-[10px] text-slate-400">Thinking budget is retained and applies only when Interactions is off and the provider supports it.</p>
+      <p className="text-[10px] text-slate-400">{t('Thinking budget is retained and applies only when Interactions is off and the provider supports it.', 'งบประมาณการคิดจะเก็บไว้ ใช้เมื่อปิด Interactions และบริการรองรับเท่านั้น')}</p>
       {showTemperature ? <label className="block">
-        <span className="block text-slate-400 mb-1 font-medium">Temperature</span>
-        <input type="number" min="0" max="2" step="0.1" value={current('temperature')} placeholder={inherited('temperature') || 'Provider default'} onChange={(event) => update('temperature', event.target.value)} className={inputClass} />
-      </label> : <p className="self-center text-slate-500">Temperature is not supported by this model; saved values are preserved.</p>}
+        <span className="block text-slate-400 mb-1 font-medium">{t('Temperature', 'ความสร้างสรรค์ (Temperature)')}</span>
+        <input type="number" min="0" max="2" step="0.1" value={current('temperature')} placeholder={inherited('temperature') || t('Provider default', 'ค่าเริ่มต้นบริการ')} onChange={(event) => update('temperature', event.target.value)} className={inputClass} />
+      </label> : <p className="self-center text-slate-500">{t('Temperature is not supported by this model; saved values are preserved.', 'โมเดลนี้ไม่รองรับ Temperature ค่าที่บันทึกไว้จะยังอยู่')}</p>}
       {showGeminiControls && <>
         <label className="block">
-          <span className="block text-slate-400 mb-1 font-medium">Thinking level</span>
+          <span className="block text-slate-400 mb-1 font-medium">{t('Thinking level', 'ระดับการคิด')}</span>
           <select value={current('thinking_level')} onChange={(event) => update('thinking_level', event.target.value)} className={inputClass}>
-            <option value="">{isProject ? `Inherit${inherited('thinking_level') ? ` (${inherited('thinking_level')})` : ''}` : 'Provider default'}</option>
+            <option value="">{isProject ? `Inherit${inherited('thinking_level') ? ` (${inherited('thinking_level')})` : ''}` : t('Provider default', 'ค่าเริ่มต้นบริการ')}</option>
             {!['minimal', 'low', 'medium', 'high'].includes(current('thinking_level')) && current('thinking_level') && <option value={current('thinking_level')}>{current('thinking_level')}</option>}
-            <option value="minimal">Minimal</option>
-            <option value="low">Low</option>
-            <option value="medium">Medium</option>
-            <option value="high">High</option>
+            <option value="minimal">{t('Minimal', 'ต่ำสุด')}</option>
+            <option value="low">{t('Low', 'ต่ำ')}</option>
+            <option value="medium">{t('Medium', 'ปานกลาง')}</option>
+            <option value="high">{t('High', 'สูง')}</option>
           </select>
         </label>
         {!interactionsEnabled && <label className="block">
-          <span className="block text-slate-400 mb-1 font-medium">Thinking budget</span>
-          <input type="number" min="0" step="1" value={current('thinking_budget')} placeholder={inherited('thinking_budget') || 'Provider default'} onChange={(event) => update('thinking_budget', event.target.value)} className={inputClass} />
+          <span className="block text-slate-400 mb-1 font-medium">{t('Thinking budget', 'งบประมาณการคิด')}</span>
+          <input type="number" min="0" step="1" value={current('thinking_budget')} placeholder={inherited('thinking_budget') || t('Provider default', 'ค่าเริ่มต้นบริการ')} onChange={(event) => update('thinking_budget', event.target.value)} className={inputClass} />
         </label>}
         <label className="sm:col-span-2 flex items-center justify-between gap-3 rounded-[3px] border border-[#3f3a36] bg-[#24201d] p-2">
           <span className="text-slate-400">Gemini Interactions API</span>
           <select aria-label="Gemini Interactions API" value={current('use_interactions_api')} onChange={(event) => update('use_interactions_api', event.target.value)} className="bg-[#2b2622] border border-[#3f3a36] rounded px-2 py-1 text-slate-200">
-            <option value="">{isProject ? `Inherit${inherited('use_interactions_api') ? ` (${inherited('use_interactions_api') === 'true' ? 'On' : 'Off'})` : ''}` : 'Default (On)'}</option>
-            <option value="true">On</option>
-            <option value="false">Off</option>
+            <option value="">{isProject ? `Inherit${inherited('use_interactions_api') ? ` (${inherited('use_interactions_api') === 'true' ? 'On' : 'Off'})` : ''}` : t('Default (On)', 'ค่าเริ่มต้น (เปิด)')}</option>
+            <option value="true">{t('On', 'เปิด')}</option>
+            <option value="false">{t('Off', 'ปิด')}</option>
           </select>
         </label>
       </>}
-      {!showGeminiControls && <p className="sm:col-span-2 text-[10px] text-slate-500">Gemini-specific settings are hidden for this provider and retained if you switch back.</p>}
+      {!showGeminiControls && <p className="sm:col-span-2 text-[10px] text-slate-500">{t('Gemini-specific settings are hidden for this provider and retained if you switch back.', 'ซ่อนการตั้งค่าเฉพาะ Gemini ไว้ ค่าจะยังอยู่เมื่อเปลี่ยนบริการกลับ')}</p>}
     </div>
   );
 };
@@ -1094,6 +1098,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
       {saveError && <div role="alert" className="p-3 text-rose-200">{saveError} <button type="button" onClick={() => { void loadSettingsData(); void loadMachineEnvironment(false); setApiKeyInputs({}); setClearApiKeys([]); setSaveError(null); }} className="underline">Reload and discard edits</button></div>}
       {/* Main 2-Column Layout */}
+      <button type="button" className="px-5 py-3 text-left underline" onClick={() => openSetup()}>Open guided setup / เปิดขั้นตอนตั้งค่า</button>
       <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
         {/* Left Sidebar: Settings Groups */}
         <aside className="w-full md:w-64 bg-[#2b2622] border-b md:border-b-0 md:border-r border-[#3f3a36] flex flex-col shrink-0 max-h-48 md:max-h-none overflow-hidden">
