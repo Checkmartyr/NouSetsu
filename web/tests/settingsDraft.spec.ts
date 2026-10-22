@@ -24,3 +24,10 @@ test('refresh updates effective defaults without rebasing a stale dirty revision
   expect(refreshed.baseline.revision).toBe('old');
   expect(refreshed.conflict).toBe(true);
 });
+
+
+test('refresh after save does not submit success response metadata', () => {
+  const baseline = {title: 'Saved', revision: 'r2', success: true};
+  const refreshed = refreshDraft(baseline, baseline, {title: 'Saved', revision: 'r2'});
+  expect(dirtySettings({...refreshed.draft, title: 'Next'}, refreshed.baseline)).toEqual({title: 'Next'});
+});

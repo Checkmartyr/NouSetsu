@@ -11,7 +11,7 @@ from nousetsu.graph.procedural import ProceduralGraph, get_default_critic_graph
 from nousetsu.models.bible import CharacterProfile, GlossaryItem, NovelBible
 from nousetsu.models.metadata import QualityAudit, SubdividedBlock, TokenUsage
 from nousetsu.models.schemas import CritiqueResult
-from nousetsu.models.config import resolve_agent_generation_settings
+from nousetsu.models.config import DEFAULT_AGENT_MODELS, resolve_agent_generation_settings
 from nousetsu.models.trace import PipelineStage
 from nousetsu.prompts.character_formatter import format_character_roster
 from nousetsu.prompts.templates import CRITIQUE_SYSTEM_PROMPT
@@ -34,7 +34,7 @@ class CritiqueAgent:
 
     def __init__(
         self,
-        model_name: str = "gemma-4-26b-a4b-it",
+        model_name: str = DEFAULT_AGENT_MODELS["critic"],
         fallback_model: Optional[str] = None,
         procedural_graph: Optional[ProceduralGraph] = None,
         chunker: Optional[Any] = None,

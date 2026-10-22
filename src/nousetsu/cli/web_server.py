@@ -1188,8 +1188,8 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
         repo = NovelRepository(target_dir)
         repo.initialize_project(
             title=title,
-            source_lang=body.source_language or resolve_env().get("SOURCE_LANG") or "auto",
-            target_lang=body.target_language or resolve_env().get("TARGET_LANG") or "English",
+            source_lang=body.source_language or resolve_env().get("SOURCE_LANG") or ProjectConfig().source_language,
+            target_lang=body.target_language or resolve_env().get("TARGET_LANG") or ProjectConfig().target_language,
             model_name=body.model,
             genre=body.genre or "general",
         )
@@ -2237,14 +2237,13 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
                 for role in ("extractor", "drafter", "critic", "polisher", "chronicler", "scraper")
             }
 
-            env_default_model = env.get("NOVEL_MODEL") or env.get("DEFAULT_MODEL") or "gemini-3.1-flash-lite"
-            env_fallback_model = env.get("NOVEL_FALLBACK_MODEL") or "gemini-3.5-flash-lite"
-            env_extractor = env.get("NOVEL_EXTRACTOR_MODEL") or env_default_model
-            env_drafter = env.get("NOVEL_DRAFTER_MODEL") or env_default_model
-            env_critic = env.get("NOVEL_CRITIC_MODEL") or "gemma-4-26b-a4b-it"
-            env_polisher = env.get("NOVEL_POLISHER_MODEL") or env_default_model
-            env_chronicler = env.get("NOVEL_CHRONICLER_MODEL") or "gemma-4-26b-a4b-it"
-            env_scraper = env.get("NOVEL_SCRAPER_MODEL") or env_default_model
+            defaults = ProjectConfig()
+            env_default_model = defaults.get_model_name(env)
+            env_fallback_model = defaults.get_fallback_model(env)
+            env_extractor, env_drafter, env_critic, env_polisher, env_chronicler, env_scraper = (
+                defaults.get_agent_model(role, env)
+                for role in ("extractor", "drafter", "critic", "polisher", "chronicler", "scraper")
+            )
 
             env_presets = {
                 "model_name": env_default_model,

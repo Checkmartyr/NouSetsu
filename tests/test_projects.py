@@ -8,7 +8,7 @@ from nousetsu.storage.repository import NovelRepository, ProjectRegistry
 def test_project_config_defaults(tmp_path: Path):
     cfg = ProjectConfig()
     assert cfg.title in ("Untitle", "Ascendance of a Bookworm")
-    assert cfg.source_language == "English"
+    assert cfg.source_language == "Japanese"
     assert cfg.target_language == "Thai"
     # Model fields default to None, indicating inheritance from .env
     assert cfg.model_name is None
@@ -22,12 +22,14 @@ def test_project_config_defaults(tmp_path: Path):
     assert cfg.get_model_name() is not None
     assert cfg.get_agent_model("extractor") is not None
     assert cfg.max_tpm is None
-    assert cfg.resolve_value("max_tpm", {}) == 32000
+    assert cfg.resolve_value("max_tpm", {}) == 250000
     assert cfg.chunk_threshold_lines == 800
     assert cfg.target_chunk_lines == 400
     assert cfg.chunk_overlap_lines == 3
     assert cfg.raw_dir == "raw_chapters"
     assert cfg.output_dir == "translated_chapters"
+    (tmp_path / "raw_chapters").mkdir()
+    (tmp_path / "translated_chapters").mkdir()
     assert cfg.get_raw_path(tmp_path) == (tmp_path / "raw_chapters").resolve()
     assert cfg.get_output_path(tmp_path) == (tmp_path / "translated_chapters").resolve()
 

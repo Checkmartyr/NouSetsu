@@ -7,21 +7,27 @@ from typing import Any, Dict, Mapping, Optional, Literal
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 
 
+DEFAULT_MODEL = "gemini-3.5-flash-lite"
+DEFAULT_FALLBACK_MODEL = "gemini-3.1-flash-lite"
+DEFAULT_SOURCE_LANGUAGE = "Japanese"
+DEFAULT_TARGET_LANGUAGE = "Thai"
+DEFAULT_RUNTIME_SETTINGS = {"max_tpm": 250000, "max_rpm": 30, "max_review_loops": 3, "quality_threshold": 9.5}
+
 GENERATION_ROLES = ("extractor", "drafter", "critic", "polisher", "chronicler", "scraper")
 DEFAULT_AGENT_MODELS = {
     "extractor": "gemini-3.1-flash-lite",
-    "drafter": "gemini-3.5-flash-lite",
-    "critic": "gemma-4-26b-a4b-it",
-    "polisher": "gemini-3.5-flash-lite",
-    "chronicler": "gemma-4-26b-a4b-it",
-    "scraper": "gemini-3.1-flash-lite",
+    "drafter": "gemini-3.1-flash-lite",
+    "critic": "gemini-3.5-flash-lite",
+    "polisher": "gemini-3.1-flash-lite",
+    "chronicler": "gemini-3.5-flash-lite",
+    "scraper": "gemini-3.5-flash-lite",
 }
 DEFAULT_AGENT_TEMPERATURES = {
     "extractor": 0.1,
-    "drafter": 1.0,
+    "drafter": 0.1,
     "critic": 0.1,
-    "polisher": 1.0,
-    "chronicler": 0.2,
+    "polisher": 0.1,
+    "chronicler": 0.1,
     "scraper": 1.0,
 }
 LANGUAGE_FOLDER_CODES = {
@@ -119,7 +125,7 @@ def resolve_agent_generation_settings(
         project_value("thinking_level")
         or env.get(f"{prefix}_THINKING_LEVEL")
         or env.get("NOVEL_THINKING_LEVEL")
-        or ("medium" if role == "critic" else None)
+        or "high"
     )
     thinking_budget = project_value("thinking_budget")
     if thinking_budget is None:
@@ -150,8 +156,8 @@ class ProjectConfig(BaseModel):
 
     project_id: str = Field(default="default_project")
     title: str = Field(default="Untitle")
-    source_language: str = Field(default="English")
-    target_language: str = Field(default="Thai")
+    source_language: str = Field(default=DEFAULT_SOURCE_LANGUAGE)
+    target_language: str = Field(default=DEFAULT_TARGET_LANGUAGE)
     raw_dir: str = Field(default="raw_chapters", description="Path to input raw chapter files")
     output_dir: str = Field(default="translated_chapters", description="Path to output translated files")
     model_name: Optional[str] = Field(default=None, description="Default LLM model override (defaults to .env NOVEL_MODEL)")
@@ -180,7 +186,7 @@ class ProjectConfig(BaseModel):
     safety_recursive_subdivision: bool = Field(default=True, description="Enable recursive bisection of safety-blocked chunks")
     safety_subdivision_min_lines: int = Field(default=8, ge=1, description="Minimum non-empty lines before terminating subdivision")
     safety_subdivision_max_depth: int = Field(default=4, ge=1, description="Maximum recursion depth for bisection")
-    enable_rag: bool = Field(default=True, description="Enable hybrid search episodic lore retrieval (Tier 4 Memory)")
+    enable_rag: bool = Field(default=False, description="Enable hybrid search episodic lore retrieval (Tier 4 Memory)")
     rag_top_k: int = Field(default=2, ge=1, le=10, description="Top N historical lore snippets to retrieve per chapter")
     rag_embedding_model: Optional[str] = Field(default=None, description="Dense embedding model override (defaults to text-multilingual-embedding-002)")
     enable_rag_reranker: bool = Field(default=True, description="Enable Cross-Encoder reranking stage after hybrid retrieval")
@@ -283,12 +289,12 @@ class ProjectConfig(BaseModel):
     def get_model_name(self, environ: Optional[Mapping[str, str]] = None) -> str:
         """Resolve primary route from project, machine defaults, then the built-in default."""
         env = os.environ if environ is None else environ
-        return self.model_name or env.get("NOVEL_MODEL") or env.get("DEFAULT_MODEL") or "gemini-3.1-flash-lite"
+        return self.model_name or env.get("NOVEL_MODEL") or env.get("DEFAULT_MODEL") or DEFAULT_MODEL
 
     def get_fallback_model(self, environ: Optional[Mapping[str, str]] = None) -> Optional[str]:
         """Resolve the shared fallback route from project and machine defaults."""
         env = os.environ if environ is None else environ
-        return self.fallback_model or env.get("NOVEL_FALLBACK_MODEL") or "gemini-3.5-flash-lite"
+        return self.fallback_model or env.get("NOVEL_FALLBACK_MODEL") or DEFAULT_FALLBACK_MODEL
 
     def get_agent_model(self, role: str, environ: Optional[Mapping[str, str]] = None) -> str:
         """Resolve a route consistently for the settings UI and batch runtime."""
@@ -420,7 +426,7 @@ class ProjectConfig(BaseModel):
 
     def resolve_value(self, name: str, environ: Optional[Mapping[str, str]] = None):
         """Resolve and validate the selected inheritable scalar setting."""
-        defaults = {"max_tpm": 32000, "max_rpm": 60, "max_review_loops": 3, "quality_threshold": 8.5}
+        defaults = DEFAULT_RUNTIME_SETTINGS
         if name not in defaults:
             raise ValueError("Unknown inheritable setting")
         value = getattr(self, name)

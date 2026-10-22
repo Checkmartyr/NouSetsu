@@ -221,9 +221,9 @@ def test_batch_runner_rag_flag_propagation(tmp_path: Path):
     repo = NovelRepository(tmp_path)
     repo.initialize_project("Test RAG Flags", "Japanese", "English")
 
-    # 1. Default inherits enabled RAG and Reranker
+    # 1. Default disables RAG while retaining the reranker preference
     runner_default = BatchRunner(repo, model_name="mock-model")
-    assert runner_default.workflow.enable_rag is True
+    assert runner_default.workflow.enable_rag is False
     assert runner_default.workflow.enable_rag_reranker is True
 
     # 2. Explicit enable_rag=False disables RAG in workflow

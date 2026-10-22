@@ -1,5 +1,6 @@
 """LangGraph state schema for novel translation workflow."""
 from typing import Dict, List, Optional
+from nousetsu.models.config import DEFAULT_MODEL, DEFAULT_RUNTIME_SETTINGS
 from pydantic import BaseModel, Field
 from nousetsu.models.bible import ArcSummary, CharacterProfile, ChapterSummary, GlossaryItem, NovelBible
 from nousetsu.models.metadata import ChapterMetadata, PipelineStage, QualityAudit, StepTokenUsage, SubdividedBlock
@@ -15,7 +16,7 @@ class TranslationState(BaseModel):
     source_sha256: str = Field(default="")
     output_file: str = Field(default="")
     source_text: str = Field(..., description="Raw text of chapter")
-    model_name: str = Field(default="gemini-3.1-flash-lite")
+    model_name: str = Field(default=DEFAULT_MODEL)
     genre: str = Field(default="general", description="Novel genre")
     active_skills: Dict[str, List[str]] = Field(default_factory=dict, description="Active skills used per stage")
 
@@ -40,7 +41,7 @@ class TranslationState(BaseModel):
 
     review_iteration: int = Field(default=1, description="Current review loop iteration (1-indexed)")
     max_review_loops: int = Field(default=3, description="Maximum review passes allowed")
-    quality_threshold: float = Field(default=8.5, description="Target fidelity and style score threshold")
+    quality_threshold: float = Field(default=DEFAULT_RUNTIME_SETTINGS["quality_threshold"], description="Target fidelity and style score threshold")
     best_polished_text: str = Field(default="", description="Polished text candidate with highest score")
     best_audit: Optional[QualityAudit] = Field(default=None, description="Quality audit of best candidate")
 

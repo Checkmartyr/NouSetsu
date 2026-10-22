@@ -1586,14 +1586,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
                     <div>
                       <label htmlFor="settings-field-7" className="block text-slate-400 mb-1 font-medium">
-                        Quality Score Threshold ({settings.quality_threshold ?? settings.effective_config?.quality_threshold ?? 8.5})
+                        Quality Score Threshold ({settings.quality_threshold ?? settings.effective_config?.quality_threshold ?? 9.5})
                       </label>
                       <input id="settings-field-7"
                         type="range"
                         min={5.0}
                         max={10}
                         step={0.1}
-                        value={settings.quality_threshold ?? settings.effective_config?.quality_threshold ?? 8.5}
+                        value={settings.quality_threshold ?? settings.effective_config?.quality_threshold ?? 9.5}
                         onChange={(e) =>
                           setSettings({
                             ...settings,
@@ -1604,10 +1604,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       />
                       <div className="flex justify-between text-[10px] text-slate-500 mt-1">
                         <span>6.0 (Permissive)</span>
-                        <span>8.5 (Default target)</span>
+                        <span>9.5 (Default target)</span>
                         <span>9.5 (Perfectionist)</span>
                       </div>
-                      {renderSettingInheritance('quality_threshold', 'Quality Score Threshold', 8.5)}
+                      {renderSettingInheritance('quality_threshold', 'Quality Score Threshold', 9.5)}
                     </div>
                   </div>
 
@@ -2037,8 +2037,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       <input id="settings-field-16"
                         type="number"
                         min={1}
-                        placeholder="32000"
-                        value={settings.max_tpm === '' ? '' : (settings.max_tpm ?? settings.effective_config?.max_tpm ?? 32000)}
+                        placeholder="250000"
+                        value={settings.max_tpm === '' ? '' : (settings.max_tpm ?? settings.effective_config?.max_tpm ?? 250000)}
                         onChange={(e) => {
                           const val = e.target.value;
                           setSettings({
@@ -2058,7 +2058,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
                       />
                       <span className="text-[10px] text-slate-500">60-second sliding window TPM limit (default: 32,000)</span>
-                      {renderSettingInheritance('max_tpm', 'Max Tokens Per Minute', 32000)}
+                      {renderSettingInheritance('max_tpm', 'Max Tokens Per Minute', 250000)}
                     </div>
 
                     <div>
@@ -2069,7 +2069,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         type="number"
                         min={1}
                         placeholder="60"
-                        value={settings.max_rpm === '' ? '' : (settings.max_rpm ?? settings.effective_config?.max_rpm ?? 60)}
+                        value={settings.max_rpm === '' ? '' : (settings.max_rpm ?? settings.effective_config?.max_rpm ?? 30)}
                         onChange={(e) => {
                           const val = e.target.value;
                           setSettings({
@@ -2089,7 +2089,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
                       />
                       <span className="text-[10px] text-slate-500">60-second sliding window RPM limit (default: 60)</span>
-                      {renderSettingInheritance('max_rpm', 'Max Requests Per Minute', 60)}
+                      {renderSettingInheritance('max_rpm', 'Max Requests Per Minute', 30)}
                     </div>
                   </div>
                 </div>

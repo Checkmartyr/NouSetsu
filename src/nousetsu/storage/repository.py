@@ -675,8 +675,8 @@ class NovelRepository:
     def initialize_project(
         self,
         title: str = "Ascendance of a Bookworm",
-        source_lang: str = "English",
-        target_lang: str = "Thai",
+        source_lang: str = ProjectConfig.model_fields["source_language"].default,
+        target_lang: str = ProjectConfig.model_fields["target_language"].default,
         raw_dir: str = "raw_chapters",
         output_dir: str = "translated_chapters",
         model_name: Optional[str] = None,

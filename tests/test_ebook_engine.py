@@ -176,6 +176,7 @@ def test_compile_project_to_ebook(tmp_path: Path):
     repo = NovelRepository(proj_dir)
     cfg = repo.load_config()
     cfg.title = "Isekai Reincarnation"
+    cfg.source_language = "English"  # This fixture contains English glossary source terms.
     repo.save_config(cfg)
 
     # Populate translated chapters

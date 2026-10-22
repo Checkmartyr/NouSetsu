@@ -78,13 +78,14 @@ VALID_FIELDS = {
 
 @pytest.mark.parametrize("field,value", VALID_FIELDS.items())
 def test_valid_project_field_persists_and_isolates_other_project(audit, field, value):
+    other_before = audit.other.config_file_path().read_bytes()
     response = audit.client.put("/api/settings", params=audit.params, json={field: value})
     assert response.status_code == 200
     assert audit.repo.load_config().model_dump()[field] == value
     # A fresh app/client proves handler state is not the source of persistence.
     reloaded = TestClient(create_app()).get("/api/settings", params=audit.params).json()
     assert reloaded["config"][field] == value
-    assert audit.other.load_config().model_dump()[field] != value
+    assert audit.other.config_file_path().read_bytes() == other_before
 
 
 @pytest.mark.parametrize("field,value", [("max_review_loops", 0), ("quality_threshold", 11), ("rag_top_k", 0)])

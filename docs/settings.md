@@ -74,3 +74,10 @@ A corrupt saved configuration is reported rather than replaced with project defa
 Version `0.5.3` settings clients and backends use the revision contract together. Desktop startup retains compatible backend reuse and displays the backend mode and storage context. Reusing a compatible source backend means the desktop UI edits that backend's files; it does not prove a frozen sidecar was used. Check the displayed context when comparing modes.
 
 The repair audit uses isolated fixtures and local mock providers. Source spies verify Google/Interactions payload decisions; frozen-sidecar transport uses a local OpenAI-compatible stub. Actual Tauri WebView2 automation verifies native persistence through CDP, without computer-use tools. A per-setting persistence pass does not establish every runtime path or live-provider compatibility. See `audit-results/settings-repair/setting-mode-matrix.csv` for measured scenarios and blocked cases.
+
+
+## Built-in translation defaults
+
+New projects default to Japanese to Thai, 250,000 TPM / 30 RPM, three review passes and a 9.5 quality threshold. RAG starts disabled. Primary, critic, chronicler and scraper use `gemini-3.5-flash-lite`; fallback, extractor, drafter and polisher use `gemini-3.1-flash-lite`. All roles use high thinking; translation roles use temperature 0.1 and scraper retains 1.0. `.env.example` documents this baseline. Explicit project and machine settings retain precedence.
+
+Terminal settings reject invalid numeric edits rather than reporting success with the previous value. Project saves update the selected project config.yaml; global saves update the machine .env.

@@ -14,7 +14,7 @@ def test_invalid_project_constraints(name,value):
     with pytest.raises(ValidationError):
         ProjectConfig(**{name:value})
 
-@pytest.mark.parametrize("name,default,override",[("max_tpm",32000,100),("max_rpm",60,7),("max_review_loops",3,2),("quality_threshold",8.5,9.0)])
+@pytest.mark.parametrize("name,default,override",[("max_tpm",250000,100),("max_rpm",30,7),("max_review_loops",3,2),("quality_threshold",9.5,9.0)])
 def test_saved_override_and_explicit_reset(name,default,override):
     env={"NOVEL_"+name.upper():str(override)}
     assert ProjectConfig().resolve_value(name,{})==default

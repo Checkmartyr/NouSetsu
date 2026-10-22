@@ -8,7 +8,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from nousetsu.agents.llm import extract_text_from_message, extract_usage_from_message, get_llm
 from nousetsu.graph.procedural import ProceduralGraph, get_default_polisher_graph
 from nousetsu.models.bible import CharacterProfile, GlossaryItem, NovelBible
-from nousetsu.models.config import resolve_agent_generation_settings
+from nousetsu.models.config import DEFAULT_AGENT_MODELS, resolve_agent_generation_settings
 from nousetsu.models.metadata import SubdividedBlock, TokenUsage
 from nousetsu.models.trace import PipelineStage
 from nousetsu.prompts.character_formatter import format_character_roster
@@ -44,7 +44,7 @@ class PolishingAgent:
 
     def __init__(
         self,
-        model_name: str = "gemini-3.5-flash-lite",
+        model_name: str = DEFAULT_AGENT_MODELS["polisher"],
         fallback_model: Optional[str] = None,
         procedural_graph: Optional[ProceduralGraph] = None,
         temperature: Optional[float] = None,

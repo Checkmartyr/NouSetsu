@@ -1,4 +1,5 @@
 """LLM client factory supporting Google Gemini, OpenAI, Anthropic, and local mock fallback."""
+from nousetsu.models.config import DEFAULT_MODEL
 import os
 from typing import Any, Callable, Optional, Tuple, Type
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -502,7 +503,7 @@ def _create_openai_compatible_llm(
 
 
 def _create_single_llm(
-    model_name: str = "gemini-3.1-flash-lite",
+    model_name: str = DEFAULT_MODEL,
     temperature: Optional[float] = None,
     use_interactions: Optional[bool] = None,
     thinking_level: Optional[str] = None,
@@ -611,7 +612,7 @@ def _create_single_llm(
 
 
 def get_llm(
-    model_name: str = "gemini-3.1-flash-lite",
+    model_name: str = DEFAULT_MODEL,
     temperature: Optional[float] = None,
     use_interactions: Optional[bool] = None,
     fallback_model: Optional[str] = None,

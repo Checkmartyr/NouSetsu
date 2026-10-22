@@ -19,6 +19,7 @@ from nousetsu.models.bible import ChapterSummary, NovelBible
 from nousetsu.models.exceptions import BatchStoppedException
 from nousetsu.models.metadata import PipelineStage, StageStatus, StepTokenUsage, TokenUsage
 from nousetsu.models.state import TranslationState
+from nousetsu.models.config import DEFAULT_MODEL, DEFAULT_FALLBACK_MODEL, DEFAULT_AGENT_MODELS, DEFAULT_RUNTIME_SETTINGS
 from nousetsu.rag.models import DocumentType
 from nousetsu.skills.registry import SkillRegistry
 from nousetsu.utils.character_filter import filter_characters_for_scene
@@ -43,7 +44,7 @@ class NovelTranslationWorkflow:
         chronicler_model: Optional[str] = None,
         rate_limiter: Optional[SlidingWindowRateLimiter] = None,
         max_review_loops: int = 3,
-        quality_threshold: float = 8.5,
+        quality_threshold: float = DEFAULT_RUNTIME_SETTINGS["quality_threshold"],
         enable_chunking: bool = True,
         chunk_threshold_lines: int = 800,
         target_chunk_lines: int = 400,
@@ -57,7 +58,7 @@ class NovelTranslationWorkflow:
         safety_subdivision_min_lines: int = 8,
         safety_subdivision_max_depth: int = 4,
         rag_engine: Optional[Any] = None,
-        enable_rag: bool = True,
+        enable_rag: bool = False,
         rag_top_k: int = 2,
         rag_embedding_model: str = "text-multilingual-embedding-002",
         embedding_client: Optional[Any] = None,
@@ -84,17 +85,17 @@ class NovelTranslationWorkflow:
         self.filter_extractor_entities = filter_extractor_entities
         self.enable_post_polish_reconciliation = enable_post_polish_reconciliation
         self.generation_settings = generation_settings or {}
-        effective_model = model_name or self.environ.get("NOVEL_MODEL") or self.environ.get("DEFAULT_MODEL") or "gemini-3.1-flash-lite"
+        effective_model = model_name or self.environ.get("NOVEL_MODEL") or self.environ.get("DEFAULT_MODEL") or DEFAULT_MODEL
         self.model_name = effective_model
         is_mock = effective_model.startswith("mock") or effective_model.startswith("test")
         default_agent = effective_model if is_mock else None
 
-        self.fallback_model = fallback_model or default_agent or self.environ.get("NOVEL_FALLBACK_MODEL") or "gemini-3.5-flash-lite"
-        self.extractor_model = extractor_model or default_agent or self.environ.get("NOVEL_EXTRACTOR_MODEL") or "gemini-3.1-flash-lite"
-        self.drafter_model = drafter_model or default_agent or self.environ.get("NOVEL_DRAFTER_MODEL") or "gemini-3.5-flash-lite"
-        self.critic_model = critic_model or default_agent or self.environ.get("NOVEL_CRITIC_MODEL") or "gemma-4-26b-a4b-it"
-        self.polisher_model = polisher_model or default_agent or self.environ.get("NOVEL_POLISHER_MODEL") or "gemini-3.5-flash-lite"
-        self.chronicler_model = chronicler_model or default_agent or self.environ.get("NOVEL_CHRONICLER_MODEL") or "gemma-4-26b-a4b-it"
+        self.fallback_model = fallback_model or default_agent or self.environ.get("NOVEL_FALLBACK_MODEL") or DEFAULT_FALLBACK_MODEL
+        self.extractor_model = extractor_model or default_agent or self.environ.get("NOVEL_EXTRACTOR_MODEL") or DEFAULT_AGENT_MODELS["extractor"]
+        self.drafter_model = drafter_model or default_agent or self.environ.get("NOVEL_DRAFTER_MODEL") or DEFAULT_AGENT_MODELS["drafter"]
+        self.critic_model = critic_model or default_agent or self.environ.get("NOVEL_CRITIC_MODEL") or DEFAULT_AGENT_MODELS["critic"]
+        self.polisher_model = polisher_model or default_agent or self.environ.get("NOVEL_POLISHER_MODEL") or DEFAULT_AGENT_MODELS["polisher"]
+        self.chronicler_model = chronicler_model or default_agent or self.environ.get("NOVEL_CHRONICLER_MODEL") or DEFAULT_AGENT_MODELS["chronicler"]
 
         self.rate_limiter = rate_limiter or SlidingWindowRateLimiter()
         self.max_review_loops = max_review_loops
@@ -1300,7 +1301,7 @@ class NovelTranslationWorkflow:
 
         if initial_state.max_review_loops == 3 and self.max_review_loops != 3:
             initial_state.max_review_loops = self.max_review_loops
-        if initial_state.quality_threshold == 8.5 and self.quality_threshold != 8.5:
+        if initial_state.quality_threshold == DEFAULT_RUNTIME_SETTINGS["quality_threshold"] and self.quality_threshold != DEFAULT_RUNTIME_SETTINGS["quality_threshold"]:
             initial_state.quality_threshold = self.quality_threshold
 
         self.last_state = initial_state

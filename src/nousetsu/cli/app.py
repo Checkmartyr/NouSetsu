@@ -13,6 +13,7 @@ from rich.table import Table
 from rich.tree import Tree
 import dotenv
 from nousetsu import __version__
+from nousetsu.models.config import DEFAULT_SOURCE_LANGUAGE, DEFAULT_TARGET_LANGUAGE
 from nousetsu.batch.runner import BatchRunner
 from nousetsu.storage.repository import (
     NovelRepository,
@@ -46,8 +47,8 @@ def cmd_init(args: argparse.Namespace) -> None:
     project_dir = getattr(args, "project_dir", None)
     target_path = resolve_project_dir(project_dir, for_creation=True, title=args.title)
     repo = NovelRepository(target_path)
-    source_lang = args.source_lang or resolve_env().get("SOURCE_LANG", "auto")
-    target_lang = args.target_lang or resolve_env().get("TARGET_LANG", "English")
+    source_lang = args.source_lang or resolve_env().get("SOURCE_LANG", DEFAULT_SOURCE_LANGUAGE)
+    target_lang = args.target_lang or resolve_env().get("TARGET_LANG", DEFAULT_TARGET_LANGUAGE)
     bible = repo.initialize_project(
         title=args.title,
         source_lang=source_lang,
@@ -1215,10 +1216,10 @@ def main() -> None:
     p_batch.add_argument("--limit", "-l", type=int, default=None, help="Maximum number of chapters to process")
     p_batch.add_argument("--force", "-f", action="store_true", help="Force re-translate completed chapters")
     p_batch.add_argument("--auto-update-bible", action=argparse.BooleanOptionalAction, default=None, help="Automatically merge new characters/terms into Novel Bible")
-    p_batch.add_argument("--max-tpm", type=int, default=None, help="Max tokens per minute rate limit quota (default: 32000)")
+    p_batch.add_argument("--max-tpm", type=int, default=None, help="Max tokens per minute rate limit quota (default: 250000)")
     p_batch.add_argument("--max-rpm", type=int, default=None, help="Max requests per minute rate limit quota (default: 60)")
     p_batch.add_argument("--max-loops", type=int, default=None, help="Maximum review loops for translation refinement (default: 3)")
-    p_batch.add_argument("--quality-threshold", type=float, default=None, help="Target quality score threshold (fidelity & style) to exit review loop (default: 8.5)")
+    p_batch.add_argument("--quality-threshold", type=float, default=None, help="Target quality score threshold (fidelity & style) to exit review loop (default: 9.5)")
     p_batch.add_argument("--interactions", action=argparse.BooleanOptionalAction, default=True, help="Use Gemini Interactions API (/v1beta/interactions) (default: True)")
     p_batch.add_argument("--chunking", action=argparse.BooleanOptionalAction, default=True, help="Enable line-based semantic chunking for long chapters (default: True)")
     p_batch.add_argument("--chunk-threshold-lines", type=int, default=None, help="Line threshold to trigger chunking (default: 800)")

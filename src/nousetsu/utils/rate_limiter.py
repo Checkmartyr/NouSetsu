@@ -1,9 +1,10 @@
-"""Sliding-window token and request rate limiter for API quotas (e.g. 16K TPM / 60 RPM)."""
+"""Sliding-window token and request rate limiter for API quotas (250K TPM / 30 RPM by default)."""
 from collections import deque
 import re
 import threading
 import time
 from typing import Callable, Optional, Tuple
+from nousetsu.models.config import DEFAULT_RUNTIME_SETTINGS
 from nousetsu.models.exceptions import BatchStoppedException
 
 
@@ -41,8 +42,8 @@ class SlidingWindowRateLimiter:
 
     def __init__(
         self,
-        max_tpm: int = 32000,
-        max_rpm: int = 60,
+        max_tpm: int = DEFAULT_RUNTIME_SETTINGS["max_tpm"],
+        max_rpm: int = DEFAULT_RUNTIME_SETTINGS["max_rpm"],
         window_seconds: float = 60.0
     ):
         self.max_tpm = max_tpm
@@ -131,7 +132,7 @@ class SlidingWindowRateLimiter:
                 if rpm_wait > 0:
                     reason.append(f"RPM: {current_rpm + 1}/{self.max_rpm}")
                 reason_str = ", ".join(reason)
-                msg = f"⏳ Rate Limit Guard (16K TPM / 60 RPM): {reason_str}. Throttling for {needed_wait:.1f}s to avoid 429..."
+                msg = f"⏳ Rate Limit Guard ({self.max_tpm} TPM / {self.max_rpm} RPM): {reason_str}. Throttling for {needed_wait:.1f}s to avoid 429..."
                 try:
                     notify_callback(msg)
                 except Exception:

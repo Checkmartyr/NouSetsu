@@ -99,17 +99,17 @@ def test_default_temperature_and_env_override(monkeypatch):
     from nousetsu.agents.drafter import ContextAwareDrafterAgent
     from nousetsu.agents.polisher import PolishingAgent
 
-    # Case 1: Unset shared and role-specific temperatures default to 1.0.
+    # Case 1: Generic LLM defaults to 1.0; translation roles default to 0.1.
     for key in ("NOVEL_TEMPERATURE", "NOVEL_DRAFTER_TEMPERATURE", "NOVEL_POLISHER_TEMPERATURE"):
         monkeypatch.delenv(key, raising=False)
     llm1 = get_llm(model_name="mock-test")
     assert getattr(llm1, "temperature", None) == 1.0
 
     drafter1 = ContextAwareDrafterAgent(model_name="mock-drafter")
-    assert getattr(drafter1.llm, "temperature", None) == 1.0
+    assert getattr(drafter1.llm, "temperature", None) == 0.1
 
     polisher1 = PolishingAgent(model_name="mock-polisher")
-    assert getattr(polisher1.llm, "temperature", None) == 1.0
+    assert getattr(polisher1.llm, "temperature", None) == 0.1
 
     # Case 2: NOVEL_TEMPERATURE environment variable overrides default
     monkeypatch.setenv("NOVEL_TEMPERATURE", "0.85")

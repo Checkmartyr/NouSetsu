@@ -94,7 +94,7 @@ async def test_tui_settings_modal(tmp_path: Path):
         assert app.runner.workflow.chunker.threshold_lines == 800
 
         # Verify config was persisted to disk with all fields
-        persisted_cfg = app.repo.load_config()
+        persisted_cfg = NovelRepository(tmp_path).load_config()
         assert persisted_cfg.title == "Ascendance of a Bookworm"
         assert persisted_cfg.model_name == "gemini-custom-test"
         assert persisted_cfg.chunk_threshold_lines == 800

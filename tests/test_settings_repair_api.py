@@ -26,6 +26,34 @@ def put(client, endpoint, body, revision=None):
     return client.put(endpoint, headers={"If-Match": header}, json=body)
 
 
+def test_two_project_saves_survive_fresh_repository(settings_api, tmp_path):
+    import yaml
+
+    client, repo, _ = settings_api
+    other = NovelRepository(tmp_path / "Other project")
+    other.initialize_project("Other", "Japanese", "English")
+    untouched = (other.config_file_path().read_bytes(), other.bible_file_path().read_bytes())
+    url = f"/api/settings?project_path={repo.root_dir}"
+    created_at = repo.load_config().created_at
+    for title, temperature in (("First save", 0.1), ("Second save", 0)):
+        response = put(client, url, {
+            "title": title, "enable_rag": False, "chunk_overlap_lines": 0,
+            "generation_settings": {"drafter": {"temperature": temperature,
+                "thinking_budget": 0, "use_interactions_api": False}},
+        })
+        assert response.status_code == 200, response.text
+        disk = yaml.safe_load(repo.config_file_path().read_text(encoding="utf-8"))
+        fresh = NovelRepository(repo.root_dir).load_config()
+        assert disk["title"] == fresh.title == title
+        assert disk["generation_settings"]["drafter"]["temperature"] == temperature
+        assert fresh.generation_settings["drafter"].use_interactions_api is False
+        assert fresh.created_at == created_at
+        assert disk["chunk_overlap_lines"] == fresh.chunk_overlap_lines == 0
+        assert (other.config_file_path().read_bytes(), other.bible_file_path().read_bytes()) == untouched
+    assert put(client, url, {"generation_settings": {}, "max_review_loops": None}).status_code == 200
+    assert NovelRepository(repo.root_dir).load_config().generation_settings == {}
+
+
 def test_revision_required_exact_and_conflict_preserves_disk(settings_api):
     client, repo, _ = settings_api
     url = f"/api/settings?project_path={repo.root_dir}"

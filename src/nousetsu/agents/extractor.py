@@ -11,7 +11,7 @@ from nousetsu.graph.procedural import ProceduralGraph, get_default_extractor_gra
 from nousetsu.models.bible import CharacterProfile, GlossaryItem, NovelBible
 from nousetsu.models.metadata import PipelineStage, TokenUsage
 from nousetsu.models.schemas import ExtractorResult
-from nousetsu.models.config import resolve_agent_generation_settings
+from nousetsu.models.config import DEFAULT_AGENT_MODELS, resolve_agent_generation_settings
 from nousetsu.prompts.character_formatter import format_character_roster
 from nousetsu.prompts.templates import EXTRACTION_SYSTEM_PROMPT
 from nousetsu.skills.registry import SkillRegistry
@@ -31,7 +31,7 @@ class EntityExtractorAgent:
 
     def __init__(
         self,
-        model_name: str = "gemini-3.1-flash-lite",
+        model_name: str = DEFAULT_AGENT_MODELS["extractor"],
         fallback_model: Optional[str] = None,
         procedural_graph: Optional[ProceduralGraph] = None,
         chunker: Optional[Any] = None,

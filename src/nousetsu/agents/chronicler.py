@@ -12,7 +12,7 @@ from nousetsu.agents.llm import extract_text_from_message, extract_usage_from_me
 from nousetsu.graph.procedural import ProceduralGraph, get_default_chronicler_graph
 from nousetsu.models.bible import ChapterSummary, CharacterProfile, GlossaryItem, NovelBible
 from nousetsu.models.schemas import ChroniclerResult
-from nousetsu.models.config import resolve_agent_generation_settings
+from nousetsu.models.config import DEFAULT_AGENT_MODELS, resolve_agent_generation_settings
 from nousetsu.models.metadata import (
     ChapterMetadata,
     CheckpointData,
@@ -39,7 +39,7 @@ class ChroniclerAgent:
 
     def __init__(
         self,
-        model_name: str = "gemma-4-26b-a4b-it",
+        model_name: str = DEFAULT_AGENT_MODELS["chronicler"],
         fallback_model: Optional[str] = None,
         procedural_graph: Optional[ProceduralGraph] = None,
         thinking_level: Optional[str] = None,

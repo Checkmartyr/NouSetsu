@@ -75,6 +75,7 @@ def test_batch_runner_rag_engine_wiring(tmp_path: Path):
     runner = BatchRunner(
         repo,
         model_name="mock-model",
+        enable_rag=True,
     )
     assert runner.rag_engine is not None
     assert runner.workflow.rag_engine is not None

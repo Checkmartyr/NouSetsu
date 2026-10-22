@@ -1,5 +1,7 @@
 """Modal for creating and initializing a new novel translation project."""
 from pathlib import Path
+from nousetsu.models.config import ProjectConfig
+from nousetsu.utils.env import resolve_env
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, VerticalScroll
@@ -61,10 +63,10 @@ class NewProjectModal(ModalScreen):
                 yield Input(placeholder=f"e.g. {proj_name}\\MyNovel or D:\\Novels\\MyNovel", value=f"{proj_name}/new_novel", id="inp_path")
 
                 yield Label("Source Language (or 'Auto' to detect from raw chapters):", classes="form-label")
-                yield Input(value="Auto", id="inp_src_lang")
+                yield Input(value=resolve_env().get("SOURCE_LANG") or ProjectConfig().source_language, id="inp_src_lang")
 
                 yield Label("Target Language:", classes="form-label")
-                yield Input(value="Thai", id="inp_tgt_lang")
+                yield Input(value=resolve_env().get("TARGET_LANG") or ProjectConfig().target_language, id="inp_tgt_lang")
 
                 yield Label("Raw Chapters Input Folder Name / Path:", classes="form-label")
                 yield Input(value="raw_chapters", id="inp_raw_dir")
@@ -73,7 +75,7 @@ class NewProjectModal(ModalScreen):
                 yield Input(value="translated_chapters", id="inp_out_dir")
 
                 yield Label("Default LLM Model Name:", classes="form-label")
-                yield Input(value="gemini-3.1-flash-lite", id="inp_model")
+                yield Input(value="", placeholder="Inherit machine defaults", id="inp_model")
 
                 yield Label("Novel Genre (e.g. general, xianxia, isekai, litrpg, romance, auto):", classes="form-label")
                 yield Input(value="general", id="inp_genre")
@@ -90,11 +92,11 @@ class NewProjectModal(ModalScreen):
         elif event.button.id == "btn_create":
             title = self.query_one("#inp_title", Input).value.strip() or "Untitled Novel"
             proj_path_str = self.query_one("#inp_path", Input).value.strip() or "new_novel"
-            src_lang = self.query_one("#inp_src_lang", Input).value.strip() or "Auto"
+            src_lang = self.query_one("#inp_src_lang", Input).value.strip() or ProjectConfig().source_language
             tgt_lang = self.query_one("#inp_tgt_lang", Input).value.strip() or "Thai"
             raw_dir = self.query_one("#inp_raw_dir", Input).value.strip() or "raw_chapters"
             out_dir = self.query_one("#inp_out_dir", Input).value.strip() or "translated_chapters"
-            model = self.query_one("#inp_model", Input).value.strip() or "gemini-3.1-flash-lite"
+            model = self.query_one("#inp_model", Input).value.strip() or None
             genre = self.query_one("#inp_genre", Input).value.strip() or "general"
             status = self.query_one("#new_proj_status", Static)
 

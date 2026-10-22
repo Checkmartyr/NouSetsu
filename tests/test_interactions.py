@@ -203,9 +203,9 @@ def test_critic_agent_thinking_defaults(monkeypatch):
     monkeypatch.delenv("NOVEL_CRITIC_THINKING_LEVEL", raising=False)
     monkeypatch.delenv("NOVEL_THINKING_LEVEL", raising=False)
 
-    # Default should be "medium"
+    # Default should be "high"
     _ = CritiqueAgent(model_name="gemini-3.5-flash-lite")
-    assert created_llms[-1]["thinking_level"] == "medium"
+    assert created_llms[-1]["thinking_level"] == "high"
 
     # Environment override
     monkeypatch.setenv("NOVEL_CRITIC_THINKING_LEVEL", "high")

@@ -32,7 +32,7 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
   const [sourceLanguage, setSourceLanguage] = useState('');
   const [targetLanguage, setTargetLanguage] = useState('');
   const [genre, setGenre] = useState('general');
-  const [model, setModel] = useState('gemini-3.5-flash-lite');
+  const [model, setModel] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [importFromUrl, setImportFromUrl] = useState(false);
@@ -55,7 +55,7 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
     setSourceLanguage('');
     setTargetLanguage('');
     setGenre('general');
-    setModel('gemini-3.5-flash-lite');
+    setModel('');
     setErrorMsg(null);
     setImportFromUrl(false);
     setScraperAvailable(null);
@@ -360,7 +360,7 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
                 className="w-full bg-[#24201d] border border-[#3f3a36] rounded-[3px] p-2 font-mono text-[#f7f5f0] focus:outline-none focus:border-[#b0a89f] text-xs"
-                placeholder="gemini-3.5-flash-lite"
+                placeholder="Inherit machine defaults"
               />
             </div>
           </div>
