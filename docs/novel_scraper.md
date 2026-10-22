@@ -47,6 +47,8 @@ flowchart TD
   not establish catalog coverage.
 - The advertised count, discovered count, confidence, issues, and completeness
   evidence are separate. An incomplete or empty catalog stays incomplete.
+- Chapter extraction pauses until the full catalog is verified. Pending catalog
+  controls and advertised counts remain visible in inspection and job status.
 - Browser actions are typed clicks, scrolling, and stopping. Click targets are
   witnessed controls; model suggestions are not executable scripts.
 - Initial validation samples first, middle, and last chapters, plus observed volume
@@ -164,6 +166,21 @@ chapter-number labels are distinct: a post containing chapters 1–3 is one entr
 Observed labels do not establish accessible or complete coverage. These fields
 are additive; older workers and snapshots can omit them. Recovery measurements
 remain available under `metrics.recovery_stages`.
+
+Inspection also retains `api_recipe_candidates` and `pending_catalog_controls`.
+API replay uses witnessed, sanitized requests and verifies output through the
+ordinary extraction checks. New runtime modules are included by the desktop
+build's existing scraper package collection.
+
+Both inspection and extraction requests accept optional `refresh: true`
+(default `false`), forwarded as `--refresh` to the worker. Project inspection
+uses `.novel/scraper/` as its state directory so conditional GET response caching
+can be reused during extraction. Refresh revalidates catalog and chapter sources;
+explicit selections stay bound to the supplied inspection snapshot's source URLs.
+Unfiltered refresh uses the new catalog. A changed source without overwrite
+reports `source_update_available`; local edits report `local_modified` even with
+overwrite enabled. Overwrite replaces only an unchanged, source-owned file.
+Interrupted refresh jobs retain their generation when resumed.
 
 From `modules/novel_scraper`, with the main project's installed runtime:
 

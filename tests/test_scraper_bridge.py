@@ -278,7 +278,7 @@ def test_scraper_api_uses_project_route_and_generation_settings(tmp_path, monkey
         def is_available(self):
             return True
 
-        async def inspect_url(self, url, env=None):
+        async def inspect_url(self, url, env=None, **kwargs):
             captured["url"] = url
             captured["env"] = env
             return ScraperInspectResponse(success=True, url=url)

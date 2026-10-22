@@ -1636,7 +1636,10 @@ def create_app(dist_dir: Optional[Path] = None) -> FastAPI:
             subprocess_env = scraper_subprocess_environment(cfg, environ=resolve_env(repo.root_dir), project_root=repo.root_dir)
         else:
             subprocess_env = dict(resolve_env())
-        res = await bridge.inspect_url(url, env=subprocess_env)
+        res = await bridge.inspect_url(
+            url, env=subprocess_env, refresh=body.refresh,
+            state_dir=repo.root_dir / ".novel" / "scraper" if body.project_path else None,
+        )
         if body.project_path and res.success:
             res.inspection_id = uuid.uuid4().hex
             write_scraper_json(repo.root_dir / ".novel" / "scraper" / "inspections" / f"{res.inspection_id}.json", res.model_dump())

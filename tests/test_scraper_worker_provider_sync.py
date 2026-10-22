@@ -51,6 +51,7 @@ def test_desktop_scraper_worker_keeps_src_namespace_and_loads_routing(tmp_path: 
     assert process.returncode == 0, process.stderr
     if operation[0] in {"inspect", "extract"}:
         assert "--url" in process.stdout
+        assert "--refresh" in process.stdout and "--state-dir" in process.stdout
         if operation[0] == "extract":
             assert "--snapshot-file" in process.stdout
         return
