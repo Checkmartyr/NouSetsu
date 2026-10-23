@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { BookOpen, CheckCircle2, AlertCircle, FolderOpen, ArrowRight } from 'lucide-react';
+import { CheckCircle2, AlertCircle, FolderOpen, ArrowRight } from 'lucide-react';
 import { open } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
 import { isTauriDesktopRuntime } from '../services/apiBase';
@@ -190,7 +190,7 @@ export function SetupView({ initial, onExit }: { initial?: SetupSnapshot | null;
     <p>{t('Chunking, safety, story memory and project paths are available in Settings after creating a novel. Their recommended defaults stay enabled.', 'การแบ่งบท ความปลอดภัย ความจำเรื่องราว และโฟลเดอร์เฉพาะนิยาย ตั้งค่าได้หลังสร้างนิยาย ค่าเริ่มต้นที่แนะนำยังเปิดใช้งาน')}</p>
   </details>;
   return <main className="setup-shell" lang={draft.locale}>
-    <header className="setup-header"><span className="flex items-center gap-2"><BookOpen aria-hidden="true" /> NouSetsu</span>
+    <header className="setup-header"><span className="flex items-center gap-2"><img src="/logo.png?v=story-portal-1" alt="" aria-hidden="true" className="h-7 w-7 object-contain" /> NouSetsu</span>
       <select aria-label="Language / ภาษา" value={draft.locale} disabled={busy} onChange={event => {
         const locale = event.target.value as 'en' | 'th';
         update({ locale, ...(!snapshot.existing && draft.values.TARGET_LANG === (draft.locale === 'en' ? 'English' : 'Thai') ? { values: { ...draft.values, TARGET_LANG: locale === 'th' ? 'Thai' : 'English' } } : {}) });

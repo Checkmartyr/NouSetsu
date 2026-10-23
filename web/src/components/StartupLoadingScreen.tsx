@@ -88,9 +88,9 @@ export const StartupLoadingScreen: React.FC<StartupLoadingScreenProps> = ({ onRe
           <div className="relative mb-3 flex items-center justify-center">
             <div className="w-14 h-14 rounded-[8px] bg-[#2b2622] border border-[#544d47] flex items-center justify-center overflow-hidden shadow-inner p-1">
               <img
-                src="/favicon.png"
+                src="/logo.png?v=story-portal-1"
                 alt="Nousetsu"
-                className="w-full h-full object-cover rounded-[4px]"
+                className="w-full h-full object-contain rounded-[4px]"
               />
             </div>
             <span className="absolute -bottom-1 -right-1 flex h-3.5 w-3.5">
