@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/logo.png" alt="NouSetsu Logo" width="130">
+  <img src="docs/images/logo.png" alt="NouSetsu Story Portal mascot reading an open book" width="180">
 </p>
 
 # 📖 NouSetsu (濃説 / 脳説)
@@ -20,6 +20,8 @@
 <p align="center">
   <img src="docs/images/web_studio_dashboard_demo.png" alt="NouSetsu Modern Web Studio & Batch Dashboard" width="100%">
 </p>
+
+*Screenshots use fictional demo data; model usage and quality scores are illustrative.*
 
 <p align="center">
   <strong>NouSetsu Modern Web Studio (React 19 + Vite)</strong>: High-performance browser environment featuring automated batch translation, volume folder switching, live streaming SSE execution logs, forensic prompt &amp; thought trace auditing, side-by-side diff comparison, and distraction-free literary reading.

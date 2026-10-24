@@ -189,6 +189,9 @@ nousetsu web
 *(You can also press `W` from within the running Textual TUI application to open the Web Studio automatically!)*
 
 #### 1. Studio & Batch Translation Dashboard
+
+The screenshots below use fictional demo data; model usage and quality scores are illustrative.
+
 Inspect real-time chapter queue progress, switch volume folders, trigger single or batch translations, and monitor live streaming SSE execution logs:
 
 ![NouSetsu Web Studio Dashboard View](images/web_studio_dashboard_demo.png)
